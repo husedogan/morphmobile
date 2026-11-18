@@ -1226,7 +1226,11 @@ export default function App() {
             }}
             className="flex items-center gap-2 whitespace-nowrap shrink-0 text-left"
           >
-            <img src="/morph-wordmark.png" alt="Morph" className="h-7 w-auto object-contain" />
+            <img
+              src={isDark ? '/morph-wordmark.png' : '/morph-wordmark-light.png'}
+              alt="Morph"
+              className="h-7 w-auto object-contain select-none"
+            />
           </button>
 
           {/* Zone 2: Desktop Single-Line Navigation Links */}
@@ -1388,6 +1392,7 @@ export default function App() {
             serverReady={serverReady}
             updateInfo={updateInfo}
             checkingUpdate={checkingUpdate}
+            showIntegratedEngines={prefs.showIntegratedEngines !== false}
             activeEngineAction={prefs.lastEngineAction ?? 'update'}
             activeEngineSegment={prefs.lastEngineSegment ?? null}
             onChangeEngineAction={(action) =>
@@ -1417,6 +1422,7 @@ export default function App() {
         <WheelFab
           hidden={wheelKind !== null}
           side={prefs.wheelSide ?? 'right'}
+          iconStyle={prefs.wheelIconStyle ?? 'wheel'}
           onChangeSide={(wheelSide) => setPrefs((p) => ({...p, wheelSide}))}
           onHoverChange={setShowWheelCloud}
           onClick={() => {
@@ -1431,12 +1437,20 @@ export default function App() {
               <div
                 role="tooltip"
                 className={`pointer-events-none absolute bottom-[68px] w-max max-w-[230px] rounded-2xl border border-[var(--accent)]/45 bg-[var(--surface)]/95 px-3.5 py-2 text-xs font-medium leading-snug text-[var(--ink)] shadow-2xl backdrop-blur-md ${
-                  (prefs.wheelSide ?? 'right') === 'left' ? 'left-0' : 'right-0'
+                  (prefs.wheelSide ?? 'right') === 'left'
+                    ? 'left-0'
+                    : (prefs.wheelSide ?? 'right') === 'center'
+                      ? 'left-1/2 -translate-x-1/2'
+                      : 'right-0'
                 }`}
               >
                 <span
                   className={`absolute -bottom-1.5 h-3 w-3 rotate-45 border-b border-r border-[var(--accent)]/45 bg-[var(--surface)] ${
-                    (prefs.wheelSide ?? 'right') === 'left' ? 'left-5' : 'right-5'
+                    (prefs.wheelSide ?? 'right') === 'left'
+                      ? 'left-5'
+                      : (prefs.wheelSide ?? 'right') === 'center'
+                        ? 'left-1/2 -translate-x-1/2'
+                        : 'right-5'
                   }`}
                 />
                 {t('WheelCloudTip', lang)}

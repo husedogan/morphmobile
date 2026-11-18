@@ -346,9 +346,9 @@ export async function installOrUpdateEngineModule(
   if (!isNativeApp() && (engineId === 'ytdlp_native' || engineId === 'newpipe')) {
     const msg =
       lang === 'tr'
-        ? 'Bu yerel motor Android APK sürümünde cihaz içinde çalışır. Web önizlemesinde Dahili Motor veya Cobalt API kullanılır.'
-        : 'This native engine runs inside the Android APK. On Web preview, Built-in or Cobalt API is used.';
-    diag.step(engineId, 'Web ortamında yerel APK modülü istendi (bilgilendirme gösterildi)');
+        ? 'Bu motor yalnızca mobil uygulamada çalışır; tarayıcıda Dahili Motor veya Cobalt kullanabilirsin.'
+        : 'This engine runs in the mobile app; you can use Built-in Engine or Cobalt in the browser.';
+    diag.step(engineId, 'Web ortamında mobil uygulama motoru istendi');
     diag.finish('blocked', {error: msg});
     return {ok: false, version: '-', message: msg};
   }

@@ -1726,16 +1726,8 @@ const LocalToolConfig: React.FC<{
           className="flex min-h-[46px] w-full items-center justify-between rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-4"
         >
           <span className="text-sm font-medium text-[var(--ink)]">{t('Shadow', lang)}</span>
-          <span
-            className={`h-6 w-11 rounded-full p-0.5 transition-colors ${
-              shadow ? 'bg-[var(--accent)]' : 'bg-[var(--inset)]'
-            }`}
-          >
-            <span
-              className={`block h-5 w-5 rounded-full bg-white transition-transform ${
-                shadow ? 'translate-x-5' : 'translate-x-0'
-              }`}
-            />
+          <span className="morph-switch" data-checked={shadow ? 'true' : 'false'}>
+            <span className="morph-switch-thumb" />
           </span>
         </button>
         <div>
@@ -2313,16 +2305,8 @@ const LocalToolConfig: React.FC<{
           className="flex min-h-[46px] w-full items-center justify-between rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-4"
         >
           <span className="text-sm font-medium text-[var(--ink)]">{t('IncludePageNumbers', lang)}</span>
-          <span
-            className={`h-6 w-11 rounded-full p-0.5 transition-colors ${
-              stampPageNums ? 'bg-[var(--accent)]' : 'bg-[var(--inset)]'
-            }`}
-          >
-            <span
-              className={`block h-5 w-5 rounded-full bg-white transition-transform ${
-                stampPageNums ? 'translate-x-5' : 'translate-x-0'
-              }`}
-            />
+          <span className="morph-switch" data-checked={stampPageNums ? 'true' : 'false'}>
+            <span className="morph-switch-thumb" />
           </span>
         </button>
         <div>
@@ -2424,16 +2408,8 @@ const LocalToolConfig: React.FC<{
           className="flex min-h-[46px] w-full items-center justify-between rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-4"
         >
           <span className="text-sm font-medium text-[var(--ink)]">{t('RenameNumberingLabel', lang)}</span>
-          <span
-            className={`h-6 w-11 rounded-full p-0.5 transition-colors ${
-              renameNumbering ? 'bg-[var(--accent)]' : 'bg-[var(--inset)]'
-            }`}
-          >
-            <span
-              className={`block h-5 w-5 rounded-full bg-white transition-transform ${
-                renameNumbering ? 'translate-x-5' : 'translate-x-0'
-              }`}
-            />
+          <span className="morph-switch" data-checked={renameNumbering ? 'true' : 'false'}>
+            <span className="morph-switch-thumb" />
           </span>
         </button>
 

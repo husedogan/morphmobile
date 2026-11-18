@@ -1,33 +1,23 @@
 # Morph
 
-[![Morph Version](https://img.shields.io/badge/Morph-1.1.7%20(Beta)-42C9D9?style=flat-square)](https://github.com/husodogan/morphmobilestudio/releases)
+[![Morph Version](https://img.shields.io/badge/Morph-1.1.10-42C9D9?style=flat-square)](https://github.com/husodogan/morphmobilestudio/releases)
 [![Android APK](https://img.shields.io/github/v/release/husodogan/morphmobilestudio?label=APK%20Release&color=42C9D9&style=flat-square)](https://github.com/husodogan/morphmobilestudio/releases)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/husodogan/morphmobilestudio/build-apk.yml?branch=main&label=APK%20Build&style=flat-square)](https://github.com/husodogan/morphmobilestudio/actions)
 
-**Morph**, görsel, PDF, arşiv, video, ses ve belge dosyalarını cihaz içinde dönüştüren **Android APK** ve **Web / PWA** mobil uygulamasıdır. Orijinal dosyalarına dokunmadan yerel olarak çalışır.
+**Morph**, görsel, PDF, arşiv, video, ses ve belge dosyalarını cihaz içinde hızlı ve güvenli biçimde dönüştüren mobil stüdyo uygulamasıdır. Tüm dosya işlemleri orijinallerine dokunmadan doğrudan cihazında çalışır.
 
 ## İndirme ve Kurulum
 
 - **Android APK:** [Releases](https://github.com/husodogan/morphmobilestudio/releases) sayfasından güncel `Morph-v*.apk` dosyasını indirip kurabilirsin.
-- **Web / PWA:** Tarayıcıdan **Telefona Kur / Ana Ekrana Ekle** ile uygulama olarak yüklenebilir; çevrimdışı çalışır.
-
-## Sürüm Sistemi
-
-Sürüm akışı **Morph 1.1.2** ile başlar ve GitHub Actions (`.github/workflows/build-apk.yml`) üzerinden otomatik derlenip yayınlanır:
-
-| Sürüm Türü | Numara Kuralı | Örnekler | GitHub Yayın Türü |
-| :--- | :--- | :--- | :--- |
-| **Kararlı** | Son rakam **çift** | `1.1.2`, `1.1.4`, `1.1.6` | Latest Release |
-| **Beta** | Son rakam **tek** | `1.1.3`, `1.1.5`, `1.1.7` | Pre-release |
-
-Uygulama içindeki **Güncellemeleri Kontrol Et** düğmesi GitHub Releases ve PWA önbelleğini denetleyerek yeni sürüm hazır olduğunda **Güncelleme İndir** seçeneğini sunar.
+- Uygulama içindeki **Ayarlar → Güncelleme** sekmesinden yeni sürümleri tek dokunuşla denetleyip indirebilirsin.
 
 ## Temel Özellikler
 
-- **Görsel & PDF:** Format dönüştürme, sıkıştırma, kırpma, şeffaflık korumalı filtreler ve filigran, kolaj; PDF birleştirme, bölme, döndürme, Türkçe karakter destekli sayfa no/damga ve PDF ↔ Görsel.
-- **Video, Ses & Belge (Cihaz İçi):** Entegre çevrimdışı FFmpeg WASM ile video/ses dönüştürme, kesme, hız/kanal ayarı; DOCX/ODT/XLSX/PPTX/HTML/TXT ↔ PDF ve PDF → DOCX.
-- **Arşiv & Bağlantı İndirici:** ZIP oluşturma/çıkarma ve doğrudan medya/dosya veya kapak görseli indirme (Android `CapacitorHttp` destekli).
-- **Mobil Arayüz:** Android sistem durum çubuğu (safe-area) uyumlu üst bar, basılı tutarken yanan/küle dönüşen ve sürüklenerek köşe değiştiren radyal çark menüsü, çoklu koyu/açık tema seçenekleri ve Türkçe/İngilizce dil desteği.
+- **Görsel Stüdyosu:** JPG, PNG, WEBP, GIF, ICO ve SVG dönüştürme, boyut küçültme, dokunmatik kırpma, renk & filtre ön ayarları, metin filigranı, belge tarama & netleştirme, sansür (mozaik/bulanıklık), kolaj, sosyal medya kadrajına sığdırma, vesikalık baskı dizilimi ve hareketli GIF oluşturma.
+- **PDF & Belge İşlemleri:** PDF birleştirme, sayfa bölme/silme/sıralama, döndürme, optimize etme, Türkçe karakter destekli sayfa numarası & filigran ekleme, 2’li/4’lü baskı düzeni, PDF ↔ Görsel ve DOCX/XLSX/PPTX/HTML/TXT belge dönüştürme.
+- **Video & Ses Araçları (Cihaz İçi):** Entegre FFmpeg motoru ile MP4, MKV, MOV, WEBM, MP3, WAV ve AAC format dönüştürme, kesme, hız/ses/kanal ayarı.
+- **Bağlantı İndirici & Arşiv:** ZIP oluşturma/çıkarma; Dahili Motor, NewPipe Extractor, yt-dlp Yerel Motor ve Cobalt API desteği ile doğrudan bağlantıdan video, ses, kapak görseli ve dosya indirme; Wi-Fi koruma ve mobil veri sınırı seçenekleri.
+- **Mobil Deneyim & Kişiselleştirme:** Köşe değiştirebilen özelleştirilebilir radyal çark menüsü, sistem/gündüz/gece modlu çoklu renk temaları, arayüz boyut ve köşe yumuşaklığı kaydırma ayarları, Türkçe/İngilizce dil desteği ve yerel işlem kitaplığı.
 
 ## Geliştirme Komutları
 

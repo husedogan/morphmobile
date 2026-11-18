@@ -29,6 +29,7 @@ interface StudioScreenProps {
   serverReady: boolean;
   updateInfo?: GithubUpdateInfo | null;
   checkingUpdate?: boolean;
+  showIntegratedEngines?: boolean;
   activeEngineAction?: 'update' | 'manage';
   activeEngineSegment?: 'ffmpeg' | 'office' | 'link' | null;
   onChangeEngineAction?: (action: 'update' | 'manage') => void;
@@ -54,8 +55,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   serverReady,
   updateInfo = null,
   checkingUpdate = false,
+  showIntegratedEngines = true,
   activeEngineAction = 'update',
-  activeEngineSegment = null,
   onChangeEngineAction,
   onChangeEngineSegment,
   onAddFiles,
@@ -75,9 +76,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [localAction, setLocalAction] = useState<'update' | 'manage'>(activeEngineAction);
-  const [localSegment, setLocalSegment] = useState<'ffmpeg' | 'office' | 'link' | null>(
-    activeEngineSegment
-  );
+  const [activeEngine, setActiveEngine] = useState<'ffmpeg' | 'office' | 'link' | null>(null);
 
   const activeAction = onChangeEngineAction ? activeEngineAction : localAction;
   const setLatchedAction = (next: 'update' | 'manage') => {
@@ -85,9 +84,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
     onChangeEngineAction?.(next);
   };
 
-  const activeEngine = onChangeEngineSegment ? activeEngineSegment : localSegment;
   const setLatchedSegment = (next: 'ffmpeg' | 'office' | 'link' | null) => {
-    setLocalSegment(next);
+    setActiveEngine(next);
     onChangeEngineSegment?.(next);
   };
 
@@ -329,6 +327,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
         )}
 
         {/* Card 3: Built-in Engines & Smart Update Control */}
+        {showIntegratedEngines && (
         <section className="morph-engine-card w-full rounded-3xl border border-[var(--line)] p-5">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2.5">
@@ -367,11 +366,11 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
                 aria-label={label}
                 aria-expanded={isExpanded}
                 disabled={!hasUpdate && checkingUpdate}
-                onPointerEnter={(e) => {
-                  if (e.pointerType === 'mouse') setLatchedAction('update');
-                }}
                 onClick={() => {
-                  setLatchedAction('update');
+                  if (!isExpanded) {
+                    setLatchedAction('update');
+                    return;
+                  }
                   if (hasUpdate) {
                     onApplyUpdate?.();
                   } else {
@@ -418,11 +417,11 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
                 type="button"
                 aria-label={t('ManageTools', lang)}
                 aria-expanded={isExpanded}
-                onPointerEnter={(e) => {
-                  if (e.pointerType === 'mouse') setLatchedAction('manage');
-                }}
                 onClick={() => {
-                  setLatchedAction('manage');
+                  if (!isExpanded) {
+                    setLatchedAction('manage');
+                    return;
+                  }
                   onOpenManageTools();
                 }}
                 className={`flex min-h-[46px] min-w-[48px] basis-0 items-center justify-center overflow-hidden rounded-full border px-3 transition-[flex-grow,background-color,border-color,color,opacity,transform] duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-[flex-grow] active:scale-[0.98] ${
@@ -463,9 +462,6 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
                 type="button"
                 aria-label={label}
                 aria-expanded={isExpanded}
-                onPointerEnter={(e) => {
-                  if (e.pointerType === 'mouse') setLatchedSegment(id);
-                }}
                 onClick={() => setLatchedSegment(activeEngine === id ? null : id)}
                 className={`flex min-h-[44px] min-w-[44px] basis-0 items-center justify-center overflow-hidden rounded-xl border px-2.5 transition-[flex-grow,background-color,border-color,color] duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-[flex-grow] ${
                   isExpanded
@@ -521,6 +517,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
           </div>
         )}
       </section>
+        )}
       </div>
 
       {/* Clean Studio Footer Note */}

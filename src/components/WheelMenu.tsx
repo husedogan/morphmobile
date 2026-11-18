@@ -1,7 +1,7 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {LucideIcon} from 'lucide-react';
 import {Lang} from '../data/i18n';
-import {MAX_WHEEL_SLICES} from '../data/models';
+import {MAX_WHEEL_SLICES, WheelIconStylePref, WheelSidePref} from '../data/models';
 
 export interface WheelActionItem {
   id: string;
@@ -22,6 +22,7 @@ interface WheelMenuProps {
 }
 
 const CENTER_HOLD_MS = 3000;
+const HOLD_REVEAL_DELAY_MS = 450;
 
 function vibrateIfAllowed(pattern: number | number[]) {
   if (typeof document !== 'undefined' && document.documentElement.dataset.haptics === 'off') {
@@ -284,15 +285,24 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
   const startCenterHold = useCallback(() => {
     if (!onOpenCustomize || holdingCenterRef.current || completedHoldRef.current) return;
     holdingCenterRef.current = true;
-    vibrateIfAllowed(10);
+    let revealHapticDone = false;
     const startAt = performance.now();
 
     const tick = (now: number) => {
       if (!holdingCenterRef.current) return;
       const elapsed = now - startAt;
-      const progress = Math.min(1, elapsed / CENTER_HOLD_MS);
+      if (elapsed < HOLD_REVEAL_DELAY_MS) {
+        holdRafRef.current = window.requestAnimationFrame(tick);
+        return;
+      }
+      if (!revealHapticDone) {
+        revealHapticDone = true;
+        vibrateIfAllowed(10);
+      }
+      const activeElapsed = elapsed - HOLD_REVEAL_DELAY_MS;
+      const progress = Math.min(1, activeElapsed / (CENTER_HOLD_MS - HOLD_REVEAL_DELAY_MS));
       setHoldProgress(progress);
-      setOrbitDeg((elapsed * 0.34) % 360);
+      setOrbitDeg((activeElapsed * 0.34) % 360);
 
       if (progress < 1) {
         holdRafRef.current = window.requestAnimationFrame(tick);
@@ -785,8 +795,9 @@ export const WheelFab: React.FC<{
   onClick: () => void;
   label: string;
   hidden?: boolean;
-  side?: 'left' | 'right';
-  onChangeSide?: (side: 'left' | 'right') => void;
+  side?: WheelSidePref;
+  iconStyle?: WheelIconStylePref;
+  onChangeSide?: (side: WheelSidePref) => void;
   onHoverChange?: (hover: boolean) => void;
   cloud?: React.ReactNode;
   className?: string;
@@ -797,6 +808,7 @@ export const WheelFab: React.FC<{
   label,
   hidden = false,
   side = 'right',
+  iconStyle = 'wheel',
   onChangeSide,
   onHoverChange,
   cloud,
@@ -810,7 +822,7 @@ export const WheelFab: React.FC<{
   const [dragPos, setDragPos] = useState<{x: number; y: number} | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isSnapping, setIsSnapping] = useState(false);
-  const [previewSide, setPreviewSide] = useState<'left' | 'right'>(side);
+  const [previewSide, setPreviewSide] = useState<WheelSidePref>(side);
 
   // Overheat sequence on press-and-hold (mobile & desktop) OR mouse hover:
   // 0-15s fire gear -> 15-30s burning & charring -> 30s turn into ash
@@ -950,7 +962,8 @@ export const WheelFab: React.FC<{
             const cy = rect ? rect.top + rect.height / 2 : window.innerHeight - 48;
             vibrateIfAllowed([22, 35, 16]);
             if (rect) {
-              const dropSide: 'left' | 'right' = cx < window.innerWidth / 2 ? 'left' : 'right';
+              const ratio = cx / Math.max(1, window.innerWidth);
+              const dropSide: WheelSidePref = ratio < 0.34 ? 'left' : ratio > 0.66 ? 'right' : 'center';
               onChangeSide?.(dropSide);
             }
             fx.elapsed = 0;
@@ -1101,7 +1114,8 @@ export const WheelFab: React.FC<{
       latestX = Math.max(12, Math.min(window.innerWidth - btnW - 12, originX + dx));
       latestY = Math.max(12, Math.min(window.innerHeight - btnH - 12, originY + dy));
       setDragPos({x: latestX, y: latestY});
-      setPreviewSide(latestX + btnW / 2 < window.innerWidth / 2 ? 'left' : 'right');
+      const ratio = (latestX + btnW / 2) / Math.max(1, window.innerWidth);
+      setPreviewSide(ratio < 0.34 ? 'left' : ratio > 0.66 ? 'right' : 'center');
     };
 
     const cleanup = (ev: PointerEvent, cancelled: boolean) => {
@@ -1126,10 +1140,15 @@ export const WheelFab: React.FC<{
           return;
         }
 
-        const targetSide: 'left' | 'right' =
-          latestX + btnW / 2 < window.innerWidth / 2 ? 'left' : 'right';
+        const ratio = (latestX + btnW / 2) / Math.max(1, window.innerWidth);
+        const targetSide: WheelSidePref = ratio < 0.34 ? 'left' : ratio > 0.66 ? 'right' : 'center';
         const edge = window.innerWidth >= 1024 ? 32 : 20;
-        const targetX = targetSide === 'left' ? edge : window.innerWidth - btnW - edge;
+        const targetX =
+          targetSide === 'left'
+            ? edge
+            : targetSide === 'center'
+              ? (window.innerWidth - btnW) / 2
+              : window.innerWidth - btnW - edge;
         const targetY = window.innerHeight - btnH - edge;
 
         setIsDragging(false);
@@ -1177,7 +1196,9 @@ export const WheelFab: React.FC<{
   const cornerClass =
     side === 'left'
       ? 'morph-fab-bottom left-5 lg:left-8'
-      : 'morph-fab-bottom right-5 lg:right-8';
+      : side === 'center'
+        ? 'morph-fab-bottom left-1/2 -translate-x-1/2'
+        : 'morph-fab-bottom right-5 lg:right-8';
 
   const charLevel = Math.max(0, Math.min(1, (burnLevel - 0.42) / 0.58));
   const flameFade = Math.max(0, 1 - charLevel * 1.25);
@@ -1261,6 +1282,13 @@ export const WheelFab: React.FC<{
           <div
             className={`morph-fab-bottom fixed left-5 flex h-14 w-14 items-center justify-center rounded-full border-2 border-dashed transition-all duration-150 lg:left-8 ${
               previewSide === 'left'
+                ? 'scale-105 border-[var(--accent)] bg-[var(--accent)]/15'
+                : 'border-[var(--line)] bg-[var(--surface)]/30 opacity-60'
+            }`}
+          />
+          <div
+            className={`morph-fab-bottom fixed left-1/2 flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-full border-2 border-dashed transition-all duration-150 ${
+              previewSide === 'center'
                 ? 'scale-105 border-[var(--accent)] bg-[var(--accent)]/15'
                 : 'border-[var(--line)] bg-[var(--surface)]/30 opacity-60'
             }`}
@@ -1484,25 +1512,73 @@ export const WheelFab: React.FC<{
                   />
                 );
               })}
-            {[0, 60, 120, 180, 240, 300].map((deg) => {
-              const a1 = ((deg - 82) * Math.PI) / 180;
-              const a2 = ((deg - 38) * Math.PI) / 180;
-              const r = 10.5;
-              const x1 = 14 + r * Math.cos(a1);
-              const y1 = 14 + r * Math.sin(a1);
-              const x2 = 14 + r * Math.cos(a2);
-              const y2 = 14 + r * Math.sin(a2);
-              return (
+            {iconStyle === 'wheel' && (
+              <>
+                {[0, 60, 120, 180, 240, 300].map((deg) => {
+                  const a1 = ((deg - 82) * Math.PI) / 180;
+                  const a2 = ((deg - 38) * Math.PI) / 180;
+                  const r = 10.5;
+                  const x1 = 14 + r * Math.cos(a1);
+                  const y1 = 14 + r * Math.sin(a1);
+                  const x2 = 14 + r * Math.cos(a2);
+                  const y2 = 14 + r * Math.sin(a2);
+                  return (
+                    <path
+                      key={deg}
+                      d={`M ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2}`}
+                      stroke={wheelTone}
+                      strokeWidth="2.3"
+                      strokeLinecap="round"
+                    />
+                  );
+                })}
+                <circle cx="14" cy="14" r={2.3 + toothReveal * 0.6} fill={wheelTone} />
+              </>
+            )}
+            {iconStyle === 'morph' && (
+              <>
+                <circle cx="14" cy="14" r="10.2" stroke={wheelTone} strokeWidth="1.9" strokeOpacity="0.45" />
+                <text
+                  x="14"
+                  y="18.2"
+                  textAnchor="middle"
+                  fontSize="15"
+                  fontWeight="800"
+                  fill={wheelTone}
+                  fontFamily="system-ui, sans-serif"
+                >
+                  m
+                </text>
+              </>
+            )}
+            {iconStyle === 'gear' && (
+              <g transform="translate(14 14) scale(0.72)">
+                <path d={PRECISION_GEAR_PATH} fill={wheelTone} fillRule="evenodd" />
+                <circle cx="0" cy="0" r="6.8" fill="none" stroke={wheelTone} strokeWidth="1.5" />
+                <circle cx="0" cy="0" r={3 + toothReveal * 0.6} fill={wheelTone} />
+              </g>
+            )}
+            {iconStyle === 'compass' && (
+              <>
+                <circle cx="14" cy="14" r="9.6" stroke={wheelTone} strokeWidth="1.8" strokeOpacity="0.4" />
                 <path
-                  key={deg}
-                  d={`M ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2}`}
-                  stroke={wheelTone}
-                  strokeWidth="2.3"
-                  strokeLinecap="round"
+                  d="M14 4 L16.7 11.3 L24 14 L16.7 16.7 L14 24 L11.3 16.7 L4 14 L11.3 11.3 Z"
+                  fill={wheelTone}
                 />
-              );
-            })}
-            <circle cx="14" cy="14" r={2.3 + toothReveal * 0.6} fill={wheelTone} />
+                <circle cx="14" cy="14" r="2.2" fill="var(--accent)" />
+              </>
+            )}
+            {iconStyle === 'hex' && (
+              <>
+                <polygon
+                  points="14,3.8 22.8,8.9 22.8,19.1 14,24.2 5.2,19.1 5.2,8.9"
+                  stroke={wheelTone}
+                  strokeWidth="2.1"
+                  strokeLinejoin="round"
+                />
+                <circle cx="14" cy="14" r={3 + toothReveal * 0.6} fill={wheelTone} />
+              </>
+            )}
           </svg>
         </button>
       </div>

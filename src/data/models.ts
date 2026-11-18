@@ -146,6 +146,8 @@ export const DEFAULT_WHEEL_CONFIG: WheelConfigPrefs = {
 
 export type UiScalePref = 'compact' | 'default' | 'large';
 export type CornerStylePref = 'sharp' | 'balanced' | 'soft';
+export type WheelSidePref = 'left' | 'center' | 'right';
+export type WheelIconStylePref = 'wheel' | 'morph' | 'gear' | 'compass' | 'hex';
 
 export interface Prefs {
   theme: 'system' | 'dark' | 'light';
@@ -153,11 +155,13 @@ export interface Prefs {
   lang: 'tr' | 'en';
   serverUrl: string;
   serverToken: string;
-  wheelSide?: 'left' | 'right';
+  wheelSide?: WheelSidePref;
+  wheelIconStyle?: WheelIconStylePref;
   uiScale?: UiScalePref;
   cornerStyle?: CornerStylePref;
   reducedMotion?: boolean;
   hapticsEnabled?: boolean;
+  showIntegratedEngines?: boolean;
   lastEngineAction?: 'update' | 'manage';
   lastEngineSegment?: 'ffmpeg' | 'office' | 'link' | null;
   downloadEngine?: DownloadEngineId;

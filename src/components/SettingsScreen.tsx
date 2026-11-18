@@ -34,6 +34,8 @@ import {
   Prefs,
   UiScalePref,
   VideoQualityPref,
+  WheelIconStylePref,
+  WheelSidePref,
 } from '../data/models';
 import {THEME_PRESETS} from '../data/themes';
 import {
@@ -129,9 +131,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [serverExpanded, setServerExpanded] = useState(false);
 
   // 15-second Developer Cloud Easter Egg
+  const [isHoldingDev, setIsHoldingDev] = useState(false);
   const [showDevClouds, setShowDevClouds] = useState(false);
   const [cloudBurstKey, setCloudBurstKey] = useState(0);
   const devHoldTimerRef = useRef<number | null>(null);
+  const devRingTimerRef = useRef<number | null>(null);
   const devHoldStartRef = useRef<number>(0);
   const suppressDevLinkRef = useRef(false);
   const devCloudHideTimerRef = useRef<number | null>(null);
@@ -141,6 +145,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       window.clearTimeout(devHoldTimerRef.current);
       devHoldTimerRef.current = null;
     }
+    if (devRingTimerRef.current !== null) {
+      window.clearTimeout(devRingTimerRef.current);
+      devRingTimerRef.current = null;
+    }
+    setIsHoldingDev(false);
   }, []);
 
   useEffect(() => {
@@ -286,7 +295,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
   const uiScale: UiScalePref = prefs.uiScale ?? 'default';
   const cornerStyle: CornerStylePref = prefs.cornerStyle ?? 'balanced';
-  const wheelSide: 'left' | 'right' = prefs.wheelSide ?? 'right';
+  const wheelSide: WheelSidePref = prefs.wheelSide ?? 'right';
+  const wheelIconStyle: WheelIconStylePref = prefs.wheelIconStyle ?? 'wheel';
+  const showIntegratedEngines = prefs.showIntegratedEngines !== false;
   const reducedMotion = Boolean(prefs.reducedMotion);
   const hapticsEnabled = prefs.hapticsEnabled !== false;
 
@@ -527,7 +538,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               </h2>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
               {/* Text & UI Scale Slider */}
               {(() => {
                 const scaleSteps: readonly UiScalePref[] = ['compact', 'default', 'large'];
@@ -625,13 +636,96 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   </div>
                 );
               })()}
+            </div>
 
-              {/* Quick Wheel Corner Side Slider */}
+            {/* Reduced Motion & Haptic Feedback Toggles */}
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => onChangePrefs((p) => ({...p, reducedMotion: !p.reducedMotion}))}
+                className="flex min-h-[68px] items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
+              >
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-[var(--ink)]">
+                    {t('ReducedMotionLabel', lang)}
+                  </p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
+                    {t('ReducedMotionDesc', lang)}
+                  </p>
+                </div>
+                <span className="morph-switch" data-checked={reducedMotion ? 'true' : 'false'}>
+                  <span className="morph-switch-thumb" />
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  onChangePrefs((p) => ({...p, hapticsEnabled: p.hapticsEnabled === false}))
+                }
+                className="flex min-h-[68px] items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
+              >
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-[var(--ink)]">{t('HapticsLabel', lang)}</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
+                    {t('HapticsDesc', lang)}
+                  </p>
+                </div>
+                <span className="morph-switch" data-checked={hapticsEnabled ? 'true' : 'false'}>
+                  <span className="morph-switch-thumb" />
+                </span>
+              </button>
+            </div>
+
+            {/* Integrated Engines Visibility Toggle (Home Screen) */}
+            <button
+              type="button"
+              onClick={() =>
+                onChangePrefs((p) => ({...p, showIntegratedEngines: p.showIntegratedEngines === false}))
+              }
+              className="mt-3 flex min-h-[64px] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
+            >
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-[var(--ink)]">
+                  {t('ShowIntegratedEnginesLabel', lang)}
+                </p>
+                <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
+                  {t('ShowIntegratedEnginesDesc', lang)}
+                </p>
+              </div>
+              <span className="morph-switch" data-checked={showIntegratedEngines ? 'true' : 'false'}>
+                <span className="morph-switch-thumb" />
+              </span>
+            </button>
+          </section>
+
+          {/* Dedicated Quick Wheel Position (Left / Center / Right) & Icon Design Card */}
+          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
+                <SlidersHorizontal className="h-4 w-4" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold leading-tight text-[var(--ink)]">
+                  {t('WheelFabSectionTitle', lang)}
+                </h2>
+                <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
+                  {t('WheelFabSectionDesc', lang)}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {/* 3-Step Position Slider: Sol Alt | Orta Alt | Sağ Alt */}
               {(() => {
-                const sideSteps: readonly ('left' | 'right')[] = ['left', 'right'];
-                const sideLabels = [t('WheelSideLeft', lang), t('WheelSideRight', lang)];
+                const sideSteps: readonly WheelSidePref[] = ['left', 'center', 'right'];
+                const sideLabels = [
+                  t('WheelSideLeft', lang),
+                  t('WheelSideCenter', lang),
+                  t('WheelSideRight', lang),
+                ];
                 const idx = Math.max(0, sideSteps.indexOf(wheelSide));
-                const pct = idx * 100;
+                const pct = (idx / (sideSteps.length - 1)) * 100;
                 return (
                   <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
                     <div className="mb-2.5 flex items-center justify-between gap-2">
@@ -645,7 +739,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     <input
                       type="range"
                       min={0}
-                      max={1}
+                      max={sideSteps.length - 1}
                       step={1}
                       value={idx}
                       aria-label={t('WheelSideLabel', lang)}
@@ -670,65 +764,102 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   </div>
                 );
               })()}
-            </div>
 
-            {/* Reduced Motion & Haptic Feedback Toggles */}
-            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => onChangePrefs((p) => ({...p, reducedMotion: !p.reducedMotion}))}
-                className="flex min-h-[68px] items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
-              >
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-[var(--ink)]">
-                    {t('ReducedMotionLabel', lang)}
-                  </p>
-                  <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
-                    {t('ReducedMotionDesc', lang)}
-                  </p>
+              {/* 5 Selectable Quick Wheel Icon Designs */}
+              <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
+                <p className="mb-2.5 text-xs font-semibold text-[var(--ink)]">
+                  {t('WheelIconStyleLabel', lang)}
+                </p>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {(
+                    [
+                      {id: 'wheel', label: t('WheelIconWheel', lang)},
+                      {id: 'morph', label: t('WheelIconMorph', lang)},
+                      {id: 'gear', label: t('WheelIconGear', lang)},
+                      {id: 'compass', label: t('WheelIconCompass', lang)},
+                      {id: 'hex', label: t('WheelIconHex', lang)},
+                    ] as const
+                  ).map(({id, label}) => {
+                    const active = wheelIconStyle === id;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => onChangePrefs((p) => ({...p, wheelIconStyle: id}))}
+                        className={`flex flex-col items-center justify-center gap-1 rounded-xl border py-2 text-[10px] font-semibold transition-colors ${
+                          active
+                            ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--ink)]'
+                            : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)]'
+                        }`}
+                      >
+                        <svg viewBox="0 0 28 28" fill="none" className="h-5 w-5">
+                          {id === 'wheel' && (
+                            <>
+                              {[0, 60, 120, 180, 240, 300].map((deg) => {
+                                const a1 = ((deg - 82) * Math.PI) / 180;
+                                const a2 = ((deg - 38) * Math.PI) / 180;
+                                const r = 10.2;
+                                return (
+                                  <path
+                                    key={deg}
+                                    d={`M ${14 + r * Math.cos(a1)} ${14 + r * Math.sin(a1)} A ${r} ${r} 0 0 1 ${14 + r * Math.cos(a2)} ${14 + r * Math.sin(a2)}`}
+                                    stroke="currentColor"
+                                    strokeWidth="2.2"
+                                    strokeLinecap="round"
+                                  />
+                                );
+                              })}
+                              <circle cx="14" cy="14" r="2.4" fill="currentColor" />
+                            </>
+                          )}
+                          {id === 'morph' && (
+                            <>
+                              <circle cx="14" cy="14" r="10" stroke="currentColor" strokeWidth="1.8" strokeOpacity="0.45" />
+                              <text
+                                x="14"
+                                y="18.2"
+                                textAnchor="middle"
+                                fontSize="14.5"
+                                fontWeight="800"
+                                fill="currentColor"
+                              >
+                                m
+                              </text>
+                            </>
+                          )}
+                          {id === 'gear' && (
+                            <>
+                              <circle cx="14" cy="14" r="6.8" stroke="currentColor" strokeWidth="2.4" strokeDasharray="3.2 2.1" />
+                              <circle cx="14" cy="14" r="3" fill="currentColor" />
+                            </>
+                          )}
+                          {id === 'compass' && (
+                            <>
+                              <circle cx="14" cy="14" r="9.5" stroke="currentColor" strokeWidth="1.6" strokeOpacity="0.4" />
+                              <path
+                                d="M14 4 L16.6 11.4 L24 14 L16.6 16.6 L14 24 L11.4 16.6 L4 14 L11.4 11.4 Z"
+                                fill="currentColor"
+                              />
+                            </>
+                          )}
+                          {id === 'hex' && (
+                            <>
+                              <polygon
+                                points="14,3.8 22.8,8.9 22.8,19.1 14,24.2 5.2,19.1 5.2,8.9"
+                                stroke="currentColor"
+                                strokeWidth="2.1"
+                                strokeLinejoin="round"
+                              />
+                              <circle cx="14" cy="14" r="3" fill="currentColor" />
+                            </>
+                          )}
+                        </svg>
+                        <span className="truncate max-w-full px-0.5">{label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
-                <span
-                  className={`h-6 w-11 shrink-0 rounded-full p-0.5 transition-colors ${
-                    reducedMotion
-                      ? 'bg-[var(--accent)]'
-                      : 'border border-[var(--line)] bg-[var(--surface)]'
-                  }`}
-                >
-                  <span
-                    className={`block h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                      reducedMotion ? 'translate-x-5' : 'translate-x-0'
-                    }`}
-                  />
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  onChangePrefs((p) => ({...p, hapticsEnabled: p.hapticsEnabled === false}))
-                }
-                className="flex min-h-[68px] items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
-              >
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-[var(--ink)]">{t('HapticsLabel', lang)}</p>
-                  <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
-                    {t('HapticsDesc', lang)}
-                  </p>
-                </div>
-                <span
-                  className={`h-6 w-11 shrink-0 rounded-full p-0.5 transition-colors ${
-                    hapticsEnabled
-                      ? 'bg-[var(--accent)]'
-                      : 'border border-[var(--line)] bg-[var(--surface)]'
-                  }`}
-                >
-                  <span
-                    className={`block h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                      hapticsEnabled ? 'translate-x-5' : 'translate-x-0'
-                    }`}
-                  />
-                </span>
-              </button>
+              </div>
             </div>
           </section>
 
@@ -831,16 +962,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     {t('DownloadWifiOnlyDesc', lang)}
                   </p>
                 </div>
-                <span
-                  className={`h-6 w-11 shrink-0 rounded-full p-0.5 transition-colors ${
-                    wifiOnly ? 'bg-[var(--accent)]' : 'border border-[var(--line)] bg-[var(--surface)]'
-                  }`}
-                >
-                  <span
-                    className={`block h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                      wifiOnly ? 'translate-x-5' : 'translate-x-0'
-                    }`}
-                  />
+                <span className="morph-switch" data-checked={wifiOnly ? 'true' : 'false'}>
+                  <span className="morph-switch-thumb" />
                 </span>
               </button>
 
@@ -857,16 +980,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     {t('AutoFallbackDesc', lang)}
                   </p>
                 </div>
-                <span
-                  className={`h-6 w-11 shrink-0 rounded-full p-0.5 transition-colors ${
-                    autoFallback ? 'bg-[var(--accent)]' : 'border border-[var(--line)] bg-[var(--surface)]'
-                  }`}
-                >
-                  <span
-                    className={`block h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                      autoFallback ? 'translate-x-5' : 'translate-x-0'
-                    }`}
-                  />
+                <span className="morph-switch" data-checked={autoFallback ? 'true' : 'false'}>
+                  <span className="morph-switch-thumb" />
                 </span>
               </button>
             </div>
@@ -1050,18 +1165,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               <span className="min-w-0 truncate text-xs font-semibold text-[var(--ink)]">
                 {t('QuickEnginePickerLabel', lang)}
               </span>
-              <span
-                className={`h-6 w-11 shrink-0 rounded-full p-0.5 transition-colors ${
-                  prefs.quickEnginePicker
-                    ? 'bg-[var(--accent)]'
-                    : 'border border-[var(--line)] bg-[var(--inset)]'
-                }`}
-              >
-                <span
-                  className={`block h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                    prefs.quickEnginePicker ? 'translate-x-5' : 'translate-x-0'
-                  }`}
-                />
+              <span className="morph-switch" data-checked={prefs.quickEnginePicker ? 'true' : 'false'}>
+                <span className="morph-switch-thumb" />
               </span>
             </button>
 
@@ -1591,14 +1696,18 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </div>
           </section>
 
-          {/* Equal-Width Developer Card with Updated GitHub Link + 15s Rising Cloud Easter Egg */}
+          {/* Equal-Width Developer Card with 15s Perimeter Spinner & Rising Cloud Easter Egg */}
           <div
             onPointerDown={() => {
               clearDevHoldTimer();
               suppressDevLinkRef.current = false;
               devHoldStartRef.current = Date.now();
+              devRingTimerRef.current = window.setTimeout(() => {
+                setIsHoldingDev(true);
+              }, 300);
               devHoldTimerRef.current = window.setTimeout(() => {
                 suppressDevLinkRef.current = true;
+                setIsHoldingDev(false);
                 setCloudBurstKey((k) => k + 1);
                 setShowDevClouds(true);
                 if (hapticsEnabled && typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -1613,8 +1722,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 }
                 devCloudHideTimerRef.current = window.setTimeout(() => {
                   setShowDevClouds(false);
-                }, 4200);
-              }, 15_000);
+                }, 2800);
+              }, 8_000);
             }}
             onPointerUp={() => {
               clearDevHoldTimer();
@@ -1633,99 +1742,111 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             }}
             className="relative w-full rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5 select-none"
           >
+            {isHoldingDev && (
+              <div
+                aria-hidden="true"
+                className="morph-dev-hold-border pointer-events-none absolute -inset-[1px] rounded-3xl"
+              />
+            )}
             {showDevClouds && (
               <div
                 key={cloudBurstKey}
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-x-0 -top-6 z-50 flex items-end justify-center gap-6 overflow-visible"
+                className="pointer-events-none absolute inset-x-0 -top-5 z-50 flex items-center justify-center gap-5 overflow-visible"
               >
-                {/* Cloud H */}
+                {/* Wispy Cloud-Formed H */}
                 <div
-                  className="morph-cloud-rise relative flex h-16 w-24 items-center justify-center drop-shadow-[0_6px_14px_rgba(0,0,0,0.28)]"
+                  className="morph-cloud-rise relative h-20 w-20"
                   style={{animationDelay: '0ms'}}
                 >
-                  <svg viewBox="0 0 120 76" className="h-full w-full">
-                    <path
-                      d="M28 62h64a18 18 0 0 0 4-35.5A24 24 0 0 0 50 18a20 20 0 0 0-22 15.5A15 15 0 0 0 28 62z"
-                      fill="var(--surface)"
-                      stroke="var(--accent)"
-                      strokeWidth="3.5"
-                    />
-                    <text
-                      x="60"
-                      y="48"
-                      textAnchor="middle"
-                      fontSize="24"
-                      fontWeight="800"
-                      fill="var(--ink)"
-                    >
-                      H
-                    </text>
-                  </svg>
-                </div>
-
-                {/* Cloud-Shaped Heart */}
-                <div
-                  className="morph-cloud-rise relative flex h-20 w-24 items-center justify-center drop-shadow-[0_8px_18px_rgba(233,79,120,0.45)]"
-                  style={{animationDelay: '130ms'}}
-                >
-                  <svg viewBox="0 0 120 104" className="h-full w-full">
+                  <svg viewBox="0 0 100 100" className="h-full w-full overflow-visible">
                     <defs>
-                      <linearGradient id="morph-cloud-heart-grad" x1="0" y1="0" x2="1" y2="1">
-                        <stop offset="0%" stopColor="var(--accent)" />
-                        <stop offset="100%" stopColor="var(--accent-end)" />
-                      </linearGradient>
+                      <filter id="morph-wisp-h" x="-30%" y="-30%" width="160%" height="160%">
+                        <feTurbulence type="fractalNoise" baseFrequency="0.075" numOctaves="3" seed="7" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="7" xChannelSelector="R" yChannelSelector="G" result="wisped" />
+                        <feGaussianBlur in="wisped" stdDeviation="2.1" />
+                      </filter>
                     </defs>
-                    <path
-                      d="M60 92 C42 79, 26 67, 17 55 C8 43, 10 27, 22 19 C32 13, 46 16, 54 25 C57 28, 63 28, 66 25 C74 16, 88 13, 98 19 C110 27, 112 43, 103 55 C94 67, 78 79, 60 92 Z"
-                      fill="url(#morph-cloud-heart-grad)"
-                      stroke="var(--ink)"
-                      strokeOpacity="0.25"
-                      strokeWidth="2.5"
-                    />
-                    {/* Cloud puffs sculpting the heart */}
-                    <circle cx="33" cy="26" r="14" fill="url(#morph-cloud-heart-grad)" />
-                    <circle cx="87" cy="26" r="14" fill="url(#morph-cloud-heart-grad)" />
-                    <circle cx="21" cy="40" r="13" fill="url(#morph-cloud-heart-grad)" />
-                    <circle cx="99" cy="40" r="13" fill="url(#morph-cloud-heart-grad)" />
-                    <circle cx="48" cy="30" r="11" fill="url(#morph-cloud-heart-grad)" />
-                    <circle cx="72" cy="30" r="11" fill="url(#morph-cloud-heart-grad)" />
-                    <circle cx="38" cy="64" r="12" fill="url(#morph-cloud-heart-grad)" />
-                    <circle cx="82" cy="64" r="12" fill="url(#morph-cloud-heart-grad)" />
-                    <circle cx="60" cy="76" r="11" fill="url(#morph-cloud-heart-grad)" />
-                    <path
-                      d="M36 30a8 8 0 0 1 11-2"
-                      fill="none"
-                      stroke="#ffffff"
-                      strokeOpacity="0.65"
-                      strokeWidth="3"
-                      strokeLinecap="round"
-                    />
+                    <g filter="url(#morph-wisp-h)" fill={isDark ? 'rgba(255,255,255,0.68)' : 'rgba(148,163,184,0.68)'}>
+                      {/* Left leg */}
+                      <circle cx="29" cy="22" r="8.5" />
+                      <circle cx="27" cy="35" r="9.5" />
+                      <circle cx="30" cy="49" r="9.5" />
+                      <circle cx="27" cy="63" r="9.5" />
+                      <circle cx="29" cy="77" r="8.5" />
+                      {/* Crossbar */}
+                      <circle cx="40" cy="50" r="8.2" />
+                      <circle cx="50" cy="49" r="8.8" />
+                      <circle cx="60" cy="50" r="8.2" />
+                      {/* Right leg */}
+                      <circle cx="71" cy="22" r="8.5" />
+                      <circle cx="73" cy="35" r="9.5" />
+                      <circle cx="70" cy="49" r="9.5" />
+                      <circle cx="73" cy="63" r="9.5" />
+                      <circle cx="71" cy="77" r="8.5" />
+                    </g>
                   </svg>
                 </div>
 
-                {/* Cloud S */}
+                {/* Wispy Cloud-Formed Heart (matching cloud texture & color) */}
                 <div
-                  className="morph-cloud-rise relative flex h-16 w-24 items-center justify-center drop-shadow-[0_6px_14px_rgba(0,0,0,0.28)]"
-                  style={{animationDelay: '260ms'}}
+                  className="morph-cloud-rise relative h-20 w-20"
+                  style={{animationDelay: '90ms'}}
                 >
-                  <svg viewBox="0 0 120 76" className="h-full w-full">
-                    <path
-                      d="M28 62h64a18 18 0 0 0 4-35.5A24 24 0 0 0 50 18a20 20 0 0 0-22 15.5A15 15 0 0 0 28 62z"
-                      fill="var(--surface)"
-                      stroke="var(--accent-end)"
-                      strokeWidth="3.5"
-                    />
-                    <text
-                      x="60"
-                      y="48"
-                      textAnchor="middle"
-                      fontSize="24"
-                      fontWeight="800"
-                      fill="var(--ink)"
-                    >
-                      S
-                    </text>
+                  <svg viewBox="0 0 100 100" className="h-full w-full overflow-visible">
+                    <defs>
+                      <filter id="morph-wisp-heart" x="-25%" y="-25%" width="150%" height="150%">
+                        <feTurbulence type="fractalNoise" baseFrequency="0.085" numOctaves="3" seed="11" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="3.8" xChannelSelector="R" yChannelSelector="G" result="wisped" />
+                        <feGaussianBlur in="wisped" stdDeviation="1.35" />
+                      </filter>
+                    </defs>
+                    <g filter="url(#morph-wisp-heart)" fill={isDark ? 'rgba(255,255,255,0.68)' : 'rgba(148,163,184,0.68)'}>
+                      <path d="M 50 84 C 31 70, 14 55, 14 37 C 14 23, 25 14, 37 14 C 44.5 14, 48.2 18.5, 50 24 C 51.8 18.5, 55.5 14, 63 14 C 75 14, 86 23, 86 37 C 86 55, 69 70, 50 84 Z" />
+                      {/* Subtle perimeter cloud puffs keeping cleft and tip sharp */}
+                      <circle cx="28" cy="21" r="7.5" />
+                      <circle cx="38" cy="18" r="6.5" />
+                      <circle cx="19" cy="31" r="7.5" />
+                      <circle cx="18" cy="43" r="6.5" />
+                      <circle cx="72" cy="21" r="7.5" />
+                      <circle cx="62" cy="18" r="6.5" />
+                      <circle cx="81" cy="31" r="7.5" />
+                      <circle cx="82" cy="43" r="6.5" />
+                      <circle cx="29" cy="60" r="6.2" />
+                      <circle cx="71" cy="60" r="6.2" />
+                    </g>
+                  </svg>
+                </div>
+
+                {/* Wispy Cloud-Formed S */}
+                <div
+                  className="morph-cloud-rise relative h-20 w-20"
+                  style={{animationDelay: '180ms'}}
+                >
+                  <svg viewBox="0 0 100 100" className="h-full w-full overflow-visible">
+                    <defs>
+                      <filter id="morph-wisp-s" x="-30%" y="-30%" width="160%" height="160%">
+                        <feTurbulence type="fractalNoise" baseFrequency="0.075" numOctaves="3" seed="14" result="noise" />
+                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="7" xChannelSelector="R" yChannelSelector="G" result="wisped" />
+                        <feGaussianBlur in="wisped" stdDeviation="2.1" />
+                      </filter>
+                    </defs>
+                    <g filter="url(#morph-wisp-s)" fill={isDark ? 'rgba(255,255,255,0.68)' : 'rgba(148,163,184,0.68)'}>
+                      {/* Top arc */}
+                      <circle cx="65" cy="25" r="8.2" />
+                      <circle cx="52" cy="21" r="9" />
+                      <circle cx="38" cy="24" r="8.5" />
+                      <circle cx="32" cy="35" r="8.8" />
+                      {/* Middle curve */}
+                      <circle cx="40" cy="46" r="8.5" />
+                      <circle cx="52" cy="50" r="9" />
+                      <circle cx="64" cy="55" r="8.5" />
+                      {/* Bottom arc */}
+                      <circle cx="68" cy="67" r="8.8" />
+                      <circle cx="60" cy="77" r="8.8" />
+                      <circle cx="46" cy="79" r="9" />
+                      <circle cx="34" cy="74" r="8" />
+                    </g>
                   </svg>
                 </div>
               </div>
@@ -1758,10 +1879,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 onClick={(e) => {
                   if (suppressDevLinkRef.current) e.preventDefault();
                 }}
-                className="flex shrink-0 items-center gap-1.5 text-xs font-bold text-[#2AABEE] hover:underline whitespace-nowrap"
+                className="flex shrink-0 items-center text-xs font-bold text-[#2AABEE] hover:underline whitespace-nowrap"
               >
                 <span>@ucanbizon</span>
-                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
               </a>
             </div>
           </div>

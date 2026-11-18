@@ -12,6 +12,8 @@ export const DEFAULT_PREFS: Prefs = {
   serverUrl: '',
   serverToken: '',
   wheelSide: 'right',
+  wheelIconStyle: 'wheel',
+  showIntegratedEngines: true,
   lastEngineAction: 'update',
   lastEngineSegment: null,
   downloadEngine: 'builtin',
