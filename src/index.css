@@ -203,6 +203,60 @@ html[data-corners="soft"] .rounded-xl {
   cursor: pointer;
 }
 
+/* Sleek Pro NLE Range Sliders (no jarring white browser tracks) */
+.morph-nle-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+  background: linear-gradient(
+    90deg,
+    var(--accent) 0%,
+    var(--accent) var(--nle-pct, 50%),
+    var(--inset) var(--nle-pct, 50%),
+    var(--inset) 100%
+  );
+  outline: none;
+  cursor: pointer;
+}
+
+.morph-nle-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 9999px;
+  background: var(--accent);
+  border: 2px solid var(--paper);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent), 0 2px 6px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+
+.morph-nle-range:active::-webkit-slider-thumb {
+  transform: scale(1.18);
+}
+
+.morph-nle-range::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border-radius: 9999px;
+  background: var(--accent);
+  border: 2px solid var(--paper);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent), 0 2px 6px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 @keyframes morph-cloud-rise {
   0% {
     opacity: 0;

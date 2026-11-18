@@ -82,6 +82,129 @@ import {EngineCardInfo, getAllEnginesStatus} from '../engine/morphEnginesBridge'
 import {ToolOptions} from '../engine/processor';
 import {CropEditor} from './CropEditor';
 import {FileThumb} from './FileThumb';
+import {VideoEditor, VideoEditorState, VideoEditorTab} from './VideoEditor';
+
+const VIDEO_STUDIO_TOOL_IDS = new Set([
+  'video_studio',
+  'video_trim',
+  'video_split',
+  'video_crop',
+  'video_rotate',
+  'video_speed',
+  'video_reverse',
+  'video_boomerang',
+  'video_loop',
+  'video_mute',
+]);
+
+function videoEditorPresetForTool(
+  toolId: string,
+  formatOverride?: VideoEditorState['format'] | null
+): {tab: VideoEditorTab; preset: Partial<VideoEditorState>} {
+  const baseFmt = formatOverride ? {format: formatOverride} : {};
+  switch (toolId) {
+    case 'video_crop':
+      return {tab: 'transform', preset: {cropAspect: '1:1', ...baseFmt}};
+    case 'video_rotate':
+      return {tab: 'transform', preset: {rotateDeg: 90, ...baseFmt}};
+    case 'video_speed':
+      return {tab: 'fx', preset: {speed: 1.5, ...baseFmt}};
+    case 'video_reverse':
+      return {tab: 'fx', preset: {effect: 'reverse', ...baseFmt}};
+    case 'video_boomerang':
+      return {tab: 'fx', preset: {effect: 'boomerang', ...baseFmt}};
+    case 'video_loop':
+      return {tab: 'fx', preset: {effect: 'loop', loopCount: 2, ...baseFmt}};
+    case 'video_mute':
+      return {tab: 'trim', preset: {mute: true, ...baseFmt}};
+    case 'video_trim':
+    case 'video_split':
+    default:
+      return {tab: 'trim', preset: {...baseFmt}};
+  }
+}
+
+const InlineMediaPreview: React.FC<{files: PickedFile[]; lang: Lang}> = ({files, lang}) => {
+  const [activeIdx, setActiveIdx] = useState(0);
+  const safeIdx = Math.min(activeIdx, Math.max(0, files.length - 1));
+  const activeFile = files[safeIdx];
+  const [mediaUrl, setMediaUrl] = useState('');
+
+  useEffect(() => {
+    setActiveIdx(0);
+  }, [files]);
+
+  useEffect(() => {
+    if (!activeFile || (activeFile.kind !== 'video' && activeFile.kind !== 'audio')) {
+      setMediaUrl('');
+      return;
+    }
+    const url = URL.createObjectURL(activeFile.file);
+    setMediaUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [activeFile]);
+
+  if (!activeFile || (activeFile.kind !== 'video' && activeFile.kind !== 'audio')) {
+    return null;
+  }
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)]">
+      <div className="flex items-center justify-between border-b border-[var(--line)] px-3.5 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          {activeFile.kind === 'video' ? (
+            <Film className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+          ) : (
+            <Music className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+          )}
+          <span className="truncate text-xs font-bold text-[var(--ink)]">{activeFile.name}</span>
+        </div>
+        <span className="font-mono-num shrink-0 text-[11px] font-semibold text-[var(--muted)]">
+          {formatBytes(activeFile.size)}
+        </span>
+      </div>
+
+      {files.length > 1 && (
+        <div className="flex gap-1.5 overflow-x-auto border-b border-[var(--line)] bg-[var(--inset)]/60 px-3 py-1.5">
+          {files.map((f, idx) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setActiveIdx(idx)}
+              className={`shrink-0 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                idx === safeIdx
+                  ? 'border-[var(--accent)] bg-[var(--accent)]/18 text-[var(--ink)]'
+                  : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]'
+              }`}
+            >
+              {idx + 1}. {f.name.slice(0, 18)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {activeFile.kind === 'video' && mediaUrl ? (
+        <div className="bg-black">
+          <video
+            key={mediaUrl}
+            src={mediaUrl}
+            controls
+            playsInline
+            preload="metadata"
+            className="max-h-60 w-full object-contain"
+          />
+        </div>
+      ) : activeFile.kind === 'audio' && mediaUrl ? (
+        <div className="bg-[var(--inset)] p-3.5">
+          <p className="mb-2 text-[11px] font-semibold text-[var(--muted)]">
+            {t('VeAudioPreview', lang)}
+          </p>
+          <audio key={mediaUrl} src={mediaUrl} controls preload="metadata" className="w-full" />
+        </div>
+      ) : null}
+    </div>
+  );
+};
 
 interface ToolFlowProps {
   mode: 'convert' | 'tools' | 'web';
@@ -215,6 +338,7 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
   const [selectedTool, setSelectedTool] = useState<ToolId | null>(initialTool);
   const [convertFormat, setConvertFormat] = useState<string | null>(initialConvertFormat);
   const [selectedServerTool, setSelectedServerTool] = useState<ServerToolDef | null>(initialServerTool);
+  const [studioFormatHint, setStudioFormatHint] = useState<VideoEditorState['format'] | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<ToolCategory>('all');
 
@@ -222,7 +346,21 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
     setSelectedTool(initialTool);
     setConvertFormat(initialConvertFormat);
     setSelectedServerTool(initialServerTool);
+    setStudioFormatHint(null);
   }, [initialTool, initialConvertFormat, initialServerTool]);
+
+  const openVideoEditorStudio = (fmtHint?: string) => {
+    const allowed: VideoEditorState['format'][] = ['mp4', 'mov', 'webm', 'mkv', 'gif'];
+    const normalized = fmtHint ? fmtHint.toLowerCase() : '';
+    setStudioFormatHint(
+      allowed.includes(normalized as VideoEditorState['format'])
+        ? (normalized as VideoEditorState['format'])
+        : null
+    );
+    setConvertFormat(null);
+    const studioDef = SERVER_TOOLS.find((s) => s.id === 'video_studio') ?? null;
+    setSelectedServerTool(studioDef);
+  };
 
   const localTools = useMemo(() => toolsForSelection(files), [files]);
   const serverTools = useMemo(() => serverToolsForSelection(files), [files]);
@@ -289,6 +427,11 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
         format={convertFormat}
         lang={lang}
         onBack={() => (directEntry ? onBack() : setConvertFormat(null))}
+        onOpenVideoEditor={
+          files.length === 1 && files[0]?.kind === 'video'
+            ? () => openVideoEditorStudio(convertFormat)
+            : undefined
+        }
         onExport={(opts) => {
           const kind = files[0]?.kind;
           if (kind === 'pdf' && (convertFormat === 'docx' || convertFormat === 'txt' || convertFormat === 'html')) {
@@ -304,7 +447,13 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
           }
           if (kind === 'video') {
             const vidTool = SERVER_TOOLS.find((s) => s.id === 'video_convert');
-            if (vidTool) onRunServer(vidTool, {format: convertFormat});
+            if (vidTool) {
+              const srvOpts: Record<string, string> = {format: convertFormat};
+              if (opts.kind === 'convert' && opts.quality) {
+                srvOpts.quality = String(opts.quality);
+              }
+              onRunServer(vidTool, srvOpts);
+            }
             return;
           }
           if (kind === 'audio') {
@@ -347,6 +496,28 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
     );
   }
 
+  if (
+    selectedServerTool &&
+    VIDEO_STUDIO_TOOL_IDS.has(selectedServerTool.id) &&
+    files[0]?.kind === 'video'
+  ) {
+    const {tab: initVeTab, preset: initVePreset} = videoEditorPresetForTool(
+      selectedServerTool.id,
+      studioFormatHint
+    );
+    const studioDef = SERVER_TOOLS.find((s) => s.id === 'video_studio') ?? selectedServerTool;
+    return (
+      <VideoEditor
+        file={files[0]}
+        lang={lang}
+        initialTab={initVeTab}
+        initialPreset={initVePreset}
+        onBack={() => (directEntry ? onBack() : setSelectedServerTool(null))}
+        onExport={(opts) => onRunServer(studioDef, opts)}
+      />
+    );
+  }
+
   if (selectedServerTool) {
     return (
       <ServerToolConfig
@@ -354,6 +525,11 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
         files={files}
         lang={lang}
         onBack={() => (directEntry ? onBack() : setSelectedServerTool(null))}
+        onOpenVideoEditor={
+          files.length === 1 && files[0]?.kind === 'video'
+            ? () => openVideoEditorStudio(selectedServerTool.id === 'video_convert' ? undefined : 'mp4')
+            : undefined
+        }
         onRun={(opts) => onRunServer(selectedServerTool, opts)}
       />
     );
@@ -419,17 +595,33 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
         onBack={onBack}
       />
 
-      {/* Preview Strip */}
-      <div className="mt-4 flex items-center gap-2 overflow-x-auto pb-1">
-        {files.slice(0, 6).map((f) => (
-          <FileThumb key={f.id} previewUrl={f.previewUrl} kind={f.kind} alt={f.name} sizeClass="h-14 w-14" />
-        ))}
-        {files.length > 6 && (
-          <div className="font-mono-num flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-xs font-bold text-[var(--muted)]">
-            +{files.length - 6}
-          </div>
-        )}
-      </div>
+      {/* Preview Strip or Live Video/Audio Player */}
+      {firstKind === 'video' || firstKind === 'audio' ? (
+        <div className="mt-4 space-y-3">
+          <InlineMediaPreview files={files} lang={lang} />
+          {files.length === 1 && firstKind === 'video' && (
+            <button
+              type="button"
+              onClick={() => openVideoEditorStudio('mp4')}
+              className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl border border-[var(--accent)]/45 bg-[var(--accent)]/12 px-4 text-xs font-bold text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
+            >
+              <Scissors className="h-4 w-4 text-[var(--accent)]" />
+              <span>{t('VeOpenStudioBtn', lang)}</span>
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="mt-4 flex items-center gap-2 overflow-x-auto pb-1">
+          {files.slice(0, 6).map((f) => (
+            <FileThumb key={f.id} previewUrl={f.previewUrl} kind={f.kind} alt={f.name} sizeClass="h-14 w-14" />
+          ))}
+          {files.length > 6 && (
+            <div className="font-mono-num flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-xs font-bold text-[var(--muted)]">
+              +{files.length - 6}
+            </div>
+          )}
+        </div>
+      )}
 
       {mode === 'convert' ? (
         <div className="mt-6">
@@ -688,15 +880,19 @@ const ConvertConfig: React.FC<{
   format: string;
   lang: Lang;
   onBack: () => void;
+  onOpenVideoEditor?: () => void;
   onExport: (opts: ToolOptions) => void;
-}> = ({files, format, lang, onBack, onExport}) => {
+}> = ({files, format, lang, onBack, onOpenVideoEditor, onExport}) => {
   const [quality, setQuality] = useState(90);
+  const [videoCrf, setVideoCrf] = useState('24');
   const [maxDim, setMaxDim] = useState('0');
   const firstKind = files[0]?.kind;
   const isRasterConvert =
     (firstKind === 'image' && !['pdf', 'ico', 'svg'].includes(format)) ||
     (firstKind === 'pdf' && ['jpg', 'png', 'webp'].includes(format));
   const lossy = isRasterConvert && (format === 'jpg' || format === 'webp');
+  const isVideoTranscode =
+    firstKind === 'video' && ['mp4', 'mov', 'webm', 'mkv'].includes(format.toLowerCase());
 
   return (
     <ConfigShell
@@ -708,11 +904,51 @@ const ConvertConfig: React.FC<{
         onExport({
           kind: 'convert',
           format,
-          quality,
+          quality: isVideoTranscode ? Number(videoCrf) : quality,
           maxDim: Number(maxDim) > 0 ? Number(maxDim) : undefined,
         })
       }
     >
+      {(firstKind === 'video' || firstKind === 'audio') && (
+        <InlineMediaPreview files={files} lang={lang} />
+      )}
+
+      {firstKind === 'video' && onOpenVideoEditor && (
+        <button
+          type="button"
+          onClick={onOpenVideoEditor}
+          className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl border border-[var(--accent)]/45 bg-[var(--accent)]/12 px-4 text-xs font-bold text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
+        >
+          <Scissors className="h-4 w-4 text-[var(--accent)]" />
+          <span>{t('VeOpenStudioBtn', lang)}</span>
+        </button>
+      )}
+
+      {firstKind === 'image' && files[0]?.previewUrl && (
+        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-2">
+          <img
+            src={files[0].previewUrl}
+            alt={files[0].name}
+            className="mx-auto max-h-56 w-auto rounded-xl object-contain"
+          />
+        </div>
+      )}
+
+      {isVideoTranscode && (
+        <div>
+          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('Quality', lang)}</p>
+          <OptionPills
+            selected={videoCrf}
+            onSelect={setVideoCrf}
+            options={[
+              {value: '20', label: t('High', lang)},
+              {value: '24', label: t('Balanced', lang)},
+              {value: '32', label: t('Small', lang)},
+            ]}
+          />
+        </div>
+      )}
+
       {lossy && (
         <SliderField label={t('Quality', lang)} value={quality} min={40} max={100} onChange={setQuality} />
       )}
@@ -2515,8 +2751,9 @@ const ServerToolConfig: React.FC<{
   files: PickedFile[];
   lang: Lang;
   onBack: () => void;
+  onOpenVideoEditor?: () => void;
   onRun: (options: Record<string, string>) => void;
-}> = ({tool, files, lang, onBack, onRun}) => {
+}> = ({tool, files, lang, onBack, onOpenVideoEditor, onRun}) => {
   const [format, setFormat] = useState(tool.formats[0] ?? '');
   const [quality, setQuality] = useState('26');
   const [start, setStart] = useState('0');
@@ -2529,6 +2766,7 @@ const ServerToolConfig: React.FC<{
   const [loopCount, setLoopCount] = useState('2');
   const [fadeSec, setFadeSec] = useState('2');
   const [audioSpeedMode, setAudioSpeedMode] = useState('1.25');
+  const firstKind = files[0]?.kind;
 
   return (
     <ConfigShell
@@ -2556,6 +2794,21 @@ const ServerToolConfig: React.FC<{
       }}
     >
       <p className="text-xs text-[var(--muted)]">{lang === 'tr' ? tool.descTr : tool.descEn}</p>
+
+      {(firstKind === 'video' || firstKind === 'audio') && (
+        <InlineMediaPreview files={files} lang={lang} />
+      )}
+
+      {firstKind === 'video' && onOpenVideoEditor && (
+        <button
+          type="button"
+          onClick={onOpenVideoEditor}
+          className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl border border-[var(--accent)]/45 bg-[var(--accent)]/12 px-4 text-xs font-bold text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
+        >
+          <Scissors className="h-4 w-4 text-[var(--accent)]" />
+          <span>{t('VeOpenStudioBtn', lang)}</span>
+        </button>
+      )}
 
       {tool.fields.includes('format') && tool.formats.length > 0 && (
         <div>

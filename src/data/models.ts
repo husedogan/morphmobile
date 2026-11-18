@@ -215,6 +215,16 @@ export const ALL_TOOLS: Record<ToolId, ToolDef> = {
 
 export const SERVER_TOOLS: ServerToolDef[] = [
   {
+    id: 'video_studio',
+    titleTr: 'Video Düzenleyici (Pro Stüdyo)',
+    titleEn: 'Video Editor (Pro Studio)',
+    descTr: 'Çok katmanlı zaman çizelgesi, ses dalga formu, renk filtresi, metin katmanı, bulanık arka plan, hız, ters & bumerang.',
+    descEn: 'Pro NLE timeline with audio waveform, color grading, text captions, blur pad, trim, split, speed & boomerang.',
+    kinds: ['video'],
+    formats: ['mp4', 'mov', 'webm', 'mkv', 'gif'],
+    fields: [],
+  },
+  {
     id: 'video_convert',
     titleTr: 'Video Dönüştür',
     titleEn: 'Convert Video',
@@ -900,6 +910,7 @@ const WHEEL_TOOL_LABELS: Record<string, {tr: string; en: string}> = {
   ZIP_EXTRACT: {tr: 'ZIP Aç', en: 'Extract'},
   BATCH_RENAME: {tr: 'Adlandır', en: 'Rename'},
   FILE_HASH_INFO: {tr: 'SHA-256', en: 'Checksum'},
+  video_studio: {tr: 'Video Editör', en: 'Video Editor'},
   video_convert: {tr: 'Video Çevir', en: 'Convert'},
   video_compress: {tr: 'V. Sıkıştır', en: 'Compress'},
   video_extract_audio: {tr: 'Ses Al', en: 'To Audio'},
@@ -1156,10 +1167,10 @@ export function smartToolIdsForSelection(files: PickedFile[]): string[] {
         ];
       } else {
         priority = [
+          'server:video_studio',
           'server:video_compress',
           'server:video_extract_audio',
           'server:video_trim',
-          'server:video_rotate',
           'server:video_boomerang',
           'server:video_speed',
         ];

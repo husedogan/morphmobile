@@ -4,7 +4,7 @@ export const GITHUB_REPO = 'husedogan/morphmobile';
 export const APP_VERSION: string =
   typeof __MORPH_VERSION__ === 'string' && __MORPH_VERSION__.trim().length > 0
     ? __MORPH_VERSION__
-    : '1.1.12';
+    : '1.1.13';
 
 export type VersionChannel = 'stable' | 'preview';
 

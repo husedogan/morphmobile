@@ -568,7 +568,7 @@ export default function App() {
       });
 
       try {
-        if (serverReady) {
+        if (serverReady && tool.id !== 'video_studio') {
           const jobId = await submitServerJob(
             prefs.serverUrl,
             prefs.serverToken,
