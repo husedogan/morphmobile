@@ -12,7 +12,7 @@ const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 
 export default defineConfig(() => {
   return {
     define: {
-      __MORPH_VERSION__: JSON.stringify(pkg.version || '1.1.9'),
+      __MORPH_VERSION__: JSON.stringify(pkg.version || '1.1.12'),
     },
     plugins: [
       react(),
@@ -23,6 +23,7 @@ export default defineConfig(() => {
           'icon.svg',
           'morph-mark.png',
           'morph-wordmark.png',
+          'morph-wordmark-light.png',
           'apple-touch-icon.png',
           'pwa-192x192.png',
           'pwa-512x512.png',

@@ -1,14 +1,14 @@
 # Morph
 
-[![Morph Version](https://img.shields.io/badge/Morph-1.1.10-42C9D9?style=flat-square)](https://github.com/husodogan/morphmobilestudio/releases)
-[![Android APK](https://img.shields.io/github/v/release/husodogan/morphmobilestudio?label=APK%20Release&color=42C9D9&style=flat-square)](https://github.com/husodogan/morphmobilestudio/releases)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/husodogan/morphmobilestudio/build-apk.yml?branch=main&label=APK%20Build&style=flat-square)](https://github.com/husodogan/morphmobilestudio/actions)
+[![Morph Version](https://img.shields.io/badge/Morph-1.1.12-42C9D9?style=flat-square)](https://github.com/husedogan/morphmobilestudio/releases)
+[![Android APK](https://img.shields.io/github/v/release/husedogan/morphmobilestudio?label=APK%20Release&color=42C9D9&style=flat-square)](https://github.com/husedogan/morphmobilestudio/releases)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/husedogan/morphmobilestudio/build-apk.yml?branch=main&label=APK%20Build&style=flat-square)](https://github.com/husedogan/morphmobilestudio/actions)
 
 **Morph**, görsel, PDF, arşiv, video, ses ve belge dosyalarını cihaz içinde hızlı ve güvenli biçimde dönüştüren mobil stüdyo uygulamasıdır. Tüm dosya işlemleri orijinallerine dokunmadan doğrudan cihazında çalışır.
 
 ## İndirme ve Kurulum
 
-- **Android APK:** [Releases](https://github.com/husodogan/morphmobilestudio/releases) sayfasından güncel `Morph-v*.apk` dosyasını indirip kurabilirsin.
+- **Android APK:** [Releases](https://github.com/husedogan/morphmobilestudio/releases) sayfasından güncel `Morph-v*.apk` dosyasını indirip kurabilirsin.
 - Uygulama içindeki **Ayarlar → Güncelleme** sekmesinden yeni sürümleri tek dokunuşla denetleyip indirebilirsin.
 
 ## Temel Özellikler

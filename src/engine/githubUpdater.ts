@@ -1,6 +1,6 @@
 declare const __MORPH_VERSION__: string;
 
-export const GITHUB_REPO = 'husodogan/morphmobilestudio';
+export const GITHUB_REPO = 'husedogan/morphmobilestudio';
 export const APP_VERSION: string =
   typeof __MORPH_VERSION__ === 'string' && __MORPH_VERSION__.trim().length > 0
     ? __MORPH_VERSION__
