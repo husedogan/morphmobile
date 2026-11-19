@@ -1,9 +1,27 @@
 import {FFmpeg} from '@ffmpeg/ffmpeg';
 import {fetchFile, toBlobURL} from '@ffmpeg/util';
 import {PickedFile, mimeFromExt} from '../data/models';
+import {getAudioClipBlob} from './audioEngine';
 
 let ffmpegInstance: FFmpeg | null = null;
 let ffmpegLoading: Promise<FFmpeg> | null = null;
+let ffmpegJobQueue: Promise<unknown> = Promise.resolve();
+
+function enqueueFfmpegJob<T>(task: () => Promise<T>): Promise<T> {
+  const next = ffmpegJobQueue.then(task, task);
+  ffmpegJobQueue = next.then(
+    () => undefined,
+    () => undefined
+  );
+  return next;
+}
+
+async function cleanupVfsFiles(ffmpeg: FFmpeg, names: string[]): Promise<void> {
+  if (ffmpegInstance !== ffmpeg || !ffmpeg.loaded) return;
+  for (const name of names) {
+    await ffmpeg.deleteFile(name).catch(() => {});
+  }
+}
 
 function terminateFFmpegInstance(): void {
   if (ffmpegInstance) {
@@ -221,6 +239,18 @@ function buildAudioEncodeArgs(inName: string, targetFmt: string, outName: string
 }
 
 export async function runLocalFfmpegTool(
+  toolId: string,
+  files: PickedFile[],
+  options: Record<string, string>,
+  onProgress: (ratio: number, step: string) => void,
+  signal?: AbortSignal
+): Promise<Array<{name: string; blob: Blob}>> {
+  return enqueueFfmpegJob(() =>
+    runLocalFfmpegToolInternal(toolId, files, options, onProgress, signal)
+  );
+}
+
+async function runLocalFfmpegToolInternal(
   toolId: string,
   files: PickedFile[],
   options: Record<string, string>,
@@ -995,12 +1025,27 @@ export async function runLocalFfmpegTool(
         transitionDurationSec: number;
       }
 
+      interface ParsedExternalAudio {
+        id: string;
+        kind: 'original' | 'music' | 'voiceover';
+        sourceStart: number;
+        sourceEnd: number;
+        timelineStart: number;
+        volume: number;
+        muted: boolean;
+        fadeInSec: number;
+        fadeOutSec: number;
+        noiseReduction: boolean;
+        ducking: boolean;
+        blobUrl?: string;
+      }
+
       let multiSegments: ParsedSeg[] = [];
       if (options.clipsJson) {
         try {
           const rawArr = JSON.parse(options.clipsJson);
-          if (Array.isArray(rawArr) && rawArr.length > 1) {
-            multiSegments = rawArr
+          if (Array.isArray(rawArr) && rawArr.length > 0) {
+            const parsedSegs: ParsedSeg[] = rawArr
               .map((c: Record<string, unknown>) => ({
                 sourceStart: Math.max(0, Number(c.sourceStart) || 0),
                 sourceEnd: Math.max(0.1, Number(c.sourceEnd) || totalDur),
@@ -1016,33 +1061,136 @@ export async function runLocalFfmpegTool(
               }))
               .filter((c) => c.sourceEnd - c.sourceStart >= 0.08)
               .sort((a, b) => a.timelineStart - b.timelineStart);
+            if (parsedSegs.length > 1 || (parsedSegs.length === 1 && parsedSegs[0].timelineStart > 0.05)) {
+              multiSegments = parsedSegs;
+            }
           }
         } catch {
           multiSegments = [];
         }
       }
 
+      const audioDuckingEnabled = options.audioDucking === '1';
+      let externalAudioClips: ParsedExternalAudio[] = [];
+      if (options.audioClipsJson && !isGif) {
+        try {
+          const rawAudio = JSON.parse(options.audioClipsJson);
+          if (Array.isArray(rawAudio)) {
+            externalAudioClips = rawAudio
+              .map((a: Record<string, unknown>) => ({
+                id: String(a.id || ''),
+                kind: (a.kind === 'voiceover' ? 'voiceover' : a.kind === 'music' ? 'music' : 'original') as
+                  | 'original'
+                  | 'music'
+                  | 'voiceover',
+                sourceStart: Math.max(0, Number(a.sourceStart) || 0),
+                sourceEnd: Math.max(0.1, Number(a.sourceEnd) || 10),
+                timelineStart: Math.max(0, Number(a.timelineStart) || 0),
+                volume: Number.isFinite(Number(a.volume)) ? Number(a.volume) : 100,
+                muted: Boolean(a.muted),
+                fadeInSec: Math.max(0, Number(a.fadeInSec) || 0),
+                fadeOutSec: Math.max(0, Number(a.fadeOutSec) || 0),
+                noiseReduction: Boolean(a.noiseReduction),
+                ducking: Boolean(a.ducking),
+                blobUrl: typeof a.blobUrl === 'string' ? a.blobUrl : undefined,
+              }))
+              .filter((a) => a.id && a.kind !== 'original' && !a.muted && a.volume > 0);
+          }
+        } catch {
+          externalAudioClips = [];
+        }
+      }
+
       const progressHandler = ({progress}: {progress: number}) => {
         if (Number.isFinite(progress)) {
-          onProgress(Math.min(0.95, 0.15 + progress * 0.78), outFile);
+          onProgress(Math.min(0.95, 0.15 + progress * 0.72), outFile);
         }
       };
       ffmpeg.on('progress', progressHandler);
 
       try {
-        // Multi-clip NLE timeline rendering & concatenation
-        if (multiSegments.length > 1 && !isGif && !isBoomerang) {
+        let renderedHasAudio = info.hasAudio && !mute && volumePct > 0 && !isGif && !isBoomerang;
+
+        // Multi-clip NLE timeline rendering & gap-preserving concatenation
+        if (multiSegments.length > 0 && !isGif && !isBoomerang) {
           const segFiles: string[] = [];
           const anyAudio = info.hasAudio && !mute;
+          renderedHasAudio = anyAudio;
+          const effFps = targetFps > 0 ? targetFps : 30;
+          let timelineCursor = 0;
 
           for (let idx = 0; idx < multiSegments.length; idx++) {
             const seg = multiSegments[idx];
             const segDur = Math.max(0.08, Number((seg.sourceEnd - seg.sourceStart).toFixed(3)));
+            const segTimelineDur = segDur / seg.speed;
+
+            // Preserve real timeline gaps with matching black video (+ silent audio when needed)
+            const gapDur = Number((seg.timelineStart - timelineCursor).toFixed(3));
+            if (gapDur > 0.04) {
+              const gapName = `nle_gap_${idx}.mp4`;
+              tempFilesToClean.push(gapName);
+              segFiles.push(gapName);
+              const gapArgs = anyAudio
+                ? [
+                    '-f',
+                    'lavfi',
+                    '-i',
+                    `color=c=black:s=${outW}x${outH}:r=${effFps}:d=${gapDur}`,
+                    '-f',
+                    'lavfi',
+                    '-i',
+                    `anullsrc=r=48000:cl=stereo`,
+                    '-t',
+                    String(gapDur),
+                    '-pix_fmt',
+                    'yuv420p',
+                    '-c:v',
+                    'libx264',
+                    '-preset',
+                    'ultrafast',
+                    '-crf',
+                    crf,
+                    '-c:a',
+                    'aac',
+                    '-ar',
+                    '48000',
+                    '-ac',
+                    '2',
+                    '-b:a',
+                    audioBitrate,
+                    '-shortest',
+                    '-y',
+                    gapName,
+                  ]
+                : [
+                    '-f',
+                    'lavfi',
+                    '-i',
+                    `color=c=black:s=${outW}x${outH}:r=${effFps}:d=${gapDur}`,
+                    '-t',
+                    String(gapDur),
+                    '-pix_fmt',
+                    'yuv420p',
+                    '-c:v',
+                    'libx264',
+                    '-preset',
+                    'ultrafast',
+                    '-crf',
+                    crf,
+                    '-an',
+                    '-y',
+                    gapName,
+                  ];
+              const rcGap = await ffmpeg.exec(gapArgs);
+              if (signal?.aborted) throw new Error('Cancelled');
+              if (rcGap !== 0) throw new Error('Timeline boşluk segmenti oluşturulamadı.');
+            }
+
             const segName = `nle_seg_${idx}.mp4`;
             tempFilesToClean.push(segName);
             segFiles.push(segName);
 
-            onProgress(0.15 + (idx / multiSegments.length) * 0.65, outFile);
+            onProgress(0.15 + (idx / multiSegments.length) * 0.62, outFile);
             const effFadeIn =
               seg.transitionIn !== 'none'
                 ? Math.max(seg.fadeInSec, seg.transitionDurationSec)
@@ -1066,34 +1214,80 @@ export async function runLocalFfmpegTool(
                   seg.fadeOutSec
                 )
               : [];
-            const gSeg = attachAudioComplex(complex, afList, segKeepAudio);
 
-            const rcSeg = await ffmpeg.exec([
-              ...(seg.sourceStart > 0.03 ? ['-ss', String(seg.sourceStart)] : []),
-              '-t',
-              String(segDur),
-              '-i',
-              inName,
-              ...extraInputs,
-              '-filter_complex',
-              gSeg.fullComplex,
-              '-map',
-              `[${outPad}]`,
-              ...gSeg.audioMapArgs,
-              ...(segKeepAudio ? ['-c:a', 'aac', '-b:a', audioBitrate] : ['-an']),
-              '-pix_fmt',
-              'yuv420p',
-              '-c:v',
-              'libx264',
-              '-preset',
-              'ultrafast',
-              '-crf',
-              crf,
-              '-y',
-              segName,
-            ]);
+            // When project has audio, muted clips still receive a matching silent stereo track
+            // so stream-copy concat never drops audio or desyncs following clips.
+            let segExecArgs: string[];
+            if (anyAudio && !segKeepAudio) {
+              segExecArgs = [
+                ...(seg.sourceStart > 0.03 ? ['-ss', String(seg.sourceStart)] : []),
+                '-t',
+                String(segDur),
+                '-i',
+                inName,
+                ...extraInputs,
+                '-f',
+                'lavfi',
+                '-i',
+                'anullsrc=r=48000:cl=stereo',
+                '-filter_complex',
+                complex,
+                '-map',
+                `[${outPad}]`,
+                '-map',
+                `${hasOverlayPng ? 2 : 1}:a:0`,
+                '-c:a',
+                'aac',
+                '-ar',
+                '48000',
+                '-ac',
+                '2',
+                '-b:a',
+                audioBitrate,
+                '-shortest',
+                '-pix_fmt',
+                'yuv420p',
+                '-c:v',
+                'libx264',
+                '-preset',
+                'ultrafast',
+                '-crf',
+                crf,
+                '-y',
+                segName,
+              ];
+            } else {
+              const gSeg = attachAudioComplex(complex, afList, segKeepAudio);
+              segExecArgs = [
+                ...(seg.sourceStart > 0.03 ? ['-ss', String(seg.sourceStart)] : []),
+                '-t',
+                String(segDur),
+                '-i',
+                inName,
+                ...extraInputs,
+                '-filter_complex',
+                gSeg.fullComplex,
+                '-map',
+                `[${outPad}]`,
+                ...gSeg.audioMapArgs,
+                ...(segKeepAudio ? ['-c:a', 'aac', '-ar', '48000', '-ac', '2', '-b:a', audioBitrate] : ['-an']),
+                '-pix_fmt',
+                'yuv420p',
+                '-c:v',
+                'libx264',
+                '-preset',
+                'ultrafast',
+                '-crf',
+                crf,
+                '-y',
+                segName,
+              ];
+            }
+
+            const rcSeg = await ffmpeg.exec(segExecArgs);
             if (signal?.aborted) throw new Error('Cancelled');
             if (rcSeg !== 0) throw new Error(`Klip #${idx + 1} işlenemedi.`);
+            timelineCursor = Math.max(timelineCursor, seg.timelineStart + segTimelineDur);
           }
 
           const listFile = 'nle_concat.txt';
@@ -1101,7 +1295,7 @@ export async function runLocalFfmpegTool(
           const listBody = segFiles.map((f) => `file '${f}'`).join('\n');
           await ffmpeg.writeFile(listFile, new TextEncoder().encode(listBody));
 
-          onProgress(0.86, outFile);
+          onProgress(0.8, outFile);
           const rcConcat = await ffmpeg.exec([
             '-f',
             'concat',
@@ -1117,6 +1311,9 @@ export async function runLocalFfmpegTool(
           ]);
           if (signal?.aborted) throw new Error('Cancelled');
           if (rcConcat !== 0) throw new Error('Timeline klipleri birleştirilemedi.');
+
+          // Immediately free segment temp files from WASM memory before audio mix pass
+          await cleanupVfsFiles(ffmpeg, [...segFiles, listFile]);
         } else {
           const seekArgs = [
             ...(hasTrimStart ? ['-ss', String(startSec)] : []),
@@ -1132,6 +1329,7 @@ export async function runLocalFfmpegTool(
 
           const effectiveClipDur = trimDur > 0 ? trimDur : totalDur;
           const keepAudio = info.hasAudio && !mute && volumePct > 0 && !isGif && !isBoomerang;
+          renderedHasAudio = keepAudio;
 
           if (isLoop) {
             const segName = 'studio_seg.mp4';
@@ -1223,6 +1421,127 @@ export async function runLocalFfmpegTool(
           }
         }
 
+        // Real Multi-Track External Audio Mixing Pass (Music + Voiceover + Ducking + Timeline Delay)
+        if (!isGif && externalAudioClips.length > 0 && !mute) {
+          const resolvedExtTracks: Array<{clip: ParsedExternalAudio; vfsName: string}> = [];
+          for (let i = 0; i < externalAudioClips.length; i++) {
+            const aClip = externalAudioClips[i];
+            let aBlob: Blob | null = getAudioClipBlob(aClip.id)?.blob ?? null;
+            if (!aBlob && aClip.blobUrl && aClip.blobUrl.startsWith('blob:')) {
+              try {
+                const res = await fetch(aClip.blobUrl);
+                if (res.ok) aBlob = await res.blob();
+              } catch {
+                aBlob = null;
+              }
+            }
+            if (!aBlob || aBlob.size < 64) continue;
+            const extGuess = (aBlob.type || '').includes('mpeg')
+              ? 'mp3'
+              : (aBlob.type || '').includes('wav')
+                ? 'wav'
+                : (aBlob.type || '').includes('mp4')
+                  ? 'm4a'
+                  : 'webm';
+            const vfsName = `nle_ext_aud_${i}.${extGuess}`;
+            await ffmpeg.writeFile(vfsName, await fetchFile(aBlob));
+            tempFilesToClean.push(vfsName);
+            resolvedExtTracks.push({clip: aClip, vfsName});
+          }
+
+          if (resolvedExtTracks.length > 0) {
+            onProgress(0.88, outFile);
+            const mixedOut = `nle_mixed_${outFile}`;
+            tempFilesToClean.push(mixedOut);
+
+            const hasVoiceover = resolvedExtTracks.some((t) => t.clip.kind === 'voiceover');
+            const mixInputs: string[] = ['-i', outFile];
+            const filterChains: string[] = [];
+            const mixPadLabels: string[] = [];
+
+            if (renderedHasAudio) {
+              const mainDuckGain = audioDuckingEnabled && hasVoiceover ? 0.55 : 1.0;
+              filterChains.push(
+                `[0:a:0]aformat=sample_rates=48000:channel_layouts=stereo,volume=${mainDuckGain.toFixed(2)}[amain]`
+              );
+              mixPadLabels.push('[amain]');
+            }
+
+            resolvedExtTracks.forEach(({clip, vfsName}, idx) => {
+              mixInputs.push('-i', vfsName);
+              const inputIdx = idx + 1;
+              const clipDur = Math.max(0.2, Number((clip.sourceEnd - clip.sourceStart).toFixed(3)));
+              const delayMs = Math.max(0, Math.round(clip.timelineStart * 1000));
+              const masterFactor = Math.max(0, volumePct / 100);
+              const duckFactor =
+                clip.kind === 'music' && (audioDuckingEnabled || clip.ducking) && (hasVoiceover || renderedHasAudio)
+                  ? 0.45
+                  : 1.0;
+              const effGain = Math.min(2.5, Math.max(0.02, (clip.volume / 100) * masterFactor * duckFactor));
+
+              const chain: string[] = [
+                `atrim=start=${clip.sourceStart.toFixed(3)}:duration=${clipDur.toFixed(3)}`,
+                'asetpts=PTS-STARTPTS',
+                'aformat=sample_rates=48000:channel_layouts=stereo',
+              ];
+              if (clip.noiseReduction) {
+                chain.push('highpass=f=85,lowpass=f=11500');
+              }
+              chain.push(`volume=${effGain.toFixed(2)}`);
+              if (clip.fadeInSec > 0.05) {
+                const dIn = Math.min(clip.fadeInSec, clipDur * 0.45);
+                chain.push(`afade=t=in:st=0:d=${dIn.toFixed(2)}`);
+              }
+              if (clip.fadeOutSec > 0.05 && clipDur > clip.fadeOutSec * 1.2) {
+                const dOut = Math.min(clip.fadeOutSec, clipDur * 0.45);
+                chain.push(`afade=t=out:st=${Math.max(0, clipDur - dOut).toFixed(2)}:d=${dOut.toFixed(2)}`);
+              }
+              if (delayMs > 0) {
+                chain.push(`adelay=${delayMs}|${delayMs}`);
+              }
+              const pad = `aext${idx}`;
+              filterChains.push(`[${inputIdx}:a]${chain.join(',')}[${pad}]`);
+              mixPadLabels.push(`[${pad}]`);
+            });
+
+            if (mixPadLabels.length === 1) {
+              filterChains.push(`${mixPadLabels[0]}alimiter=limit=0.95[amixed]`);
+            } else {
+              filterChains.push(
+                `${mixPadLabels.join('')}amix=inputs=${mixPadLabels.length}:duration=first:dropout_transition=2:normalize=0,alimiter=limit=0.95[amixed]`
+              );
+            }
+
+            const mixAudioCodecArgs =
+              outFmt === 'webm'
+                ? ['-c:a', 'libvorbis']
+                : ['-c:a', 'aac', '-ar', '48000', '-ac', '2', '-b:a', audioBitrate];
+
+            const rcMix = await ffmpeg.exec([
+              ...mixInputs,
+              '-filter_complex',
+              filterChains.join(';'),
+              '-map',
+              '0:v:0',
+              '-map',
+              '[amixed]',
+              '-c:v',
+              'copy',
+              ...mixAudioCodecArgs,
+              '-shortest',
+              '-y',
+              mixedOut,
+            ]);
+            if (signal?.aborted) throw new Error('Cancelled');
+            if (rcMix === 0) {
+              const mixedData = await ffmpeg.readFile(mixedOut);
+              const mixedUint8 =
+                mixedData instanceof Uint8Array ? new Uint8Array(mixedData) : new Uint8Array();
+              return [{name: outFile, blob: new Blob([mixedUint8], {type: mimeFromExt(outFmt)})}];
+            }
+          }
+        }
+
         const outData = await ffmpeg.readFile(outFile);
         const uint8 = outData instanceof Uint8Array ? new Uint8Array(outData) : new Uint8Array();
         return [{name: outFile, blob: new Blob([uint8], {type: mimeFromExt(outFmt)})}];
@@ -1231,11 +1550,7 @@ export async function runLocalFfmpegTool(
       }
     } finally {
       signal?.removeEventListener('abort', onAbortSpecial);
-      if (ffmpegInstance === ffmpeg && ffmpeg.loaded) {
-        for (const fName of tempFilesToClean) {
-          await ffmpeg.deleteFile(fName).catch(() => {});
-        }
-      }
+      await cleanupVfsFiles(ffmpeg, tempFilesToClean);
     }
   }
 

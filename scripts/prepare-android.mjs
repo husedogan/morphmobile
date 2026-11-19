@@ -152,8 +152,8 @@ const pkgPath = path.join(root, 'package.json');
 const gradlePath = path.join(androidDir, 'app', 'build.gradle');
 if (fs.existsSync(pkgPath) && fs.existsSync(gradlePath)) {
   const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-  const ver = String(pkg.version || '1.1.15').split('-')[0];
-  const [maj = 1, min = 1, pat = 15] = ver.split('.').map((n) => parseInt(n, 10) || 0);
+  const ver = String(pkg.version || '1.1.21').split('-')[0];
+  const [maj = 1, min = 1, pat = 21] = ver.split('.').map((n) => parseInt(n, 10) || 0);
   const runNum = parseInt(process.env.GITHUB_RUN_NUMBER || '0', 10);
   const semverCode = maj * 100000 + min * 1000 + pat * 10;
   // Strictly monotonic on every CI build (always > legacy 10109) so Android allows seamless in-place updates

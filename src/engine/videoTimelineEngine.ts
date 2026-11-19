@@ -35,11 +35,17 @@ export interface CropBoxRect {
   h: number;
 }
 
+export type KeyframeEasingType = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut';
+
 export interface ClipKeyframe {
   id: string;
   timeOffsetSec: number;
   zoom: number;
   opacity: number;
+  posX?: number;
+  posY?: number;
+  rotation?: number;
+  easing?: KeyframeEasingType;
 }
 
 export interface TimelineVideoClip {
@@ -733,6 +739,88 @@ export function insertFreezeFrameAtPlayhead(
   });
 
   return {clips: packed, freezeClipId: freezeId, didInsert: true};
+}
+
+/**
+ * Removes detected silent source intervals from the timeline clips and packs
+ * the remaining speaking/active segments cleanly (Auto Silence Cut).
+ */
+export function autoCutSilenceIntervals(
+  videoClips: TimelineVideoClip[],
+  silences: Array<{startSec: number; endSec: number}>,
+  fps: ProjectFps
+): {clips: TimelineVideoClip[]; removedCount: number; removedSec: number} {
+  if (!videoClips.length || !silences.length) {
+    return {clips: videoClips, removedCount: 0, removedSec: 0};
+  }
+
+  const sortedSilences = [...silences]
+    .filter((s) => s.endSec - s.startSec >= 0.35)
+    .sort((a, b) => a.startSec - b.startSec);
+  if (sortedSilences.length === 0) {
+    return {clips: videoClips, removedCount: 0, removedSec: 0};
+  }
+
+  const result: TimelineVideoClip[] = [];
+  let removedCount = 0;
+  let removedSec = 0;
+
+  for (const clip of [...videoClips].sort((a, b) => a.timelineStart - b.timelineStart)) {
+    let segStart = clip.sourceStart;
+    const clipEnd = clip.sourceEnd;
+    let pieceIdx = 0;
+
+    for (const sil of sortedSilences) {
+      const ovStart = Math.max(segStart, sil.startSec + 0.08);
+      const ovEnd = Math.min(clipEnd, sil.endSec - 0.08);
+      if (ovEnd - ovStart < 0.25) continue;
+
+      if (ovStart - segStart >= 0.2) {
+        result.push({
+          ...clip,
+          id: pieceIdx === 0 ? clip.id : `${clip.id}-sc${pieceIdx}`,
+          sourceStart: snapToFrame(segStart, fps),
+          sourceEnd: snapToFrame(ovStart, fps),
+          keyframes: [],
+        });
+        pieceIdx++;
+      }
+      removedCount++;
+      removedSec += ovEnd - ovStart;
+      segStart = ovEnd;
+    }
+
+    if (clipEnd - segStart >= 0.2) {
+      result.push({
+        ...clip,
+        id: pieceIdx === 0 ? clip.id : `${clip.id}-sc${pieceIdx}`,
+        sourceStart: snapToFrame(segStart, fps),
+        sourceEnd: snapToFrame(clipEnd, fps),
+        keyframes: pieceIdx === 0 ? clip.keyframes : [],
+      });
+    }
+  }
+
+  if (result.length === 0 || removedCount === 0) {
+    return {clips: videoClips, removedCount: 0, removedSec: 0};
+  }
+
+  let cursor = 0;
+  const packed = result.map((c, idx) => {
+    const start = snapToFrame(cursor, fps);
+    cursor = start + clipTimelineDuration(c);
+    return {
+      ...c,
+      timelineStart: start,
+      label: c.isFreezeFrame ? `Donuk Kare ${idx + 1}` : `Klip ${idx + 1}`,
+    };
+  });
+
+  return {
+    clips: packed,
+    removedCount,
+    removedSec: Number(removedSec.toFixed(2)),
+  };
 }
 
 export function parseSrtSubtitles(srtContent: string): TimelineTextClip[] {

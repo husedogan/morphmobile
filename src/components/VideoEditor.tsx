@@ -1,54 +1,24 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
-  ArrowLeft,
   Bookmark,
-  Camera,
   Check,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  ChevronUp,
-  ChevronsUpDown,
-  Copy,
-  Crop,
   Download,
-  Eye,
   FlipHorizontal,
   FlipVertical,
-  FolderOpen,
-  Gauge,
-  Grid,
   Image as ImageIcon,
-  Layers,
-  Magnet,
-  Maximize2,
   Mic,
-  Minimize2,
   Minus,
-  MoveLeft,
-  MoveRight,
   Music,
-  Palette,
-  Pause,
-  Play,
   Plus,
-  Redo2,
   RotateCcw,
   RotateCw,
   Save,
   Scissors,
-  SkipBack,
-  SkipForward,
-  SlidersHorizontal,
-  Smartphone,
-  Snowflake,
   Sparkles,
   Trash2,
-  Type,
-  Undo2,
   Upload,
-  Volume2,
-  VolumeX,
+  Wand2,
+  X,
 } from 'lucide-react';
 import nleSampleImg from '../assets/images/nle_filter_reference_1795084645929.jpg';
 import {Lang} from '../data/i18n';
@@ -63,6 +33,7 @@ import {
   ExportQualityCrf,
   ExportResolution,
   FitFillMode,
+  KeyframeEasingType,
   NleProjectState,
   ProjectFps,
   SavedNleProjectSummary,
@@ -70,6 +41,7 @@ import {
   TimelineAudioClip,
   TimelineTextClip,
   TimelineVideoClip,
+  autoCutSilenceIntervals,
   clipSourceDuration,
   clipTimelineDuration,
   clipTimelineEnd,
@@ -77,8 +49,6 @@ import {
   createInitialNleProject,
   deleteClipKeepGap,
   deleteClipRipple,
-  deleteSavedNleProject,
-  duplicateSavedNleProject,
   duplicateVideoClip,
   estimateOutputFileSizeBytes,
   findVideoClipAtTime,
@@ -88,17 +58,48 @@ import {
   loadSavedNleProjects,
   parseSrtSubtitles,
   reorderClipByStep,
-  saveNleProjectToStorage,
   snapToFrame,
   splitVideoClipAtPlayhead,
   timelineToSourceTime,
   trimVideoClipHandle,
 } from '../engine/videoTimelineEngine';
+import {
+  detectAudioSilences,
+  extractRealAudioWaveform,
+  registerAudioClipBlob,
+  removeAudioClipBlob,
+} from '../engine/audioEngine';
+import {interpolateClipKeyframes} from '../engine/keyframeEngine';
+import {
+  deleteNleProjectIdb,
+  duplicateNleProjectIdb,
+  exportMorphPackage,
+  importMorphPackage,
+  listNleProjectsIdb,
+  loadNleProjectIdb,
+  saveNleProjectIdb,
+} from '../engine/projectStorage';
+import {evaluateClipTransition} from '../engine/previewEngine';
+import {
+  evaluateProxyRecommendation,
+  generateProxyPreviewUrl,
+  getCachedProxyUrl,
+} from '../engine/proxyEngine';
+import {
+  CustomColorPreset,
+  deleteCustomColorPreset,
+  loadCustomColorPresets,
+  parseCubeLutToGrading,
+  saveCustomColorPreset,
+} from '../engine/colorEngine';
+import {RgbScopeCanvas} from './VideoEditor/RgbScopeCanvas';
+import {ProjectsModal, SocialProjectTemplate} from './VideoEditor/ProjectsModal';
+import {StudioHeader} from './VideoEditor/StudioHeader';
+import {PreviewMonitor} from './VideoEditor/PreviewMonitor';
+import {MultiTrackTimeline} from './VideoEditor/MultiTrackTimeline';
+import {StudioDock} from './VideoEditor/StudioDock';
 
-const TRANSPARENT_POSTER =
-  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-
-export type VideoEditorTab = 'trim' | 'transform' | 'color' | 'text' | 'fx' | 'export';
+export type VideoEditorTab = 'trim' | 'audio' | 'transform' | 'color' | 'text' | 'fx' | 'export';
 export type CropAspect = AspectRatioPreset;
 export type FitMode = FitFillMode;
 export type ColorPreset = ColorFilterPreset;
@@ -429,93 +430,6 @@ const NleSlider: React.FC<NleSliderProps> = ({
   );
 };
 
-// Sleek Icon Button with Floating Hover/Focus Info Cloud Tooltip
-interface NleTooltipBtnProps {
-  tooltip: string;
-  onClick?: () => void;
-  onPointerDown?: () => void;
-  onPointerUp?: () => void;
-  onPointerLeave?: () => void;
-  disabled?: boolean;
-  placement?: 'top' | 'bottom';
-  align?: 'center' | 'left' | 'right';
-  className?: string;
-  children: React.ReactNode;
-}
-
-const NleTooltipBtn: React.FC<NleTooltipBtnProps> = ({
-  tooltip,
-  onClick,
-  onPointerDown,
-  onPointerUp,
-  onPointerLeave,
-  disabled,
-  placement = 'top',
-  align = 'center',
-  className = '',
-  children,
-}) => {
-  const [open, setOpen] = useState(false);
-
-  const alignClasses =
-    align === 'left'
-      ? 'left-0'
-      : align === 'right'
-        ? 'right-0'
-        : 'left-1/2 -translate-x-1/2';
-
-  const arrowAlignClasses =
-    align === 'left'
-      ? 'left-3'
-      : align === 'right'
-        ? 'right-3'
-        : 'left-1/2 -translate-x-1/2';
-
-  return (
-    <div
-      className="relative inline-flex shrink-0"
-      onMouseEnter={() => !disabled && setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-    >
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => {
-          setOpen(false);
-          onClick?.();
-        }}
-        onPointerDown={onPointerDown}
-        onPointerUp={onPointerUp}
-        onPointerLeave={onPointerLeave}
-        onFocus={() => !disabled && setOpen(true)}
-        onBlur={() => setOpen(false)}
-        aria-label={tooltip}
-        className={className}
-      >
-        {children}
-      </button>
-
-      {open && !disabled && (
-        <div
-          role="tooltip"
-          className={`pointer-events-none absolute z-50 whitespace-nowrap rounded-xl border border-[var(--accent)]/45 bg-[var(--surface)]/95 px-2.5 py-1 text-[10px] font-semibold text-[var(--ink)] shadow-xl backdrop-blur-md ${alignClasses} ${
-            placement === 'bottom' ? 'top-[calc(100%+7px)]' : 'bottom-[calc(100%+7px)]'
-          }`}
-        >
-          <span
-            className={`absolute h-2 w-2 rotate-45 bg-[var(--surface)] ${arrowAlignClasses} ${
-              placement === 'bottom'
-                ? '-top-1 border-l border-t border-[var(--accent)]/45'
-                : '-bottom-1 border-b border-r border-[var(--accent)]/45'
-            }`}
-          />
-          {tooltip}
-        </div>
-      )}
-    </div>
-  );
-};
-
 export const VideoEditor: React.FC<VideoEditorProps> = ({
   file,
   lang,
@@ -533,17 +447,27 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const timelineTrackRef = useRef<HTMLDivElement | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
   const srtInputRef = useRef<HTMLInputElement | null>(null);
+  const morphImportInputRef = useRef<HTMLInputElement | null>(null);
+  const cubeLutInputRef = useRef<HTMLInputElement | null>(null);
+  const relinkVideoInputRef = useRef<HTMLInputElement | null>(null);
+  const pinchStartDistRef = useRef<number | null>(null);
+  const externalAudioElsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const voiceChunksRef = useRef<Blob[]>([]);
 
   const [videoUrl, setVideoUrl] = useState('');
+  const [relinkedVideoUrl, setRelinkedVideoUrl] = useState<string | null>(null);
+  const [proxyUrl, setProxyUrl] = useState<string | null>(null);
+  const [isProxyEnabled, setIsProxyEnabled] = useState(false);
+  const [isGeneratingProxy, setIsGeneratingProxy] = useState(false);
+  const [proxyProgress, setProxyProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [videoMeta, setVideoMeta] = useState<{w: number; h: number}>({w: 1280, h: 720});
   const [playhead, setPlayhead] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [activeTab, setActiveTab] = useState<VideoEditorTab>(initialTab);
-  const [isTimelineExpanded, setIsTimelineExpanded] = useState<boolean>(initialTab === 'trim');
-  const [previewHeightVh, setPreviewHeightVh] = useState<number>(42);
+  const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(initialTab !== 'trim');
+  const [previewHeightVh, setPreviewHeightVh] = useState<number>(44);
   const [isResizingPreview, setIsResizingPreview] = useState<boolean>(false);
   const [filterPreviewMode, setFilterPreviewMode] = useState<'sample' | 'video'>('sample');
   const [showGrid, setShowGrid] = useState(false);
@@ -551,6 +475,22 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
   const [timelineZoom, setTimelineZoom] = useState<1 | 2 | 4 | 8>(1);
   const [thumbnails, setThumbnails] = useState<string[]>([]);
+  const [realWaveformBars, setRealWaveformBars] = useState<number[] | null>(null);
+  const [trackVisibility, setTrackVisibility] = useState({
+    t1: true,
+    v1: true,
+    a1: true,
+    a2: true,
+  });
+  const [customColorPresets, setCustomColorPresets] = useState<CustomColorPreset[]>(() =>
+    loadCustomColorPresets()
+  );
+  const [activeCustomPresetId, setActiveCustomPresetId] = useState<string | null>(null);
+  const [isCuttingSilence, setIsCuttingSilence] = useState(false);
+  const [kfPosX, setKfPosX] = useState(0);
+  const [kfPosY, setKfPosY] = useState(0);
+  const [kfRotation, setKfRotation] = useState(0);
+  const [kfEasing, setKfEasing] = useState<KeyframeEasingType>('easeInOut');
   const [isPortraitMode, setIsPortraitMode] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerHeight >= window.innerWidth : false
   );
@@ -560,6 +500,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const [savedProjects, setSavedProjects] = useState<SavedNleProjectSummary[]>(() =>
     loadSavedNleProjects()
   );
+  const [isBusyPackage, setIsBusyPackage] = useState(false);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
 
   const previewThumbSrc = useMemo(() => {
@@ -572,17 +513,17 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const handleSelectDockTab = useCallback(
     (tab: VideoEditorTab) => {
       if (isPortraitMode) {
-        if (tab === activeTab) {
-          setIsTimelineExpanded((prev) => !prev);
+        if (tab === activeTab && isInspectorOpen) {
+          setIsInspectorOpen(false);
           return;
         }
         setActiveTab(tab);
-        setIsTimelineExpanded(tab === 'trim');
+        setIsInspectorOpen(true);
       } else {
         setActiveTab(tab);
       }
     },
-    [activeTab, isPortraitMode]
+    [activeTab, isInspectorOpen, isPortraitMode]
   );
 
   // Initialize NLE Project State
@@ -650,8 +591,29 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   useEffect(() => {
     const url = URL.createObjectURL(file.file);
     setVideoUrl(url);
+    setRelinkedVideoUrl(null);
+    const cached = getCachedProxyUrl(file, '540') ?? getCachedProxyUrl(file, '720');
+    setProxyUrl(cached?.url ?? null);
+    setIsProxyEnabled(false);
     return () => URL.revokeObjectURL(url);
   }, [file]);
+
+  useEffect(() => {
+    return () => {
+      if (relinkedVideoUrl) URL.revokeObjectURL(relinkedVideoUrl);
+    };
+  }, [relinkedVideoUrl]);
+
+  const proxyRecommendation = useMemo(
+    () => evaluateProxyRecommendation(videoMeta.w, videoMeta.h, file.size),
+    [videoMeta.w, videoMeta.h, file.size]
+  );
+
+  const activePreviewVideoSrc = useMemo(() => {
+    if (isProxyEnabled && proxyUrl) return proxyUrl;
+    if (relinkedVideoUrl) return relinkedVideoUrl;
+    return videoUrl;
+  }, [isProxyEnabled, proxyUrl, relinkedVideoUrl, videoUrl]);
 
   // Generate filmstrip thumbnails
   useEffect(() => {
@@ -708,7 +670,33 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     };
   }, [videoUrl]);
 
-  const waveformBars = useMemo(() => generateWaveformBars(file.name, 88), [file.name]);
+  // Extract real Web Audio API RMS waveform bars from source video (safe mobile fallback)
+  useEffect(() => {
+    let cancelled = false;
+    setRealWaveformBars(null);
+    void extractRealAudioWaveform(file.file, 88).then((bars) => {
+      if (!cancelled && bars && bars.length > 0) {
+        setRealWaveformBars(bars);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [file]);
+
+  // Hydrate IndexedDB project list on mount & when modal opens
+  useEffect(() => {
+    let cancelled = false;
+    void listNleProjectsIdb().then((list) => {
+      if (!cancelled) setSavedProjects(list);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [showProjectsModal]);
+
+  const fallbackWaveformBars = useMemo(() => generateWaveformBars(file.name, 88), [file.name]);
+  const waveformBars = realWaveformBars ?? fallbackWaveformBars;
 
   const totalTimelineDur = useMemo(
     () => Math.max(0.5, computeTotalTimelineDuration(project.videoClips, duration || 10)),
@@ -847,12 +835,118 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     if (!v) return;
     const clip = activeTimelineClip || selectedClip;
     const effSpeed = clip ? clip.speed : 1;
-    const effMuted = project.masterMuted || (clip ? clip.muted : false);
-    const effVol = (project.masterVolume / 100) * ((clip ? clip.volume : 100) / 100);
+    const effMuted = project.masterMuted || !trackVisibility.a1 || (clip ? clip.muted : false);
+    const hasActiveVoiceover = project.audioClips.some(
+      (a) =>
+        a.kind === 'voiceover' &&
+        !a.muted &&
+        playhead >= a.timelineStart &&
+        playhead <= a.timelineStart + Math.max(0.2, a.sourceEnd - a.sourceStart)
+    );
+    const duckFactor = project.audioDucking && hasActiveVoiceover ? 0.55 : 1;
+    const effVol = (project.masterVolume / 100) * ((clip ? clip.volume : 100) / 100) * duckFactor;
     v.playbackRate = Math.min(4, Math.max(0.25, effSpeed));
     v.muted = effMuted || effVol <= 0.005;
     v.volume = Math.min(1, Math.max(0, effVol));
-  }, [project.masterMuted, project.masterVolume, activeTimelineClip, selectedClip]);
+  }, [
+    project.masterMuted,
+    project.masterVolume,
+    project.audioDucking,
+    project.audioClips,
+    trackVisibility.a1,
+    activeTimelineClip,
+    selectedClip,
+    playhead,
+  ]);
+
+  // Synchronize external music & voiceover HTMLAudio elements with live preview playback
+  useEffect(() => {
+    const map = externalAudioElsRef.current;
+    const activeIds = new Set<string>();
+    const hasActiveVoiceover = project.audioClips.some(
+      (a) =>
+        a.kind === 'voiceover' &&
+        !a.muted &&
+        playhead >= a.timelineStart &&
+        playhead <= a.timelineStart + Math.max(0.2, a.sourceEnd - a.sourceStart)
+    );
+
+    for (const aClip of project.audioClips) {
+      if (aClip.kind === 'original' || !aClip.blobUrl) continue;
+      activeIds.add(aClip.id);
+      let el = map.get(aClip.id);
+      if (!el || el.src !== aClip.blobUrl) {
+        if (el) el.pause();
+        el = new Audio(aClip.blobUrl);
+        el.preload = 'auto';
+        map.set(aClip.id, el);
+      }
+
+      const clipDur = Math.max(0.2, aClip.sourceEnd - aClip.sourceStart);
+      const inRange =
+        playhead >= aClip.timelineStart && playhead < aClip.timelineStart + clipDur;
+      const targetTime = aClip.sourceStart + Math.max(0, playhead - aClip.timelineStart);
+
+      const duckMult =
+        aClip.kind === 'music' && (project.audioDucking || aClip.ducking) && hasActiveVoiceover
+          ? 0.45
+          : 1;
+      const vol = Math.min(
+        1,
+        Math.max(0, (project.masterVolume / 100) * (aClip.volume / 100) * duckMult)
+      );
+      el.muted =
+        project.masterMuted || !trackVisibility.a2 || aClip.muted || vol <= 0.005;
+      el.volume = vol;
+
+      if (isPlaying && inRange && !el.muted) {
+        if (Math.abs(el.currentTime - targetTime) > 0.28) {
+          try {
+            el.currentTime = targetTime;
+          } catch {
+            // Ignore seek before ready
+          }
+        }
+        if (el.paused) {
+          void el.play().catch(() => {});
+        }
+      } else {
+        if (!el.paused) el.pause();
+        if (inRange && Math.abs(el.currentTime - targetTime) > 0.25) {
+          try {
+            el.currentTime = targetTime;
+          } catch {
+            // Ignore seek before ready
+          }
+        }
+      }
+    }
+
+    for (const [id, el] of Array.from(map.entries())) {
+      if (!activeIds.has(id)) {
+        el.pause();
+        map.delete(id);
+      }
+    }
+  }, [
+    project.audioClips,
+    project.masterMuted,
+    project.masterVolume,
+    project.audioDucking,
+    trackVisibility.a2,
+    isPlaying,
+    playhead,
+  ]);
+
+  useEffect(() => {
+    const map = externalAudioElsRef.current;
+    return () => {
+      for (const el of map.values()) {
+        el.pause();
+      }
+      map.clear();
+    };
+  }, []);
 
   const togglePlay = () => {
     const v = videoRef.current;
@@ -1123,8 +1217,10 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       'loadedmetadata',
       () => {
         const dur = Number.isFinite(aud.duration) && aud.duration > 0 ? aud.duration : 15;
+        const clipId = `aud-music-${Date.now()}`;
+        registerAudioClipBlob(clipId, f, f.name);
         const newTrack: TimelineAudioClip = {
-          id: `aud-music-${Date.now()}`,
+          id: clipId,
           label: f.name.replace(/\.[^.]+$/, ''),
           kind: 'music',
           sourceStart: 0,
@@ -1171,8 +1267,10 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         const blob = new Blob(voiceChunksRef.current, {type: 'audio/webm'});
         const url = URL.createObjectURL(blob);
         const recDur = Math.max(1, Number(((Date.now() - startedAt) / 1000).toFixed(2)));
+        const voId = `aud-vo-${Date.now()}`;
+        registerAudioClipBlob(voId, blob, `${voId}.webm`);
         const voClip: TimelineAudioClip = {
-          id: `aud-vo-${Date.now()}`,
+          id: voId,
           label: `Seslendirme #${project.audioClips.length}`,
           kind: 'voiceover',
           sourceStart: 0,
@@ -1277,24 +1375,329 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   };
 
   // ============================================================================
-  // PROJECT SAVE / LOAD
+  // PROJECT SAVE / LOAD (IndexedDB + .morph Package Export/Import)
   // ============================================================================
-  const handleSaveProject = () => {
-    const list = saveNleProjectToStorage(project);
-    setSavedProjects(list);
+  const handleSaveProject = async () => {
+    const res = await saveNleProjectIdb(project, file.file);
+    setSavedProjects(res.projects);
     notifyStatus(
-      tr(`Proje "${project.projectName}" kaydedildi.`, `Project "${project.projectName}" saved.`)
+      res.savedInIdb
+        ? tr(
+            `Proje "${project.projectName}" IndexedDB'ye kaydedildi (${res.savedAudioCount} ses katmanı).`,
+            `Project "${project.projectName}" saved to IndexedDB (${res.savedAudioCount} audio tracks).`
+          )
+        : tr(`Proje "${project.projectName}" kaydedildi.`, `Project "${project.projectName}" saved.`)
     );
   };
 
-  const handleLoadProject = (summary: SavedNleProjectSummary) => {
-    setProject(summary.state);
-    setHistory([summary.state]);
+  const handleLoadProject = async (summary: SavedNleProjectSummary) => {
+    const loaded = await loadNleProjectIdb(summary.projectId);
+    const nextState = loaded?.state ?? summary.state;
+    setProject(nextState);
+    setHistory([nextState]);
     setHistoryIdx(0);
-    setSelectedClipId(summary.state.videoClips[0]?.id || 'clip-main-1');
+    setSelectedClipId(nextState.videoClips[0]?.id || 'clip-main-1');
     setShowProjectsModal(false);
     notifyStatus(
-      tr(`"${summary.projectName}" projesi yüklendi.`, `Loaded project "${summary.projectName}".`)
+      loaded && loaded.restoredAudioCount > 0
+        ? tr(
+            `"${summary.projectName}" yüklendi (${loaded.restoredAudioCount} ses dosyası geri yüklendi).`,
+            `Loaded "${summary.projectName}" (${loaded.restoredAudioCount} audio files restored).`
+          )
+        : tr(`"${summary.projectName}" projesi yüklendi.`, `Loaded project "${summary.projectName}".`)
+    );
+  };
+
+  const handleExportMorphPackage = async () => {
+    if (isBusyPackage) return;
+    setIsBusyPackage(true);
+    try {
+      const pkg = await exportMorphPackage(project, file.file);
+      const dlUrl = URL.createObjectURL(pkg.blob);
+      const a = document.createElement('a');
+      a.href = dlUrl;
+      a.download = pkg.fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(dlUrl), 1500);
+      notifyStatus(
+        tr(
+          `${pkg.fileName} dışa aktarıldı (${pkg.includedAudioCount} ses${pkg.includesVideo ? ' + video' : ''}).`,
+          `Exported ${pkg.fileName} (${pkg.includedAudioCount} audio${pkg.includesVideo ? ' + video' : ''}).`
+        )
+      );
+    } catch {
+      notifyStatus(tr('.morph paketi oluşturulamadı.', 'Failed to export .morph package.'));
+    } finally {
+      setIsBusyPackage(false);
+    }
+  };
+
+  const handleImportMorphPackage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    setIsBusyPackage(true);
+    try {
+      const imported = await importMorphPackage(f);
+      setProject(imported.project);
+      setHistory([imported.project]);
+      setHistoryIdx(0);
+      setSelectedClipId(imported.project.videoClips[0]?.id || 'clip-main-1');
+      const list = await listNleProjectsIdb();
+      setSavedProjects(list);
+      setShowProjectsModal(false);
+      notifyStatus(
+        tr(
+          `"${imported.project.projectName}" içe aktarıldı (${imported.restoredAudioCount} ses geri yüklendi).`,
+          `Imported "${imported.project.projectName}" (${imported.restoredAudioCount} audio restored).`
+        )
+      );
+    } catch (err) {
+      notifyStatus(
+        err instanceof Error
+          ? err.message
+          : tr('.morph paketi içe aktarılamadı.', 'Failed to import .morph package.')
+      );
+    } finally {
+      setIsBusyPackage(false);
+    }
+  };
+
+  // ============================================================================
+  // PROXY PREVIEW, PINCH ZOOM, AUTO SILENCE CUT, .CUBE LUT & TEMPLATES
+  // ============================================================================
+  const handleToggleProxyPreview = async () => {
+    if (isGeneratingProxy) return;
+    if (isProxyEnabled) {
+      setIsProxyEnabled(false);
+      notifyStatus(
+        tr(
+          'Orijinal yüksek çözünürlüklü önizlemeye geçildi.',
+          'Switched back to original high-res preview.'
+        )
+      );
+      return;
+    }
+
+    const cached = getCachedProxyUrl(file, proxyRecommendation.targetResolution);
+    if (cached?.url) {
+      setProxyUrl(cached.url);
+      setIsProxyEnabled(true);
+      notifyStatus(
+        tr(
+          `${cached.resolution} Proxy önizleme aktif (dışa aktarma orijinal kalitede yapılır).`,
+          `${cached.resolution} Proxy preview enabled (final export uses original).`
+        )
+      );
+      return;
+    }
+
+    setIsGeneratingProxy(true);
+    setProxyProgress(0);
+    notifyStatus(
+      tr(
+        'Hafif Proxy önizleme hazırlanıyor...',
+        'Generating lightweight Proxy preview...'
+      )
+    );
+    try {
+      const entry = await generateProxyPreviewUrl(
+        file,
+        proxyRecommendation.targetResolution,
+        (ratio) => setProxyProgress(Math.min(1, Math.max(0, ratio)))
+      );
+      setProxyUrl(entry.url);
+      setIsProxyEnabled(true);
+      notifyStatus(
+        tr(
+          `${entry.resolution} Proxy hazır (${formatBytes(entry.sizeBytes)}) · Orijinal kalite dışa aktarımda korunur.`,
+          `${entry.resolution} Proxy ready (${formatBytes(entry.sizeBytes)}) · Original quality preserved on export.`
+        )
+      );
+    } catch (err) {
+      notifyStatus(
+        err instanceof Error
+          ? err.message
+          : tr('Proxy önizleme oluşturulamadı.', 'Failed to generate proxy preview.')
+      );
+    } finally {
+      setIsGeneratingProxy(false);
+      setProxyProgress(0);
+    }
+  };
+
+  const handleTimelineTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchStartDistRef.current = Math.hypot(dx, dy);
+    } else {
+      pinchStartDistRef.current = null;
+    }
+  };
+
+  const handleTimelineTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length !== 2 || pinchStartDistRef.current === null) return;
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const dist = Math.hypot(dx, dy);
+    const ratio = dist / Math.max(1, pinchStartDistRef.current);
+    const steps: Array<1 | 2 | 4 | 8> = [1, 2, 4, 8];
+    const currentIdx = steps.indexOf(timelineZoom);
+
+    if (ratio > 1.28 && currentIdx < steps.length - 1) {
+      setTimelineZoom(steps[currentIdx + 1]);
+      pinchStartDistRef.current = dist;
+    } else if (ratio < 0.78 && currentIdx > 0) {
+      setTimelineZoom(steps[currentIdx - 1]);
+      pinchStartDistRef.current = dist;
+    }
+  };
+
+  const handleTimelineTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length < 2) {
+      pinchStartDistRef.current = null;
+    }
+  };
+
+  const handleAutoCutSilence = async () => {
+    if (isCuttingSilence) return;
+    setIsCuttingSilence(true);
+    notifyStatus(
+      tr(
+        'Ses dalgası taranıyor, sessiz aralıklar bulunuyor...',
+        'Scanning audio waveform for silent gaps...'
+      )
+    );
+    try {
+      const silences = await detectAudioSilences(file.file, 0.024, 0.55);
+      if (silences.length === 0) {
+        notifyStatus(
+          tr(
+            'Kesilecek belirgin sessiz bölüm algılanmadı.',
+            'No notable silent sections detected.'
+          )
+        );
+        return;
+      }
+      const result = autoCutSilenceIntervals(project.videoClips, silences, project.fps);
+      if (result.removedCount === 0) {
+        notifyStatus(
+          tr(
+            'Mevcut kliplerde sessiz bölüm çıkarılamadı.',
+            'Could not remove silent ranges from current clips.'
+          )
+        );
+        return;
+      }
+      commitProject((prev) => ({
+        ...prev,
+        videoClips: result.clips,
+      }));
+      if (result.clips[0]) {
+        setSelectedClipId(result.clips[0].id);
+      }
+      notifyStatus(
+        tr(
+          `${result.removedCount} sessiz bölüm kesildi (${result.removedSec.toFixed(1)} sn kısaldı).`,
+          `Removed ${result.removedCount} silent gaps (${result.removedSec.toFixed(1)}s trimmed).`
+        )
+      );
+    } catch {
+      notifyStatus(
+        tr('Sessizlik analizi tamamlanamadı.', 'Could not analyze audio for silences.')
+      );
+    } finally {
+      setIsCuttingSilence(false);
+    }
+  };
+
+  const handleImportCubeLut = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    try {
+      const text = await f.text();
+      const parsed = parseCubeLutToGrading(text, f.name);
+      const updated = saveCustomColorPreset(parsed.title, parsed.grading, 'cube');
+      setCustomColorPresets(updated);
+      setActiveCustomPresetId(updated[0]?.id ?? null);
+      commitProject((prev) => ({
+        ...prev,
+        colorFilter: 'orig',
+        colorGrading: {...parsed.grading},
+      }));
+      notifyStatus(
+        tr(
+          `"${parsed.title}" .cube LUT uygulandı (${parsed.sampleCount} renk noktası).`,
+          `Applied "${parsed.title}" .cube LUT (${parsed.sampleCount} color entries).`
+        )
+      );
+    } catch (err) {
+      notifyStatus(
+        err instanceof Error
+          ? err.message
+          : tr('.cube LUT dosyası okunamadı.', 'Failed to parse .cube LUT file.')
+      );
+    }
+  };
+
+  const handleSaveCustomFilterPreset = () => {
+    const idx = customColorPresets.length + 1;
+    const defaultName = tr(`Stil #${idx}`, `Look #${idx}`);
+    const updated = saveCustomColorPreset(defaultName, project.colorGrading, 'custom');
+    setCustomColorPresets(updated);
+    setActiveCustomPresetId(updated[0]?.id ?? null);
+    notifyStatus(
+      tr(
+        `"${defaultName}" özel renk stili kaydedildi.`,
+        `Saved custom color look "${defaultName}".`
+      )
+    );
+  };
+
+  const handleRelinkVideoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    const nextUrl = URL.createObjectURL(f);
+    setRelinkedVideoUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return nextUrl;
+    });
+    setIsProxyEnabled(false);
+    commitProject((prev) => ({
+      ...prev,
+      sourceFileName: f.name,
+    }));
+    setShowProjectsModal(false);
+    notifyStatus(
+      tr(
+        `"${f.name}" kaynak medyası zaman çizelgesine yeniden bağlandı.`,
+        `Relinked source media "${f.name}" to timeline.`
+      )
+    );
+  };
+
+  const handleApplySocialTemplate = (tpl: SocialProjectTemplate) => {
+    commitProject((prev) => ({
+      ...prev,
+      aspectRatio: tpl.aspectRatio,
+      fps: tpl.fps,
+      exportSettings: {
+        ...prev.exportSettings,
+        fps: tpl.fps,
+        resolution: tpl.resolution,
+      },
+    }));
+    setShowProjectsModal(false);
+    notifyStatus(
+      tr(
+        `${tpl.labelTr} şablonu uygulandı (${tpl.meta}).`,
+        `Applied ${tpl.labelEn} template (${tpl.meta}).`
+      )
     );
   };
 
@@ -1468,18 +1871,61 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     window.addEventListener('pointerup', onUp);
   };
 
-  // Live CSS Preview Filter String
+  // Real-time 5-Channel Keyframe Interpolation (zoom, opacity, posX, posY, rotation)
+  const interpolatedKeyframe = useMemo(
+    () =>
+      interpolateClipKeyframes(
+        activeTimelineClip || selectedClip,
+        playhead,
+        project.zoom,
+        selectedClip ? selectedClip.opacity : 100
+      ),
+    [activeTimelineClip, selectedClip, playhead, project.zoom]
+  );
+
+  // Real-time Clip Intro Transition Evaluator (fade, dissolve, slide, zoom, blur, wipe)
+  const evaluatedTransition = useMemo(
+    () => evaluateClipTransition(activeTimelineClip, playhead),
+    [activeTimelineClip, playhead]
+  );
+
+  // Live CSS Preview Filter String (Grading + Motion Blur + Transition Blur)
   const cssFilter = useMemo(() => {
     if (compareOriginal) return 'none';
-    return buildCssFilterFromGrading(project.colorGrading, project.vfx.motionBlur);
-  }, [project.colorGrading, project.vfx.motionBlur, compareOriginal]);
+    const base = buildCssFilterFromGrading(project.colorGrading, project.vfx.motionBlur);
+    if (evaluatedTransition.extraBlurPx > 0.15) {
+      return `${base} blur(${evaluatedTransition.extraBlurPx.toFixed(2)}px)`;
+    }
+    return base;
+  }, [
+    project.colorGrading,
+    project.vfx.motionBlur,
+    evaluatedTransition.extraBlurPx,
+    compareOriginal,
+  ]);
 
   const previewTransform = useMemo(() => {
     if (compareOriginal) return 'none';
-    const sx = (project.flipH ? -1 : 1) * project.zoom;
-    const sy = (project.flipV ? -1 : 1) * project.zoom;
-    return `rotate(${project.rotateDeg}deg) scale(${sx.toFixed(2)}, ${sy.toFixed(2)})`;
-  }, [project.rotateDeg, project.flipH, project.flipV, project.zoom, compareOriginal]);
+    const effZoom =
+      (interpolatedKeyframe.hasKeyframes ? interpolatedKeyframe.zoom : project.zoom) *
+      evaluatedTransition.extraScale;
+    const effRot = project.rotateDeg + (interpolatedKeyframe.hasKeyframes ? interpolatedKeyframe.rotation : 0);
+    const tx =
+      (interpolatedKeyframe.hasKeyframes ? interpolatedKeyframe.posX : 0) +
+      evaluatedTransition.extraTranslateXPct;
+    const ty = interpolatedKeyframe.hasKeyframes ? interpolatedKeyframe.posY : 0;
+    const sx = (project.flipH ? -1 : 1) * effZoom;
+    const sy = (project.flipV ? -1 : 1) * effZoom;
+    return `translate(${tx.toFixed(2)}%, ${ty.toFixed(2)}%) rotate(${effRot.toFixed(1)}deg) scale(${sx.toFixed(3)}, ${sy.toFixed(3)})`;
+  }, [
+    project.rotateDeg,
+    project.flipH,
+    project.flipV,
+    project.zoom,
+    interpolatedKeyframe,
+    evaluatedTransition,
+    compareOriginal,
+  ]);
 
   const targetDimensions = useMemo(() => {
     const rot90 = project.rotateDeg === 90 || project.rotateDeg === 270;
@@ -1610,7 +2056,10 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     const g = project.colorGrading;
     const vfx = project.vfx;
     const exp = project.exportSettings;
-    const overlayPng = buildTextOverlayPngDataUrl();
+    const overlayPng = trackVisibility.t1 ? buildTextOverlayPngDataUrl() : '';
+    const effectiveAudioClips = project.audioClips.map((a) =>
+      a.kind !== 'original' && !trackVisibility.a2 ? {...a, muted: true} : a
+    );
 
     const payload: Record<string, string> = {
       action,
@@ -1651,7 +2100,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       effect: project.effectMode,
       loopCount: String(project.loopCount),
       videoFadeSec: String(selectedClip?.fadeInSec ?? 0),
-      mute: project.masterMuted ? '1' : '0',
+      mute: project.masterMuted || !trackVisibility.a1 ? '1' : '0',
       volume: String(project.masterVolume),
       audioFadeSec: String(selectedClip?.fadeInSec ?? 0),
       resolution: exp.resolution,
@@ -1660,7 +2109,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       fps: String(exp.fps),
       codec: exp.codec,
       audioBitrate: exp.audioBitrate,
+      audioDucking: project.audioDucking ? '1' : '0',
       clipsJson: JSON.stringify(project.videoClips),
+      audioClipsJson: JSON.stringify(effectiveAudioClips),
     };
     if (overlayPng) {
       payload.overlayPng = overlayPng;
@@ -1668,871 +2119,82 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     return payload;
   };
 
-  const TABS: {
-    id: VideoEditorTab;
-    label: string;
-    icon: React.ComponentType<{className?: string}>;
-  }[] = [
-    {id: 'trim', label: tr('Klip', 'Clip'), icon: Scissors},
-    {id: 'transform', label: tr('Kadraj', 'Crop'), icon: Crop},
-    {id: 'color', label: tr('Filtre', 'Filter'), icon: Palette},
-    {id: 'text', label: tr('Metin', 'Text'), icon: Type},
-    {id: 'fx', label: tr('Hız/FX', 'FX'), icon: Gauge},
-    {id: 'export', label: tr('Aktar', 'Export'), icon: SlidersHorizontal},
-  ];
+  const hasKeyframeAtPlayhead = useMemo(() => {
+    if (!selectedClip) return false;
+    const rel = Math.max(0, playhead - selectedClip.timelineStart);
+    return selectedClip.keyframes.some((kf) => Math.abs(kf.timeOffsetSec - rel) <= 0.15);
+  }, [selectedClip, playhead]);
 
-  // ============================================================================
-  // RENDER: HEADER BAR (SINGLE-ROW, ICON-FIRST WITH FLOATING TOOLTIP CLOUDS)
-  // ============================================================================
-  const renderMonitorHeader = () => (
-    <header className="pt-safe relative z-40 flex h-11 shrink-0 items-center justify-between gap-1.5 border-b border-[var(--line)] bg-[var(--surface)] px-2 sm:px-3">
-      {/* Left: Back + Undo/Redo + Desktop-only project meta */}
-      <div className="flex min-w-0 items-center gap-1">
-        <NleTooltipBtn
-          tooltip={tr('Geri Dön', 'Go Back')}
-          placement="bottom"
-          align="left"
-          onClick={onBack}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </NleTooltipBtn>
-
-        <NleTooltipBtn
-          tooltip={tr('Geri Al (Undo)', 'Undo')}
-          placement="bottom"
-          onClick={handleUndo}
-          disabled={!canUndo}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] transition-colors hover:text-[var(--ink)] disabled:opacity-35"
-        >
-          <Undo2 className="h-3.5 w-3.5" />
-        </NleTooltipBtn>
-
-        <NleTooltipBtn
-          tooltip={tr('İleri Al (Redo)', 'Redo')}
-          placement="bottom"
-          onClick={handleRedo}
-          disabled={!canRedo}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] transition-colors hover:text-[var(--ink)] disabled:opacity-35"
-        >
-          <Redo2 className="h-3.5 w-3.5" />
-        </NleTooltipBtn>
-
-        <div className="ml-1.5 hidden min-w-0 items-center gap-2 md:flex">
-          <p className="max-w-[160px] truncate text-xs font-bold text-[var(--ink)]">
-            {project.projectName}
-          </p>
-          <span className="font-mono-num shrink-0 whitespace-nowrap rounded bg-[var(--accent)]/15 px-1.5 py-0.5 text-[10px] font-bold text-[var(--accent)]">
-            {project.fps} FPS
-          </span>
-        </div>
-      </div>
-
-      {/* Right: Save, Projects, Compare, Grid, Layout, Export */}
-      <div className="flex shrink-0 items-center gap-1">
-        <NleTooltipBtn
-          tooltip={tr('Projeyi Kaydet', 'Save Project')}
-          placement="bottom"
-          onClick={handleSaveProject}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--ink)]"
-        >
-          <Save className="h-3.5 w-3.5" />
-        </NleTooltipBtn>
-
-        <NleTooltipBtn
-          tooltip={tr('Kaydedilen Projeler', 'Saved Projects')}
-          placement="bottom"
-          onClick={() => {
-            setSavedProjects(loadSavedNleProjects());
-            setShowProjectsModal(true);
-          }}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--ink)]"
-        >
-          <FolderOpen className="h-3.5 w-3.5" />
-        </NleTooltipBtn>
-
-        <NleTooltipBtn
-          tooltip={tr('Orijinali Görmek İçin Basılı Tut', 'Hold to Compare Original')}
-          placement="bottom"
-          onPointerDown={() => setCompareOriginal(true)}
-          onPointerUp={() => setCompareOriginal(false)}
-          onPointerLeave={() => setCompareOriginal(false)}
-          className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
-            compareOriginal
-              ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--accent)]'
-              : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
-          }`}
-        >
-          <Eye className="h-3.5 w-3.5" />
-        </NleTooltipBtn>
-
-        <NleTooltipBtn
-          tooltip={tr('Kılavuz Izgara (3×3)', 'Rule of Thirds Grid')}
-          placement="bottom"
-          onClick={() => setShowGrid((g) => !g)}
-          className={`hidden h-8 w-8 items-center justify-center rounded-lg border transition-colors sm:flex ${
-            showGrid
-              ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--accent)]'
-              : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
-          }`}
-        >
-          <Grid className="h-3.5 w-3.5" />
-        </NleTooltipBtn>
-
-        <NleTooltipBtn
-          tooltip={tr('Dikey / Yatay Düzen', 'Portrait / Landscape Layout')}
-          placement="bottom"
-          onClick={toggleOrientationLock}
-          className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
-            !isPortraitMode
-              ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--accent)]'
-              : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
-          }`}
-        >
-          <Smartphone
-            className={`h-3.5 w-3.5 transition-transform ${!isPortraitMode ? 'rotate-90' : ''}`}
-          />
-        </NleTooltipBtn>
-
-        <NleTooltipBtn
-          tooltip={tr('Videoyu Dışa Aktar', 'Export Video')}
-          placement="bottom"
-          align="right"
-          onClick={() => onExport(buildPayload('export'))}
-          className="morph-accent-btn ml-0.5 flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 text-xs font-extrabold shadow-sm transition-opacity hover:opacity-95"
-        >
-          <Download className="h-3.5 w-3.5" />
-          <span className="hidden xs:inline sm:inline">{tr('Aktar', 'Export')}</span>
-        </NleTooltipBtn>
-      </div>
-    </header>
-  );
-
-  // ============================================================================
-  // RENDER: LARGE RESIZABLE PREVIEW MONITOR + CENTERED TRANSPORT BAR
-  // ============================================================================
-  const renderPreviewMonitor = () => (
-    <div
-      style={
-        !isFullscreenPreview && isPortraitMode
-          ? {height: `${previewHeightVh}vh`, minHeight: '175px', maxHeight: '64vh'}
-          : undefined
-      }
-      className={`flex flex-col bg-[var(--paper)] ${
-        isResizingPreview ? '' : 'transition-[height] duration-150'
-      } ${
-        isFullscreenPreview
-          ? 'fixed inset-0 z-50 p-3'
-          : isPortraitMode
-            ? 'shrink-0 border-b border-[var(--line)]'
-            : 'min-h-0 flex-1'
-      }`}
-    >
-      {/* Monitor Canvas — Full Height Video Display */}
-      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black p-1.5 sm:p-2.5">
-        {project.aspectRatio !== 'orig' && project.fitMode === 'blur' && videoUrl && (
-          <video
-            src={videoUrl}
-            muted
-            playsInline
-            poster={TRANSPARENT_POSTER}
-            className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-35 blur-xl"
-          />
-        )}
-
-        <div
-          ref={previewStageRef}
-          className="relative flex h-full max-h-full max-w-full items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-black shadow-2xl"
-          style={{
-            aspectRatio:
-              project.aspectRatio === '1:1'
-                ? '1 / 1'
-                : project.aspectRatio === '16:9'
-                  ? '16 / 9'
-                  : project.aspectRatio === '9:16'
-                    ? '9 / 16'
-                    : project.aspectRatio === '4:5'
-                      ? '4 / 5'
-                      : project.aspectRatio === '3:4'
-                        ? '3 / 4'
-                        : undefined,
-            opacity: selectedClip ? selectedClip.opacity / 100 : 1,
-          }}
-        >
-          {videoUrl && (
-            <video
-              ref={videoRef}
-              src={videoUrl}
-              playsInline
-              preload="auto"
-              poster={TRANSPARENT_POSTER}
-              onClick={togglePlay}
-              onLoadedMetadata={handleLoadedMetadata}
-              onTimeUpdate={handleTimeUpdate}
-              onPlay={() => setIsPlaying(true)}
-              onPause={() => setIsPlaying(false)}
-              style={{
-                filter: cssFilter,
-                transform: previewTransform,
-                clipPath:
-                  project.vfx.maskShape === 'circle'
-                    ? 'circle(42% at 50% 50%)'
-                    : project.vfx.maskShape === 'rect'
-                      ? 'inset(10% 10% 10% 10% round 16px)'
-                      : undefined,
-              }}
-              className="h-full w-full cursor-pointer bg-black object-contain transition-transform duration-150"
-            />
-          )}
-
-          {/* Vignette Preview Overlay */}
-          {project.colorGrading.vignette > 5 && !compareOriginal && (
-            <div
-              className="pointer-events-none absolute inset-0"
-              style={{
-                background: `radial-gradient(circle, transparent 52%, rgba(0,0,0,${(
-                  project.colorGrading.vignette / 115
-                ).toFixed(2)}) 100%)`,
-              }}
-            />
-          )}
-
-          {/* Rule of Thirds Grid */}
-          {showGrid && (
-            <div className="pointer-events-none absolute inset-0 grid grid-cols-3 grid-rows-3">
-              {Array.from({length: 9}).map((_, i) => (
-                <div key={i} className="border border-white/15" />
-              ))}
-            </div>
-          )}
-
-          {/* Interactive Free Crop Handles when on Kadraj tab */}
-          {activeTab === 'transform' && !compareOriginal && (
-            <div className="pointer-events-none absolute inset-0">
-              <div
-                onPointerDown={(e) => startCropDrag(e, 'move')}
-                style={{
-                  left: `${project.cropBox.x * 100}%`,
-                  top: `${project.cropBox.y * 100}%`,
-                  width: `${project.cropBox.w * 100}%`,
-                  height: `${project.cropBox.h * 100}%`,
-                  boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.58)',
-                }}
-                className="pointer-events-auto absolute cursor-move border-2 border-[var(--accent)]"
-              >
-                <div
-                  onPointerDown={(e) => startCropDrag(e, 'nw')}
-                  className="absolute -left-2 -top-2 h-4 w-4 cursor-nwse-resize rounded-sm border-2 border-white bg-[var(--accent)]"
-                />
-                <div
-                  onPointerDown={(e) => startCropDrag(e, 'ne')}
-                  className="absolute -right-2 -top-2 h-4 w-4 cursor-nesw-resize rounded-sm border-2 border-white bg-[var(--accent)]"
-                />
-                <div
-                  onPointerDown={(e) => startCropDrag(e, 'sw')}
-                  className="absolute -bottom-2 -left-2 h-4 w-4 cursor-nesw-resize rounded-sm border-2 border-white bg-[var(--accent)]"
-                />
-                <div
-                  onPointerDown={(e) => startCropDrag(e, 'se')}
-                  className="absolute -bottom-2 -right-2 h-4 w-4 cursor-nwse-resize rounded-sm border-2 border-white bg-[var(--accent)]"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Live Synchronized Text & SRT Overlays */}
-          {activeTextOverlays.length > 0 && !compareOriginal && (
-            <div className="pointer-events-none absolute inset-x-3 inset-y-3 flex flex-col justify-between">
-              {activeTextOverlays.map((tItem) => (
-                <div
-                  key={tItem.id}
-                  className={`flex w-full ${
-                    tItem.posY === 'top'
-                      ? 'items-start'
-                      : tItem.posY === 'center'
-                        ? 'my-auto items-center'
-                        : 'mt-auto items-end'
-                  } ${
-                    tItem.align === 'left'
-                      ? 'justify-start'
-                      : tItem.align === 'right'
-                        ? 'justify-end'
-                        : 'justify-center'
-                  }`}
-                >
-                  <span
-                    style={{
-                      color: tItem.textColor,
-                      fontFamily: tItem.fontFamily,
-                      backgroundColor: tItem.bgEnabled ? tItem.bgColor : 'transparent',
-                      WebkitTextStroke:
-                        tItem.strokeWidth > 0
-                          ? `${tItem.strokeWidth}px ${tItem.strokeColor}`
-                          : undefined,
-                      textShadow: tItem.shadowEnabled ? '0 2px 6px rgba(0,0,0,0.85)' : 'none',
-                    }}
-                    className={`max-w-[92%] whitespace-pre-line break-words rounded-lg px-2.5 py-1 font-extrabold tracking-tight ${
-                      tItem.fontSize === 'sm'
-                        ? 'text-xs'
-                        : tItem.fontSize === 'lg'
-                          ? 'text-lg'
-                          : tItem.fontSize === 'xl'
-                            ? 'text-xl'
-                            : 'text-sm'
-                    }`}
-                  >
-                    {tItem.text}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Floating Status Toast Inside Monitor */}
-        {statusBanner && (
-          <div className="pointer-events-none absolute left-1/2 top-2.5 z-30 -translate-x-1/2 rounded-lg border border-[var(--accent)]/50 bg-[var(--surface)]/95 px-3 py-1 text-[11px] font-bold text-[var(--ink)] shadow-lg backdrop-blur-md">
-            {statusBanner}
-          </div>
-        )}
-
-        {/* Top-Left Compact Video Meta Pill */}
-        <div className="pointer-events-none absolute left-2 top-2 flex items-center gap-1 rounded-md border border-white/10 bg-black/60 px-2 py-0.5 backdrop-blur-sm">
-          <span className="font-mono-num whitespace-nowrap text-[10px] font-bold text-white/85">
-            {targetDimensions.w}×{targetDimensions.h}
-          </span>
-          <span className="text-white/35">·</span>
-          <span className="font-mono-num whitespace-nowrap text-[10px] font-bold text-[var(--accent)]">
-            {project.fps} FPS
-          </span>
-        </div>
-
-        {/* Top-Right Monitor Badges */}
-        <div className="absolute right-2 top-2 flex items-center gap-1.5">
-          {selectedClip && (
-            <span className="font-mono-num whitespace-nowrap rounded-md border border-white/10 bg-black/60 px-2 py-0.5 text-[10px] font-bold text-[var(--accent)] backdrop-blur-sm">
-              {selectedClip.label} · {selectedClip.speed}×
-            </span>
-          )}
-          <NleTooltipBtn
-            tooltip={
-              isFullscreenPreview
-                ? tr('Tam Ekrandan Çık', 'Exit Fullscreen')
-                : tr('Tam Ekran Önizleme', 'Fullscreen Preview')
+  const handleQuickToggleKeyframe = () => {
+    if (!selectedClip) return;
+    const rel = Math.max(0, Number((playhead - selectedClip.timelineStart).toFixed(2)));
+    const existing = selectedClip.keyframes.find((kf) => Math.abs(kf.timeOffsetSec - rel) <= 0.15);
+    if (existing) {
+      commitProject((prev) => ({
+        ...prev,
+        videoClips: prev.videoClips.map((c) =>
+          c.id === selectedClip.id
+            ? {...c, keyframes: c.keyframes.filter((k) => k.id !== existing.id)}
+            : c
+        ),
+      }));
+      notifyStatus(
+        tr(
+          `${rel.toFixed(1)}s konumundaki Keyframe kaldırıldı.`,
+          `Removed keyframe at ${rel.toFixed(1)}s.`
+        )
+      );
+      return;
+    }
+    commitProject((prev) => ({
+      ...prev,
+      videoClips: prev.videoClips.map((c) =>
+        c.id === selectedClip.id
+          ? {
+              ...c,
+              keyframes: [
+                ...c.keyframes,
+                {
+                  id: `kf-${Date.now().toString(36)}`,
+                  timeOffsetSec: rel,
+                  zoom: project.zoom,
+                  opacity: c.opacity,
+                  posX: kfPosX,
+                  posY: kfPosY,
+                  rotation: kfRotation,
+                  easing: kfEasing,
+                },
+              ],
             }
-            placement="bottom"
-            align="right"
-            onClick={() => setIsFullscreenPreview((f) => !f)}
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/60 text-white hover:border-[var(--accent)]"
-          >
-            {isFullscreenPreview ? (
-              <Minimize2 className="h-3.5 w-3.5" />
-            ) : (
-              <Maximize2 className="h-3.5 w-3.5" />
-            )}
-          </NleTooltipBtn>
-        </div>
-      </div>
-
-      {/* Draggable Vertical Resize Handle (Portrait Mode: drag up/down or double-tap) */}
-      {isPortraitMode && !isFullscreenPreview && (
-        <div
-          onPointerDown={startPreviewResize}
-          onDoubleClick={cyclePreviewHeight}
-          title={tr(
-            'Video ekranını büyütmek/küçültmek için yukarı-aşağı sürükleyin',
-            'Drag up or down to resize preview monitor'
-          )}
-          className="group flex h-3.5 shrink-0 cursor-ns-resize touch-none items-center justify-center border-t border-[var(--line)]/70 bg-[var(--surface)] hover:bg-[var(--accent)]/10"
-        >
-          <span className="h-1 w-10 rounded-full bg-[var(--line)] transition-colors group-hover:bg-[var(--accent)]" />
-        </div>
-      )}
-
-      {/* Centered, Symmetrical Transport Bar */}
-      <div className="relative z-30 grid h-11 shrink-0 grid-cols-[1fr_auto_1fr] items-center border-t border-[var(--line)]/60 bg-[var(--surface)] px-2.5">
-        {/* Left: Crisp Timecode */}
-        <div className="font-mono-num flex min-w-0 items-baseline gap-1 text-[11px] font-bold">
-          <span className="text-[var(--accent)]">{formatSmpteTimecode(playhead, project.fps)}</span>
-          <span className="text-[var(--muted)]/55">/</span>
-          <span className="truncate text-[var(--muted)]">
-            {formatSmpteTimecode(totalTimelineDur, project.fps)}
-          </span>
-        </div>
-
-        {/* Dead-Center: Sleek Unified Playback Pill */}
-        <div className="flex items-center gap-0.5 rounded-full border border-[var(--line)] bg-[var(--inset)] px-1.5 py-0.5 shadow-inner">
-          <NleTooltipBtn
-            tooltip={tr('Başa Dön', 'Jump to Start')}
-            onClick={() => seekTimelineTo(0)}
-            className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--ink)]"
-          >
-            <SkipBack className="h-3.5 w-3.5" />
-          </NleTooltipBtn>
-
-          <NleTooltipBtn
-            tooltip={tr('1 Kare Geri', 'Previous Frame')}
-            onClick={() => stepFrame(-1)}
-            className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--ink)]"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </NleTooltipBtn>
-
-          <NleTooltipBtn
-            tooltip={isPlaying ? tr('Duraklat', 'Pause') : tr('Oynat', 'Play')}
-            onClick={togglePlay}
-            className="morph-accent-btn mx-0.5 flex h-8 w-8 items-center justify-center rounded-full shadow-md transition-transform active:scale-95"
-          >
-            {isPlaying ? (
-              <Pause className="h-3.5 w-3.5 fill-current" />
-            ) : (
-              <Play className="h-3.5 w-3.5 translate-x-[1px] fill-current" />
-            )}
-          </NleTooltipBtn>
-
-          <NleTooltipBtn
-            tooltip={tr('1 Kare İleri', 'Next Frame')}
-            onClick={() => stepFrame(1)}
-            className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--ink)]"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </NleTooltipBtn>
-
-          <NleTooltipBtn
-            tooltip={tr('Sona Git', 'Jump to End')}
-            onClick={() => seekTimelineTo(totalTimelineDur)}
-            className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--ink)]"
-          >
-            <SkipForward className="h-3.5 w-3.5" />
-          </NleTooltipBtn>
-        </div>
-
-        {/* Right: Mute + Frame Snapshot + Video Screen Resize */}
-        <div className="flex items-center justify-end gap-1">
-          <NleTooltipBtn
-            tooltip={project.masterMuted ? tr('Sesi Aç', 'Unmute Audio') : tr('Sesi Kapat', 'Mute Audio')}
-            onClick={() =>
-              commitProject((prev) => ({...prev, masterMuted: !prev.masterMuted}))
-            }
-            className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-colors ${
-              project.masterMuted
-                ? 'border-rose-500/40 bg-rose-500/15 text-rose-400'
-                : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]'
-            }`}
-          >
-            {project.masterMuted ? (
-              <VolumeX className="h-3.5 w-3.5" />
-            ) : (
-              <Volume2 className="h-3.5 w-3.5" />
-            )}
-          </NleTooltipBtn>
-
-          <NleTooltipBtn
-            tooltip={tr('Mevcut Kareyi Fotoğraf Olarak Kaydet', 'Capture Current Frame')}
-            align="right"
-            onClick={() => onExport(buildPayload('snapshot'))}
-            className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)] transition-colors hover:border-[var(--accent)]"
-          >
-            <Camera className="h-3.5 w-3.5" />
-          </NleTooltipBtn>
-
-          {isPortraitMode && !isFullscreenPreview && (
-            <NleTooltipBtn
-              tooltip={tr('Video Ekranını Büyüt / Küçült', 'Resize Video Monitor')}
-              align="right"
-              onClick={cyclePreviewHeight}
-              className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--ink)]"
-            >
-              <ChevronsUpDown className="h-3.5 w-3.5" />
-            </NleTooltipBtn>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-
-  // ============================================================================
-  // RENDER: COMPACT MINI-SCRUB BAR (SHOWN WHEN TIMELINE COLLAPSED FOR TOOLS)
-  // ============================================================================
-  const renderCompactMiniTimelineBar = () => {
-    const playheadPct = totalTimelineDur > 0 ? (playhead / totalTimelineDur) * 100 : 0;
-    return (
-      <div className="relative z-20 flex h-9 shrink-0 items-center gap-2 border-b border-[var(--line)] bg-[var(--surface)] px-2.5">
-        <NleTooltipBtn
-          tooltip={tr('Tam Zaman Çizelgesini Aç', 'Expand Full Timeline')}
-          align="left"
-          onClick={() => setIsTimelineExpanded(true)}
-          className="morph-tonal-btn flex h-7 items-center gap-1 rounded-lg px-2 text-[11px] font-bold"
-        >
-          <Layers className="h-3 w-3 text-[var(--accent)]" />
-          <ChevronDown className="h-3 w-3 text-[var(--muted)]" />
-        </NleTooltipBtn>
-
-        {/* Live Mini Scrub Track */}
-        <div
-          onPointerDown={(e) => {
-            const rect = e.currentTarget.getBoundingClientRect();
-            const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / Math.max(1, rect.width)));
-            seekTimelineTo(ratio * totalTimelineDur);
-          }}
-          className="relative flex h-6 flex-1 cursor-ew-resize items-center"
-        >
-          <div className="relative h-1.5 w-full overflow-hidden rounded-full border border-[var(--line)] bg-[var(--inset)]">
-            <div
-              style={{width: `${Math.min(100, Math.max(0, playheadPct))}%`}}
-              className="morph-accent-btn h-full rounded-full"
-            />
-          </div>
-          <div
-            style={{left: `${Math.min(100, Math.max(0, playheadPct))}%`}}
-            className="pointer-events-none absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--paper)] bg-[var(--accent)] shadow"
-          />
-        </div>
-
-        <span className="font-mono-num shrink-0 text-[10px] font-bold text-[var(--muted)]">
-          {project.videoClips.length} {tr('Klip', 'Clip')}
-        </span>
-      </div>
+          : c
+      ),
+    }));
+    notifyStatus(
+      tr(
+        `${rel.toFixed(1)}s konumuna Keyframe (◆) eklendi.`,
+        `Added Keyframe (◆) at ${rel.toFixed(1)}s.`
+      )
     );
   };
 
-  // ============================================================================
-  // RENDER: CENTERED ICON-ONLY QUICK NLE ACTION BAR (WITH FLOATING CLOUDS)
-  // ============================================================================
-  const renderQuickNleActionBar = () => {
-    const cycleZoom = () => {
-      setTimelineZoom((z) => (z === 1 ? 2 : z === 2 ? 4 : z === 4 ? 8 : 1));
-    };
-
-    return (
-      <div className="relative z-20 flex shrink-0 items-center justify-center gap-1 border-b border-[var(--line)] bg-[var(--surface)] px-2 py-1.5">
-        <NleTooltipBtn
-          tooltip={tr('Oynatma Çizgisinden Böl (Split)', 'Split Clip at Playhead')}
-          align="left"
-          onClick={handleSplitAtPlayhead}
-          className="morph-tonal-btn flex h-7 w-8 items-center justify-center rounded-lg transition-colors"
-        >
-          <Scissors className="h-3.5 w-3.5 text-[var(--accent)]" />
-        </NleTooltipBtn>
-
-        <NleTooltipBtn
-          tooltip={tr('Seçili Klibi Sil (Boşluğu Koru)', 'Delete Clip (Keep Gap)')}
-          onClick={handleNormalDelete}
-          disabled={project.videoClips.length <= 1}
-          className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] text-rose-400 transition-colors hover:border-rose-500/50 disabled:opacity-35"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </NleTooltipBtn>
-
-        <NleTooltipBtn
-          tooltip={tr('Boşluksuz Sil (Ripple Delete)', 'Ripple Delete (Close Gap)')}
-          onClick={handleRippleDelete}
-          disabled={project.videoClips.length <= 1}
-          className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)] transition-colors hover:border-[var(--accent)] disabled:opacity-35"
-        >
-          <Layers className="h-3.5 w-3.5" />
-        </NleTooltipBtn>
-
-        <span className="mx-0.5 h-4 w-px bg-[var(--line)]" />
-
-        <NleTooltipBtn
-          tooltip={tr('Klibi Sola Taşı', 'Move Clip Left')}
-          onClick={() => handleMoveClipStep(-1)}
-          disabled={project.videoClips.length <= 1}
-          className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)] disabled:opacity-35"
-        >
-          <MoveLeft className="h-3.5 w-3.5" />
-        </NleTooltipBtn>
-
-        <NleTooltipBtn
-          tooltip={tr('Klibi Sağa Taşı', 'Move Clip Right')}
-          onClick={() => handleMoveClipStep(1)}
-          disabled={project.videoClips.length <= 1}
-          className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)] disabled:opacity-35"
-        >
-          <MoveRight className="h-3.5 w-3.5" />
-        </NleTooltipBtn>
-
-        <NleTooltipBtn
-          tooltip={tr('Seçili Klibi Çoğalt', 'Duplicate Clip')}
-          onClick={handleDuplicateClip}
-          className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]"
-        >
-          <Copy className="h-3.5 w-3.5" />
-        </NleTooltipBtn>
-
-        <NleTooltipBtn
-          tooltip={tr('2 sn Dondurulmuş Kare Ekle', 'Insert 2s Freeze Frame')}
-          onClick={handleFreezeFrame}
-          className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] text-[var(--accent-end)] hover:border-[var(--accent)]"
-        >
-          <Snowflake className="h-3.5 w-3.5" />
-        </NleTooltipBtn>
-
-        <span className="mx-0.5 h-4 w-px bg-[var(--line)]" />
-
-        <NleTooltipBtn
-          tooltip={
-            project.snapEnabled
-              ? tr('Mıknatıs Hizalama Açık (Snap)', 'Magnetic Snap On')
-              : tr('Mıknatıs Hizalama Kapalı (Snap)', 'Magnetic Snap Off')
-          }
-          onClick={() =>
-            commitProject((prev) => ({...prev, snapEnabled: !prev.snapEnabled}))
-          }
-          className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-colors ${
-            project.snapEnabled
-              ? 'border-[var(--accent)] bg-[var(--accent)]/18 text-[var(--accent)]'
-              : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
-          }`}
-        >
-          <Magnet className="h-3.5 w-3.5" />
-        </NleTooltipBtn>
-
-        <NleTooltipBtn
-          tooltip={tr('Zaman Çizelgesi Yakınlaştırma (1×–8×)', 'Timeline Zoom (1×–8×)')}
-          align="right"
-          onClick={cycleZoom}
-          className="font-mono-num flex h-7 min-w-[28px] items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] px-1.5 text-[10px] font-extrabold text-[var(--ink)] hover:border-[var(--accent)]"
-        >
-          {timelineZoom}×
-        </NleTooltipBtn>
-
-        {isPortraitMode && (
-          <NleTooltipBtn
-            tooltip={tr('Zaman Çizelgesini Daralt', 'Collapse Timeline')}
-            align="right"
-            onClick={() => setIsTimelineExpanded(false)}
-            className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]"
-          >
-            <ChevronUp className="h-3.5 w-3.5" />
-          </NleTooltipBtn>
-        )}
-      </div>
-    );
+  const handleToggleTrackVisibility = (track: "t1" | "v1" | "a1" | "a2") => {
+    if (track === "a1") {
+      const next = !trackVisibility.a1;
+      setTrackVisibility((t) => ({...t, a1: next}));
+      commitProject((prev) => ({...prev, masterMuted: !next}));
+      return;
+    }
+    setTrackVisibility((t) => ({...t, [track]: !t[track]}));
   };
 
-  // ============================================================================
-  // RENDER: MULTI-LAYER TIMELINE ENGINE (PINNED TRACK RAIL + PIXEL-EXACT PLAYHEAD)
-  // ============================================================================
-  const renderMultiTrackTimeline = () => {
-    const playheadPct = totalTimelineDur > 0 ? (playhead / totalTimelineDur) * 100 : 0;
-
-    return (
-      <div className="flex shrink-0 items-stretch gap-1.5 border-b border-[var(--line)] bg-[var(--paper)] px-2 py-1.5 select-none">
-        {/* Pinned Left Track Header Rail (Never overlaps clips or handles, stays visible when zoomed) */}
-        <div className="flex w-7 shrink-0 flex-col gap-1 pt-3.5">
-          <div className="font-mono-num flex h-6 items-center justify-center rounded-md border border-[var(--line)]/80 bg-[var(--surface)] text-[9px] font-bold text-[var(--accent)]">
-            T1
-          </div>
-          <div className="font-mono-num flex h-12 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[9px] font-extrabold text-[var(--ink)]">
-            V1
-          </div>
-          <div className="font-mono-num flex h-7 items-center justify-center rounded-md border border-[var(--line)]/80 bg-[var(--surface)] text-[9px] font-bold text-[var(--accent-end)]">
-            A1
-          </div>
-        </div>
-
-        {/* Scrollable Right Timeline Canvas (0-100% maps 1:1 with playhead & clips) */}
-        <div
-          ref={timelineScrollRef}
-          className="no-scrollbar min-w-0 flex-1 overflow-x-auto overflow-y-hidden"
-        >
-          <div style={{width: `${timelineZoom * 100}%`}} className="min-w-full px-2">
-            <div
-              ref={timelineTrackRef}
-              onPointerDown={(e) => startTimelineDrag(e, 'playhead')}
-              className="relative cursor-ew-resize space-y-1 pt-3.5"
-            >
-              {/* Time Ruler Marks */}
-              <div className="font-mono-num pointer-events-none absolute inset-x-0 top-0 flex justify-between text-[9px] text-[var(--muted)]">
-                <span>00:00:00</span>
-                <span>{formatSmpteTimecode(totalTimelineDur * 0.25, project.fps)}</span>
-                <span>{formatSmpteTimecode(totalTimelineDur * 0.5, project.fps)}</span>
-                <span>{formatSmpteTimecode(totalTimelineDur * 0.75, project.fps)}</span>
-                <span>{formatSmpteTimecode(totalTimelineDur, project.fps)}</span>
-              </div>
-
-              {/* TRACK T1: TIMED TEXT & SRT SUBTITLE CLIPS */}
-              <div className="relative flex h-6 items-center overflow-hidden rounded-md border border-[var(--line)]/80 bg-[var(--surface)] px-2">
-                {project.textClips.length === 0 ? (
-                  <button
-                    type="button"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={handleAddTextClip}
-                    className="truncate text-[10px] font-semibold text-[var(--muted)] hover:text-[var(--ink)]"
-                  >
-                    + {tr('Metin veya SRT Altyazı Ekle', 'Add Text or SRT Subtitle')}
-                  </button>
-                ) : (
-                  project.textClips.map((tItem) => {
-                    const leftPct = (tItem.timelineStart / totalTimelineDur) * 100;
-                    const widthPct = Math.max(4, (tItem.durationSec / totalTimelineDur) * 100);
-                    const isSel = tItem.id === selectedTextClip?.id;
-                    return (
-                      <div
-                        key={tItem.id}
-                        onPointerDown={(e) => {
-                          e.stopPropagation();
-                          setSelectedTextId(tItem.id);
-                          handleSelectDockTab('text');
-                        }}
-                        style={{
-                          left: `${Math.min(96, Math.max(0, leftPct))}%`,
-                          width: `${Math.min(100 - leftPct, widthPct)}%`,
-                        }}
-                        className={`absolute inset-y-0.5 flex cursor-pointer items-center truncate rounded px-1.5 text-[10px] font-bold transition-colors ${
-                          isSel
-                            ? 'border border-[var(--accent)] bg-[var(--accent)]/25 text-[var(--ink)]'
-                            : 'border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
-                        }`}
-                      >
-                        <Type className="mr-1 h-2.5 w-2.5 shrink-0 text-[var(--accent)]" />
-                        <span className="truncate">{tItem.text}</span>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              {/* TRACK V1: MULTI-CLIP VIDEO TRACK WITH DRAGGABLE THEME TRIM HANDLES */}
-              <div className="relative h-12 overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)]">
-                {project.videoClips.map((clip, idx) => {
-                  const dur = clipTimelineDuration(clip);
-                  const leftPct = (clip.timelineStart / totalTimelineDur) * 100;
-                  const widthPct = Math.max(5, (dur / totalTimelineDur) * 100);
-                  const isSelected = clip.id === selectedClip?.id;
-
-                  return (
-                    <div
-                      key={clip.id}
-                      onPointerDown={(e) => {
-                        e.stopPropagation();
-                        setSelectedClipId(clip.id);
-                      }}
-                      style={{
-                        left: `${Math.min(95, Math.max(0, leftPct))}%`,
-                        width: `${Math.min(100 - leftPct, widthPct)}%`,
-                      }}
-                      className={`absolute inset-y-0.5 flex cursor-pointer items-center overflow-hidden rounded-md border-2 transition-colors ${
-                        isSelected
-                          ? 'z-10 border-[var(--accent)] shadow-md'
-                          : 'border-[var(--line)] hover:border-[var(--accent)]/55'
-                      }`}
-                    >
-                      {/* Filmstrip Background inside Clip */}
-                      <div className="pointer-events-none absolute inset-0 flex overflow-hidden opacity-75">
-                        {thumbnails.length > 0 ? (
-                          thumbnails.map((src, tIdx) => (
-                            <img
-                              key={tIdx}
-                              src={src}
-                              alt=""
-                              className="h-full flex-1 object-cover"
-                              draggable={false}
-                            />
-                          ))
-                        ) : (
-                          <div className="h-full w-full bg-gradient-to-r from-[var(--inset)] via-[var(--surface)] to-[var(--inset)]" />
-                        )}
-                      </div>
-
-                      {/* Left Draggable Trim Handle */}
-                      <div
-                        onPointerDown={(e) => startTimelineDrag(e, 'trim-left', clip.id)}
-                        title={tr('Sol Kenardan Kırp', 'Trim Start')}
-                        className={`z-20 flex h-full w-3 shrink-0 cursor-ew-resize items-center justify-center transition-colors ${
-                          isSelected
-                            ? 'morph-accent-solid'
-                            : 'bg-[var(--inset)]/90 text-[var(--muted)]'
-                        }`}
-                      >
-                        <div className="h-4 w-0.5 rounded-full bg-current" />
-                      </div>
-
-                      {/* Clip Label & Metadata Overlay */}
-                      <div className="pointer-events-none relative z-10 flex min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden px-1.5">
-                        <div className="flex items-center gap-1 overflow-hidden">
-                          <span className="truncate rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-extrabold text-white">
-                            {clip.isFreezeFrame ? '❄ ' : ''}
-                            {clip.label}
-                          </span>
-                          {clip.transitionIn !== 'none' && idx > 0 && (
-                            <span className="morph-accent-solid shrink-0 rounded px-1 text-[8px] font-bold uppercase">
-                              {clip.transitionIn}
-                            </span>
-                          )}
-                        </div>
-                        {widthPct > 22 && (
-                          <span className="font-mono-num truncate text-[9px] font-semibold text-white/90 drop-shadow">
-                            {formatSecondsShort(clip.sourceStart)}–{formatSecondsShort(clip.sourceEnd)} ({clip.speed}×)
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Right Draggable Trim Handle */}
-                      <div
-                        onPointerDown={(e) => startTimelineDrag(e, 'trim-right', clip.id)}
-                        title={tr('Sağ Kenardan Kırp', 'Trim End')}
-                        className={`z-20 flex h-full w-3 shrink-0 cursor-ew-resize items-center justify-center transition-colors ${
-                          isSelected
-                            ? 'morph-accent-solid'
-                            : 'bg-[var(--inset)]/90 text-[var(--muted)]'
-                        }`}
-                      >
-                        <div className="h-4 w-0.5 rounded-full bg-current" />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* TRACK A1: AUDIO & VOICEOVER WAVEFORM TRACK */}
-              <div className="relative flex h-7 items-center overflow-hidden rounded-md border border-[var(--line)]/80 bg-[var(--surface)] px-1.5">
-                <div className="relative flex h-full flex-1 items-center gap-[2px] overflow-hidden pr-1.5">
-                  {waveformBars.map((amp, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        height: `${Math.round(
-                          amp * (project.masterMuted ? 12 : Math.min(100, project.masterVolume))
-                        )}%`,
-                      }}
-                      className={`flex-1 rounded-full transition-all ${
-                        project.masterMuted
-                          ? 'bg-rose-500/35'
-                          : 'bg-[var(--accent-end)]/75'
-                      }`}
-                    />
-                  ))}
-                </div>
-                <span className="font-mono-num shrink-0 rounded bg-[var(--paper)]/85 px-1.5 py-0.5 text-[9px] font-bold text-[var(--muted)]">
-                  {project.audioClips.length} {tr('Ses', 'Aud')}
-                </span>
-              </div>
-
-              {/* Magnetic Snap Alignment Line */}
-              {snapGuideTime !== null && (
-                <div
-                  style={{
-                    left: `${Math.min(100, Math.max(0, (snapGuideTime / totalTimelineDur) * 100))}%`,
-                  }}
-                  className="pointer-events-none absolute inset-y-0 z-30 w-0.5 bg-amber-400 shadow-[0_0_8px_#FBBF24]"
-                />
-              )}
-
-              {/* Playhead Indicator Line */}
-              <div
-                style={{left: `${Math.min(100, Math.max(0, playheadPct))}%`}}
-                className="pointer-events-none absolute inset-y-0 z-30 w-0.5 -translate-x-1/2 bg-[var(--ink)] shadow-md"
-              >
-                <div className="mx-auto -mt-1 h-2.5 w-2.5 rotate-45 rounded-xs bg-[var(--accent)] ring-2 ring-[var(--ink)]" />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+  const activeTabTitle: Record<VideoEditorTab, string> = {
+    trim: tr("Klip & Geçişler", "Clip & Transitions"),
+    audio: tr("Ses Stüdyosu", "Audio Studio"),
+    transform: tr("Kadraj & Dönüştür", "Crop & Transform"),
+    color: tr("Renk, RGB Scope & LUT", "Color, RGB Scope & LUT"),
+    text: tr("Metin & Altyazılar", "Text & Subtitles"),
+    fx: tr("Hız, Keyframe & VFX", "Speed, Keyframes & VFX"),
+    export: tr("Dışa Aktarma Ayarları", "Export Settings"),
   };
 
   // ============================================================================
@@ -2553,12 +2215,43 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     );
 
     return (
-      <div className="morph-nle-scroll flex-1 overflow-y-auto bg-[var(--paper)] p-3">
-        {/* TAB 1: CLIP TRANSITIONS & AUDIO STUDIO (IN/OUT BOX REMOVED) */}
+      <div
+        className={`flex flex-col overflow-hidden bg-[#0E1117] ${
+          isPortraitMode
+            ? 'max-h-[45vh] shrink-0 border-t border-white/[0.08] shadow-[0_-10px_30px_rgba(0,0,0,0.65)]'
+            : 'min-h-0 flex-1'
+        }`}
+      >
+        {/* Clean Contextual Drawer Header (Premiere iOS / ProCut pattern) */}
+        <div className="flex h-9 shrink-0 items-center justify-between border-b border-white/[0.07] bg-[#12151E] px-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold tracking-tight text-white">
+              {activeTabTitle[activeTab]}
+            </span>
+            {selectedClip && (activeTab === 'trim' || activeTab === 'fx') && (
+              <span className="font-mono-num text-[10px] font-medium text-white/45">
+                {selectedClip.label} · {selectedClip.speed}×
+              </span>
+            )}
+          </div>
+          {isPortraitMode && (
+            <button
+              type="button"
+              onClick={() => setIsInspectorOpen(false)}
+              className="flex items-center gap-1 rounded-md bg-white/[0.08] px-2.5 py-1 text-[11px] font-bold text-[#F5B82E] transition-colors hover:bg-white/[0.14]"
+            >
+              <Check className="h-3 w-3" />
+              <span>{tr('Tamam', 'Done')}</span>
+            </button>
+          )}
+        </div>
+
+        <div className="morph-nle-scroll flex-1 overflow-y-auto p-3">
+        {/* TAB 1: CLIP TRANSITIONS, OPACITY & SILENCE CUT */}
         {activeTab === 'trim' && (
           <div className="space-y-3">
             {selectedClip && (
-              <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3">
+              <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 space-y-3">
                 {/* Clip Transition Picker WITH VISUAL PREVIEW CARDS */}
                 <div>
                   <div className="mb-2 flex items-center justify-between">
@@ -2694,14 +2387,82 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                     })}
                   </div>
                 </div>
+
+                {/* Precision Transition Duration & Clip Opacity Sliders */}
+                <div className="grid grid-cols-1 gap-3 border-t border-[var(--line)] pt-2.5 sm:grid-cols-2">
+                  <NleSlider
+                    label={tr('Geçiş Süresi', 'Transition Duration')}
+                    value={selectedClip.transitionDurationSec}
+                    min={0.2}
+                    max={2.0}
+                    step={0.1}
+                    defaultValue={0.5}
+                    valueText={`${selectedClip.transitionDurationSec.toFixed(1)}s`}
+                    onChange={(val) =>
+                      commitProject((prev) => ({
+                        ...prev,
+                        videoClips: prev.videoClips.map((c) =>
+                          c.id === selectedClip.id ? {...c, transitionDurationSec: val} : c
+                        ),
+                      }))
+                    }
+                  />
+                  <NleSlider
+                    label={tr('Klip Opaklığı', 'Clip Opacity')}
+                    value={selectedClip.opacity}
+                    min={0}
+                    max={100}
+                    step={5}
+                    defaultValue={100}
+                    valueText={`${selectedClip.opacity}%`}
+                    onChange={(val) =>
+                      commitProject((prev) => ({
+                        ...prev,
+                        videoClips: prev.videoClips.map((c) =>
+                          c.id === selectedClip.id ? {...c, opacity: val} : c
+                        ),
+                      }))
+                    }
+                  />
+                </div>
+
+                {/* Quick Smart Clip Actions */}
+                <div className="flex flex-wrap items-center gap-2 border-t border-[var(--line)] pt-2.5">
+                  <button
+                    type="button"
+                    onClick={handleSplitAtPlayhead}
+                    className="flex items-center gap-1.5 rounded-lg border border-[#F5B82E]/40 bg-[#F5B82E]/12 px-2.5 py-1.5 text-[11px] font-bold text-[#F5B82E] transition-colors hover:bg-[#F5B82E]/20"
+                  >
+                    <Scissors className="h-3.5 w-3.5" />
+                    <span>{tr('İmleçten Böl', 'Split at Playhead')}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isCuttingSilence}
+                    onClick={() => void handleAutoCutSilence()}
+                    className="flex items-center gap-1.5 rounded-lg border border-[#38BDF8]/40 bg-[#38BDF8]/12 px-2.5 py-1.5 text-[11px] font-bold text-[#38BDF8] transition-colors hover:bg-[#38BDF8]/20 disabled:opacity-50"
+                  >
+                    <Wand2 className="h-3.5 w-3.5" />
+                    <span>
+                      {isCuttingSilence
+                        ? tr('Analiz Ediliyor…', 'Scanning…')
+                        : tr('Otomatik Sessizliği Kes', 'Auto Silence Cut')}
+                    </span>
+                  </button>
+                </div>
               </div>
             )}
+          </div>
+        )}
 
-            {/* Audio Studio & Layers */}
+        {/* TAB 2: DEDICATED AUDIO STUDIO (MIXER, VOICEOVER, MUSIC, DUCKING, DENOISE) */}
+        {activeTab === 'audio' && (
+          <div className="space-y-3">
             <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-xs font-extrabold text-[var(--ink)]">
-                  {tr('Ses Düzenleme & Katmanlar (A1/A2)', 'Audio Studio & Layers (A1/A2)')}
+                  {tr('Ses Mikseri, Müzik & Seslendirme', 'Audio Mixer, Music & Voiceover')}
                 </span>
                 <div className="flex flex-wrap items-center gap-1.5">
                   <input
@@ -2850,6 +2611,20 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                   }`}
                 >
                   {tr('Audio Ducking (Konuşmada Müziği Kıs)', 'Audio Ducking')}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isCuttingSilence}
+                  onClick={() => void handleAutoCutSilence()}
+                  className="flex items-center gap-1 rounded-lg border border-[#45C5D7]/45 bg-[#45C5D7]/12 px-2.5 py-1 text-[11px] font-bold text-[#45C5D7] transition-colors hover:bg-[#45C5D7]/20 disabled:opacity-50"
+                >
+                  <Wand2 className="h-3 w-3" />
+                  <span>
+                    {isCuttingSilence
+                      ? tr('Analiz Ediliyor…', 'Scanning…')
+                      : tr('Otomatik Sessizliği Kes', 'Auto Silence Cut')}
+                  </span>
                 </button>
               </div>
             </div>
@@ -3057,6 +2832,29 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
+                  <input
+                    ref={cubeLutInputRef}
+                    type="file"
+                    accept=".cube,text/plain"
+                    onChange={(e) => void handleImportCubeLut(e)}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => cubeLutInputRef.current?.click()}
+                    className="flex items-center gap-1 rounded-md border border-[#45C5D7]/45 bg-[#45C5D7]/12 px-2 py-0.5 text-[10px] font-bold text-[#45C5D7] hover:bg-[#45C5D7]/20"
+                  >
+                    <Upload className="h-3 w-3" />
+                    <span>.CUBE LUT</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveCustomFilterPreset}
+                    className="flex items-center gap-1 rounded-md border border-[#61C995]/45 bg-[#61C995]/12 px-2 py-0.5 text-[10px] font-bold text-[#61C995] hover:bg-[#61C995]/20"
+                  >
+                    <Save className="h-3 w-3" />
+                    <span>{tr('Stil Kaydet', 'Save Look')}</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() =>
@@ -3073,7 +2871,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() =>
+                    onClick={() => {
+                      setActiveCustomPresetId(null);
                       commitProject((prev) => ({
                         ...prev,
                         colorFilter: 'orig',
@@ -3081,8 +2880,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                           ...prev.colorGrading,
                           ...COLOR_PRESET_VALUES.orig.grading,
                         },
-                      }))
-                    }
+                      }));
+                    }}
                     className="text-[11px] font-bold text-[var(--muted)] hover:text-[var(--accent)]"
                   >
                     {tr('Sıfırla', 'Reset')}
@@ -3094,14 +2893,15 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
               <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
                 {(Object.keys(COLOR_PRESET_VALUES) as ColorFilterPreset[]).map((key) => {
                   const item = COLOR_PRESET_VALUES[key];
-                  const active = project.colorFilter === key;
+                  const active = project.colorFilter === key && !activeCustomPresetId;
                   const presetCss = buildCssFilterFromGrading(item.grading);
                   const vig = item.grading.vignette ?? 0;
                   return (
                     <button
                       key={key}
                       type="button"
-                      onClick={() =>
+                      onClick={() => {
+                        setActiveCustomPresetId(null);
                         commitProject((prev) => ({
                           ...prev,
                           colorFilter: key,
@@ -3109,8 +2909,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                             ...prev.colorGrading,
                             ...item.grading,
                           },
-                        }))
-                      }
+                        }));
+                      }}
                       className={`group flex flex-col overflow-hidden rounded-xl border transition-all ${
                         active
                           ? 'border-[var(--accent)] bg-[var(--accent)]/15 ring-1 ring-[var(--accent)]'
@@ -3152,7 +2952,61 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                   );
                 })}
               </div>
+
+              {/* Saved Custom Filters & Imported .cube LUTs */}
+              {customColorPresets.length > 0 && (
+                <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-[var(--line)] pt-2">
+                  {customColorPresets.map((cp) => {
+                    const isAct = activeCustomPresetId === cp.id;
+                    return (
+                      <div
+                        key={cp.id}
+                        className={`flex items-center overflow-hidden rounded-lg border text-[10px] font-bold ${
+                          isAct
+                            ? 'border-[#45C5D7] bg-[#45C5D7]/18 text-[#45C5D7]'
+                            : 'border-[var(--line)] bg-[var(--inset)] text-[var(--ink)]'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveCustomPresetId(cp.id);
+                            commitProject((prev) => ({
+                              ...prev,
+                              colorFilter: 'orig',
+                              colorGrading: {...cp.grading},
+                            }));
+                          }}
+                          className="px-2 py-1"
+                        >
+                          {cp.source === 'cube' ? 'LUT · ' : ''}
+                          {cp.name}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomColorPresets(deleteCustomColorPreset(cp.id));
+                            if (activeCustomPresetId === cp.id) setActiveCustomPresetId(null);
+                          }}
+                          className="border-l border-[var(--line)] px-1.5 py-1 text-[var(--muted)] hover:text-rose-400"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
+
+            {/* Live RGB Histogram & Luma Scope (Color Grading Visual Reference) */}
+            <RgbScopeCanvas
+              videoRef={videoRef}
+              cssFilter={cssFilter}
+              grading={project.colorGrading}
+              playhead={playhead}
+              label={tr('Canlı RGB Renk Histogramı (Scope)', 'Live RGB Color Scope')}
+            />
 
             <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3">
               <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-5">
@@ -3655,60 +3509,159 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() =>
-                    commitProject((prev) => ({
-                      ...prev,
-                      vfx: {...prev.vfx, stabilization: !prev.vfx.stabilization},
-                    }))
-                  }
-                  className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors ${
-                    project.vfx.stabilization
-                      ? 'border-[var(--accent)] bg-[var(--accent)]/18 text-[var(--accent)]'
-                      : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
-                  }`}
-                >
-                  {tr('Titreşim Sabitleme', 'Stabilization')}
-                </button>
+              {/* 5-Channel Keyframe Animation Studio (Position X/Y, Rotation, Zoom, Opacity + Easing) */}
+              <div className="space-y-2.5 border-t border-[var(--line)] pt-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <Bookmark className="h-3.5 w-3.5 text-[#FF8A3D]" />
+                    <span className="text-xs font-extrabold text-[var(--ink)]">
+                      {tr('Keyframe Hareket & Animasyon', 'Keyframe Motion & Animation')}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <select
+                      value={kfEasing}
+                      onChange={(e) => setKfEasing(e.target.value as KeyframeEasingType)}
+                      className="rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2 py-1 text-[10px] font-bold text-[var(--ink)]"
+                    >
+                      <option value="easeInOut">Ease In/Out</option>
+                      <option value="linear">Linear</option>
+                      <option value="easeIn">Ease In</option>
+                      <option value="easeOut">Ease Out</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!selectedClip) return;
+                        const offset = Math.max(0, playhead - selectedClip.timelineStart);
+                        commitProject((prev) => ({
+                          ...prev,
+                          videoClips: prev.videoClips.map((c) =>
+                            c.id === selectedClip.id
+                              ? {
+                                  ...c,
+                                  keyframes: [
+                                    ...c.keyframes.filter(
+                                      (k) => Math.abs(k.timeOffsetSec - offset) > 0.08
+                                    ),
+                                    {
+                                      id: `kf-${Date.now()}`,
+                                      timeOffsetSec: Number(offset.toFixed(2)),
+                                      zoom: prev.zoom,
+                                      opacity: c.opacity,
+                                      posX: kfPosX,
+                                      posY: kfPosY,
+                                      rotation: kfRotation,
+                                      easing: kfEasing,
+                                    },
+                                  ],
+                                }
+                              : c
+                          ),
+                        }));
+                        notifyStatus(
+                          tr(
+                            `Keyframe (${formatSmpteTimecode(playhead, project.fps)}) eklendi.`,
+                            'Keyframe added at playhead.'
+                          )
+                        );
+                      }}
+                      className="flex items-center gap-1 rounded-lg border border-[#FF8A3D]/55 bg-[#FF8A3D]/18 px-2.5 py-1 text-[11px] font-extrabold text-[#FF8A3D] hover:bg-[#FF8A3D]/25"
+                    >
+                      <Plus className="h-3 w-3" />
+                      <span>Keyframe ({selectedClip?.keyframes.length ?? 0})</span>
+                    </button>
+                  </div>
+                </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!selectedClip) return;
-                    const offset = Math.max(0, playhead - selectedClip.timelineStart);
-                    commitProject((prev) => ({
-                      ...prev,
-                      videoClips: prev.videoClips.map((c) =>
-                        c.id === selectedClip.id
-                          ? {
-                              ...c,
-                              keyframes: [
-                                ...c.keyframes,
-                                {
-                                  id: `kf-${Date.now()}`,
-                                  timeOffsetSec: Number(offset.toFixed(2)),
-                                  zoom: prev.zoom,
-                                  opacity: c.opacity,
-                                },
-                              ],
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <NleSlider
+                    label={tr('Konum X', 'Pos X')}
+                    value={kfPosX}
+                    min={-40}
+                    max={40}
+                    step={2}
+                    defaultValue={0}
+                    valueText={`${kfPosX > 0 ? '+' : ''}${kfPosX}%`}
+                    onChange={setKfPosX}
+                  />
+                  <NleSlider
+                    label={tr('Konum Y', 'Pos Y')}
+                    value={kfPosY}
+                    min={-40}
+                    max={40}
+                    step={2}
+                    defaultValue={0}
+                    valueText={`${kfPosY > 0 ? '+' : ''}${kfPosY}%`}
+                    onChange={setKfPosY}
+                  />
+                  <NleSlider
+                    label={tr('Eğim / Döndür', 'Tilt / Rot')}
+                    value={kfRotation}
+                    min={-180}
+                    max={180}
+                    step={5}
+                    defaultValue={0}
+                    valueText={`${kfRotation}°`}
+                    onChange={setKfRotation}
+                  />
+                </div>
+
+                {selectedClip && selectedClip.keyframes.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    {[...selectedClip.keyframes]
+                      .sort((a, b) => a.timeOffsetSec - b.timeOffsetSec)
+                      .map((kf) => (
+                        <div
+                          key={kf.id}
+                          className="font-mono-num flex items-center overflow-hidden rounded-lg border border-[#FF8A3D]/40 bg-[#FF8A3D]/10 text-[10px] font-bold text-[#FF8A3D]"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => seekTimelineTo(selectedClip.timelineStart + kf.timeOffsetSec)}
+                            className="px-2 py-1 hover:bg-[#FF8A3D]/20"
+                          >
+                            ◆ {kf.timeOffsetSec.toFixed(1)}s · {kf.zoom.toFixed(1)}×
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              commitProject((prev) => ({
+                                ...prev,
+                                videoClips: prev.videoClips.map((c) =>
+                                  c.id === selectedClip.id
+                                    ? {...c, keyframes: c.keyframes.filter((k) => k.id !== kf.id)}
+                                    : c
+                                ),
+                              }))
                             }
-                          : c
-                      ),
-                    }));
-                    notifyStatus(
-                      tr(
-                        `Keyframe (${formatSmpteTimecode(playhead, project.fps)}) eklendi.`,
-                        'Keyframe added at playhead.'
-                      )
-                    );
-                  }}
-                  className="flex items-center gap-1 rounded-lg border border-[var(--line)] bg-[var(--inset)] px-3 py-1.5 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)]"
-                >
-                  <Bookmark className="h-3.5 w-3.5 text-[var(--accent)]" />
-                  <span>+ Keyframe ({selectedClip?.keyframes.length ?? 0})</span>
-                </button>
+                            className="border-l border-[#FF8A3D]/30 px-1.5 py-1 hover:text-rose-400"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      commitProject((prev) => ({
+                        ...prev,
+                        vfx: {...prev.vfx, stabilization: !prev.vfx.stabilization},
+                      }))
+                    }
+                    className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors ${
+                      project.vfx.stabilization
+                        ? 'border-[var(--accent)] bg-[var(--accent)]/18 text-[var(--accent)]'
+                        : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
+                    }`}
+                  >
+                    {tr('Titreşim Sabitleme', 'Stabilization')}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -3986,150 +3939,216 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             </div>
           </div>
         )}
+        </div>
       </div>
     );
   };
 
-  // ============================================================================
-  // RENDER: BOTTOM TOOL CATEGORY BAR (CRISP SPACED LABELS, 1-TAP SHEET TOGGLE)
-  // ============================================================================
-  const renderBottomToolDock = () => (
-    <nav className="pb-safe grid shrink-0 grid-cols-6 gap-1 border-t border-[var(--line)] bg-[var(--surface)] px-1.5 pt-1.5">
-      {TABS.map((tab) => {
-        const Icon = tab.icon;
-        const active = activeTab === tab.id;
-        return (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => handleSelectDockTab(tab.id)}
-            className={`flex flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-bold transition-colors ${
-              active
-                ? 'bg-[var(--accent)]/16 text-[var(--accent)]'
-                : 'text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)]'
-            }`}
-          >
-            <Icon className={`h-4 w-4 ${active ? 'text-[var(--accent)]' : ''}`} />
-            <span className="max-w-full truncate">{tab.label}</span>
-          </button>
-        );
-      })}
-    </nav>
+  const studioHeaderNode = (
+    <StudioHeader
+      isTr={isTr}
+      projectName={project.projectName}
+      targetWidth={targetDimensions.w}
+      targetHeight={targetDimensions.h}
+      fps={project.fps}
+      isProxyEnabled={isProxyEnabled}
+      isGeneratingProxy={isGeneratingProxy}
+      proxyProgress={proxyProgress}
+      proxyRecommended={proxyRecommendation.recommended}
+      proxyReason={tr(proxyRecommendation.reasonTr, proxyRecommendation.reasonEn)}
+      compareOriginal={compareOriginal}
+      showGrid={showGrid}
+      isPortraitMode={isPortraitMode}
+      onBack={onBack}
+      onSaveProject={handleSaveProject}
+      onOpenProjects={() => {
+        setSavedProjects(loadSavedNleProjects());
+        setShowProjectsModal(true);
+      }}
+      onToggleProxy={() => void handleToggleProxyPreview()}
+      onSetCompareOriginal={setCompareOriginal}
+      onToggleGrid={() => setShowGrid((g) => !g)}
+      onToggleOrientation={toggleOrientationLock}
+      onExport={() => onExport(buildPayload('export'))}
+    />
+  );
+
+  const previewMonitorNode = (
+    <PreviewMonitor
+      isTr={isTr}
+      project={project}
+      videoRef={videoRef}
+      previewStageRef={previewStageRef}
+      activePreviewVideoSrc={activePreviewVideoSrc}
+      blurBgVideoSrc={videoUrl}
+      playhead={playhead}
+      totalTimelineDur={totalTimelineDur}
+      isPlaying={isPlaying}
+      isPortraitMode={isPortraitMode}
+      isFullscreenPreview={isFullscreenPreview}
+      previewHeightVh={previewHeightVh}
+      isResizingPreview={isResizingPreview}
+      compareOriginal={compareOriginal}
+      showGrid={showGrid}
+      isCropTabActive={activeTab === 'transform' && (!isPortraitMode || isInspectorOpen)}
+      trackVisibility={trackVisibility}
+      selectedClip={selectedClip}
+      activeTimelineClip={activeTimelineClip ?? undefined}
+      activeTextOverlays={activeTextOverlays}
+      interpolatedKeyframe={interpolatedKeyframe}
+      evaluatedTransition={evaluatedTransition}
+      cssFilter={cssFilter}
+      previewTransform={previewTransform}
+      statusBanner={statusBanner}
+      canUndo={canUndo}
+      canRedo={canRedo}
+      hasKeyframeAtPlayhead={hasKeyframeAtPlayhead}
+      onTogglePlay={togglePlay}
+      onLoadedMetadata={handleLoadedMetadata}
+      onTimeUpdate={handleTimeUpdate}
+      onSetPlaying={setIsPlaying}
+      onStartCropDrag={startCropDrag}
+      onStartPreviewResize={startPreviewResize}
+      onCyclePreviewHeight={cyclePreviewHeight}
+      onToggleFullscreen={() => setIsFullscreenPreview((f) => !f)}
+      onSeekTimelineTo={seekTimelineTo}
+      onStepFrame={stepFrame}
+      onUndo={handleUndo}
+      onRedo={handleRedo}
+      onQuickToggleKeyframe={handleQuickToggleKeyframe}
+      onToggleMute={() => commitProject((prev) => ({...prev, masterMuted: !prev.masterMuted}))}
+      onCaptureSnapshot={() => onExport(buildPayload('snapshot'))}
+    />
+  );
+
+  const multiTrackTimelineNode = (
+    <MultiTrackTimeline
+      isTr={isTr}
+      project={project}
+      playhead={playhead}
+      totalTimelineDur={totalTimelineDur}
+      timelineZoom={timelineZoom}
+      selectedClip={selectedClip}
+      selectedTextId={selectedTextId}
+      thumbnails={thumbnails}
+      waveformBars={waveformBars}
+      isPlaying={isPlaying}
+      snapGuideTime={snapGuideTime}
+      trackVisibility={trackVisibility}
+      timelineScrollRef={timelineScrollRef}
+      timelineTrackRef={timelineTrackRef}
+      onToggleTrackVisibility={handleToggleTrackVisibility}
+      onSelectClip={(id) => setSelectedClipId(id)}
+      onSelectTextClip={(id) => {
+        setSelectedTextId(id);
+        setActiveTab('text');
+        if (isPortraitMode) setIsInspectorOpen(true);
+      }}
+      onQuickAddText={() => {
+        handleAddTextClip();
+        setActiveTab('text');
+        if (isPortraitMode) setIsInspectorOpen(true);
+      }}
+      onOpenFxOrColor={(tab) => {
+        setActiveTab(tab);
+        if (isPortraitMode) setIsInspectorOpen(true);
+      }}
+      onRemoveExternalAudio={(audioId) => {
+        removeAudioClipBlob(audioId);
+        commitProject((prev) => ({
+          ...prev,
+          audioClips: prev.audioClips.filter((x) => x.id !== audioId),
+        }));
+      }}
+      onStartTimelineDrag={startTimelineDrag}
+      onTouchStart={handleTimelineTouchStart}
+      onTouchMove={handleTimelineTouchMove}
+      onTouchEnd={handleTimelineTouchEnd}
+      onSplit={handleSplitAtPlayhead}
+      onDeleteKeepGap={handleNormalDelete}
+      onRippleDelete={handleRippleDelete}
+      onMoveClipStep={handleMoveClipStep}
+      onDuplicateClip={handleDuplicateClip}
+      onFreezeFrame={handleFreezeFrame}
+      onToggleSnap={() =>
+        commitProject((prev) => ({...prev, snapEnabled: !prev.snapEnabled}))
+      }
+      onCycleZoom={() =>
+        setTimelineZoom((z) => (z === 1 ? 2 : z === 2 ? 4 : z === 4 ? 8 : 1))
+      }
+    />
+  );
+
+  const studioDockNode = (
+    <StudioDock
+      isTr={isTr}
+      activeTab={activeTab}
+      isInspectorOpen={isInspectorOpen}
+      isPortraitMode={isPortraitMode}
+      onSelectTab={handleSelectDockTab}
+    />
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-[var(--paper)] text-[var(--ink)] select-none">
-      {renderMonitorHeader()}
+    <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#07080B] text-[var(--ink)] select-none">
+      {studioHeaderNode}
 
       {isPortraitMode ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {renderPreviewMonitor()}
-          {isTimelineExpanded ? (
-            <>
-              {renderQuickNleActionBar()}
-              {renderMultiTrackTimeline()}
-            </>
-          ) : (
-            renderCompactMiniTimelineBar()
-          )}
-          {renderInspectorPanel()}
-          {renderBottomToolDock()}
+          {previewMonitorNode}
+          {multiTrackTimelineNode}
+          {isInspectorOpen && renderInspectorPanel()}
+          {studioDockNode}
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="grid min-h-0 flex-1 grid-cols-12 overflow-hidden border-b border-[var(--line)]">
-            <div className="col-span-6 flex min-h-0 flex-col border-r border-[var(--line)] lg:col-span-7">
-              {renderPreviewMonitor()}
+          <div className="grid min-h-0 flex-1 grid-cols-12 overflow-hidden border-b border-white/[0.07]">
+            <div className="col-span-6 flex min-h-0 flex-col border-r border-white/[0.07] lg:col-span-7">
+              {previewMonitorNode}
             </div>
             <div className="col-span-6 flex min-h-0 flex-col overflow-hidden lg:col-span-5">
               {renderInspectorPanel()}
-              {renderBottomToolDock()}
+              {studioDockNode}
             </div>
           </div>
 
-          <div className="shrink-0">
-            {renderQuickNleActionBar()}
-            {renderMultiTrackTimeline()}
+          <div className="flex h-[205px] shrink-0 flex-col">
+            {multiTrackTimelineNode}
           </div>
         </div>
       )}
 
-      {/* SAVED PROJECTS MODAL */}
-      {showProjectsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-4 shadow-2xl">
-            <div className="mb-3 flex items-center justify-between border-b border-[var(--line)] pb-2.5">
-              <div>
-                <h3 className="text-sm font-extrabold text-[var(--ink)]">
-                  {tr('Kaydedilen Video Projeleri', 'Saved Video Projects')}
-                </h3>
-                <p className="text-[11px] text-[var(--muted)]">
-                  {tr(
-                    'Tahribatsız timeline geçmişi, klipler ve ayarlar korunur.',
-                    'Non-destructive timeline clips and grading are preserved.'
-                  )}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowProjectsModal(false)}
-                className="rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2.5 py-1 text-xs font-bold text-[var(--muted)] hover:text-[var(--ink)]"
-              >
-                {tr('Kapat', 'Close')}
-              </button>
-            </div>
+      {/* Hidden .morph Package & Source Relink Inputs */}
+      <input
+        ref={morphImportInputRef}
+        type="file"
+        accept=".morph,.json"
+        className="hidden"
+        onChange={handleImportMorphPackage}
+      />
+      <input
+        ref={relinkVideoInputRef}
+        type="file"
+        accept="video/*"
+        className="hidden"
+        onChange={handleRelinkVideoFile}
+      />
 
-            {savedProjects.length === 0 ? (
-              <p className="py-6 text-center text-xs text-[var(--muted)]">
-                {tr('Henüz kaydedilmiş proje yok.', 'No saved projects yet.')}
-              </p>
-            ) : (
-              <div className="morph-nle-scroll max-h-72 space-y-2 overflow-y-auto pr-1">
-                {savedProjects.map((p) => (
-                  <div
-                    key={p.projectId}
-                    className="flex items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-[var(--inset)] p-2.5"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-bold text-[var(--ink)]">
-                        {p.projectName}
-                      </p>
-                      <p className="font-mono-num text-[10px] text-[var(--muted)]">
-                        {p.clipCount} {tr('Klip', 'Clips')} · {formatSecondsShort(p.durationSec)}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => handleLoadProject(p)}
-                        className="morph-accent-btn rounded-lg px-2.5 py-1 text-[11px] font-bold"
-                      >
-                        {tr('Aç', 'Load')}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSavedProjects(duplicateSavedNleProject(p.projectId))}
-                        title={tr('Projeyi Kopyala', 'Duplicate Project')}
-                        className="rounded-lg border border-[var(--line)] bg-[var(--surface)] p-1.5 text-[var(--muted)] hover:text-[var(--ink)]"
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSavedProjects(deleteSavedNleProject(p.projectId))}
-                        title={tr('Projeyi Sil', 'Delete Project')}
-                        className="rounded-lg border border-rose-500/30 bg-rose-500/15 p-1.5 text-rose-400"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* MODULAR PROJECTS, TEMPLATES, RELINK & .MORPH PACKAGE MODAL */}
+      <ProjectsModal
+        open={showProjectsModal}
+        isTr={isTr}
+        isBusyPackage={isBusyPackage}
+        savedProjects={savedProjects}
+        onClose={() => setShowProjectsModal(false)}
+        onExportMorph={() => void handleExportMorphPackage()}
+        onTriggerImportMorph={() => morphImportInputRef.current?.click()}
+        onTriggerRelinkVideo={() => relinkVideoInputRef.current?.click()}
+        onApplyTemplate={handleApplySocialTemplate}
+        onLoadProject={(p) => void handleLoadProject(p)}
+        onDuplicateProject={(id) => void duplicateNleProjectIdb(id).then(setSavedProjects)}
+        onDeleteProject={(id) => void deleteNleProjectIdb(id).then(setSavedProjects)}
+      />
     </div>
   );
 };
