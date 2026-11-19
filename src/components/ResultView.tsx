@@ -12,6 +12,7 @@ interface ResultViewProps {
   onDownloadAll: () => void;
   onOpenLibrary: () => void;
   onNewTask: () => void;
+  onKeepFiles?: () => void;
 }
 
 export const ResultView: React.FC<ResultViewProps> = ({
@@ -22,13 +23,16 @@ export const ResultView: React.FC<ResultViewProps> = ({
   onDownloadAll,
   onOpenLibrary,
   onNewTask,
+  onKeepFiles,
 }) => {
   const outputBytes = result.items.reduce((sum, i) => sum + i.size, 0);
   const sourceBytes = result.sourceBytes;
+  const deltaBytes = outputBytes - sourceBytes;
+  const isTinySource = sourceBytes > 0 && sourceBytes < 100 * 1024;
   const pct = sourceBytes > 0 && outputBytes > 0 ? Math.round((outputBytes / sourceBytes) * 100) : null;
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 pb-24 pt-6 sm:px-6">
+    <div className="mx-auto w-full max-w-lg px-4 pb-28 pt-6 sm:px-6">
       <div className="morph-accent-btn flex h-14 w-14 items-center justify-center rounded-full shadow-lg">
         <Check className="h-7 w-7" />
       </div>
@@ -57,10 +61,16 @@ export const ResultView: React.FC<ResultViewProps> = ({
         {pct !== null && (
           <div className="col-span-2 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-4 py-3 sm:col-span-1">
             <p className="text-xs font-medium text-[var(--muted)]">{t('Savings', lang)}</p>
-            <p className="font-mono-num mt-1 text-base font-bold text-[var(--accent)]">
-              {pct <= 100
-                ? `%${100 - pct} ${t('Smaller', lang)}`
-                : `%${pct - 100} ${t('Larger', lang)}`}
+            <p className="font-mono-num mt-1 text-base font-bold text-[var(--accent-text)]">
+              {isTinySource
+                ? deltaBytes === 0
+                  ? (lang === 'tr' ? 'Aynı boyut' : 'Same size')
+                  : deltaBytes < 0
+                    ? `▼ -${formatBytes(Math.abs(deltaBytes))}`
+                    : `▲ +${formatBytes(deltaBytes)}`
+                : pct <= 100
+                  ? `%${100 - pct} ${t('Smaller', lang)}`
+                  : `%${pct - 100} ${t('Larger', lang)}`}
             </p>
           </div>
         )}
@@ -124,13 +134,28 @@ export const ResultView: React.FC<ResultViewProps> = ({
           <Grid className="h-4 w-4" />
           <span>{t('OpenLibrary', lang)}</span>
         </button>
-        <button
-          type="button"
-          onClick={onNewTask}
-          className="flex min-h-[44px] w-full items-center justify-center text-sm font-semibold text-[var(--muted)] hover:text-[var(--ink)]"
-        >
-          {t('NewTask', lang)}
-        </button>
+        <div className={onKeepFiles ? 'grid grid-cols-2 gap-2.5' : ''}>
+          {onKeepFiles && (
+            <button
+              type="button"
+              onClick={onKeepFiles}
+              className="flex min-h-[44px] w-full items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--ink)] hover:border-[var(--accent)]"
+            >
+              {lang === 'tr' ? 'Dosyaları Koru' : 'Keep Files'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onNewTask}
+            className={`flex min-h-[44px] w-full items-center justify-center rounded-full px-3 text-sm font-semibold ${
+              onKeepFiles
+                ? 'border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
+                : 'text-[var(--muted)] hover:text-[var(--ink)]'
+            }`}
+          >
+            {t('NewTask', lang)}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -178,7 +203,7 @@ export const ErrorView: React.FC<{
 
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-lg flex-col items-center justify-center px-5 py-8 text-center">
-      <div className="flex h-16 w-16 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
+      <div className="flex h-16 w-16 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--inset)] text-[var(--danger)]">
         <AlertTriangle className="h-7 w-7" />
       </div>
       <h2 className="mt-5 text-xl font-bold text-[var(--ink)]">{t('ProcessFailed', lang)}</h2>

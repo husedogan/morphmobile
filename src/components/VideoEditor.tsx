@@ -376,23 +376,6 @@ const TEXT_FONTS = [
 
 const TEXT_COLORS = ['#FFFFFF', '#FDE047', '#E94F78', '#38BDF8', '#34D399', '#FB923C', '#101114'];
 
-function generateWaveformBars(seedName: string, count = 72): number[] {
-  let hash = 2166136261;
-  for (let i = 0; i < seedName.length; i++) {
-    hash ^= seedName.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  const bars: number[] = [];
-  for (let i = 0; i < count; i++) {
-    hash ^= i * 31 + 17;
-    hash = Math.imul(hash, 16777619);
-    const norm = ((hash >>> 0) % 100) / 100;
-    const wave = Math.sin(i * 0.35) * 0.25 + 0.5;
-    bars.push(Math.min(0.96, Math.max(0.18, norm * 0.55 + wave * 0.45)));
-  }
-  return bars;
-}
-
 // Reusable sleek theme-colored slider with zero ugly white browser bars
 interface NleSliderProps {
   label: string;
@@ -428,7 +411,7 @@ const NleSlider: React.FC<NleSliderProps> = ({
           onClick={() => {
             if (isModified && defaultValue !== undefined) onChange(defaultValue);
           }}
-          title={isModified ? 'Sıfırla' : undefined}
+          title={isModified ? 'Reset' : undefined}
           className={`font-mono-num flex items-center gap-1 rounded px-1 py-0.5 text-[11px] font-bold transition-colors ${
             isModified
               ? 'bg-[var(--accent)]/15 text-[var(--accent)] hover:bg-[var(--accent)]/25'
@@ -509,6 +492,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const [timelineZoom, setTimelineZoom] = useState<1 | 2 | 4 | 8>(1);
   const [thumbnails, setThumbnails] = useState<string[]>([]);
   const [realWaveformBars, setRealWaveformBars] = useState<number[] | null>(null);
+  const [waveformStatus, setWaveformStatus] = useState<'loading' | 'ready' | 'silent'>('loading');
   const [trackVisibility, setTrackVisibility] = useState({
     t1: true,
     v1: true,
@@ -565,7 +549,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
 
   // Initialize NLE Project State
   const [project, setProject] = useState<NleProjectState>(() =>
-    createInitialNleProject(file.name, 10, 30)
+    createInitialNleProject(file.name, 10, 30, lang === 'tr')
   );
   const [history, setHistory] = useState<NleProjectState[]>([]);
   const [historyIdx, setHistoryIdx] = useState(-1);
@@ -712,19 +696,44 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     };
   }, [videoUrl]);
 
-  // Extract real Web Audio API RMS waveform bars from source video (safe mobile fallback)
+  // Extract real Web Audio API RMS waveform bars from source video (truthful silent state when audio is absent)
   useEffect(() => {
     let cancelled = false;
     setRealWaveformBars(null);
+    setWaveformStatus('loading');
     void extractRealAudioWaveform(file.file, 88).then((bars) => {
-      if (!cancelled && bars && bars.length > 0) {
+      if (cancelled) return;
+      if (bars && bars.length > 0 && bars.some((b) => b > 0.015)) {
         setRealWaveformBars(bars);
+        setWaveformStatus('ready');
+      } else {
+        setRealWaveformBars([]);
+        setWaveformStatus('silent');
       }
     });
     return () => {
       cancelled = true;
     };
   }, [file]);
+
+  // Close editor sub-dialogs on Escape key (U-9)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (showUnsavedExitDialog) {
+        e.preventDefault();
+        setShowUnsavedExitDialog(false);
+      } else if (showProjectsModal) {
+        e.preventDefault();
+        setShowProjectsModal(false);
+      } else if (isFullscreenPreview) {
+        e.preventDefault();
+        setIsFullscreenPreview(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showUnsavedExitDialog, showProjectsModal, isFullscreenPreview]);
 
   // Hydrate IndexedDB project list on mount & when modal opens
   useEffect(() => {
@@ -737,8 +746,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     };
   }, [showProjectsModal]);
 
-  const fallbackWaveformBars = useMemo(() => generateWaveformBars(file.name, 88), [file.name]);
-  const waveformBars = realWaveformBars ?? fallbackWaveformBars;
+  const waveformBars = realWaveformBars ?? [];
 
   const totalTimelineDur = useMemo(
     () => Math.max(0.5, computeTotalTimelineDuration(project.videoClips, duration || 10)),
@@ -2604,10 +2612,10 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
 
     return (
       <div
-        className={`flex flex-col overflow-hidden bg-[#0E1117] ${
+        className={`flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0E1117] ${
           isPortraitMode
-            ? 'max-h-[45vh] shrink-0 border-t border-white/[0.08] shadow-[0_-10px_30px_rgba(0,0,0,0.65)]'
-            : 'min-h-0 flex-1'
+            ? 'border-t border-white/[0.08] shadow-[0_-10px_30px_rgba(0,0,0,0.65)]'
+            : ''
         }`}
       >
         {/* Clean Contextual Drawer Header (Premiere iOS / ProCut pattern) */}
@@ -2634,7 +2642,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
           )}
         </div>
 
-        <div className="morph-nle-scroll flex-1 overflow-y-auto p-3">
+        <div className="morph-nle-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
         {/* TAB 1: MULTI-SOURCE MEDIA BIN, V2 PIP, CLIP TRANSITIONS, OPACITY & SILENCE CUT */}
         {activeTab === 'trim' && (
           <div className="space-y-3">
@@ -2814,11 +2822,11 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
               <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 space-y-3">
                 {/* Clip Transition Picker WITH VISUAL PREVIEW CARDS */}
                 <div>
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-[var(--muted)]">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-[11px] font-bold text-[var(--muted)]">
                       {tr('Klip Giriş Geçişi (Transition · FFmpeg xfade)', 'Clip In Transition (xfade)')}
                     </span>
-                    <span className="font-mono-num text-[10px] font-bold text-[var(--accent)]">
+                    <span className="font-mono-num shrink-0 whitespace-nowrap text-[10px] font-bold text-[var(--accent-text)]">
                       {selectedClip.transitionDurationSec.toFixed(1)}s
                     </span>
                   </div>
@@ -4685,7 +4693,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                 <button
                   type="button"
                   onClick={() => onExport(buildPayload('export'))}
-                  className="morph-accent-btn flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-extrabold shadow-md"
+                  className="morph-accent-btn flex min-h-[46px] items-center justify-center gap-1.5 rounded-xl px-5 py-2.5 text-xs font-extrabold shadow-md transition-transform active:scale-[0.98]"
                 >
                   <Check className="h-4 w-4" />
                   <span>{tr('Videoyu Dışa Aktar', 'Render & Export Video')}</span>
@@ -4747,6 +4755,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       isPlaying={isPlaying}
       isInGap={isInGap}
       isPortraitMode={isPortraitMode}
+      isInspectorOpen={isInspectorOpen}
       isFullscreenPreview={isFullscreenPreview}
       previewHeightVh={previewHeightVh}
       isResizingPreview={isResizingPreview}
@@ -4799,6 +4808,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       selectedTextId={selectedTextId}
       thumbnails={thumbnails}
       waveformBars={waveformBars}
+      waveformStatus={waveformStatus}
+      isPortraitMode={isPortraitMode}
+      isInspectorOpen={isInspectorOpen}
       isPlaying={isPlaying}
       snapGuideTime={snapGuideTime}
       trackVisibility={trackVisibility}
@@ -4859,7 +4871,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#07080B] text-[var(--ink)] select-none">
+    <div className="fixed inset-0 z-50 flex h-[100dvh] flex-col overflow-hidden bg-[#07080B] text-[var(--ink)] select-none">
       {studioHeaderNode}
 
       {isPortraitMode ? (

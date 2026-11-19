@@ -44,6 +44,9 @@ interface MultiTrackTimelineProps {
   selectedTextId: string | null;
   thumbnails: string[];
   waveformBars: number[];
+  waveformStatus?: 'loading' | 'ready' | 'silent';
+  isPortraitMode?: boolean;
+  isInspectorOpen?: boolean;
   isPlaying: boolean;
   snapGuideTime: number | null;
   trackVisibility: {t1: boolean; v1: boolean; v2: boolean; a1: boolean; a2: boolean};
@@ -91,6 +94,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
   selectedTextId,
   thumbnails,
   waveformBars,
+  waveformStatus = 'ready',
+  isPortraitMode = false,
+  isInspectorOpen = false,
   isPlaying,
   snapGuideTime,
   trackVisibility,
@@ -165,20 +171,26 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
     Math.max(0, Math.floor((playheadPct / 100) * waveformBars.length))
   );
   const liveVuPct =
-    isPlaying && !project.masterMuted && trackVisibility.a1
+    isPlaying && !project.masterMuted && trackVisibility.a1 && waveformStatus === 'ready' && waveformBars.length > 0
       ? Math.min(100, Math.round((waveformBars[activeWaveIdx] ?? 0.35) * project.masterVolume))
       : 0;
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col bg-[#0B0D12]">
+    <section
+      className={`flex flex-col bg-[#0B0D12] ${
+        isPortraitMode && isInspectorOpen
+          ? 'h-[164px] min-h-[156px] shrink-0 border-t border-white/[0.06]'
+          : 'min-h-[168px] flex-1'
+      }`}
+    >
       {/* Compact Icon-First Quick Context Bar */}
-      <div className="relative z-20 flex h-9 shrink-0 items-center justify-between gap-1 border-b border-white/[0.06] bg-[#10131B] px-2">
-        <div className="flex items-center gap-0.5">
+      <div className="relative z-20 flex h-10 shrink-0 items-center justify-between gap-1 border-b border-white/[0.06] bg-[#10131B] px-2">
+        <div className="no-scrollbar flex min-w-0 items-center gap-0.5 overflow-x-auto">
           <StudioTooltipBtn
             tooltip={tr('İmleçten Böl (Split)', 'Split at Playhead')}
             align="left"
             onClick={onSplit}
-            className="flex h-7 items-center gap-1 rounded-md bg-white/[0.07] px-2 text-[11px] font-bold text-[#F5B82E] transition-colors hover:bg-[#F5B82E]/18"
+            className="flex h-8 min-w-[36px] shrink-0 items-center justify-center gap-1 rounded-md bg-white/[0.08] px-2.5 text-[11px] font-bold text-[#F5B82E] transition-colors hover:bg-[#F5B82E]/18"
           >
             <Scissors className="h-3.5 w-3.5" />
           </StudioTooltipBtn>
@@ -602,8 +614,8 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
 
                     {/* Transition Indicator on Clip Seam */}
                     {clipIdx > 0 && clip.transitionIn !== 'none' && (
-                      <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 rounded bg-black/75 px-1 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-[#38BDF8] ring-1 ring-[#38BDF8]/50">
-                        {clip.transitionIn}
+                      <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 whitespace-nowrap rounded bg-black/80 px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-[#38BDF8] ring-1 ring-[#38BDF8]/50">
+                        {clip.transitionIn} · {clip.transitionDurationSec.toFixed(1)}s
                       </div>
                     )}
 
@@ -623,10 +635,10 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                       </div>
                     )}
 
-                    {/* ClipCraft Tactile "<" Left Trim Handle */}
+                    {/* ClipCraft Tactile "<" Left Trim Handle (extended touch target) */}
                     <div
                       onPointerDown={(e) => onStartTimelineDrag(e, 'trim-left', clip.id)}
-                      className={`absolute inset-y-0 left-0 z-20 flex w-3.5 cursor-ew-resize items-center justify-center transition-colors ${
+                      className={`absolute inset-y-0 left-0 z-20 flex w-4 cursor-ew-resize items-center justify-center transition-colors after:absolute after:-inset-x-2 after:inset-y-0 after:content-[''] ${
                         isSelected
                           ? 'bg-[#F5B82E] text-black'
                           : 'bg-white/15 text-white/70 hover:bg-white/30'
@@ -635,10 +647,10 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                       <ChevronLeft className="h-3 w-3 stroke-[3]" />
                     </div>
 
-                    {/* ClipCraft Tactile ">" Right Trim Handle */}
+                    {/* ClipCraft Tactile ">" Right Trim Handle (extended touch target) */}
                     <div
                       onPointerDown={(e) => onStartTimelineDrag(e, 'trim-right', clip.id)}
-                      className={`absolute inset-y-0 right-0 z-20 flex w-3.5 cursor-ew-resize items-center justify-center transition-colors ${
+                      className={`absolute inset-y-0 right-0 z-20 flex w-4 cursor-ew-resize items-center justify-center transition-colors after:absolute after:-inset-x-2 after:inset-y-0 after:content-[''] ${
                         isSelected
                           ? 'bg-[#F5B82E] text-black'
                           : 'bg-white/15 text-white/70 hover:bg-white/30'
@@ -700,34 +712,50 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               )}
             </div>
 
-            {/* LANE 3: ORIGINAL AUDIO RMS WAVEFORM (Emerald Clean Surface) */}
+            {/* LANE 3: ORIGINAL AUDIO RMS WAVEFORM (Emerald Clean Surface / Truthful Silent Track) */}
             <div
-              className={`relative flex h-8 items-center overflow-hidden rounded-lg bg-[#0D1A16]/75 px-1.5 transition-opacity ${
+              className={`relative flex h-8 items-center overflow-hidden rounded-lg bg-[#0D1A16]/75 px-2 transition-opacity ${
                 trackVisibility.a1 && !project.masterMuted ? 'opacity-100' : 'opacity-35'
               }`}
             >
               {/* Center reference line */}
-              <div className="pointer-events-none absolute inset-x-1.5 top-1/2 h-px bg-[#34D399]/15" />
-              <div className="relative flex h-full flex-1 items-center gap-[2px] overflow-hidden">
-                {waveformBars.map((amp, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      height: `${Math.round(
-                        amp *
-                          (project.masterMuted || !trackVisibility.a1
-                            ? 14
-                            : Math.min(100, project.masterVolume))
-                      )}%`,
-                    }}
-                    className={`flex-1 rounded-full transition-all ${
-                      project.masterMuted || !trackVisibility.a1
-                        ? 'bg-rose-400/35'
-                        : 'bg-[#34D399]/80'
-                    }`}
-                  />
-                ))}
-              </div>
+              <div className="pointer-events-none absolute inset-x-2 top-1/2 h-px bg-[#34D399]/18" />
+              {waveformStatus === 'silent' ? (
+                <div className="relative flex w-full items-center gap-1.5 text-[10px] font-semibold text-white/45">
+                  <VolumeX className="h-3 w-3 shrink-0 text-white/40" />
+                  <span className="truncate">
+                    {tr('Ses kanalı yok (sessiz klip)', 'No audio track (silent clip)')}
+                  </span>
+                </div>
+              ) : waveformStatus === 'loading' ? (
+                <div className="relative flex w-full items-center gap-1.5 text-[10px] font-medium text-[#34D399]/70">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#34D399]" />
+                  <span className="truncate">
+                    {tr('Ses dalgası analiz ediliyor...', 'Analyzing audio waveform...')}
+                  </span>
+                </div>
+              ) : (
+                <div className="relative flex h-full flex-1 items-center gap-[2px] overflow-hidden">
+                  {waveformBars.map((amp, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        height: `${Math.round(
+                          amp *
+                            (project.masterMuted || !trackVisibility.a1
+                              ? 14
+                              : Math.min(100, project.masterVolume))
+                        )}%`,
+                      }}
+                      className={`flex-1 rounded-full transition-all ${
+                        project.masterMuted || !trackVisibility.a1
+                          ? 'bg-rose-400/35'
+                          : 'bg-[#34D399]/80'
+                      }`}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* LANE 4: EXTERNAL MUSIC & VOICEOVER CLIPS (Indigo/Cobalt ClipCraft Bars) */}

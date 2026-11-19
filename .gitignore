@@ -9,4 +9,11 @@ coverage/
 *.log
 .env*
 !.env.example
+.env.signing
+*.p12
+*.jks
+*.keystore
+scripts/android-signing/*.p12
+scripts/android-signing/*.jks
+scripts/android-signing/*.keystore
 public/assets/aistudio/

@@ -1,6 +1,8 @@
+import dns from 'dns/promises';
 import express from 'express';
 import fs from 'fs';
 import http from 'http';
+import net from 'net';
 import path from 'path';
 import {Readable} from 'stream';
 import {fileURLToPath} from 'url';
@@ -34,8 +36,25 @@ async function startServer() {
     app.use('/ffmpeg', express.static(ffmpegCoreDir, {maxAge: '7d'}));
   }
 
+  const isPrivateIp = (ip: string): boolean => {
+    const clean = ip.toLowerCase().replace(/^::ffff:/, '');
+    if (clean === '::1' || clean === '::' || clean.startsWith('fc') || clean.startsWith('fd') || clean.startsWith('fe80:')) {
+      return true;
+    }
+    const ipv4 = clean.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (ipv4) {
+      const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
+      if (a === 10 || a === 127 || a === 0) return true;
+      if (a === 172 && b >= 16 && b <= 31) return true;
+      if (a === 192 && b === 168) return true;
+      if (a === 169 && b === 254) return true;
+      if (a === 100 && b >= 64 && b <= 127) return true;
+    }
+    return false;
+  };
+
   const isBlockedHost = (hostname: string): boolean => {
-    const h = hostname.toLowerCase();
+    const h = hostname.toLowerCase().replace(/^\[|\]$/g, '');
     if (
       h === 'localhost' ||
       h === '127.0.0.1' ||
@@ -48,25 +67,45 @@ async function startServer() {
     ) {
       return true;
     }
-    const ipv4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-    if (ipv4) {
-      const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
-      if (a === 10 || a === 127 || a === 0) return true;
-      if (a === 172 && b >= 16 && b <= 31) return true;
-      if (a === 192 && b === 168) return true;
-      if (a === 169 && b === 254) return true;
+    if (net.isIP(h)) {
+      return isPrivateIp(h);
     }
     return false;
   };
 
+  const assertSafeUrl = async (urlObj: URL): Promise<void> => {
+    if ((urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') || isBlockedHost(urlObj.hostname)) {
+      throw new Error('Blocked URL');
+    }
+    const host = urlObj.hostname.replace(/^\[|\]$/g, '');
+    if (!net.isIP(host)) {
+      const records = await dns.lookup(host, {all: true, verbatim: true});
+      if (!records.length || records.some((r) => isPrivateIp(r.address))) {
+        throw new Error('Blocked resolved IP');
+      }
+    }
+  };
+
+  const safeFetch = async (rawUrl: string, init: RequestInit = {}, maxRedirects = 5): Promise<Response> => {
+    let currentUrl = rawUrl;
+    for (let hop = 0; hop <= maxRedirects; hop += 1) {
+      const parsedUrl = new URL(currentUrl);
+      await assertSafeUrl(parsedUrl);
+      const res = await fetch(parsedUrl.toString(), {...init, redirect: 'manual'});
+      if (res.status >= 300 && res.status < 400) {
+        const loc = res.headers.get('location');
+        if (!loc) return res;
+        currentUrl = new URL(loc, parsedUrl).toString();
+        continue;
+      }
+      return res;
+    }
+    throw new Error('Too many redirects');
+  };
+
   const serverHttpFetcher: HttpJsonFetcher = {
     async fetchText(url: string, headers?: Record<string, string>) {
-      const target = new URL(url);
-      if ((target.protocol !== 'http:' && target.protocol !== 'https:') || isBlockedHost(target.hostname)) {
-        throw new Error('Blocked URL');
-      }
-      const r = await fetch(target.toString(), {
-        redirect: 'follow',
+      const r = await safeFetch(url, {
         headers: {
           'User-Agent': BROWSER_USER_AGENT,
           Accept: 'text/html,application/json,*/*;q=0.8',
@@ -82,11 +121,7 @@ async function startServer() {
       };
     },
     async postJson(url: string, body: unknown, headers?: Record<string, string>) {
-      const target = new URL(url);
-      if ((target.protocol !== 'http:' && target.protocol !== 'https:') || isBlockedHost(target.hostname)) {
-        throw new Error('Blocked URL');
-      }
-      const r = await fetch(target.toString(), {
+      const r = await safeFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -160,8 +195,7 @@ async function startServer() {
         return;
       }
 
-      const upstream = await fetch(initialUrlObj.toString(), {
-        redirect: 'follow',
+      const upstream = await safeFetch(initialUrlObj.toString(), {
         signal: streamAbort.signal,
         headers: {
           'User-Agent': BROWSER_USER_AGENT,

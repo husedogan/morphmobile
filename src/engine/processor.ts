@@ -584,7 +584,14 @@ export async function runLocalTool(
 
     case 'ZIP_CREATE': {
       const blob = await createZipArchive(files, (r, step) => onProgress(r, step));
-      outputs.push({name: `${files[0].baseName}-archive.zip`, blob});
+      let archiveName = `${files[0].baseName}.zip`;
+      if (files.length > 1) {
+        const now = new Date();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+        archiveName = `morph-${stamp}.zip`;
+      }
+      outputs.push({name: archiveName, blob});
       break;
     }
 

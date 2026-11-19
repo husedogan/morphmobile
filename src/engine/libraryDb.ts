@@ -5,6 +5,26 @@ const DB_NAME = 'morph_studio_db';
 const DB_VERSION = 1;
 const STORE_EXPORTS = 'exports';
 
+type LibraryChangeListener = () => void;
+const libraryListeners = new Set<LibraryChangeListener>();
+
+export function subscribeLibraryChanges(listener: LibraryChangeListener): () => void {
+  libraryListeners.add(listener);
+  return () => {
+    libraryListeners.delete(listener);
+  };
+}
+
+function notifyLibraryChanged(): void {
+  for (const listener of libraryListeners) {
+    try {
+      listener();
+    } catch {
+      // Ignore subscriber errors
+    }
+  }
+}
+
 export const DEFAULT_PREFS: Prefs = {
   theme: 'system',
   preset: 'midnight',
@@ -141,6 +161,7 @@ export async function saveExportItems(items: ExportItem[]): Promise<void> {
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
+    notifyLibraryChanged();
   } catch {
     // Ignore storage quota errors
   }
@@ -155,6 +176,7 @@ export async function deleteExportItem(id: string): Promise<void> {
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
+    notifyLibraryChanged();
   } catch {
     // Ignore
   }
@@ -169,6 +191,7 @@ export async function clearAllExports(): Promise<void> {
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
+    notifyLibraryChanged();
   } catch {
     // Ignore
   }

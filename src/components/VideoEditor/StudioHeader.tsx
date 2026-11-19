@@ -75,25 +75,25 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
   return (
     <header className="pt-safe relative z-40 flex h-12 shrink-0 items-center justify-between gap-2 border-b border-white/[0.07] bg-[#0B0D12] px-2.5 sm:px-3.5">
       {/* Left: Back + Stacked Project Title & Clean Unboxed Technical Metadata */}
-      <div className="flex min-w-0 items-center gap-2">
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
         <StudioTooltipBtn
           tooltip={tr('Projeden Çık', 'Exit Editor')}
           placement="bottom"
           align="left"
           onClick={onBack}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-white/75 transition-colors hover:bg-white/[0.07] hover:text-white"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/75 transition-colors hover:bg-white/[0.07] hover:text-white"
         >
           <ChevronLeft className="h-5 w-5" />
         </StudioTooltipBtn>
 
-        <div className="min-w-0">
-          <h1 className="max-w-[140px] truncate text-[13px] font-bold leading-tight tracking-tight text-white sm:max-w-[240px]">
+        <div className="min-w-[68px] flex-1">
+          <h1 className="truncate text-[13px] font-bold leading-tight tracking-tight text-white">
             {projectName}
           </h1>
-          <div className="font-mono-num flex items-center gap-1.5 text-[10px] font-medium text-white/45">
+          <div className="font-mono-num flex items-center gap-1 text-[10px] font-medium text-white/50">
             <span className="whitespace-nowrap">{resTag}</span>
-            <span aria-hidden="true">·</span>
-            <span className="whitespace-nowrap">{fps} FPS</span>
+            <span className="hidden min-[360px]:inline" aria-hidden="true">·</span>
+            <span className="hidden whitespace-nowrap min-[360px]:inline">{fps} FPS</span>
             {isProxyEnabled && (
               <>
                 <span aria-hidden="true">·</span>
@@ -118,7 +118,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           }
           placement="bottom"
           onClick={onToggleProxy}
-          className={`flex h-8 items-center justify-center gap-1 rounded-lg px-2 text-[11px] font-bold transition-colors ${
+          className={`flex h-8 items-center justify-center gap-1 rounded-lg px-1.5 text-[11px] font-bold transition-colors sm:px-2 ${
             isProxyEnabled
               ? 'bg-[#34D399]/18 text-[#34D399]'
               : proxyRecommended
@@ -126,8 +126,8 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
                 : 'text-white/60 hover:bg-white/[0.07] hover:text-white'
           }`}
         >
-          <Zap className="h-3.5 w-3.5" />
-          <span className="font-mono-num text-[10px]">
+          <Zap className="h-3.5 w-3.5 shrink-0" />
+          <span className="font-mono-num hidden text-[10px] min-[400px]:inline">
             {isGeneratingProxy ? `${Math.round(proxyProgress * 100)}%` : 'PX'}
           </span>
         </StudioTooltipBtn>
@@ -182,7 +182,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           onPointerDown={() => onSetCompareOriginal(true)}
           onPointerUp={() => onSetCompareOriginal(false)}
           onPointerLeave={() => onSetCompareOriginal(false)}
-          className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+          className={`hidden h-8 w-8 items-center justify-center rounded-lg transition-colors min-[380px]:flex ${
             compareOriginal
               ? 'bg-[#F5B82E]/20 text-[#F5B82E]'
               : 'text-white/65 hover:bg-white/[0.07] hover:text-white'

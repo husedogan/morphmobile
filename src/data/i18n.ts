@@ -289,7 +289,7 @@ const DICT: Record<string, {tr: string; en: string}> = {
   Themes: {tr: 'Temalar', en: 'Themes'},
   SourceOrder: {tr: 'Kaynak Sırası', en: 'Source Files'},
   SplitAtTime: {tr: 'Bölme zamanı (boş = ortadan)', en: 'Split time (blank = midpoint)'},
-  Language: {tr: 'Dil / Language', en: 'Language / Dil'},
+  Language: {tr: 'Dil', en: 'Language'},
   ServerSection: {tr: 'Ek İndirme Sunucusu (İsteğe Bağlı)', en: 'Extra Download Server (Optional)'},
   ServerDesc: {
     tr: 'Video, ses ve belge araçları artık sunucusuz çalışır. Yalnızca YouTube/Instagram tam akış indirmek istersen isteğe bağlı yt-dlp sunucunu bağlayabilirsin.',
@@ -622,7 +622,7 @@ const DICT: Record<string, {tr: string; en: string}> = {
 
   // Settings Categories, Appearance Controls & Wheel Cap
   SetCatAppearance: {tr: 'Görünüm', en: 'Appearance'},
-  SetCatDownloads: {tr: 'İndirme', en: 'Downloads'},
+  SetCatDownloads: {tr: 'İndirmeler', en: 'Downloads'},
   SetCatPermissions: {tr: 'İzinler', en: 'Permissions'},
   SetCatAbout: {tr: 'Güncelleme', en: 'Updates'},
   CurrentVersionLabel: {tr: 'Mevcut Sürüm', en: 'Current Version'},

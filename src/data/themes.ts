@@ -527,14 +527,78 @@ export function getPreset(id: string): ThemePreset {
   return THEME_PRESETS.find((t) => t.id === id) ?? THEME_PRESETS[0];
 }
 
-function hexLuminance(hex: string): number {
+function hexToRgb(hex: string): [number, number, number] {
   const clean = hex.replace('#', '');
-  if (clean.length !== 6) return 0.2;
-  const r = parseInt(clean.slice(0, 2), 16) / 255;
-  const g = parseInt(clean.slice(2, 4), 16) / 255;
-  const b = parseInt(clean.slice(4, 6), 16) / 255;
+  if (clean.length !== 6) return [128, 128, 128];
+  return [
+    parseInt(clean.slice(0, 2), 16),
+    parseInt(clean.slice(2, 4), 16),
+    parseInt(clean.slice(4, 6), 16),
+  ];
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+  return `#${clamp(r)}${clamp(g)}${clamp(b)}`;
+}
+
+function mixHex(hexA: string, hexB: string, weightB: number): string {
+  const [r1, g1, b1] = hexToRgb(hexA);
+  const [r2, g2, b2] = hexToRgb(hexB);
+  const w = Math.max(0, Math.min(1, weightB));
+  return rgbToHex(r1 + (r2 - r1) * w, g1 + (g2 - g1) * w, b1 + (b2 - b1) * w);
+}
+
+function hexLuminance(hex: string): number {
+  const [r, g, b] = hexToRgb(hex).map((c) => c / 255);
   const linear = [r, g, b].map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
   return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+}
+
+function contrastRatio(lumA: number, lumB: number): number {
+  const lighter = Math.max(lumA, lumB);
+  const darker = Math.min(lumA, lumB);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+const DARK_INK = '#0B101B';
+const LIGHT_INK = '#FFFFFF';
+const LIGHT_INK_LUM = 1.0;
+
+/**
+ * Deepens overly bright pastel CTA/button fills just enough so crisp white (#FFFFFF)
+ * text and icons maintain >= 4.5:1 WCAG AA contrast without turning button labels black.
+ */
+function ensureWhiteInkSurface(bgHex: string, minRatio = 4.5): string {
+  let candidate = bgHex;
+  for (let step = 0; step <= 14; step += 1) {
+    if (contrastRatio(hexLuminance(candidate), LIGHT_INK_LUM) >= minRatio) {
+      return candidate;
+    }
+    candidate = mixHex(bgHex, '#0B101B', (step + 1) * 0.05);
+  }
+  return candidate;
+}
+
+function isNearWhiteAchromatic(hex: string): boolean {
+  const [r, g, b] = hexToRgb(hex);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const saturation = max === 0 ? 0 : (max - min) / max;
+  return hexLuminance(hex) > 0.62 && saturation < 0.14;
+}
+
+function ensureAccentTextContrast(accentHex: string, surfaceHex: string, isDark: boolean): string {
+  const surfaceLum = hexLuminance(surfaceHex);
+  let candidate = accentHex;
+  const targetHex = isDark ? '#FFFFFF' : '#0B101B';
+  for (let step = 0; step <= 6; step += 1) {
+    if (contrastRatio(hexLuminance(candidate), surfaceLum) >= 4.8) {
+      return candidate;
+    }
+    candidate = mixHex(accentHex, targetHex, (step + 1) * 0.12);
+  }
+  return candidate;
 }
 
 export function applyThemeTokens(
@@ -547,9 +611,18 @@ export function applyThemeTokens(
   const isDark = mode === 'dark' ? true : mode === 'light' ? false : prefersDark;
   const palette = getPreset(presetId)[isDark ? 'dark' : 'light'];
 
-  const avgLum = (hexLuminance(palette.accent) + hexLuminance(palette.accentEnd)) / 2;
-  const accentInk = avgLum > 0.45 ? '#0D1320' : '#FFFFFF';
-  const accentSingleInk = hexLuminance(palette.accent) > 0.46 ? '#0D1320' : '#FFFFFF';
+  const useDarkInkOnLightMono =
+    isNearWhiteAchromatic(palette.accent) && isNearWhiteAchromatic(palette.accentEnd);
+  const accentInk = useDarkInkOnLightMono ? DARK_INK : LIGHT_INK;
+  const accentSingleInk = useDarkInkOnLightMono ? DARK_INK : LIGHT_INK;
+  const accentBtnStart = useDarkInkOnLightMono
+    ? palette.accent
+    : ensureWhiteInkSurface(palette.accent, 4.5);
+  const accentBtnEnd = useDarkInkOnLightMono
+    ? palette.accentEnd
+    : ensureWhiteInkSurface(palette.accentEnd, 4.5);
+  const accentText = ensureAccentTextContrast(palette.accent, palette.surface, isDark);
+  const dangerColor = isDark ? '#F87171' : '#DC2626';
 
   if (typeof document === 'undefined') {
     return isDark;
@@ -557,6 +630,9 @@ export function applyThemeTokens(
 
   const root = document.documentElement;
   root.classList.toggle('dark', isDark);
+  root.setAttribute('data-theme', isDark ? 'dark' : 'light');
+  root.style.colorScheme = isDark ? 'dark' : 'light';
+  root.style.backgroundColor = palette.paper;
   root.style.setProperty('--paper', palette.paper);
   root.style.setProperty('--sidebar', palette.sidebar);
   root.style.setProperty('--surface', palette.surface);
@@ -566,8 +642,12 @@ export function applyThemeTokens(
   root.style.setProperty('--line', palette.line);
   root.style.setProperty('--accent', palette.accent);
   root.style.setProperty('--accent-end', palette.accentEnd);
+  root.style.setProperty('--accent-btn-start', accentBtnStart);
+  root.style.setProperty('--accent-btn-end', accentBtnEnd);
   root.style.setProperty('--accent-ink', accentInk);
   root.style.setProperty('--accent-single-ink', accentSingleInk);
+  root.style.setProperty('--accent-text', accentText);
+  root.style.setProperty('--danger', dangerColor);
 
   if (appearance) {
     root.dataset.uiScale = appearance.uiScale ?? 'default';

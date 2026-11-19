@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
+import React, {Suspense, lazy, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ArrowLeft,
   ArrowLeftRight,
@@ -82,7 +82,11 @@ import {EngineCardInfo, getAllEnginesStatus} from '../engine/morphEnginesBridge'
 import {ToolOptions} from '../engine/processor';
 import {CropEditor} from './CropEditor';
 import {FileThumb} from './FileThumb';
-import {VideoEditor, VideoEditorState, VideoEditorTab} from './VideoEditor';
+import type {VideoEditorState, VideoEditorTab} from './VideoEditor';
+
+const VideoEditor = lazy(() =>
+  import('./VideoEditor').then((mod) => ({default: mod.VideoEditor}))
+);
 
 const VIDEO_STUDIO_TOOL_IDS = new Set([
   'video_studio',
@@ -507,14 +511,25 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
     );
     const studioDef = SERVER_TOOLS.find((s) => s.id === 'video_studio') ?? selectedServerTool;
     return (
-      <VideoEditor
-        file={files[0]}
-        lang={lang}
-        initialTab={initVeTab}
-        initialPreset={initVePreset}
-        onBack={() => (directEntry ? onBack() : setSelectedServerTool(null))}
-        onExport={(opts) => onRunServer(studioDef, opts)}
-      />
+      <Suspense
+        fallback={
+          <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-[#07080B] text-white">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-[var(--accent)]" />
+            <p className="text-xs font-semibold text-white/70">
+              {lang === 'tr' ? 'Video Stüdyosu yükleniyor...' : 'Loading Video Studio...'}
+            </p>
+          </div>
+        }
+      >
+        <VideoEditor
+          file={files[0]}
+          lang={lang}
+          initialTab={initVeTab}
+          initialPreset={initVePreset}
+          onBack={() => (directEntry ? onBack() : setSelectedServerTool(null))}
+          onExport={(opts) => onRunServer(studioDef, opts)}
+        />
+      </Suspense>
     );
   }
 

@@ -334,10 +334,11 @@ export function timelineToSourceTime(
 export function createInitialNleProject(
   fileName: string,
   durationSec: number,
-  fps: ProjectFps = 30
+  fps: ProjectFps = 30,
+  isTr = true
 ): NleProjectState {
   const safeDur = Math.max(0.2, Number(durationSec.toFixed(4)));
-  const cleanTitle = fileName.replace(/\.[^.]+$/, '') || 'Yeni Proje';
+  const cleanTitle = fileName.replace(/\.[^.]+$/, '') || (isTr ? 'Yeni Proje' : 'New Project');
   return {
     projectId: `proj-${Date.now()}`,
     projectName: cleanTitle,
@@ -391,7 +392,7 @@ export function createInitialNleProject(
     videoClips: [
       {
         id: 'clip-main-1',
-        label: 'Klip 1',
+        label: isTr ? 'Klip 1' : 'Clip 1',
         mediaId: PRIMARY_MEDIA_ID,
         trackIndex: 0,
         sourceStart: 0,
@@ -414,7 +415,7 @@ export function createInitialNleProject(
     audioClips: [
       {
         id: 'aud-orig-1',
-        label: 'Orijinal Ses',
+        label: isTr ? 'Orijinal Ses' : 'Original Audio',
         kind: 'original',
         sourceStart: 0,
         sourceEnd: safeDur,

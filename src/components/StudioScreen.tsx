@@ -98,7 +98,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   };
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 pb-24 pt-5 sm:px-6 lg:pb-12 lg:pt-8">
+    <div className="mx-auto w-full max-w-2xl px-4 pb-28 pt-5 sm:px-6 lg:pb-12 lg:pt-8">
       {/* Hidden file pickers */}
       <input
         ref={docInputRef}
@@ -124,7 +124,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
 
       {/* Editorial Hero */}
       <div className="mb-5">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--accent)]">
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--accent-text)]">
           {t('Workspace', lang)}
         </p>
         <h1 className="mt-1 text-balance text-2xl font-extrabold tracking-tight text-[var(--ink)] sm:text-4xl">
@@ -176,7 +176,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
               <button
                 type="button"
                 onClick={onClearFiles}
-                className="flex min-h-[38px] items-center gap-1.5 rounded-full px-3 text-xs font-semibold text-[var(--accent)] hover:bg-[var(--inset)]"
+                className="flex min-h-[44px] items-center gap-1.5 rounded-full px-3 text-xs font-semibold text-[var(--danger)] hover:bg-[var(--inset)]"
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 <span>{t('Clear', lang)}</span>
@@ -270,9 +270,14 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
               type="button"
               disabled={files.length === 0}
               onClick={onOpenConvert}
-              className="flex min-h-[72px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-1.5 py-2.5 text-center text-[var(--ink)] transition-colors hover:border-[var(--accent)] disabled:opacity-45"
+              title={files.length === 0 ? (lang === 'tr' ? 'Önce dosya seçin' : 'Select a file first') : t('Convert', lang)}
+              className={`flex min-h-[72px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-2xl border px-1.5 py-2.5 text-center transition-colors ${
+                files.length === 0
+                  ? 'cursor-not-allowed border-[var(--line)]/70 bg-[var(--inset)]/70 text-[var(--muted)]'
+                  : 'border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] hover:border-[var(--accent)]'
+              }`}
             >
-              <ArrowLeftRight className="h-4 w-4 shrink-0 text-[var(--accent)]" />
+              <ArrowLeftRight className={`h-4 w-4 shrink-0 ${files.length === 0 ? 'text-[var(--muted)]' : 'text-[var(--accent-text)]'}`} />
               <span className="max-w-full text-[11px] font-semibold leading-tight">
                 {t('Convert', lang)}
               </span>
@@ -281,9 +286,14 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
               type="button"
               disabled={files.length === 0}
               onClick={onOpenTools}
-              className="flex min-h-[72px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-1.5 py-2.5 text-center text-[var(--ink)] transition-colors hover:border-[var(--accent)] disabled:opacity-45"
+              title={files.length === 0 ? (lang === 'tr' ? 'Önce dosya seçin' : 'Select a file first') : t('Tools', lang)}
+              className={`flex min-h-[72px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-2xl border px-1.5 py-2.5 text-center transition-colors ${
+                files.length === 0
+                  ? 'cursor-not-allowed border-[var(--line)]/70 bg-[var(--inset)]/70 text-[var(--muted)]'
+                  : 'border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] hover:border-[var(--accent)]'
+              }`}
             >
-              <SlidersHorizontal className="h-4 w-4 shrink-0 text-[var(--accent)]" />
+              <SlidersHorizontal className={`h-4 w-4 shrink-0 ${files.length === 0 ? 'text-[var(--muted)]' : 'text-[var(--accent-text)]'}`} />
               <span className="max-w-full text-[11px] font-semibold leading-tight">
                 {t('Tools', lang)}
               </span>
@@ -292,14 +302,26 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
               type="button"
               disabled={files.length === 0}
               onClick={onOpenFileActions}
-              className="flex min-h-[72px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-1.5 py-2.5 text-center text-[var(--ink)] transition-colors hover:border-[var(--accent)] disabled:opacity-45"
+              title={files.length === 0 ? (lang === 'tr' ? 'Önce dosya seçin' : 'Select a file first') : t('FileActionsShort', lang)}
+              className={`flex min-h-[72px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-2xl border px-1.5 py-2.5 text-center transition-colors ${
+                files.length === 0
+                  ? 'cursor-not-allowed border-[var(--line)]/70 bg-[var(--inset)]/70 text-[var(--muted)]'
+                  : 'border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] hover:border-[var(--accent)]'
+              }`}
             >
-              <MoreHorizontal className="h-4 w-4 shrink-0 text-[var(--accent)]" />
+              <MoreHorizontal className={`h-4 w-4 shrink-0 ${files.length === 0 ? 'text-[var(--muted)]' : 'text-[var(--accent-text)]'}`} />
               <span className="max-w-full text-[11px] font-semibold leading-tight">
                 {t('FileActionsShort', lang)}
               </span>
             </button>
           </div>
+          {files.length === 0 && (
+            <p className="mt-2 text-center text-xs text-[var(--muted)]">
+              {lang === 'tr'
+                ? 'Araçları açmak için yukarıdan en az bir dosya seçin.'
+                : 'Select at least one file above to unlock conversion and tools.'}
+            </p>
+          )}
         </section>
 
         {/* Card 2: WEB & MEDYA / Bağlantıdan indir */}
@@ -533,8 +555,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
       </div>
 
       {/* Clean Studio Footer Note */}
-      <footer className="mt-4 text-center">
-        <p className="truncate text-[10.5px] font-medium whitespace-nowrap text-[var(--muted)] sm:text-xs">
+      <footer className="mt-5 text-center">
+        <p className="text-xs font-medium text-[var(--muted)]">
           {t('StudioFooterNote', lang)}
         </p>
       </footer>

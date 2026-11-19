@@ -12,7 +12,7 @@ const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 
 export default defineConfig(() => {
   return {
     define: {
-      __MORPH_VERSION__: JSON.stringify(pkg.version || '1.1.15'),
+      __MORPH_VERSION__: JSON.stringify(pkg.version || '1.1.125'),
     },
     plugins: [
       react(),
@@ -159,6 +159,20 @@ export default defineConfig(() => {
     },
     optimizeDeps: {
       exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules/@ffmpeg/')) return 'vendor-ffmpeg';
+            if (id.includes('node_modules/pdf-lib')) return 'vendor-pdf-lib';
+            if (id.includes('node_modules/pdfjs-dist')) return 'vendor-pdfjs';
+            if (id.includes('node_modules/jszip')) return 'vendor-jszip';
+            if (id.includes('node_modules/lucide-react')) return 'vendor-icons';
+            return undefined;
+          },
+        },
+      },
     },
     resolve: {
       alias: {

@@ -360,16 +360,44 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       ? t('ReleaseStable', lang)
       : t('ReleasePreview', lang);
 
+  const [isOnline, setIsOnline] = useState<boolean>(() =>
+    typeof navigator === 'undefined' ? true : navigator.onLine !== false
+  );
+
+  useEffect(() => {
+    const onOnline = () => setIsOnline(true);
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
+
   const toggleDayNightTheme = () => {
-    onChangePrefs((p) => ({...p, theme: isDark ? 'light' : 'dark'}));
+    onChangePrefs((p) => {
+      const sysDark =
+        typeof window !== 'undefined' &&
+        window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const effectiveDark = p.theme === 'dark' || (p.theme === 'system' && sysDark);
+      return {...p, theme: effectiveDark ? 'light' : 'dark'};
+    });
   };
 
   const dayNightSelected = prefs.theme === 'light' || prefs.theme === 'dark';
+  const dayNightActionLabel = isDark
+    ? lang === 'tr'
+      ? 'Açık temaya geç'
+      : 'Switch to light theme'
+    : lang === 'tr'
+      ? 'Koyu temaya geç'
+      : 'Switch to dark theme';
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 pb-10 pt-5 sm:px-6 lg:pb-12 lg:pt-8">
+    <div className="mx-auto w-full max-w-4xl px-4 pb-28 pt-5 sm:px-6 lg:pb-12 lg:pt-8">
       <div className="flex items-center justify-between gap-2">
-        <h1 className="text-2xl font-extrabold tracking-tight text-[var(--ink)] sm:text-3xl">
+        <h1 className="text-2xl font-bold tracking-tight text-[var(--ink)] sm:text-3xl">
           {t('Settings', lang)}
         </h1>
       </div>
@@ -409,8 +437,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
-                <Palette className="h-5 w-5 text-[var(--accent)]" />
-                <h2 className="text-base font-bold text-[var(--ink)]">{t('Appearance', lang)}</h2>
+                <Palette className="h-5 w-5 text-[var(--accent-text)]" />
+                <h2 className="text-base font-semibold text-[var(--ink)]">{t('Appearance', lang)}</h2>
               </div>
 
               <div className="flex items-center gap-2">
@@ -418,7 +446,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   type="button"
                   onClick={() => onChangePrefs((p) => ({...p, theme: 'system'}))}
                   aria-pressed={prefs.theme === 'system'}
-                  className={`min-h-[40px] rounded-full border px-3.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                  className={`min-h-[44px] rounded-full border px-3.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                     prefs.theme === 'system'
                       ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
                       : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
@@ -431,33 +459,41 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   type="button"
                   onClick={toggleDayNightTheme}
                   aria-pressed={dayNightSelected}
-                  title={isDark ? t('ThemeModeDark', lang) : t('ThemeModeLight', lang)}
-                  aria-label={isDark ? t('ThemeModeDark', lang) : t('ThemeModeLight', lang)}
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition-all active:scale-95 ${
+                  title={dayNightActionLabel}
+                  aria-label={dayNightActionLabel}
+                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition-all active:scale-95 ${
                     dayNightSelected
-                      ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--accent)]'
+                      ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--accent-text)]'
                       : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
                   }`}
                 >
-                  {isDark ? <Moon className="h-4.5 w-4.5" /> : <Sun className="h-4.5 w-4.5" />}
+                  {isDark ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
                 </button>
               </div>
             </div>
 
             <p className="mt-5 text-xs font-semibold text-[var(--muted)]">{t('Themes', lang)}</p>
-            <div className="mt-3 grid grid-cols-3 gap-2.5 sm:grid-cols-4 sm:gap-3 md:grid-cols-6">
+            <div
+              role="radiogroup"
+              aria-label={t('Themes', lang)}
+              className="mt-3 grid grid-cols-3 gap-2.5 sm:grid-cols-4 sm:gap-3 md:grid-cols-6"
+            >
               {THEME_PRESETS.map((preset) => {
                 const pal = isDark ? preset.dark : preset.light;
                 const selected = prefs.preset === preset.id;
+                const presetLabel = lang === 'tr' ? preset.nameTr : preset.nameEn;
                 return (
                   <button
                     key={preset.id}
                     type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    title={presetLabel}
                     onClick={() => onChangePrefs((p) => ({...p, preset: preset.id}))}
-                    className="group flex flex-col items-stretch text-left"
+                    className="group flex min-h-[44px] flex-col items-stretch text-left"
                   >
                     <div
-                      className={`relative flex aspect-[3/4] w-full flex-col overflow-hidden rounded-xl border-2 transition-transform duration-150 group-active:scale-[0.97] ${
+                      className={`relative flex aspect-[4/3] w-full flex-col overflow-hidden rounded-xl border-2 transition-transform duration-150 group-active:scale-[0.97] ${
                         selected ? 'border-[var(--accent)] shadow-md' : 'border-[var(--line)]'
                       }`}
                       style={{
@@ -525,11 +561,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       )}
                     </div>
                     <p
-                      className={`mt-1.5 text-center text-[11px] font-semibold leading-tight ${
+                      className={`mt-1.5 line-clamp-1 text-center text-[11px] font-semibold leading-tight ${
                         selected ? 'text-[var(--ink)]' : 'text-[var(--muted)]'
                       }`}
                     >
-                      {lang === 'tr' ? preset.nameTr : preset.nameEn}
+                      {presetLabel}
                     </p>
                   </button>
                 );
@@ -585,11 +621,27 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       }}
                       className="morph-slider"
                     />
-                    <div className="mt-2 flex items-center justify-between text-[10px] font-semibold text-[var(--muted)]">
+                    <div className="mt-2 grid grid-cols-3 gap-1" role="radiogroup" aria-label={t('UiScaleLabel', lang)}>
                       {scaleLabels.map((lbl, i) => (
-                        <span key={lbl} className={i === idx ? 'text-[var(--ink)]' : ''}>
+                        <button
+                          key={lbl}
+                          type="button"
+                          role="radio"
+                          aria-checked={i === idx}
+                          onClick={() =>
+                            onChangePrefs((p) => ({
+                              ...p,
+                              uiScale: scaleSteps[i] ?? 'default',
+                            }))
+                          }
+                          className={`min-h-[36px] rounded-lg px-1.5 text-[11px] font-semibold transition-colors ${
+                            i === idx
+                              ? 'bg-[var(--surface)] text-[var(--ink)] ring-1 ring-[var(--accent)]/60'
+                              : 'text-[var(--muted)] hover:bg-[var(--surface)]/60 hover:text-[var(--ink)]'
+                          }`}
+                        >
                           {lbl}
-                        </span>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -612,7 +664,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       <span className="text-xs font-semibold text-[var(--ink)]">
                         {t('CornerStyleLabel', lang)}
                       </span>
-                      <span className="font-mono-num text-[11px] font-bold text-[var(--accent)]">
+                      <span className="font-mono-num text-[11px] font-bold text-[var(--accent-text)]">
                         {cornerLabels[idx]}
                       </span>
                     </div>
@@ -634,11 +686,27 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       }}
                       className="morph-slider"
                     />
-                    <div className="mt-2 flex items-center justify-between text-[10px] font-semibold text-[var(--muted)]">
+                    <div className="mt-2 grid grid-cols-3 gap-1" role="radiogroup" aria-label={t('CornerStyleLabel', lang)}>
                       {cornerLabels.map((lbl, i) => (
-                        <span key={lbl} className={i === idx ? 'text-[var(--ink)]' : ''}>
+                        <button
+                          key={lbl}
+                          type="button"
+                          role="radio"
+                          aria-checked={i === idx}
+                          onClick={() =>
+                            onChangePrefs((p) => ({
+                              ...p,
+                              cornerStyle: cornerSteps[i] ?? 'balanced',
+                            }))
+                          }
+                          className={`min-h-[36px] rounded-lg px-1.5 text-[11px] font-semibold transition-colors ${
+                            i === idx
+                              ? 'bg-[var(--surface)] text-[var(--ink)] ring-1 ring-[var(--accent)]/60'
+                              : 'text-[var(--muted)] hover:bg-[var(--surface)]/60 hover:text-[var(--ink)]'
+                          }`}
+                        >
                           {lbl}
-                        </span>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -762,11 +830,27 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       }}
                       className="morph-slider"
                     />
-                    <div className="mt-2 flex items-center justify-between text-[10px] font-semibold text-[var(--muted)]">
+                    <div className="mt-2 grid grid-cols-3 gap-1" role="radiogroup" aria-label={t('WheelSideLabel', lang)}>
                       {sideLabels.map((lbl, i) => (
-                        <span key={lbl} className={i === idx ? 'text-[var(--ink)]' : ''}>
+                        <button
+                          key={lbl}
+                          type="button"
+                          role="radio"
+                          aria-checked={i === idx}
+                          onClick={() =>
+                            onChangePrefs((p) => ({
+                              ...p,
+                              wheelSide: sideSteps[i] ?? 'right',
+                            }))
+                          }
+                          className={`min-h-[36px] rounded-lg px-1.5 text-[11px] font-semibold transition-colors ${
+                            i === idx
+                              ? 'bg-[var(--surface)] text-[var(--ink)] ring-1 ring-[var(--accent)]/60'
+                              : 'text-[var(--muted)] hover:bg-[var(--surface)]/60 hover:text-[var(--ink)]'
+                          }`}
+                        >
                           {lbl}
-                        </span>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -1683,11 +1767,19 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 <button
                   type="button"
                   onClick={onCheckUpdate}
-                  disabled={checkingUpdate || Boolean(updateDownload?.active)}
-                  className="morph-tonal-btn flex h-12 w-full min-w-0 items-center justify-center gap-2 rounded-2xl px-4 text-xs font-semibold transition-all active:scale-[0.98] disabled:opacity-70 whitespace-nowrap"
+                  disabled={!isOnline || checkingUpdate || Boolean(updateDownload?.active)}
+                  className="morph-tonal-btn flex h-12 w-full min-w-0 items-center justify-center gap-2 rounded-2xl px-4 text-xs font-semibold transition-all active:scale-[0.98] disabled:opacity-60 whitespace-nowrap"
                 >
-                  <RefreshCw className={`h-4 w-4 shrink-0 text-[var(--accent)] ${checkingUpdate ? 'animate-spin' : ''}`} />
-                  <span>{checkingUpdate ? t('CheckingUpdates', lang) : t('CheckUpdates', lang)}</span>
+                  <RefreshCw className={`h-4 w-4 shrink-0 text-[var(--accent-text)] ${checkingUpdate ? 'animate-spin' : ''}`} />
+                  <span>
+                    {!isOnline
+                      ? lang === 'tr'
+                        ? 'Çevrimdışı — Güncelleme kontrolü kapalı'
+                        : 'Offline — Update check unavailable'
+                      : checkingUpdate
+                        ? t('CheckingUpdates', lang)
+                        : t('CheckUpdates', lang)}
+                  </span>
                 </button>
               )}
 
@@ -1698,7 +1790,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     <span className="truncate font-semibold text-[var(--ink)]">
                       {updateDownload.fileName}
                     </span>
-                    <span className="font-mono-num shrink-0 font-bold text-[var(--accent)]">
+                    <span className="font-mono-num shrink-0 font-bold text-[var(--accent-text)]">
                       {updateDownload.totalBytes > 0
                         ? `${formatBytes(updateDownload.downloadedBytes)} / ${formatBytes(updateDownload.totalBytes)} · %${updateDownload.percent}`
                         : `%${updateDownload.percent}`}
@@ -1713,10 +1805,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 </div>
               )}
 
-              {/* Single clean version & status row (exact same h-12 height, no text collision) */}
-              <div className="flex h-12 w-full items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-4 text-xs">
+              {/* Single clean version & status row */}
+              <div className="flex min-h-[48px] w-full flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-4 py-2 text-xs">
                 <div className="flex min-w-0 items-center gap-2 whitespace-nowrap">
-                  <GitBranch className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                  <GitBranch className="h-3.5 w-3.5 shrink-0 text-[var(--accent-text)]" />
                   <span className="font-mono-num tabular-nums font-bold text-[var(--ink)]">
                     Morph {APP_VERSION}
                   </span>
@@ -1726,14 +1818,52 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   <span className="truncate text-[var(--muted)]">{channelLabel}</span>
                 </div>
 
-                <span className="shrink-0 whitespace-nowrap text-xs font-semibold text-[var(--accent)]">
-                  {updateInfo?.error
-                    ? updateInfo.error
-                    : updateInfo?.hasUpdate
-                      ? `${t('UpdateAvailable', lang)}${updateInfo.releaseTag ? ` · ${updateInfo.releaseTag}` : ''}`
-                      : t('UpToDateShort', lang)}
+                <span
+                  className={`shrink-0 text-xs font-semibold ${
+                    updateInfo?.errorType
+                      ? 'text-[var(--danger)]'
+                      : 'text-[var(--accent-text)]'
+                  }`}
+                >
+                  {!isOnline
+                    ? lang === 'tr'
+                      ? 'Çevrimdışı'
+                      : 'Offline'
+                    : updateInfo?.errorType === 'rate_limit'
+                      ? lang === 'tr'
+                        ? 'GitHub sınırı aşıldı (403)'
+                        : 'GitHub rate limit (403)'
+                      : updateInfo?.error
+                        ? lang === 'tr'
+                          ? 'Kontrol edilemedi'
+                          : 'Check failed'
+                        : updateInfo?.hasUpdate
+                          ? `${t('UpdateAvailable', lang)}${updateInfo.releaseTag ? ` · ${updateInfo.releaseTag}` : ''}`
+                          : t('UpToDateShort', lang)}
                 </span>
               </div>
+
+              {updateInfo?.error && (
+                <p className="rounded-xl border border-[var(--danger)]/35 bg-[var(--danger)]/10 px-3 py-2 text-xs leading-relaxed text-[var(--ink)]">
+                  {updateInfo.errorType === 'rate_limit'
+                    ? lang === 'tr'
+                      ? `GitHub API günlük istek sınırı aşıldı${updateInfo.retryAfterSec ? ` (~${Math.ceil(updateInfo.retryAfterSec / 60)} dk sonra yenilenir)` : ''}. Güncel APK paketini doğrudan GitHub Sürümler sayfasından indirebilirsin.`
+                      : `GitHub API rate limit exceeded${updateInfo.retryAfterSec ? ` (resets in ~${Math.ceil(updateInfo.retryAfterSec / 60)} min)` : ''}. Download the latest APK directly from GitHub Releases.`
+                    : updateInfo.error}
+                </p>
+              )}
+
+              {updateInfo?.checkedAt && (
+                <p className="px-1 text-[11px] text-[var(--muted)]">
+                  {lang === 'tr' ? 'Son denetim:' : 'Last checked:'}{' '}
+                  <span className="font-mono-num">
+                    {new Date(updateInfo.checkedAt).toLocaleTimeString(lang === 'tr' ? 'tr-TR' : 'en-US', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                </p>
+              )}
 
               {!isNativeApp() && <PWAInstallButton lang={lang} variant="card" />}
 
@@ -1741,19 +1871,36 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 {(() => {
                   const apkDownloaded =
                     updateDownload?.phase === 'done' || isUpdateApkDownloaded(updateInfo);
+                  const isRateLimitedOrNoApk =
+                    updateInfo?.errorType === 'rate_limit' || (!updateInfo?.apkDownloadUrl && Boolean(updateInfo?.error));
+                  if (isRateLimitedOrNoApk && !apkDownloaded) {
+                    return (
+                      <a
+                        href={`${GITHUB_REPO_URL}/releases/latest`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex h-12 min-w-0 items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-semibold text-[var(--ink)] whitespace-nowrap transition-colors hover:border-[var(--accent)]"
+                      >
+                        <Download className="h-3.5 w-3.5 shrink-0 text-[var(--accent-text)]" />
+                        <span className="truncate">
+                          {lang === 'tr' ? 'Sürümlerden İndir' : 'Latest Releases'}
+                        </span>
+                      </a>
+                    );
+                  }
                   return (
                     <button
                       type="button"
                       onClick={onApplyUpdate}
-                      disabled={Boolean(updateDownload?.active)}
-                      className="flex h-12 min-w-0 items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-semibold text-[var(--ink)] whitespace-nowrap transition-colors hover:border-[var(--accent)] disabled:opacity-65"
+                      disabled={!isOnline || Boolean(updateDownload?.active)}
+                      className="flex h-12 min-w-0 items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-semibold text-[var(--ink)] whitespace-nowrap transition-colors hover:border-[var(--accent)] disabled:opacity-60"
                     >
                       {updateDownload?.active ? (
-                        <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--accent)]" />
+                        <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--accent-text)]" />
                       ) : apkDownloaded ? (
-                        <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                        <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent-text)]" />
                       ) : (
-                        <Download className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                        <Download className="h-3.5 w-3.5 shrink-0 text-[var(--accent-text)]" />
                       )}
                       <span className="truncate">
                         {updateDownload?.active
@@ -1771,7 +1918,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   rel="noopener noreferrer"
                   className="flex h-12 min-w-0 items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-semibold text-[var(--ink)] whitespace-nowrap transition-colors hover:border-[var(--accent)]"
                 >
-                  <ExternalLink className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0 text-[var(--accent-text)]" />
                   <span className="truncate">{t('OpenGithubRepo', lang)}</span>
                 </a>
               </div>

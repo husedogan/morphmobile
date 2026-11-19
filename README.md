@@ -1,7 +1,7 @@
 # Morph
 
-[![Morph Version](https://img.shields.io/badge/Morph-1.1.23-42C9D9?style=flat-square)](https://github.com/husedogan/morphmobile/releases)
-[![Web & PWA (Vercel)](https://img.shields.io/badge/Web_%26_PWA-morph--ucanbizon.vercel.app-FF3B6B?style=flat-square)](https://morph-ucanbizon.vercel.app)
+[![Morph Version](https://img.shields.io/badge/Morph-1.1.125-42C9D9?style=flat-square)](https://github.com/husedogan/morphmobile/releases)
+[![Web & PWA (Vercel)](https://img.shields.io/badge/Web_%26_PWA-morphmobile.vercel.app-FF3B6B?style=flat-square)](https://morphmobile.vercel.app)
 [![Android APK](https://img.shields.io/github/v/release/husedogan/morphmobile?label=APK%20Release&color=42C9D9&style=flat-square)](https://github.com/husedogan/morphmobile/releases)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/husedogan/morphmobile/build-apk.yml?branch=main&label=APK%20Build&style=flat-square)](https://github.com/husedogan/morphmobile/actions)
 
@@ -14,10 +14,10 @@
 - **Uygulama İçi Güncelleme:** **Ayarlar → Güncelleme** sekmesinden yeni sürümleri tek dokunuşla denetleyip doğrudan güncel APK paketini indirebilirsin.
 
 ### 2. Web & PWA (Vercel — Kurulumsuz Tarayıcı & Çevrimdışı Ana Ekran Uygulaması)
-- **Canlı Adres:** **[https://morph-ucanbizon.vercel.app](https://morph-ucanbizon.vercel.app)**
+- **Canlı Adres:** **[https://morphmobile.vercel.app](https://morphmobile.vercel.app)**
 - Morph, **Progressive Web App (PWA)** mimarisine sahiptir; APK kurmadan doğrudan tarayıcıda çalışır veya ana ekrana tam ekran uygulama olarak kurulup **çevrimdışı (offline)** kullanılabilir:
   - **Android (Chrome / Edge / Brave):** Siteyi açtıktan sonra uygulama içindeki **"Telefona Kur"** butonuna veya tarayıcı menüsünden **"Uygulamayı Yükle / Ana ekrana ekle"** seçeneğine dokun.
-  - **iPhone & iPad (iOS Safari):** `morph-ucanbizon.vercel.app` adresini Safari ile aç, alt bardaki **Paylaş** simgesine dokun ve **"Ana Ekrana Ekle"** seçeneğini seç.
+  - **iPhone & iPad (iOS Safari):** `morphmobile.vercel.app` adresini Safari ile aç, alt bardaki **Paylaş** simgesine dokun ve **"Ana Ekrana Ekle"** seçeneğini seç.
   - **Bilgisayar (Windows / macOS / Linux):** Chrome veya Edge adres çubuğunun sağındaki **Uygulamayı Yükle** simgesine tıklayarak masaüstü uygulaması olarak çalıştır.
 
 ## Temel Özellikler

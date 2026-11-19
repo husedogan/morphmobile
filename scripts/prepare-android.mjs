@@ -9,17 +9,54 @@ if (!fs.existsSync(androidDir)) {
   process.exit(0);
 }
 
-// 1. Patch AndroidManifest.xml with cleartext LAN support, legacy storage, extractNativeLibs (required for Python/yt-dlp .so), and full permissions
+// 1. Write strict network_security_config.xml (HTTPS-only globally; cleartext permitted strictly for local dev loopback)
+const resDirEarly = path.join(androidDir, 'app', 'src', 'main', 'res');
+const xmlResDir = path.join(resDirEarly, 'xml');
+if (fs.existsSync(resDirEarly)) {
+  fs.mkdirSync(xmlResDir, {recursive: true});
+  const networkSecXml = `<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>
+`;
+  fs.writeFileSync(path.join(xmlResDir, 'network_security_config.xml'), networkSecXml, 'utf8');
+}
+
+// 1b. Patch AndroidManifest.xml with hardened network/backup flags, extractNativeLibs (required for Python/yt-dlp .so), and scoped permissions
+const enableSelfUpdateApk = process.env.MORPH_ENABLE_SELF_UPDATE_APK === 'true';
 const manifestPath = path.join(androidDir, 'app', 'src', 'main', 'AndroidManifest.xml');
 if (fs.existsSync(manifestPath)) {
   let manifest = fs.readFileSync(manifestPath, 'utf8');
 
-  if (!manifest.includes('android:usesCleartextTraffic=')) {
-    manifest = manifest.replace('<application', '<application android:usesCleartextTraffic="true"');
+  if (manifest.includes('android:usesCleartextTraffic=')) {
+    manifest = manifest.replace(/android:usesCleartextTraffic="[^"]*"/g, 'android:usesCleartextTraffic="false"');
+  } else {
+    manifest = manifest.replace('<application', '<application android:usesCleartextTraffic="false"');
   }
-  if (!manifest.includes('android:requestLegacyExternalStorage=')) {
-    manifest = manifest.replace('<application', '<application android:requestLegacyExternalStorage="true"');
+  if (manifest.includes('android:networkSecurityConfig=')) {
+    manifest = manifest.replace(
+      /android:networkSecurityConfig="[^"]*"/g,
+      'android:networkSecurityConfig="@xml/network_security_config"'
+    );
+  } else {
+    manifest = manifest.replace(
+      '<application',
+      '<application android:networkSecurityConfig="@xml/network_security_config"'
+    );
   }
+  if (manifest.includes('android:allowBackup=')) {
+    manifest = manifest.replace(/android:allowBackup="[^"]*"/g, 'android:allowBackup="false"');
+  } else {
+    manifest = manifest.replace('<application', '<application android:allowBackup="false"');
+  }
+  // Remove obsolete requestLegacyExternalStorage flag (no-op on API 30+ and red flag in Play audits)
+  manifest = manifest.replace(/\s*android:requestLegacyExternalStorage="[^"]*"/g, '');
+
   if (manifest.includes('android:extractNativeLibs=')) {
     manifest = manifest.replace(/android:extractNativeLibs="[^"]*"/g, 'android:extractNativeLibs="true"');
   } else {
@@ -39,8 +76,16 @@ if (fs.existsSync(manifestPath)) {
     '<uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />',
     '<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />',
     '<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />',
-    '<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />',
   ];
+
+  if (enableSelfUpdateApk) {
+    permissions.push('<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />');
+  } else {
+    manifest = manifest.replace(
+      /\s*<uses-permission\s+android:name="android\.permission\.REQUEST_INSTALL_PACKAGES"\s*\/>\s*/g,
+      '\n'
+    );
+  }
 
   for (const perm of permissions) {
     const nameMatch = perm.match(/android:name="([^"]+)"/);
@@ -50,7 +95,9 @@ if (fs.existsSync(manifestPath)) {
   }
 
   fs.writeFileSync(manifestPath, manifest, 'utf8');
-  console.log('Patched AndroidManifest.xml with extractNativeLibs="true" and full Morph permissions');
+  console.log(
+    `Patched hardened AndroidManifest.xml (cleartext=false, allowBackup=false, selfUpdateApk=${enableSelfUpdateApk})`
+  );
 }
 
 // 2. Patch root android/build.gradle to add JitPack repository (required for NewPipeExtractor)
@@ -152,29 +199,37 @@ const pkgPath = path.join(root, 'package.json');
 const gradlePath = path.join(androidDir, 'app', 'build.gradle');
 if (fs.existsSync(pkgPath) && fs.existsSync(gradlePath)) {
   const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-  const ver = String(pkg.version || '1.1.23').split('-')[0];
-  const [maj = 1, min = 1, pat = 23] = ver.split('.').map((n) => parseInt(n, 10) || 0);
+  const ver = String(pkg.version || '1.1.125').split('-')[0];
+  const [maj = 1, min = 1, pat = 125] = ver.split('.').map((n) => parseInt(n, 10) || 0);
   const runNum = parseInt(process.env.GITHUB_RUN_NUMBER || '0', 10);
   const semverCode = maj * 100000 + min * 1000 + pat * 10;
-  // Strictly monotonic on every CI build (always > legacy 10109) so Android allows seamless in-place updates
+  // Strictly monotonic on every CI build so Android allows seamless in-place updates
   const versionCode = runNum > 0 ? Math.max(200000 + runNum, semverCode + runNum) : semverCode;
 
-  // Copy permanent signing keystore into android/app/morph-release.p12
-  const keystoreSrc = path.join(root, 'scripts', 'android-signing', 'morph-release.p12');
+  // Load signing keystore ONLY from environment secret or explicit untracked local path (never committed in git)
   const keystoreDst = path.join(androidDir, 'app', 'morph-release.p12');
   const envKeystoreB64 = (process.env.MORPH_KEYSTORE_BASE64 || '').trim();
+  const envKeystorePath = (process.env.MORPH_KEYSTORE_PATH || '').trim();
   if (envKeystoreB64) {
     fs.writeFileSync(keystoreDst, Buffer.from(envKeystoreB64, 'base64'));
-    console.log('Wrote permanent signing keystore from MORPH_KEYSTORE_BASE64');
-  } else if (fs.existsSync(keystoreSrc)) {
-    fs.copyFileSync(keystoreSrc, keystoreDst);
-    console.log('Copied permanent signing keystore scripts/android-signing/morph-release.p12 -> android/app/');
+    console.log('Wrote signing keystore from MORPH_KEYSTORE_BASE64 secret');
+  } else if (envKeystorePath && fs.existsSync(envKeystorePath)) {
+    fs.copyFileSync(envKeystorePath, keystoreDst);
+    console.log('Copied signing keystore from MORPH_KEYSTORE_PATH');
   }
 
-  const storePass = process.env.MORPH_KEYSTORE_PASSWORD || 'morphstudio2026';
-  const keyAlias = process.env.MORPH_KEY_ALIAS || 'morphkey';
-  const keyPass = process.env.MORPH_KEY_PASSWORD || 'morphstudio2026';
-  const hasKeystore = fs.existsSync(keystoreDst);
+  const storePass = (process.env.MORPH_KEYSTORE_PASSWORD || '').trim();
+  const keyAlias = (process.env.MORPH_KEY_ALIAS || '').trim();
+  const keyPass = (process.env.MORPH_KEY_PASSWORD || storePass).trim();
+  const requireSigning = process.env.MORPH_REQUIRE_SIGNING === 'true' || process.env.CI === 'true';
+  const hasKeystore = fs.existsSync(keystoreDst) && Boolean(storePass) && Boolean(keyAlias) && Boolean(keyPass);
+
+  if (requireSigning && !hasKeystore) {
+    console.error(
+      'ERROR: Release signing secrets are missing. Configure MORPH_KEYSTORE_BASE64, MORPH_KEYSTORE_PASSWORD, MORPH_KEY_ALIAS, and MORPH_KEY_PASSWORD in GitHub Secrets.'
+    );
+    process.exit(1);
+  }
 
   let gradle = fs.readFileSync(gradlePath, 'utf8');
   gradle = gradle.replace(/versionCode\s+\d+/, `versionCode ${versionCode}`);

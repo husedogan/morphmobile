@@ -8,8 +8,8 @@
     <meta property="og:title" content="Morph" />
     <meta property="og:description" content="Cihaz içi görsel, PDF, video, ses ve arşiv uygulaması." />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://morph-ucanbizon.vercel.app/" />
-    <link rel="canonical" href="https://morph-ucanbizon.vercel.app/" />
+    <meta property="og:url" content="https://morphmobile.vercel.app/" />
+    <link rel="canonical" href="https://morphmobile.vercel.app/" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="theme-color" content="#101722" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -19,10 +19,33 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem('morph_studio_prefs_v1');
+          var prefs = raw ? JSON.parse(raw) : {};
+          var mode = prefs && prefs.theme ? prefs.theme : 'system';
+          var sysDark =
+            window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var isDark = mode === 'dark' || (mode === 'system' && sysDark);
+          var root = document.documentElement;
+          root.classList.toggle('dark', isDark);
+          root.setAttribute('data-theme', isDark ? 'dark' : 'light');
+          root.style.colorScheme = isDark ? 'dark' : 'light';
+          root.style.backgroundColor = isDark ? '#0F1724' : '#EDEFF3';
+          if (prefs && prefs.reducedMotion) {
+            root.classList.add('reduce-motion');
+          }
+          if (prefs && prefs.lang === 'en') {
+            root.lang = 'en';
+          }
+        } catch (e) {}
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
   </head>

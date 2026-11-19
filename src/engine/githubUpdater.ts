@@ -8,12 +8,12 @@ declare const __MORPH_VERSION__: string;
 export const GITHUB_REPO = 'husedogan/morphmobile';
 export const GITHUB_REPO_URL = `https://github.com/${GITHUB_REPO}`;
 export const GITHUB_RELEASES_URL = `${GITHUB_REPO_URL}/releases`;
-export const PWA_WEB_URL = 'https://morph-ucanbizon.vercel.app';
+export const PWA_WEB_URL = 'https://morphmobile.vercel.app';
 
 export const APP_VERSION: string =
   typeof __MORPH_VERSION__ === 'string' && __MORPH_VERSION__.trim().length > 0
     ? __MORPH_VERSION__
-    : '1.1.23';
+    : '1.1.125';
 
 export type VersionChannel = 'stable' | 'preview';
 
@@ -69,6 +69,8 @@ export interface GithubUpdateInfo {
   hasUpdate: boolean;
   swUpdated: boolean;
   error?: string;
+  errorType?: 'offline' | 'rate_limit' | 'network' | 'http';
+  retryAfterSec?: number;
 }
 
 interface GithubReleaseAsset {
@@ -85,9 +87,9 @@ interface GithubReleaseEntry {
   assets?: GithubReleaseAsset[];
 }
 
-export async function checkGithubUpdates(): Promise<GithubUpdateInfo> {
+export async function checkGithubUpdates(githubToken?: string): Promise<GithubUpdateInfo> {
   const repoUrl = GITHUB_REPO_URL;
-  let releasesUrl = GITHUB_RELEASES_URL;
+  let releasesUrl = `${GITHUB_RELEASES_URL}/latest`;
 
   let swUpdated = false;
   if ('serviceWorker' in navigator) {
@@ -102,6 +104,24 @@ export async function checkGithubUpdates(): Promise<GithubUpdateInfo> {
     }
   }
 
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return {
+      checkedAt: Date.now(),
+      repoUrl,
+      releasesUrl,
+      apkDownloadUrl: null,
+      apkSizeBytes: null,
+      releaseTag: null,
+      releaseChannel: null,
+      commitMessage: null,
+      commitDate: null,
+      hasUpdate: swUpdated,
+      swUpdated,
+      error: 'Çevrimdışı — güncelleme kontrolü için internet bağlantısı gerekli.',
+      errorType: 'offline',
+    };
+  }
+
   let apkDownloadUrl: string | null = null;
   let apkSizeBytes: number | null = null;
   let releaseTag: string | null = null;
@@ -109,15 +129,24 @@ export async function checkGithubUpdates(): Promise<GithubUpdateInfo> {
   let commitMessage: string | null = null;
   let commitDate: string | null = null;
   let error: string | undefined;
+  let errorType: GithubUpdateInfo['errorType'];
+  let retryAfterSec: number | undefined;
+
+  const ghHeaders: Record<string, string> = {
+    Accept: 'application/vnd.github+json',
+  };
+  if (githubToken && githubToken.trim()) {
+    ghHeaders.Authorization = `Bearer ${githubToken.trim()}`;
+  }
 
   try {
     const [relsRes, commitRes, pkgRes] = await Promise.all([
       fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=20`, {
-        headers: {Accept: 'application/vnd.github+json'},
+        headers: ghHeaders,
         cache: 'no-store',
       }),
       fetch(`https://api.github.com/repos/${GITHUB_REPO}/commits/main`, {
-        headers: {Accept: 'application/vnd.github+json'},
+        headers: ghHeaders,
         cache: 'no-store',
       }),
       fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/package.json`, {
@@ -169,7 +198,7 @@ export async function checkGithubUpdates(): Promise<GithubUpdateInfo> {
           if (!releaseTag || compareVersions(mainVer, releaseTag) > 0) {
             releaseTag = mainVer.startsWith('v') ? mainVer : `v${mainVer}`;
             releaseChannel = getVersionChannel(releaseTag);
-            if (!apkDownloadUrl) {
+            if (!apkDownloadUrl && relsRes.ok) {
               apkDownloadUrl = `https://github.com/${GITHUB_REPO}/releases/download/${releaseTag}/Morph-${releaseTag}.apk`;
             }
           }
@@ -184,9 +213,27 @@ export async function checkGithubUpdates(): Promise<GithubUpdateInfo> {
       commitMessage = typeof c.commit?.message === 'string' ? c.commit.message.split('\n')[0] : null;
       commitDate = typeof c.commit?.committer?.date === 'string' ? c.commit.committer?.date : null;
     } else if (!relsRes.ok) {
-      error = `GitHub HTTP ${commitRes.status}`;
+      const status = relsRes.status || commitRes.status;
+      if (status === 403 || status === 429) {
+        errorType = 'rate_limit';
+        const retryHeader = relsRes.headers.get('retry-after') || commitRes.headers.get('retry-after');
+        const resetHeader =
+          relsRes.headers.get('x-ratelimit-reset') || commitRes.headers.get('x-ratelimit-reset');
+        if (retryHeader && Number.isFinite(Number(retryHeader))) {
+          retryAfterSec = Math.max(1, Number(retryHeader));
+        } else if (resetHeader && Number.isFinite(Number(resetHeader))) {
+          retryAfterSec = Math.max(1, Number(resetHeader) - Math.floor(Date.now() / 1000));
+        }
+        releasesUrl = `${GITHUB_RELEASES_URL}/latest`;
+        apkDownloadUrl = null;
+        error = 'GitHub API istek sınırı aşıldı (HTTP 403). Güncel APK için Sürümler sayfasını açabilirsin.';
+      } else {
+        errorType = 'http';
+        error = `GitHub HTTP ${status}`;
+      }
     }
   } catch (err) {
+    errorType = typeof navigator !== 'undefined' && navigator.onLine === false ? 'offline' : 'network';
     error = err instanceof Error ? err.message : 'GitHub bağlantısı kurulamadı.';
   }
 
@@ -206,6 +253,8 @@ export async function checkGithubUpdates(): Promise<GithubUpdateInfo> {
     hasUpdate: hasNewerRelease || swUpdated,
     swUpdated,
     error,
+    errorType,
+    retryAfterSec,
   };
 }
 

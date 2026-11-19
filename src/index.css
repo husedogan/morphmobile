@@ -11,8 +11,12 @@
   --line: #283648;
   --accent: #E94F78;
   --accent-end: #42C9D9;
+  --accent-btn-start: #CF446A;
+  --accent-btn-end: #298090;
   --accent-ink: #FFFFFF;
   --accent-single-ink: #FFFFFF;
+  --accent-text: #F27C9B;
+  --danger: #F87171;
 
   /* Unified safe-area insets for Capacitor 8 Android (--safe-area-inset-*) and iOS Safari (env) */
   --morph-safe-top: max(var(--safe-area-inset-top, 0px), env(safe-area-inset-top, 0px));
@@ -94,12 +98,12 @@ html[data-corners="soft"] .rounded-xl {
 }
 
 .morph-accent-btn {
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-end) 100%);
+  background: linear-gradient(135deg, var(--accent-btn-start, var(--accent)) 0%, var(--accent-btn-end, var(--accent-end)) 100%);
   color: var(--accent-ink);
 }
 
 .morph-accent-solid {
-  background-color: var(--accent);
+  background-color: var(--accent-btn-start, var(--accent));
   color: var(--accent-single-ink);
 }
 

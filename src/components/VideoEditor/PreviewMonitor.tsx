@@ -44,6 +44,7 @@ interface PreviewMonitorProps {
   isPlaying: boolean;
   isInGap: boolean;
   isPortraitMode: boolean;
+  isInspectorOpen?: boolean;
   isFullscreenPreview: boolean;
   previewHeightVh: number;
   isResizingPreview: boolean;
@@ -103,6 +104,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
   isPlaying,
   isInGap,
   isPortraitMode,
+  isInspectorOpen = false,
   isFullscreenPreview,
   previewHeightVh,
   isResizingPreview,
@@ -182,7 +184,9 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
     <div
       style={
         !isFullscreenPreview && isPortraitMode
-          ? {height: `${previewHeightVh}vh`, minHeight: '190px', maxHeight: '62vh'}
+          ? isInspectorOpen
+            ? {height: 'clamp(146px, 24dvh, 215px)', minHeight: '146px', maxHeight: '215px'}
+            : {height: `${previewHeightVh}dvh`, minHeight: '170px', maxHeight: '52dvh'}
           : undefined
       }
       className={`flex flex-col bg-[#07080B] ${
@@ -196,7 +200,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
       }`}
     >
       {/* Clean Unobstructed Video Viewport */}
-      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#050608] px-2 py-2 sm:px-4">
+      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#050608] px-1.5 py-1 sm:px-3 sm:py-1.5">
         {project.aspectRatio !== 'orig' && project.fitMode === 'blur' && blurBgVideoSrc && !isInGap && (
           <video
             src={blurBgVideoSrc}
@@ -209,7 +213,9 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
 
         <div
           ref={previewStageRef}
-          className="relative flex h-full max-h-full max-w-full items-center justify-center overflow-hidden rounded-md bg-black shadow-[0_14px_40px_rgba(0,0,0,0.75)] ring-1 ring-white/[0.08]"
+          className={`relative flex h-full max-h-full max-w-full items-center justify-center overflow-hidden rounded-md bg-black shadow-[0_14px_40px_rgba(0,0,0,0.75)] ring-1 ring-white/[0.08] ${
+            project.aspectRatio === 'orig' ? 'w-full' : ''
+          }`}
           style={{
             aspectRatio:
               project.aspectRatio === '1:1'

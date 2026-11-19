@@ -89,6 +89,7 @@ import {
   loadPrefs,
   saveExportItems,
   savePrefs,
+  subscribeLibraryChanges,
 } from './engine/libraryDb';
 import {downloadBuiltInLink} from './engine/linkDownloader';
 import {
@@ -237,12 +238,141 @@ export default function App() {
   }, [prefs]);
 
   useEffect(() => {
-    loadLibraryItems().then(setLibrary);
+    const refreshLibrary = () => {
+      loadLibraryItems().then(setLibrary).catch(() => {});
+    };
+    refreshLibrary();
+    const unsub = subscribeLibraryChanges(refreshLibrary);
     checkGithubUpdates().then(setUpdateInfo).catch(() => {});
     if (isNativeApp()) {
       ensureStoragePermission(true).catch(() => {});
     }
+    return unsub;
   }, []);
+
+  useEffect(() => {
+    if (tab === 'library') {
+      loadLibraryItems().then(setLibrary).catch(() => {});
+    }
+  }, [tab]);
+
+  const resetNavigationFlow = useCallback(() => {
+    setDirectTool(null);
+    setDirectFormat(null);
+    setDirectServerTool(null);
+    setToolMode(null);
+  }, []);
+
+  // Global Escape key closes top-most overlay/modal (U-9)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (previewTarget) {
+        e.preventDefault();
+        setPreviewTarget(null);
+        setSourcePreviewText(null);
+        setSourcePreviewUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return null;
+        });
+      } else if (customizeModal.open) {
+        e.preventDefault();
+        setCustomizeModal((m) => ({...m, open: false}));
+      } else if (showManageTools) {
+        e.preventDefault();
+        setShowManageTools(false);
+      } else if (showFileActions) {
+        e.preventDefault();
+        setShowFileActions(false);
+      } else if (wheelKind) {
+        e.preventDefault();
+        setWheelKind(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [previewTarget, customizeModal.open, showManageTools, showFileActions, wheelKind]);
+
+  // Android / browser hardware Back button closes modals/tool flows instead of exiting app (U-10, A-9)
+  const hasOverlayOrSubView = Boolean(
+    previewTarget ||
+      customizeModal.open ||
+      showManageTools ||
+      showFileActions ||
+      wheelKind ||
+      toolMode ||
+      job.status === 'done' ||
+      job.status === 'failed' ||
+      tab !== 'studio'
+  );
+  const pushedHistoryRef = useRef(false);
+
+  useEffect(() => {
+    if (hasOverlayOrSubView && !pushedHistoryRef.current) {
+      try {
+        window.history.pushState({morphLayer: true}, '');
+        pushedHistoryRef.current = true;
+      } catch {
+        // Ignore restricted history environments
+      }
+    } else if (!hasOverlayOrSubView) {
+      pushedHistoryRef.current = false;
+    }
+  }, [hasOverlayOrSubView]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      pushedHistoryRef.current = false;
+      if (previewTarget) {
+        setPreviewTarget(null);
+        setSourcePreviewText(null);
+        setSourcePreviewUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return null;
+        });
+        return;
+      }
+      if (customizeModal.open) {
+        setCustomizeModal((m) => ({...m, open: false}));
+        return;
+      }
+      if (showManageTools) {
+        setShowManageTools(false);
+        return;
+      }
+      if (showFileActions) {
+        setShowFileActions(false);
+        return;
+      }
+      if (wheelKind) {
+        setWheelKind(null);
+        return;
+      }
+      if (job.status === 'done' || job.status === 'failed') {
+        setJob({status: 'idle'});
+        return;
+      }
+      if (toolMode) {
+        resetNavigationFlow();
+        return;
+      }
+      if (tab !== 'studio') {
+        setTab('studio');
+      }
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [
+    previewTarget,
+    customizeModal.open,
+    showManageTools,
+    showFileActions,
+    wheelKind,
+    job.status,
+    toolMode,
+    tab,
+    resetNavigationFlow,
+  ]);
 
   // Keep screen awake during active encoding/downloading jobs and notify if completed in background
   useEffect(() => {
@@ -1180,20 +1310,24 @@ export default function App() {
         clearFiles();
         break;
       case 'nav:studio':
-        setToolMode(null);
+        setJob({status: 'idle'});
+        resetNavigationFlow();
         setTab('studio');
         break;
       case 'nav:library':
-        setToolMode(null);
+        setJob({status: 'idle'});
+        resetNavigationFlow();
         setTab('library');
         break;
       case 'nav:server':
-        setToolMode(null);
+        setJob({status: 'idle'});
+        resetNavigationFlow();
         setSettingsCategory('downloads');
         setTab('settings');
         break;
       case 'nav:settings':
-        setToolMode(null);
+        setJob({status: 'idle'});
+        resetNavigationFlow();
         setSettingsCategory('appearance');
         setTab('settings');
         break;
@@ -1231,12 +1365,13 @@ export default function App() {
           {/* Zone 1: Single-line Brand Wordmark */}
           <button
             type="button"
+            aria-label={`Morph — ${t('Studio', lang)}`}
             onClick={() => {
               setJob({status: 'idle'});
-              setToolMode(null);
+              resetNavigationFlow();
               setTab('studio');
             }}
-            className="flex items-center gap-2 whitespace-nowrap shrink-0 text-left"
+            className="flex min-h-[44px] items-center gap-2 whitespace-nowrap shrink-0 text-left"
           >
             <img
               src={isDark ? '/morph-wordmark.png' : '/morph-wordmark-light.png'}
@@ -1260,7 +1395,7 @@ export default function App() {
                   type="button"
                   onClick={() => {
                     setJob({status: 'idle'});
-                    setToolMode(null);
+                    resetNavigationFlow();
                     setTab(id);
                   }}
                   className={`whitespace-nowrap shrink-0 border-b-2 py-1 text-sm font-semibold transition-colors ${
@@ -1286,14 +1421,14 @@ export default function App() {
               onClick={() => {
                 setShowGearCloud(false);
                 setJob({status: 'idle'});
-                setToolMode(null);
+                resetNavigationFlow();
                 setSettingsCategory('appearance');
                 setTab('settings');
               }}
               onFocus={() => setShowGearCloud(true)}
               onBlur={() => setShowGearCloud(false)}
               aria-label={t('Settings', lang)}
-              className={`flex h-10 w-10 items-center justify-center rounded-full border transition-colors ${
+              className={`flex h-11 w-11 items-center justify-center rounded-full border transition-colors ${
                 tab === 'settings' && !toolMode
                   ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent)]'
                   : 'border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] hover:border-[var(--accent)]'
@@ -1319,6 +1454,7 @@ export default function App() {
       <main className="pb-safe">
         {job.status === 'done' ? (
           <ResultView
+            key={`result-${lang}-${job.result.items[0]?.id ?? 'done'}`}
             result={job.result}
             lang={lang}
             onDownloadItem={handleSaveOrDownload}
@@ -1326,13 +1462,20 @@ export default function App() {
             onDownloadAll={() => handleDownloadAll(job.result.items)}
             onOpenLibrary={() => {
               setJob({status: 'idle'});
-              setToolMode(null);
+              resetNavigationFlow();
               setTab('library');
             }}
-            onNewTask={() => {
+            onKeepFiles={() => {
               setJob({status: 'idle'});
-              setToolMode(null);
+              resetNavigationFlow();
               setTab('studio');
+            }}
+            onNewTask={() => {
+              clearFiles();
+              setJob({status: 'idle'});
+              resetNavigationFlow();
+              setTab('studio');
+              showToast(lang === 'tr' ? 'Dosyalar temizlendi' : 'Files cleared');
             }}
           />
         ) : job.status === 'failed' ? (

@@ -85,6 +85,12 @@ jobs:
       - name: Prepare Capacitor Android project
         env:
           CAPACITOR_TELEMETRY: 'false'
+          MORPH_REQUIRE_SIGNING: 'true'
+          MORPH_ENABLE_SELF_UPDATE_APK: 'true'
+          MORPH_KEYSTORE_BASE64: ${{ secrets.MORPH_KEYSTORE_BASE64 }}
+          MORPH_KEYSTORE_PASSWORD: ${{ secrets.MORPH_KEYSTORE_PASSWORD }}
+          MORPH_KEY_ALIAS: ${{ secrets.MORPH_KEY_ALIAS }}
+          MORPH_KEY_PASSWORD: ${{ secrets.MORPH_KEY_PASSWORD }}
         run: |
           if [ ! -d "android" ]; then
             npx cap add android
@@ -92,10 +98,16 @@ jobs:
           npx cap sync android
           node scripts/prepare-android.mjs
 
-      - name: Verify permanent signing key & Build Android APK
+      - name: Verify signing key & Build Android APK
         working-directory: android
+        env:
+          MORPH_KEYSTORE_PASSWORD: ${{ secrets.MORPH_KEYSTORE_PASSWORD }}
         run: |
-          keytool -list -keystore app/morph-release.p12 -storepass morphstudio2026 -storetype PKCS12
+          if [ -z "$MORPH_KEYSTORE_PASSWORD" ] || [ ! -f "app/morph-release.p12" ]; then
+            echo "ERROR: Signing keystore or password secret is missing." >&2
+            exit 1
+          fi
+          keytool -list -keystore app/morph-release.p12 -storepass "$MORPH_KEYSTORE_PASSWORD" -storetype PKCS12 >/dev/null
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
 
@@ -128,7 +140,7 @@ jobs:
             ### Morph ${{ steps.meta.outputs.version }} (${{ steps.meta.outputs.channel }})
 
             - **Android Kurulum Paketi (APK):** `Morph-${{ steps.meta.outputs.tag }}.apk`
-            - **Canlı Web & PWA (Tarayıcı / iOS / Masaüstü / Android):** [morph-ucanbizon.vercel.app](https://morph-ucanbizon.vercel.app)
+            - **Canlı Web & PWA (Tarayıcı / iOS / Masaüstü / Android):** [morphmobile.vercel.app](https://morphmobile.vercel.app)
             - **Doğrulama Özeti:** `checksums.sha256`
           files: |
             release-assets/Morph-${{ steps.meta.outputs.tag }}.apk

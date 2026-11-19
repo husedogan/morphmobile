@@ -1,4 +1,4 @@
-import React, {useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {
   Archive,
   Clock,
@@ -62,6 +62,21 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
     setPreviewItem(null);
   };
 
+  useEffect(() => {
+    if (!confirmClear && !previewItem) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (previewItem) {
+          closePreview();
+        } else if (confirmClear) {
+          setConfirmClear(false);
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [confirmClear, previewItem]);
+
   const filterTabs: Array<{
     id: FilterKind;
     label: string;
@@ -81,18 +96,18 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
           <h1 className="truncate text-2xl font-extrabold tracking-tight text-[var(--ink)] sm:text-3xl">
             {t('Library', lang)}
           </h1>
-          <p className="mt-0.5 truncate text-xs text-[var(--muted)] sm:text-sm">
-            {items.length === 0
-              ? t('LibrarySubtitleEmpty', lang)
-              : `${t('HistoryLabel', lang)} · ${items.length} ${t('HistoryRecords', lang)}`}
-          </p>
+          {items.length > 0 && (
+            <p className="mt-0.5 truncate text-xs text-[var(--muted)] sm:text-sm">
+              {`${t('HistoryLabel', lang)} · ${items.length} ${t('HistoryRecords', lang)}`}
+            </p>
+          )}
         </div>
 
         {items.length > 0 && (
           <button
             type="button"
             onClick={() => setConfirmClear(true)}
-            className="flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3.5 text-xs font-semibold whitespace-nowrap text-[var(--accent)] hover:border-[var(--accent)] sm:min-h-[42px] sm:px-4"
+            className="flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3.5 text-xs font-semibold whitespace-nowrap text-[var(--danger)] hover:border-[var(--danger)] sm:px-4"
           >
             <Trash2 className="h-3.5 w-3.5 shrink-0" />
             <span>{t('ClearLibrary', lang)}</span>
@@ -207,6 +222,9 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
       {/* Confirm Clear Modal */}
       {confirmClear && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('ConfirmClearLibrary', lang)}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
           onClick={() => setConfirmClear(false)}
         >
