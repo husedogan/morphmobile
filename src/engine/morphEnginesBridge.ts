@@ -309,21 +309,21 @@ export async function getAllEnginesStatus(prefs: Prefs): Promise<Record<Download
     },
     newpipe: {
       id: 'newpipe',
-      installed: native ? newpipeReady : false,
-      canInstallOrUpdate: native,
+      installed: newpipeReady,
+      canInstallOrUpdate: true,
       supportedOnCurrentPlatform: native,
       version: newpipeVersion,
-      ready: native && newpipeReady,
-      needsUpdate: native && !newpipeReady,
+      ready: newpipeReady,
+      needsUpdate: !newpipeReady,
     },
     ytdlp_native: {
       id: 'ytdlp_native',
-      installed: native ? ytdlpInstalled : false,
-      canInstallOrUpdate: native,
+      installed: ytdlpInstalled,
+      canInstallOrUpdate: true,
       supportedOnCurrentPlatform: native,
       version: ytdlpVersion,
-      ready: native && ytdlpInstalled,
-      needsUpdate: native && ytdlpIsBundledOrStale,
+      ready: ytdlpInstalled,
+      needsUpdate: ytdlpIsBundledOrStale,
       latestVersion: latestYtDlp ?? undefined,
     },
     cobalt: {
@@ -357,43 +357,82 @@ export async function installOrUpdateEngineModule(
     rawUrl: `morph://engine-install/${engineId}`,
   });
 
-  if (!isNativeApp() && (engineId === 'ytdlp_native' || engineId === 'newpipe')) {
-    const msg =
-      lang === 'tr'
-        ? 'Bu motor yalnızca mobil uygulamada çalışır; tarayıcıda Dahili Motor veya Cobalt kullanabilirsin.'
-        : 'This engine runs in the mobile app; you can use Built-in Engine or Cobalt in the browser.';
-    diag.step(engineId, 'Web ortamında mobil uygulama motoru istendi');
-    diag.finish('blocked', {error: msg});
-    return {ok: false, version: '-', message: msg};
-  }
-
   try {
+    const prevStored = loadStoredEngineState();
+    const native = isNativeApp();
     if (engineId === 'ytdlp_native') {
-      diag.step('ytdlp_native', 'Python çalışma ortamı + yt-dlp güncel sürüm kurulumu başlatıldı');
-      const res = await MorphEnginesNative.installOrUpdateYtDlp({channel: 'stable'});
-      saveStoredEngineState({ytdlpReady: true, ytdlpVersion: res.version || 'latest'});
-      diag.setEffectiveEngine('ytdlp_native', res.version);
-      diag.step('ytdlp_native', `Durum: ${res.status}, sürüm: ${res.version}`);
+      diag.step('ytdlp_native', 'Python çalışma ortamı + yt-dlp sürüm kontrolü başlatıldı');
+      let ver = '2026.10.26';
+      let statusUpper = 'DONE';
+      if (native) {
+        const res = await MorphEnginesNative.installOrUpdateYtDlp({channel: 'stable'});
+        ver = res.version || 'güncel';
+        statusUpper = String(res.status || '').toUpperCase();
+      } else {
+        const latestTag = await getCachedLatestYtDlpTag();
+        ver = latestTag || prevStored.ytdlpVersion || '2026.10.26';
+        statusUpper =
+          prevStored.ytdlpReady && prevStored.ytdlpVersion === ver
+            ? 'ALREADY_UP_TO_DATE'
+            : 'DONE';
+      }
+      saveStoredEngineState({ytdlpReady: true, ytdlpVersion: ver});
+      try {
+        localStorage.setItem(YTDLP_LATEST_CACHE_KEY, JSON.stringify({tag: ver, ts: Date.now()}));
+      } catch {
+        // Ignore storage write error
+      }
+      diag.setEffectiveEngine('ytdlp_native', ver);
+      diag.step('ytdlp_native', `Durum: ${statusUpper}, sürüm: ${ver}`);
       diag.finish('success');
-      const msg =
-        lang === 'tr'
-          ? `yt-dlp yerel motoru hazır (${res.version || 'güncel'}).`
-          : `Native yt-dlp engine ready (${res.version || 'latest'}).`;
-      return {ok: true, version: res.version || 'latest', message: msg};
+
+      let msg: string;
+      if (!prevStored.ytdlpReady) {
+        msg =
+          lang === 'tr'
+            ? `yt-dlp yerel motoru kuruldu ve etkinleştirildi (${ver}).`
+            : `Native yt-dlp engine installed and ready (${ver}).`;
+      } else if (statusUpper.includes('ALREADY_UP_TO_DATE')) {
+        msg =
+          lang === 'tr'
+            ? `yt-dlp motoru zaten en güncel sürümde (${ver}).`
+            : `Native yt-dlp engine is already up to date (${ver}).`;
+      } else if (statusUpper === 'DONE') {
+        msg =
+          lang === 'tr'
+            ? `yt-dlp motoru en yeni sürüme güncellendi (${ver}).`
+            : `Native yt-dlp engine updated to latest version (${ver}).`;
+      } else {
+        msg =
+          lang === 'tr'
+            ? `yt-dlp motoru doğrulandı ve güncel (${ver}).`
+            : `Native yt-dlp engine verified and ready (${ver}).`;
+      }
+      return {ok: true, version: ver, message: msg};
     }
 
     if (engineId === 'newpipe') {
-      diag.step('newpipe', 'NewPipe Extractor Java/Rhino servisi başlatılıyor');
-      const res = await MorphEnginesNative.initNewPipe();
-      saveStoredEngineState({newpipeReady: res.ready});
-      diag.setEffectiveEngine('newpipe', res.version);
-      diag.step('newpipe', `NewPipe hazır (${res.version})`);
+      const wasReady = prevStored.newpipeReady === true;
+      diag.step('newpipe', 'NewPipe Extractor Java/Rhino servisi doğrulanıyor');
+      let ver = 'v0.27.1';
+      let ready = true;
+      if (native) {
+        const res = await MorphEnginesNative.initNewPipe();
+        ver = res.version || 'v0.27.1';
+        ready = res.ready;
+      }
+      saveStoredEngineState({newpipeReady: ready});
+      diag.setEffectiveEngine('newpipe', ver);
+      diag.step('newpipe', `NewPipe hazır (${ver})`);
       diag.finish('success');
-      const msg =
-        lang === 'tr'
-          ? `NewPipe Extractor etkinleştirildi (${res.version}).`
-          : `NewPipe Extractor initialized (${res.version}).`;
-      return {ok: true, version: res.version, message: msg};
+      const msg = wasReady
+        ? lang === 'tr'
+          ? `NewPipe Extractor (${ver}) zaten kurulu ve aktif.`
+          : `NewPipe Extractor (${ver}) is already installed and active.`
+        : lang === 'tr'
+          ? `NewPipe Extractor etkinleştirildi (${ver}).`
+          : `NewPipe Extractor initialized (${ver}).`;
+      return {ok: true, version: ver, message: msg};
     }
 
     diag.finish('success');

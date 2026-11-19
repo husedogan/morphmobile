@@ -1,6 +1,6 @@
 # Morph
 
-[![Morph Version](https://img.shields.io/badge/Morph-1.1.13-42C9D9?style=flat-square)](https://github.com/husedogan/morphmobile/releases)
+[![Morph Version](https://img.shields.io/badge/Morph-1.1.15-42C9D9?style=flat-square)](https://github.com/husedogan/morphmobile/releases)
 [![Web & PWA (Vercel)](https://img.shields.io/badge/Web_%26_PWA-morph--ucanbizon.vercel.app-FF3B6B?style=flat-square)](https://morph-ucanbizon.vercel.app)
 [![Android APK](https://img.shields.io/github/v/release/husedogan/morphmobile?label=APK%20Release&color=42C9D9&style=flat-square)](https://github.com/husedogan/morphmobile/releases)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/husedogan/morphmobile/build-apk.yml?branch=main&label=APK%20Build&style=flat-square)](https://github.com/husedogan/morphmobile/actions)

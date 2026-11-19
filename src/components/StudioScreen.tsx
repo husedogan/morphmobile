@@ -131,7 +131,19 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
           {files.length === 0 ? t('HeroTitleEmpty', lang) : t('HeroTitleReady', lang)}
         </h1>
         <p className="mt-1.5 text-sm leading-snug text-[var(--muted)] sm:text-[15px]">
-          {t('HeroSubtitle', lang)}
+          {(() => {
+            const raw = t('HeroSubtitle', lang);
+            const parts = raw.split(/;\s*|\s*—\s*/);
+            if (parts.length === 2) {
+              return (
+                <>
+                  <span className="block sm:inline">{parts[0]}; </span>
+                  <span className="block sm:inline">{parts[1]}</span>
+                </>
+              );
+            }
+            return raw;
+          })()}
         </p>
       </div>
 
@@ -522,7 +534,9 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
 
       {/* Clean Studio Footer Note */}
       <footer className="mt-4 text-center">
-        <p className="text-[11px] font-medium text-[var(--muted)]">{t('StudioFooterNote', lang)}</p>
+        <p className="truncate text-[10.5px] font-medium whitespace-nowrap text-[var(--muted)] sm:text-xs">
+          {t('StudioFooterNote', lang)}
+        </p>
       </footer>
     </div>
   );

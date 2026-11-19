@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ArrowLeft,
+  Camera,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -10,7 +11,6 @@ import {
   FlipVertical,
   Gauge,
   Grid,
-  Image as ImageIcon,
   Music,
   Palette,
   Pause,
@@ -31,6 +31,9 @@ import {
 } from 'lucide-react';
 import {Lang, t} from '../data/i18n';
 import {PickedFile} from '../data/models';
+
+const TRANSPARENT_POSTER =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
 export type VideoEditorTab = 'trim' | 'transform' | 'color' | 'text' | 'fx' | 'export';
 export type CropAspect = 'orig' | 'free' | '1:1' | '16:9' | '9:16' | '4:5';
@@ -1262,775 +1265,173 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const inPct = duration > 0 ? (state.startSec / duration) * 100 : 0;
   const outPct = duration > 0 ? (effectiveEnd / duration) * 100 : 100;
   const playPct = duration > 0 ? (playhead / duration) * 100 : 0;
+  const isTrimmed = state.startSec > 0.05 || (duration > 0 && effectiveEnd < duration - 0.05);
 
-  return (
-    <div className="morph-bg fixed inset-0 z-40 flex flex-col text-[var(--ink)] select-none">
-      {/* 1. Pro NLE Top Studio Bar */}
-      <header className="shrink-0 border-b border-[var(--line)] bg-[var(--paper)]/95 pt-safe backdrop-blur-md">
-        <div className="flex h-13 items-center justify-between gap-2 px-3 sm:px-5">
-          <div className="flex min-w-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={onBack}
-              aria-label={t('Back', lang)}
-              className="flex h-9.5 w-9.5 shrink-0 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] hover:border-[var(--accent)]"
-            >
-              <ArrowLeft className="h-4.5 w-4.5" />
-            </button>
-            <div className="min-w-0">
-              <p className="truncate text-xs font-extrabold leading-tight text-[var(--ink)] sm:text-sm">
-                {file.name}
-              </p>
-              <p className="font-mono-num truncate text-[10px] font-semibold text-[var(--muted)]">
-                {activeChips.join(' · ')}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-1.5">
-            <button
-              type="button"
-              onPointerDown={() => setIsComparing(true)}
-              onPointerUp={() => setIsComparing(false)}
-              onPointerLeave={() => setIsComparing(false)}
-              onPointerCancel={() => setIsComparing(false)}
-              title={t('VeCompareHold', lang)}
-              className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-colors ${
-                isComparing
-                  ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--accent)]'
-                  : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)]'
-              }`}
-            >
-              <Eye className="h-4 w-4" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowGuides((g) => !g)}
-              title={t('VeSafeGuides', lang)}
-              className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-colors ${
-                showGuides
-                  ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--accent)]'
-                  : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)]'
-              }`}
-            >
-              <Grid className="h-4 w-4" />
-            </button>
-
-            <button
-              type="button"
-              onClick={handleToggleOrientation}
-              title={t('VeLandscapeToggle', lang)}
-              className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-colors ${
-                isSideBySide
-                  ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--accent)]'
-                  : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)]'
-              }`}
-            >
-              <Smartphone className={`h-4 w-4 transition-transform ${isSideBySide ? 'rotate-90' : ''}`} />
-            </button>
-
-            <select
-              aria-label={t('VeResolution', lang)}
-              value={state.resolution}
-              onChange={(e) =>
-                commitState((s) => ({
-                  ...s,
-                  resolution: e.target.value as VideoEditorState['resolution'],
-                }))
-              }
-              className="h-9 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-2 text-[11px] font-bold text-[var(--ink)] outline-none focus:border-[var(--accent)]"
-            >
-              <option value="orig">{t('Original', lang)}</option>
-              <option value="1080">1080p</option>
-              <option value="720">720p</option>
-              <option value="480">480p</option>
-            </select>
-
-            <button
-              type="button"
-              onClick={() => {
-                setPlaying(false);
-                onExport(buildStudioOptions('export'));
-              }}
-              className="morph-accent-btn flex h-9 items-center gap-1 rounded-full px-3 text-xs font-bold shadow-md transition-transform active:scale-95"
-            >
-              <Check className="h-3.5 w-3.5" />
-              <span>{t('Export', lang)}</span>
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Responsive Workspace: Vertical in Portrait, Side-by-Side Split Studio in Landscape */}
+  // CapCut & VN Video Editor Contextual Tool Drawer + Bottom 6-Tab Icon Dock
+  const toolInspectorAndDock = (
+    <div
+      className={`flex flex-col ${
+        isSideBySide
+          ? 'min-h-0 w-[46%] max-w-[460px] shrink-0 justify-between rounded-2xl border border-white/10 bg-[#0D111A] p-2.5 shadow-xl'
+          : 'shrink-0 px-2.5 pb-safe pt-1 sm:px-5'
+      }`}
+    >
       <div
-        className={`flex min-h-0 flex-1 ${
-          isSideBySide ? 'flex-row gap-2 px-3 pb-safe pt-2' : 'flex-col'
-        }`}
-      >
-        {/* Left/Top Column: Monitor Stage + Transport Bar */}
-        <div
-          className={`flex min-h-0 flex-col ${
-            isSideBySide ? 'min-w-0 flex-1' : 'min-h-0 flex-1'
-          }`}
-        >
-          {/* 2. Pro Monitor Stage (Interactive On-Screen Crop, Live Blur Pad, Color Grade, Fade, Text, Safe Guides) */}
-          <div
-            ref={stageRef}
-            onClick={showCropEditor ? undefined : togglePlay}
-            className={`relative flex flex-1 min-h-[140px] items-center justify-center overflow-hidden rounded-2xl border border-[var(--line)]/85 bg-[#06090F] ${
-              isSideBySide ? '' : 'mx-3 mt-2'
-            } ${showCropEditor ? '' : 'cursor-pointer'}`}
-          >
-        <div
-          className="relative flex items-center justify-center overflow-hidden bg-[#06090F]"
-          style={{
-            width: monitorGeometry.frameW,
-            height: monitorGeometry.frameH,
-          }}
-        >
-          {/* Blurred background replica when Aspect Fit Mode === 'blur' */}
-          {monitorGeometry.mode === 'canvas' && state.fitMode === 'blur' && videoUrl && !isComparing && (
-            <video
-              ref={bgBlurVideoRef}
-              src={videoUrl}
-              muted
-              playsInline
-              preload="auto"
-              className="pointer-events-none absolute shrink-0 object-cover opacity-80"
-              style={{
-                width: monitorGeometry.bgElemW,
-                height: monitorGeometry.bgElemH,
-                filter: `${liveCssFilter} blur(20px)`,
-                transform: `rotate(${state.rotateDeg}deg) scaleX(${state.flipH ? -1 : 1}) scaleY(${state.flipV ? -1 : 1}) scale(${(state.zoom * 1.12).toFixed(2)})`,
-              }}
-            />
-          )}
-
-          {/* Primary Foreground Video inside Cropped Viewport Wrapper */}
-          {videoUrl && (
-            <div
-              className={
-                monitorGeometry.mode === 'cropped-preview'
-                  ? 'pointer-events-none absolute flex items-center justify-center overflow-hidden'
-                  : 'pointer-events-none relative z-[1] flex items-center justify-center'
-              }
-              style={
-                monitorGeometry.mode === 'cropped-preview'
-                  ? {
-                      left: monitorGeometry.offsetX,
-                      top: monitorGeometry.offsetY,
-                      width: monitorGeometry.srcW,
-                      height: monitorGeometry.srcH,
-                    }
-                  : {
-                      width: monitorGeometry.srcW,
-                      height: monitorGeometry.srcH,
-                    }
-              }
-            >
-              <video
-                ref={videoRef}
-                src={videoUrl}
-                playsInline
-                preload="auto"
-                onLoadedMetadata={(e) => {
-                  const vid = e.currentTarget;
-                  const dur = Number.isFinite(vid.duration) ? vid.duration : 0;
-                  setDuration(dur);
-                  if (vid.videoWidth && vid.videoHeight) {
-                    setVideoDims({w: vid.videoWidth, h: vid.videoHeight});
-                  }
-                  setState((s) => ({
-                    ...s,
-                    endSec: s.endSec > 0 ? Math.min(dur, s.endSec) : dur,
-                  }));
-                  setHistory((h) =>
-                    h.map((item) => ({
-                      ...item,
-                      endSec: item.endSec > 0 ? Math.min(dur, item.endSec) : dur,
-                    }))
-                  );
-                }}
-                className="pointer-events-none shrink-0 object-contain"
-                style={{
-                  width: monitorGeometry.elemW,
-                  height: monitorGeometry.elemH,
-                  opacity: liveVideoFadeOpacity,
-                  filter: liveCssFilter,
-                  transform: isComparing
-                    ? 'none'
-                    : `rotate(${state.rotateDeg}deg) scaleX(${state.flipH ? -1 : 1}) scaleY(${state.flipV ? -1 : 1}) scale(${state.zoom.toFixed(2)})`,
-                }}
-              />
-            </div>
-          )}
-
-          {/* On-Screen Interactive 8-Handle Crop Box (active in Kadraj tab when Fit === Crop) */}
-          {showCropEditor && (
-            <div
-              onPointerDown={(e) => startCropDrag(e, 'move')}
-              onPointerMove={moveCropDrag}
-              onPointerUp={endCropDrag}
-              onPointerCancel={endCropDrag}
-              className="absolute z-[6] cursor-move touch-none border-[1.5px] border-[var(--accent)]"
-              style={{
-                left: state.cropBox.x * monitorGeometry.frameW,
-                top: state.cropBox.y * monitorGeometry.frameH,
-                width: state.cropBox.w * monitorGeometry.frameW,
-                height: state.cropBox.h * monitorGeometry.frameH,
-                boxShadow: '0 0 0 9999px rgba(6, 9, 15, 0.72)',
-              }}
-            >
-              {/* Rule-of-thirds internal alignment grid */}
-              <div
-                className={`pointer-events-none absolute inset-0 transition-opacity ${
-                  isDraggingCrop ? 'opacity-90' : 'opacity-45'
-                }`}
-              >
-                <div className="absolute inset-y-0 left-1/3 w-px bg-[var(--ink)]/25" />
-                <div className="absolute inset-y-0 left-2/3 w-px bg-[var(--ink)]/25" />
-                <div className="absolute inset-x-0 top-1/3 h-px bg-[var(--ink)]/25" />
-                <div className="absolute inset-x-0 top-2/3 h-px bg-[var(--ink)]/25" />
-              </div>
-
-              {/* Dimension badge inside crop frame */}
-              <span className="pointer-events-none absolute left-1.5 top-1.5 rounded-md bg-[#0B111B]/85 px-1.5 py-0.5 font-mono-num text-[9px] font-bold text-[var(--ink)]">
-                {targetDimsLabel}
-              </span>
-
-              {/* 4 L-Shaped Corner Resize Handles */}
-              <span
-                onPointerDown={(e) => startCropDrag(e, 'nw')}
-                onPointerMove={moveCropDrag}
-                onPointerUp={endCropDrag}
-                onPointerCancel={endCropDrag}
-                className="absolute -left-2 -top-2 h-6 w-6 cursor-nwse-resize touch-none"
-              >
-                <span className="absolute left-1.5 top-1.5 h-3.5 w-3.5 rounded-tl border-l-[3px] border-t-[3px] border-[var(--accent)]" />
-              </span>
-              <span
-                onPointerDown={(e) => startCropDrag(e, 'ne')}
-                onPointerMove={moveCropDrag}
-                onPointerUp={endCropDrag}
-                onPointerCancel={endCropDrag}
-                className="absolute -right-2 -top-2 h-6 w-6 cursor-nesw-resize touch-none"
-              >
-                <span className="absolute right-1.5 top-1.5 h-3.5 w-3.5 rounded-tr border-r-[3px] border-t-[3px] border-[var(--accent)]" />
-              </span>
-              <span
-                onPointerDown={(e) => startCropDrag(e, 'sw')}
-                onPointerMove={moveCropDrag}
-                onPointerUp={endCropDrag}
-                onPointerCancel={endCropDrag}
-                className="absolute -bottom-2 -left-2 h-6 w-6 cursor-nesw-resize touch-none"
-              >
-                <span className="absolute bottom-1.5 left-1.5 h-3.5 w-3.5 rounded-bl border-b-[3px] border-l-[3px] border-[var(--accent)]" />
-              </span>
-              <span
-                onPointerDown={(e) => startCropDrag(e, 'se')}
-                onPointerMove={moveCropDrag}
-                onPointerUp={endCropDrag}
-                onPointerCancel={endCropDrag}
-                className="absolute -bottom-2 -right-2 h-6 w-6 cursor-nwse-resize touch-none"
-              >
-                <span className="absolute bottom-1.5 right-1.5 h-3.5 w-3.5 rounded-br border-b-[3px] border-r-[3px] border-[var(--accent)]" />
-              </span>
-
-              {/* 4 Edge Pill Resize Handles */}
-              <span
-                onPointerDown={(e) => startCropDrag(e, 'n')}
-                onPointerMove={moveCropDrag}
-                onPointerUp={endCropDrag}
-                onPointerCancel={endCropDrag}
-                className="absolute -top-2 left-1/2 flex h-4 w-9 -translate-x-1/2 cursor-ns-resize items-center justify-center touch-none"
-              >
-                <span className="h-1 w-6 rounded-full bg-[var(--accent)]" />
-              </span>
-              <span
-                onPointerDown={(e) => startCropDrag(e, 's')}
-                onPointerMove={moveCropDrag}
-                onPointerUp={endCropDrag}
-                onPointerCancel={endCropDrag}
-                className="absolute -bottom-2 left-1/2 flex h-4 w-9 -translate-x-1/2 cursor-ns-resize items-center justify-center touch-none"
-              >
-                <span className="h-1 w-6 rounded-full bg-[var(--accent)]" />
-              </span>
-              <span
-                onPointerDown={(e) => startCropDrag(e, 'w')}
-                onPointerMove={moveCropDrag}
-                onPointerUp={endCropDrag}
-                onPointerCancel={endCropDrag}
-                className="absolute -left-2 top-1/2 flex h-9 w-4 -translate-y-1/2 cursor-ew-resize items-center justify-center touch-none"
-              >
-                <span className="h-6 w-1 rounded-full bg-[var(--accent)]" />
-              </span>
-              <span
-                onPointerDown={(e) => startCropDrag(e, 'e')}
-                onPointerMove={moveCropDrag}
-                onPointerUp={endCropDrag}
-                onPointerCancel={endCropDrag}
-                className="absolute -right-2 top-1/2 flex h-9 w-4 -translate-y-1/2 cursor-ew-resize items-center justify-center touch-none"
-              >
-                <span className="h-6 w-1 rounded-full bg-[var(--accent)]" />
-              </span>
-            </div>
-          )}
-
-          {/* Live Text / Watermark Overlay inside final cropped/framed bounds */}
-          {!isComparing && state.overlayText.trim() && (
-            <div
-              className="pointer-events-none absolute z-[4] flex items-center justify-center px-3"
-              style={{
-                left: showCropEditor ? state.cropBox.x * monitorGeometry.frameW : undefined,
-                top: showCropEditor ? state.cropBox.y * monitorGeometry.frameH : undefined,
-                width: monitorGeometry.cropW,
-                height: monitorGeometry.cropH,
-                alignItems:
-                  state.textPos === 'top'
-                    ? 'flex-start'
-                    : state.textPos === 'center'
-                      ? 'center'
-                      : 'flex-end',
-                paddingTop: state.textPos === 'top' ? '8%' : undefined,
-                paddingBottom: state.textPos === 'bottom' ? '8%' : undefined,
-              }}
-            >
-              <span
-                className="max-w-[90%] break-words text-center font-bold leading-snug"
-                style={{
-                  color: state.textColor,
-                  fontSize:
-                    state.textSize === 'sm' ? '12px' : state.textSize === 'lg' ? '20px' : '15px',
-                  padding: state.textBg ? '4px 10px' : undefined,
-                  borderRadius: state.textBg ? '8px' : undefined,
-                  backgroundColor: state.textBg ? 'rgba(10, 16, 26, 0.72)' : undefined,
-                  textShadow: state.textBg ? undefined : '0 2px 6px rgba(0,0,0,0.85)',
-                }}
-              >
-                {state.overlayText}
-              </span>
-            </div>
-          )}
-
-          {/* Rule of Thirds & Social Safe Margins Guide */}
-          {showGuides && !showCropEditor && (
-            <div
-              className="pointer-events-none absolute z-[5]"
-              style={{
-                width: monitorGeometry.cropW,
-                height: monitorGeometry.cropH,
-              }}
-            >
-              <div className="absolute inset-y-0 left-1/3 w-px bg-[var(--ink)]/25" />
-              <div className="absolute inset-y-0 left-2/3 w-px bg-[var(--ink)]/25" />
-              <div className="absolute inset-x-0 top-1/3 h-px bg-[var(--ink)]/25" />
-              <div className="absolute inset-x-0 top-2/3 h-px bg-[var(--ink)]/25" />
-              <div className="absolute inset-[10%] rounded-sm border border-dashed border-[var(--accent)]/65" />
-            </div>
-          )}
-        </div>
-
-        {/* Before / After Compare Pill */}
-        {isComparing && (
-          <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-lg bg-[#0B111B]/85 px-2.5 py-1 text-[11px] font-bold text-[var(--ink)]">
-            {lang === 'tr' ? 'ORİJİNAL' : 'ORIGINAL'}
-          </div>
-        )}
-
-        {/* Quick Play / Pause overlay toggle when editing on-screen crop handles */}
-        {showCropEditor && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              togglePlay();
-            }}
-            className="absolute bottom-2.5 right-2.5 z-10 flex h-8 items-center gap-1 rounded-full border border-[var(--line)] bg-[#0B111B]/85 px-2.5 text-[10px] font-bold text-[var(--ink)] backdrop-blur-sm hover:border-[var(--accent)]"
-          >
-            {playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3 fill-current" />}
-            <span>{playing ? (lang === 'tr' ? 'Duraklat' : 'Pause') : lang === 'tr' ? 'Oynat' : 'Play'}</span>
-          </button>
-        )}
-
-        {/* Subtle On-Screen Crop Hint Pill on Kadraj tab */}
-        {showCropEditor && !playing && (
-          <div className="pointer-events-none absolute left-3 top-2.5 z-10 rounded-lg bg-[#0B111B]/75 px-2 py-0.5 text-[10px] font-semibold text-[var(--muted)] backdrop-blur-sm">
-            {t('VeCropDragHint', lang)}
-          </div>
-        )}
-
-        {/* Center Play indicator when paused (hidden during crop-box handle editing so center stays clear) */}
-        {!playing && !showCropEditor && (
-          <div className="pointer-events-none absolute z-10 flex h-12 w-12 items-center justify-center rounded-full border border-[var(--line)] bg-[#0B111B]/75 text-[var(--ink)] shadow-lg backdrop-blur-sm">
-            <Play className="ml-0.5 h-5.5 w-5.5 fill-current" />
-          </div>
-        )}
-
-        {statusNotice && (
-          <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-xl border border-[var(--accent)]/60 bg-[var(--surface)]/95 px-3 py-1.5 text-center text-xs font-semibold text-[var(--ink)] shadow-lg">
-            {statusNotice}
-          </div>
-        )}
-      </div>
-
-      {/* 3. Pro Transport Bar (Frame Step, Play/Pause, Jump In/Out, Timecode, Undo/Redo) */}
-      <div className={`shrink-0 pt-1.5 ${isSideBySide ? '' : 'px-3 sm:px-5'}`}>
-        <div className="flex items-center justify-between gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5">
-          <div className="min-w-0 font-mono-num text-[11px] font-bold text-[var(--ink)]">
-            <span>{fmtTime(playhead)}</span>
-            <span className="hidden text-[var(--muted)] sm:inline"> / {fmtTime(duration)}</span>
-            <span className="ml-1.5 text-[var(--accent)]">({trimmedSpan.toFixed(1)}s)</span>
-          </div>
-
-          <div className="flex items-center gap-0.5 sm:gap-1">
-            <button
-              type="button"
-              onClick={() => {
-                setPlaying(false);
-                seekTo(state.startSec);
-              }}
-              aria-label="In"
-              className="flex h-8 w-7 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)]"
-            >
-              <SkipBack className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPlaying(false);
-                seekTo(playhead - 0.04);
-              }}
-              aria-label="-1 frame"
-              className="flex h-8 w-7 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)]"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={togglePlay}
-              aria-label={playing ? 'Pause' : 'Play'}
-              className="morph-accent-btn flex h-8.5 w-8.5 items-center justify-center rounded-full shadow"
-            >
-              {playing ? (
-                <Pause className="h-4 w-4 fill-current" />
-              ) : (
-                <Play className="ml-0.5 h-4 w-4 fill-current" />
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPlaying(false);
-                seekTo(playhead + 0.04);
-              }}
-              aria-label="+1 frame"
-              className="flex h-8 w-7 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)]"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPlaying(false);
-                seekTo(effectiveEnd);
-              }}
-              aria-label="Out"
-              className="flex h-8 w-7 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)]"
-            >
-              <SkipForward className="h-3.5 w-3.5" />
-            </button>
-          </div>
-
-          <div className="flex items-center gap-0.5">
-            <button
-              type="button"
-              onClick={handleUndo}
-              disabled={!canUndo}
-              aria-label={t('VeUndo', lang)}
-              className="flex h-8 w-7.5 items-center justify-center rounded-lg text-[var(--ink)] hover:bg-[var(--inset)] disabled:opacity-30"
-            >
-              <Undo2 className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={handleRedo}
-              disabled={!canRedo}
-              aria-label={t('VeRedo', lang)}
-              className="flex h-8 w-7.5 items-center justify-center rounded-lg text-[var(--ink)] hover:bg-[var(--inset)] disabled:opacity-30"
-            >
-              <Redo2 className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={handleResetAll}
-              aria-label={t('Reset', lang)}
-              className="flex h-8 w-7.5 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)]"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
-      </div>
-      </div>
-
-      {/* Right/Bottom Column: Multi-Track NLE Timeline + 6-Tab Dock */}
-      <div
-        className={`flex flex-col ${
+        className={
           isSideBySide
-            ? 'no-scrollbar w-[50%] max-w-[440px] shrink-0 justify-between gap-1.5 overflow-y-auto'
-            : 'shrink-0'
-        }`}
+            ? 'flex min-h-0 flex-1 flex-col justify-between'
+            : 'rounded-2xl border border-white/10 bg-[#0D111A] p-2.5 shadow-xl'
+        }
       >
-      {/* 4. Multi-Track NLE Timeline (V1 Video Filmstrip + T1 Text + A1 Waveform + Zoom) */}
-      <div className={`shrink-0 ${isSideBySide ? '' : 'px-3 pt-1.5 sm:px-5'}`}>
-        <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-2">
-          {/* Timeline Header Bar: Track Legend + Timeline Scale Zoom */}
-          <div className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
-            <div className="flex items-center gap-2 text-[10px] font-bold text-[var(--muted)]">
-              <span>{t('VeTrackVideo', lang)}</span>
-              <span>·</span>
-              <span>{t('VeTrackAudio', lang)}</span>
-              {state.overlayText.trim() && (
-                <>
-                  <span>·</span>
-                  <span className="text-[var(--accent)]">T1</span>
-                </>
-              )}
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="mr-0.5 text-[10px] font-semibold text-[var(--muted)]">
-                {t('VeTimelineZoom', lang)}
-              </span>
-              {([1, 2, 4] as const).map((z) => (
-                <button
-                  key={z}
-                  type="button"
-                  onClick={() => setTimelineZoom(z)}
-                  className={`h-5 rounded-md border px-1.5 font-mono-num text-[10px] font-bold ${
-                    timelineZoom === z
-                      ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
-                      : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
-                  }`}
-                >
-                  {z}×
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex items-stretch gap-2">
-            {/* Left Sticky Track Header Controls */}
-            <div className="flex w-13 shrink-0 flex-col justify-between gap-1">
-              <button
-                type="button"
-                onClick={() => commitState((s) => ({...s, mute: !s.mute}))}
-                className={`flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border text-[10px] font-semibold transition-colors ${
-                  state.mute
-                    ? 'border-[var(--accent)] bg-[var(--accent)]/18 text-[var(--ink)]'
-                    : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
-                }`}
-              >
-                {state.mute ? (
-                  <VolumeX className="h-3.5 w-3.5 text-[var(--accent)]" />
-                ) : (
-                  <Volume2 className="h-3.5 w-3.5" />
-                )}
-                <span className="leading-none">
-                  {state.mute ? t('VeMuteClip', lang) : lang === 'tr' ? 'Ses' : 'Audio'}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setPlaying(false);
-                  onExport(buildStudioOptions('snapshot'));
-                }}
-                className="flex h-6.5 items-center justify-center gap-1 rounded-lg border border-[var(--line)] bg-[var(--inset)] text-[10px] font-semibold text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]"
-                title={t('VeCaptureFrame', lang)}
-              >
-                <ImageIcon className="h-3 w-3" />
-                <span>{lang === 'tr' ? 'Kare' : 'Frame'}</span>
-              </button>
-            </div>
-
-            {/* Horizontally Scrollable Zoomable Multi-Track Canvas (no ugly scrollbar) */}
-            <div className="no-scrollbar min-w-0 flex-1 overflow-x-auto pb-0.5">
-              <div style={{width: `${timelineZoom * 100}%`, minWidth: '100%'}}>
-                {/* Timecode Ruler */}
-                <div className="mb-1 flex justify-between px-0.5 font-mono-num text-[9px] text-[var(--muted)]">
-                  <span>00:00</span>
-                  <span>{duration > 0 ? fmtShortTime(duration * 0.25) : ''}</span>
-                  <span>{duration > 0 ? fmtShortTime(duration * 0.5) : '00:00'}</span>
-                  <span>{duration > 0 ? fmtShortTime(duration * 0.75) : ''}</span>
-                  <span>{duration > 0 ? fmtShortTime(duration) : '00:00'}</span>
-                </div>
-
-                {/* V1 + T1 + A1 Scrubbable Track Stack */}
-                <div
-                  ref={trackRef}
-                  onPointerDown={(e) => handleTrackPointerDown(e, 'playhead')}
-                  onPointerMove={handleTrackPointerMove}
-                  onPointerUp={handleTrackPointerUp}
-                  onPointerCancel={handleTrackPointerUp}
-                  className="relative flex flex-col overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--inset)] touch-none"
-                >
-                  {/* Optional T1 Text Track Pill */}
-                  {state.overlayText.trim() && (
-                    <div
-                      className="pointer-events-none relative h-4 border-b border-[var(--line)] bg-[var(--paper)]/60"
-                    >
-                      <div
-                        className="absolute inset-y-0.5 flex items-center overflow-hidden rounded bg-[var(--accent)]/25 px-1.5 text-[9px] font-bold text-[var(--ink)]"
-                        style={{
-                          left: `${inPct}%`,
-                          width: `${Math.max(2, outPct - inPct)}%`,
-                        }}
-                      >
-                        <span className="truncate">T: {state.overlayText}</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* V1 Video Filmstrip Track */}
-                  <div className="pointer-events-none relative h-11 w-full">
-                    <div className="flex h-full w-full">
-                      {thumbnails.length > 0 ? (
-                        thumbnails.map((src, idx) => (
-                          <img
-                            key={idx}
-                            src={src}
-                            alt=""
-                            draggable={false}
-                            className="h-full flex-1 object-cover opacity-90"
-                          />
-                        ))
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-[10px] text-[var(--muted)]">
-                          {loadingThumbs ? t('VeTimelineLoading', lang) : file.name}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* A1 Audio Waveform Track */}
-                  <div className="pointer-events-none flex h-6 w-full items-center gap-px border-t border-[var(--line)]/70 bg-[var(--paper)]/75 px-0.5">
-                    {waveform.length > 0 ? (
-                      waveform.map((amp, idx) => (
-                        <span
-                          key={idx}
-                          className={`flex-1 rounded-full transition-opacity ${
-                            state.mute || state.volume === 0 ? 'opacity-20 bg-[var(--muted)]' : 'bg-[var(--accent)]/80'
-                          }`}
-                          style={{
-                            height: `${Math.round(amp * Math.min(1.3, state.volume / 100) * 18)}px`,
-                          }}
-                        />
-                      ))
-                    ) : (
-                      <div className="h-px w-full bg-[var(--muted)]/35" />
-                    )}
-                  </div>
-
-                  {/* Dimmed Trimmed-Out Regions across Full Stack */}
-                  {inPct > 0 && (
-                    <div
-                      className="pointer-events-none absolute inset-y-0 left-0 bg-[#06090F]/72"
-                      style={{width: `${inPct}%`}}
-                    />
-                  )}
-                  {outPct < 100 && (
-                    <div
-                      className="pointer-events-none absolute inset-y-0 right-0 bg-[#06090F]/72"
-                      style={{width: `${Math.max(0, 100 - outPct)}%`}}
-                    />
-                  )}
-
-                  {/* Active Selection Bracket */}
-                  <div
-                    className="pointer-events-none absolute inset-y-0 border-y-2 border-[var(--accent)]"
-                    style={{
-                      left: `${inPct}%`,
-                      width: `${Math.max(0, outPct - inPct)}%`,
-                    }}
-                  />
-
-                  {/* Draggable Trim In & Out Handles */}
-                  <div
-                    onPointerDown={(e) => handleTrackPointerDown(e, 'in')}
-                    onPointerMove={handleTrackPointerMove}
-                    onPointerUp={handleTrackPointerUp}
-                    onPointerCancel={handleTrackPointerUp}
-                    style={{left: `${inPct}%`}}
-                    className="absolute inset-y-0 z-10 flex w-3.5 cursor-ew-resize items-center justify-center rounded-l-lg bg-[var(--accent)] text-[var(--accent-ink,#ffffff)] shadow"
-                  >
-                    <span className="h-5 w-0.5 rounded-full bg-current opacity-85" />
-                  </div>
-                  <div
-                    onPointerDown={(e) => handleTrackPointerDown(e, 'out')}
-                    onPointerMove={handleTrackPointerMove}
-                    onPointerUp={handleTrackPointerUp}
-                    onPointerCancel={handleTrackPointerUp}
-                    style={{left: `calc(${outPct}% - 14px)`}}
-                    className="absolute inset-y-0 z-10 flex w-3.5 cursor-ew-resize items-center justify-center rounded-r-lg bg-[var(--accent)] text-[var(--accent-ink,#ffffff)] shadow"
-                  >
-                    <span className="h-5 w-0.5 rounded-full bg-current opacity-85" />
-                  </div>
-
-                  {/* Sleek Cyan/Accent Playhead Needle (no harsh white stripe) */}
-                  <div
-                    className="pointer-events-none absolute inset-y-0 z-20 w-[2px] bg-[var(--accent-end)] shadow-[0_0_8px_var(--accent-end)]"
-                    style={{left: `${Math.min(99.5, Math.max(0.2, playPct))}%`}}
-                  >
-                    <span className="absolute -left-[4px] top-0 h-2.5 w-2.5 rotate-45 rounded-[2px] bg-[var(--accent-end)] shadow" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 5. Pro 6-Tab Studio Control Dock */}
-      <div className={`shrink-0 ${isSideBySide ? '' : 'px-3 pb-safe pt-1.5 sm:px-5'}`}>
-        <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-2.5">
-          {/* TAB 1: TRIM & SPLIT */}
+        {/* Contextual Tool Drawer */}
+        <div className={isSideBySide ? 'no-scrollbar min-h-0 flex-1 overflow-y-auto pr-0.5' : ''}>
+          {/* TAB 1: CAPCUT & VN STYLE TRIM & SPLIT (KES & BÖL) */}
           {activeTab === 'trim' && (
             <div className="space-y-2">
-              <div className="grid grid-cols-2 gap-2">
+              {/* Top Row: 5 CapCut / VN Quick Clip Action Tiles */}
+              <div className="grid grid-cols-5 gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleSplitClick}
+                  className="group flex min-h-[46px] flex-col items-center justify-center gap-1 rounded-xl border border-[var(--accent)]/45 bg-[var(--accent)]/12 px-1 py-1.5 text-[var(--ink)] transition-all hover:border-[var(--accent)] active:scale-95"
+                >
+                  <Scissors className="h-4 w-4 text-[var(--accent)]" />
+                  <span className="truncate text-[10px] font-bold tracking-tight">
+                    {lang === 'tr' ? 'İmleçten Böl' : 'Split'}
+                  </span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => {
                     const nextIn = Math.min(effectiveEnd - 0.3, Math.max(0, playhead));
                     commitState((s) => ({...s, startSec: nextIn}));
                   }}
-                  className="flex min-h-[36px] items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2 text-xs font-semibold text-[var(--ink)] hover:border-[var(--accent)]"
+                  className="flex min-h-[46px] flex-col items-center justify-center gap-1 rounded-xl border border-white/10 bg-[#141A26] px-1 py-1.5 text-[var(--ink)] transition-all hover:border-[var(--accent)]/60 active:scale-95"
                 >
-                  [ {t('VeSetStart', lang)}
+                  <SkipBack className="h-4 w-4 text-[var(--accent-end)]" />
+                  <span className="truncate text-[10px] font-semibold tracking-tight">
+                    {lang === 'tr' ? 'Başı Kes' : 'Trim Start'}
+                  </span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => {
                     const nextOut = Math.max(state.startSec + 0.3, Math.min(duration || 9999, playhead));
                     commitState((s) => ({...s, endSec: nextOut}));
                   }}
-                  className="flex min-h-[36px] items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2 text-xs font-semibold text-[var(--ink)] hover:border-[var(--accent)]"
+                  className="flex min-h-[46px] flex-col items-center justify-center gap-1 rounded-xl border border-white/10 bg-[#141A26] px-1 py-1.5 text-[var(--ink)] transition-all hover:border-[var(--accent)]/60 active:scale-95"
                 >
-                  {t('VeSetEnd', lang)} ]
+                  <SkipForward className="h-4 w-4 text-[var(--accent-end)]" />
+                  <span className="truncate text-[10px] font-semibold tracking-tight">
+                    {lang === 'tr' ? 'Sonu Kes' : 'Trim End'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlaying(false);
+                    onExport(buildStudioOptions('snapshot'));
+                  }}
+                  className="flex min-h-[46px] flex-col items-center justify-center gap-1 rounded-xl border border-white/10 bg-[#141A26] px-1 py-1.5 text-[var(--ink)] transition-all hover:border-[var(--accent)]/60 active:scale-95"
+                >
+                  <Camera className="h-4 w-4 text-slate-300" />
+                  <span className="truncate text-[10px] font-semibold tracking-tight">
+                    {lang === 'tr' ? 'Kare Al' : 'Freeze'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={!isTrimmed}
+                  onClick={() =>
+                    commitState((s) => ({
+                      ...s,
+                      startSec: 0,
+                      endSec: duration > 0 ? duration : 0,
+                    }))
+                  }
+                  className="flex min-h-[46px] flex-col items-center justify-center gap-1 rounded-xl border border-white/10 bg-[#141A26] px-1 py-1.5 text-[var(--ink)] transition-all hover:border-[var(--accent)]/60 active:scale-95 disabled:opacity-35"
+                >
+                  <RotateCcw className="h-4 w-4 text-slate-300" />
+                  <span className="truncate text-[10px] font-semibold tracking-tight">
+                    {lang === 'tr' ? 'Tam Süre' : 'Full Clip'}
+                  </span>
                 </button>
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-1 font-mono-num text-[11px]">
+
+              {/* Bottom Row: VN-Style Symmetrical In / Duration / Out Micro-Trim Bar */}
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5 rounded-xl border border-white/10 bg-[#121722] px-2 py-1.5">
+                {/* IN Point Stepper */}
+                <div className="flex items-center justify-between gap-1">
                   <button
                     type="button"
-                    onClick={() => commitState((s) => ({...s, startSec: Math.max(0, s.startSec - 0.1)}))}
-                    className="rounded-lg border border-[var(--line)] bg-[var(--inset)] px-1.5 py-1 text-[10px] font-bold text-[var(--muted)] hover:text-[var(--ink)]"
+                    onClick={() =>
+                      commitState((s) => ({...s, startSec: Math.max(0, s.startSec - 0.1)}))
+                    }
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#1A2130] font-mono-num text-[11px] font-bold text-slate-300 hover:border-[var(--accent)] hover:text-white active:scale-95"
+                    title="-0.1s"
                   >
-                    -0.1
+                    −
                   </button>
-                  <span className="font-bold text-[var(--ink)]">{fmtTime(state.startSec)}</span>
-                  <span className="text-[var(--muted)]">→</span>
-                  <span className="font-bold text-[var(--ink)]">{fmtTime(effectiveEnd)}</span>
+                  <div className="min-w-0 text-center">
+                    <span className="block text-[8px] font-bold uppercase tracking-wider text-slate-400">
+                      {lang === 'tr' ? 'BAŞLANGIÇ' : 'IN'}
+                    </span>
+                    <span className="block font-mono-num text-[11px] font-extrabold text-white">
+                      {fmtTime(state.startSec)}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      commitState((s) => ({
+                        ...s,
+                        startSec: Math.min(effectiveEnd - 0.3, s.startSec + 0.1),
+                      }))
+                    }
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#1A2130] font-mono-num text-[11px] font-bold text-slate-300 hover:border-[var(--accent)] hover:text-white active:scale-95"
+                    title="+0.1s"
+                  >
+                    +
+                  </button>
+                </div>
+
+                {/* Selected Clip Duration Badge */}
+                <div className="flex flex-col items-center justify-center rounded-lg border border-[var(--accent)]/35 bg-[var(--accent)]/12 px-2.5 py-0.5">
+                  <span className="text-[8px] font-bold uppercase tracking-wider text-[var(--accent)]">
+                    {lang === 'tr' ? 'SEÇİLİ' : 'CLIP'}
+                  </span>
+                  <span className="font-mono-num text-[11px] font-extrabold text-white">
+                    {trimmedSpan.toFixed(1)}s
+                  </span>
+                </div>
+
+                {/* OUT Point Stepper */}
+                <div className="flex items-center justify-between gap-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      commitState((s) => ({
+                        ...s,
+                        endSec: Math.max(s.startSec + 0.3, (s.endSec || duration) - 0.1),
+                      }))
+                    }
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#1A2130] font-mono-num text-[11px] font-bold text-slate-300 hover:border-[var(--accent)] hover:text-white active:scale-95"
+                    title="-0.1s"
+                  >
+                    −
+                  </button>
+                  <div className="min-w-0 text-center">
+                    <span className="block text-[8px] font-bold uppercase tracking-wider text-slate-400">
+                      {lang === 'tr' ? 'BİTİŞ' : 'OUT'}
+                    </span>
+                    <span className="block font-mono-num text-[11px] font-extrabold text-white">
+                      {fmtTime(effectiveEnd)}
+                    </span>
+                  </div>
                   <button
                     type="button"
                     onClick={() =>
@@ -2039,19 +1440,12 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                         endSec: Math.min(duration || 9999, (s.endSec || duration) + 0.1),
                       }))
                     }
-                    className="rounded-lg border border-[var(--line)] bg-[var(--inset)] px-1.5 py-1 text-[10px] font-bold text-[var(--muted)] hover:text-[var(--ink)]"
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#1A2130] font-mono-num text-[11px] font-bold text-slate-300 hover:border-[var(--accent)] hover:text-white active:scale-95"
+                    title="+0.1s"
                   >
-                    +0.1
+                    +
                   </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleSplitClick}
-                  className="flex min-h-[34px] items-center gap-1.5 rounded-xl border border-[var(--accent)]/45 bg-[var(--accent)]/15 px-3 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)]"
-                >
-                  <Scissors className="h-3.5 w-3.5 text-[var(--accent)]" />
-                  <span>{t('VeSplitAtPlayhead', lang)}</span>
-                </button>
               </div>
             </div>
           )}
@@ -2080,8 +1474,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                     }}
                     className={`min-h-[30px] rounded-xl border px-1 text-[11px] font-bold whitespace-nowrap transition-colors ${
                       state.cropAspect === asp
-                        ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
-                        : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
+                        ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-white'
+                        : 'border-white/10 bg-[#141A26] text-slate-400 hover:text-white'
                     }`}
                   >
                     {asp === 'orig'
@@ -2117,10 +1511,10 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                               : FULL_CROP,
                         }))
                       }
-                      className={`min-h-[30px] rounded-xl border px-1.5 text-[11px] font-semibold truncate transition-colors ${
+                      className={`min-h-[28px] rounded-xl border px-1.5 text-[11px] font-semibold truncate transition-colors ${
                         state.fitMode === fm
-                          ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
-                          : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
+                          ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-white'
+                          : 'border-white/10 bg-[#141A26] text-slate-400 hover:text-white'
                       }`}
                     >
                       {label}
@@ -2130,7 +1524,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
               )}
 
               <div className="flex items-center gap-2">
-                <span className="shrink-0 text-[11px] font-semibold text-[var(--muted)]">
+                <span className="shrink-0 text-[11px] font-semibold text-slate-400">
                   {t('VeZoomLabel', lang)}
                 </span>
                 <input
@@ -2154,7 +1548,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                     onClick={() =>
                       commitState((s) => ({...s, cropAspect: 'orig', cropBox: FULL_CROP}))
                     }
-                    className="h-6.5 rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2 text-[10px] font-bold text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]"
+                    className="h-6.5 rounded-lg border border-white/10 bg-[#141A26] px-2 text-[10px] font-bold text-slate-300 hover:border-[var(--accent)] hover:text-white"
                   >
                     {t('VeCropReset', lang)}
                   </button>
@@ -2180,7 +1574,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                       };
                     })
                   }
-                  className="flex min-h-[30px] items-center justify-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-1 text-[11px] font-semibold text-[var(--ink)] hover:border-[var(--accent)]"
+                  className="flex min-h-[30px] items-center justify-center gap-1 rounded-xl border border-white/10 bg-[#141A26] px-1 text-[11px] font-semibold text-white hover:border-[var(--accent)]"
                 >
                   <RotateCcw className="h-3.5 w-3.5 text-[var(--accent)]" />
                   <span className="truncate">{t('VeRotateLeft90', lang)}</span>
@@ -2203,7 +1597,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                       };
                     })
                   }
-                  className="flex min-h-[30px] items-center justify-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-1 text-[11px] font-semibold text-[var(--ink)] hover:border-[var(--accent)]"
+                  className="flex min-h-[30px] items-center justify-center gap-1 rounded-xl border border-white/10 bg-[#141A26] px-1 text-[11px] font-semibold text-white hover:border-[var(--accent)]"
                 >
                   <RotateCw className="h-3.5 w-3.5 text-[var(--accent)]" />
                   <span className="truncate">{t('VeRotateRight90', lang)}</span>
@@ -2213,8 +1607,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                   onClick={() => commitState((s) => ({...s, flipH: !s.flipH}))}
                   className={`flex min-h-[30px] items-center justify-center gap-1 rounded-xl border px-1 text-[11px] font-semibold ${
                     state.flipH
-                      ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
-                      : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
+                      ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-white'
+                      : 'border-white/10 bg-[#141A26] text-slate-400 hover:text-white'
                   }`}
                 >
                   <FlipHorizontal className="h-3.5 w-3.5" />
@@ -2225,8 +1619,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                   onClick={() => commitState((s) => ({...s, flipV: !s.flipV}))}
                   className={`flex min-h-[30px] items-center justify-center gap-1 rounded-xl border px-1 text-[11px] font-semibold ${
                     state.flipV
-                      ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
-                      : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
+                      ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-white'
+                      : 'border-white/10 bg-[#141A26] text-slate-400 hover:text-white'
                   }`}
                 >
                   <FlipVertical className="h-3.5 w-3.5" />
@@ -2236,7 +1630,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             </div>
           )}
 
-          {/* TAB 3: LUMETRI-STYLE COLOR GRADING (NO WHITE SCROLLBARS / CLEAN 3x2 PRESET GRID) */}
+          {/* TAB 3: CAPCUT / VN FILTER & ADJUST COLOR GRADING */}
           {activeTab === 'color' && (
             <div className="space-y-2">
               <div className="grid grid-cols-3 gap-1.5">
@@ -2262,8 +1656,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                     }
                     className={`flex min-h-[30px] items-center justify-center gap-1.5 rounded-xl border px-2 text-[11px] font-semibold transition-colors ${
                       state.colorPreset === id
-                        ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
-                        : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
+                        ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-white'
+                        : 'border-white/10 bg-[#141A26] text-slate-400 hover:text-white'
                     }`}
                   >
                     <span
@@ -2288,7 +1682,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                   return (
                     <div key={key}>
                       <div className="mb-1 flex justify-between text-[10px] font-semibold">
-                        <span className="text-[var(--muted)]">{label}</span>
+                        <span className="text-slate-400">{label}</span>
                         <span className="font-mono-num text-[var(--accent)]">
                           {val > 0 ? `+${val}` : val}
                         </span>
@@ -2324,9 +1718,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                 onBlur={finishContinuousEdit}
                 onChange={(e) => setState((s) => ({...s, overlayText: e.target.value}))}
                 placeholder={t('VeTextPlaceholder', lang)}
-                className="min-h-[36px] w-full rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs text-[var(--ink)] outline-none focus:border-[var(--accent)]"
+                className="min-h-[34px] w-full rounded-xl border border-white/10 bg-[#141A26] px-3 text-xs text-white outline-none focus:border-[var(--accent)]"
               />
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-1.5">
                 <div className="flex gap-1">
                   {(
                     [
@@ -2341,8 +1735,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                       onClick={() => commitState((s) => ({...s, textPos: pos}))}
                       className={`h-7 rounded-lg border px-2 text-[11px] font-semibold ${
                         state.textPos === pos
-                          ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
-                          : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
+                          ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-white'
+                          : 'border-white/10 bg-[#141A26] text-slate-400'
                       }`}
                     >
                       {label}
@@ -2363,8 +1757,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                       onClick={() => commitState((s) => ({...s, textSize: sz}))}
                       className={`h-7 w-7 rounded-lg border text-[11px] font-bold ${
                         state.textSize === sz
-                          ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
-                          : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
+                          ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-white'
+                          : 'border-white/10 bg-[#141A26] text-slate-400'
                       }`}
                     >
                       {label}
@@ -2377,8 +1771,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                       key={c}
                       type="button"
                       onClick={() => commitState((s) => ({...s, textColor: c}))}
-                      className={`h-5.5 w-5.5 rounded-full border-2 ${
-                        state.textColor === c ? 'border-[var(--accent)] scale-110' : 'border-[var(--line)]'
+                      className={`h-5 w-5 rounded-full border-2 ${
+                        state.textColor === c ? 'border-[var(--accent)] scale-110' : 'border-white/20'
                       }`}
                       style={{backgroundColor: c}}
                       aria-label={c}
@@ -2389,8 +1783,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                     onClick={() => commitState((s) => ({...s, textBg: !s.textBg}))}
                     className={`h-7 rounded-lg border px-2 text-[10px] font-bold ${
                       state.textBg
-                        ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
-                        : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
+                        ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-white'
+                        : 'border-white/10 bg-[#141A26] text-slate-400'
                     }`}
                   >
                     {t('VeTextBgPill', lang)}
@@ -2403,16 +1797,16 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
           {/* TAB 5: SPEED, REVERSE, BOOMERANG, LOOP & VIDEO FADE */}
           {activeTab === 'fx' && (
             <div className="space-y-2">
-              <div className="flex flex-wrap gap-1.5">
+              <div className="grid grid-cols-6 gap-1">
                 {[0.5, 0.75, 1, 1.25, 1.5, 2].map((sp) => (
                   <button
                     key={sp}
                     type="button"
                     onClick={() => commitState((s) => ({...s, speed: sp}))}
-                    className={`min-h-[32px] flex-1 rounded-xl border px-1.5 text-xs font-bold ${
+                    className={`min-h-[30px] rounded-xl border px-1 text-xs font-bold ${
                       Math.abs(state.speed - sp) < 0.02
-                        ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
-                        : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
+                        ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-white'
+                        : 'border-white/10 bg-[#141A26] text-slate-400'
                     }`}
                   >
                     {sp}×
@@ -2420,7 +1814,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                 ))}
               </div>
 
-              <div className="flex flex-wrap gap-1.5">
+              <div className="grid grid-cols-4 gap-1">
                 {(
                   [
                     ['none', t('VeNormalFx', lang)],
@@ -2433,14 +1827,14 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                     key={fx}
                     type="button"
                     onClick={() => commitState((s) => ({...s, effect: fx}))}
-                    className={`flex min-h-[32px] flex-1 items-center justify-center gap-1 rounded-xl border px-1.5 text-[11px] font-semibold whitespace-nowrap ${
+                    className={`flex min-h-[30px] items-center justify-center gap-1 rounded-xl border px-1 text-[11px] font-semibold whitespace-nowrap ${
                       state.effect === fx
-                        ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
-                        : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
+                        ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-white'
+                        : 'border-white/10 bg-[#141A26] text-slate-400'
                     }`}
                   >
-                    {fx === 'loop' && <Repeat className="h-3 w-3" />}
-                    <span>{label}</span>
+                    {fx === 'loop' && <Repeat className="h-3 w-3 shrink-0" />}
+                    <span className="truncate">{label}</span>
                   </button>
                 ))}
               </div>
@@ -2448,7 +1842,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
               <div className="flex items-center justify-between gap-2">
                 {state.effect === 'loop' ? (
                   <>
-                    <span className="text-[11px] font-semibold text-[var(--muted)]">
+                    <span className="text-[11px] font-semibold text-slate-400">
                       {t('LoopCountLabel', lang)}
                     </span>
                     <div className="flex gap-1">
@@ -2459,8 +1853,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                           onClick={() => commitState((s) => ({...s, loopCount: cnt}))}
                           className={`h-7 rounded-lg border px-2.5 text-xs font-bold ${
                             state.loopCount === cnt
-                              ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
-                              : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
+                              ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-white'
+                              : 'border-white/10 bg-[#141A26] text-slate-400'
                           }`}
                         >
                           {cnt}×
@@ -2470,7 +1864,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                   </>
                 ) : (
                   <>
-                    <span className="text-[11px] font-semibold text-[var(--muted)]">
+                    <span className="text-[11px] font-semibold text-slate-400">
                       {t('VeVideoFadeLabel', lang)}
                     </span>
                     <div className="flex gap-1">
@@ -2481,8 +1875,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                           onClick={() => commitState((s) => ({...s, videoFadeSec: sec}))}
                           className={`h-7 rounded-lg border px-2 text-[11px] font-bold ${
                             state.videoFadeSec === sec
-                              ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
-                              : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
+                              ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-white'
+                              : 'border-white/10 bg-[#141A26] text-slate-400'
                           }`}
                         >
                           {sec === 0 ? (lang === 'tr' ? 'Yok' : 'None') : `${sec}s`}
@@ -2499,7 +1893,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
           {activeTab === 'export' && (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <span className="shrink-0 text-[11px] font-semibold text-[var(--muted)]">
+                <span className="shrink-0 text-[11px] font-semibold text-slate-400">
                   {t('VeAudioVolLabel', lang)}
                 </span>
                 <input
@@ -2532,8 +1926,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                       onClick={() => commitState((s) => ({...s, audioFadeSec: fs}))}
                       className={`h-6.5 rounded-lg border px-1.5 text-[10px] font-bold ${
                         state.audioFadeSec === fs
-                          ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
-                          : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
+                          ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-white'
+                          : 'border-white/10 bg-[#141A26] text-slate-400'
                       }`}
                     >
                       {fs === 0 ? (lang === 'tr' ? 'Fade 0' : 'Off') : `${fs}s`}
@@ -2542,16 +1936,16 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-1.5">
+              <div className="grid grid-cols-5 gap-1">
                 {(['mp4', 'mov', 'webm', 'mkv', 'gif'] as const).map((fmt) => (
                   <button
                     key={fmt}
                     type="button"
                     onClick={() => commitState((s) => ({...s, format: fmt}))}
-                    className={`min-h-[30px] flex-1 rounded-xl border px-1.5 text-[11px] font-bold uppercase ${
+                    className={`min-h-[28px] rounded-xl border px-1.5 text-[11px] font-bold uppercase ${
                       state.format === fmt
-                        ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
-                        : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
+                        ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-white'
+                        : 'border-white/10 bg-[#141A26] text-slate-400'
                     }`}
                   >
                     {fmt}
@@ -2559,8 +1953,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                 ))}
               </div>
 
-              <div className="flex flex-wrap items-center gap-1.5">
-                <div className="flex flex-1 gap-1">
+              <div className="flex items-center gap-1.5">
+                <div className="grid flex-1 grid-cols-3 gap-1">
                   {(
                     [
                       ['20', t('High', lang)],
@@ -2572,10 +1966,10 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                       key={q}
                       type="button"
                       onClick={() => commitState((s) => ({...s, quality: q}))}
-                      className={`min-h-[30px] flex-1 rounded-xl border px-1.5 text-[11px] font-semibold ${
+                      className={`min-h-[28px] rounded-xl border px-1.5 text-[11px] font-semibold ${
                         state.quality === q
-                          ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
-                          : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
+                          ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-white'
+                          : 'border-white/10 bg-[#141A26] text-slate-400'
                       }`}
                     >
                       {label}
@@ -2588,7 +1982,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                     setPlaying(false);
                     onExport(buildStudioOptions('extract_audio', 'mp4'));
                   }}
-                  className="flex min-h-[30px] items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2.5 text-[11px] font-semibold text-[var(--ink)] hover:border-[var(--accent)]"
+                  className="flex min-h-[28px] items-center gap-1 rounded-xl border border-white/10 bg-[#141A26] px-2.5 text-[11px] font-semibold text-white hover:border-[var(--accent)]"
                 >
                   <Music className="h-3.5 w-3.5 text-[var(--accent)]" />
                   <span>MP3</span>
@@ -2596,40 +1990,757 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
               </div>
             </div>
           )}
+        </div>
 
-          {/* 6-Tab Pro Studio Navigation Dock */}
-          <div className="mt-2 grid grid-cols-6 gap-1 border-t border-[var(--line)] pt-2">
-            {(
-              [
-                ['trim', t('VeTabTrim', lang).split(' ')[0], Scissors],
-                ['transform', t('VeTabTransform', lang).split(' ')[0], Crop],
-                ['color', t('VeTabColor', lang), Palette],
-                ['text', t('VeTabText', lang), Type],
-                ['fx', lang === 'tr' ? 'Hız/FX' : 'Speed/FX', Gauge],
-                ['export', t('VeTabExport', lang), SlidersHorizontal],
-              ] as const
-            ).map(([id, label, Icon]) => {
-              const active = activeTab === id;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setActiveTab(id)}
-                  className={`flex min-h-[42px] flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 transition-colors ${
-                    active
-                      ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
-                      : 'text-[var(--muted)] hover:text-[var(--ink)]'
-                  }`}
+        {/* CapCut & VN Bottom 6-Tab Navigation Dock */}
+        <div className="mt-2 grid grid-cols-6 gap-1 border-t border-white/10 pt-2">
+          {(
+            [
+              ['trim', lang === 'tr' ? 'Kes & Böl' : 'Edit', Scissors],
+              ['transform', lang === 'tr' ? 'Kadraj' : 'Canvas', Crop],
+              ['color', lang === 'tr' ? 'Filtre' : 'Filter', Palette],
+              ['text', t('VeTabText', lang), Type],
+              ['fx', lang === 'tr' ? 'Hız/FX' : 'Speed', Gauge],
+              ['export', lang === 'tr' ? 'Ses/Çıktı' : 'Audio', SlidersHorizontal],
+            ] as const
+          ).map(([id, label, Icon]) => {
+            const active = activeTab === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActiveTab(id)}
+                className={`relative flex min-h-[40px] flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 transition-all ${
+                  active
+                    ? 'bg-[var(--accent)]/16 text-white'
+                    : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                }`}
+              >
+                <Icon className={`h-4 w-4 ${active ? 'text-[var(--accent)]' : ''}`} />
+                <span className="truncate text-[10px] font-bold tracking-tight">{label}</span>
+                {active && (
+                  <span className="absolute bottom-0.5 h-0.5 w-4 rounded-full bg-[var(--accent)]" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+
+  // Full-Width CapCut & VN Multi-Track Timeline Deck (Spans 100% width in Portrait & Landscape)
+  const fullWidthTimelineDeck = (
+    <div className={`shrink-0 ${isSideBySide ? 'px-3 pb-safe pt-1.5' : 'px-2.5 pt-1 sm:px-5'}`}>
+      <div className="rounded-2xl border border-white/10 bg-[#0B0F17] px-2.5 py-2 shadow-inner">
+        <div className="flex items-stretch gap-2">
+          {/* CapCut / VN Left Track Control Gutter (Aligned with Tracks) */}
+          <div className="flex w-9 shrink-0 flex-col items-center justify-between rounded-xl border border-white/10 bg-[#121722] py-1.5">
+            {/* Top: Quick Text Layer Toggle / Shortcut */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('text')}
+              title={t('VeTabText', lang)}
+              className={`flex h-6 w-6 items-center justify-center rounded-md text-[10px] font-bold transition-colors ${
+                state.overlayText.trim()
+                  ? 'bg-[var(--accent)]/20 text-[var(--accent)]'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <Type className="h-3.5 w-3.5" />
+            </button>
+
+            {/* Middle (Aligned with V1 Video Track): Mute / Unmute Clip Audio */}
+            <button
+              type="button"
+              onClick={() => commitState((s) => ({...s, mute: !s.mute}))}
+              aria-label={state.mute ? t('VeMuteClip', lang) : 'Audio'}
+              title={
+                state.mute
+                  ? lang === 'tr'
+                    ? 'Klip Sesini Aç'
+                    : 'Unmute Clip'
+                  : lang === 'tr'
+                    ? 'Klip Sesini Kapat'
+                    : 'Mute Clip'
+              }
+              className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-colors ${
+                state.mute
+                  ? 'border-rose-500/60 bg-rose-500/20 text-rose-400'
+                  : 'border-white/10 bg-[#1A2130] text-[var(--accent-end)] hover:border-[var(--accent-end)]/60'
+              }`}
+            >
+              {state.mute ? (
+                <VolumeX className="h-3.5 w-3.5" />
+              ) : (
+                <Volume2 className="h-3.5 w-3.5" />
+              )}
+            </button>
+
+            {/* Bottom (Aligned with A1 Audio Waveform): Audio Mixer Shortcut */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('export')}
+              title={t('VeAudioVolLabel', lang)}
+              className="flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+            >
+              <Music className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {/* Horizontally Scrollable Zoomable Multi-Track Canvas */}
+          <div className="no-scrollbar min-w-0 flex-1 overflow-x-auto">
+            <div style={{width: `${timelineZoom * 100}%`, minWidth: '100%'}}>
+              {/* CapCut / VN Timecode Ruler with Tick Dots */}
+              <div className="mb-1.5 flex items-center justify-between px-1 font-mono-num text-[9px] font-semibold text-slate-400">
+                <span>00:00</span>
+                <span className="text-slate-600">· · ·</span>
+                <span>{duration > 0 ? fmtShortTime(duration * 0.25) : '00:00'}</span>
+                <span className="text-slate-600">· · ·</span>
+                <span>{duration > 0 ? fmtShortTime(duration * 0.5) : '00:00'}</span>
+                <span className="text-slate-600">· · ·</span>
+                <span>{duration > 0 ? fmtShortTime(duration * 0.75) : '00:00'}</span>
+                <span className="text-slate-600">· · ·</span>
+                <span>{duration > 0 ? fmtShortTime(duration) : '00:00'}</span>
+              </div>
+
+              {/* Multi-Track Stack (T1 Text + V1 Filmstrip + A1 Audio Waveform) */}
+              <div
+                ref={trackRef}
+                onPointerDown={(e) => handleTrackPointerDown(e, 'playhead')}
+                onPointerMove={handleTrackPointerMove}
+                onPointerUp={handleTrackPointerUp}
+                onPointerCancel={handleTrackPointerUp}
+                className="relative flex flex-col overflow-hidden rounded-xl border border-white/10 bg-[#070A10] touch-none"
+              >
+                {/* T1 Text / Overlay Ribbon */}
+                {state.overlayText.trim() && (
+                  <div className="pointer-events-none relative h-4.5 border-b border-white/10 bg-[#0E131D]">
+                    <div
+                      className="absolute inset-y-0.5 flex items-center gap-1 overflow-hidden rounded-md border border-[#F0788A]/60 bg-[#F0788A]/25 px-1.5 text-[9px] font-bold text-white"
+                      style={{
+                        left: `${inPct}%`,
+                        width: `${Math.max(3, outPct - inPct)}%`,
+                      }}
+                    >
+                      <Type className="h-2.5 w-2.5 shrink-0 text-[#F0788A]" />
+                      <span className="truncate">{state.overlayText}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* V1 Main Video Filmstrip Track */}
+                <div className="pointer-events-none relative h-11 w-full bg-[#090D15]">
+                  <div className="flex h-full w-full">
+                    {thumbnails.length > 0 ? (
+                      thumbnails.map((src, idx) => (
+                        <img
+                          key={idx}
+                          src={src}
+                          alt=""
+                          draggable={false}
+                          className="h-full flex-1 border-r border-black/30 object-cover opacity-95 last:border-r-0"
+                        />
+                      ))
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-[10px] font-medium text-slate-400">
+                        {loadingThumbs ? t('VeTimelineLoading', lang) : file.name}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* A1 Audio Waveform Track */}
+                <div className="pointer-events-none flex h-6 w-full items-center gap-px border-t border-white/10 bg-[#05080D] px-1">
+                  {waveform.length > 0 ? (
+                    waveform.map((amp, idx) => (
+                      <span
+                        key={idx}
+                        className={`flex-1 rounded-full transition-opacity ${
+                          state.mute || state.volume === 0
+                            ? 'bg-rose-500/25 opacity-30'
+                            : 'bg-[#42C9D9]/85'
+                        }`}
+                        style={{
+                          height: `${Math.max(2, Math.round(amp * Math.min(1.3, state.volume / 100) * 18))}px`,
+                        }}
+                      />
+                    ))
+                  ) : (
+                    <div className="h-px w-full bg-slate-700/50" />
+                  )}
+                </div>
+
+                {/* Darkened Trimmed-Out Regions Outside In/Out Handles */}
+                {inPct > 0 && (
+                  <div
+                    className="pointer-events-none absolute inset-y-0 left-0 bg-black/75 backdrop-blur-[1px]"
+                    style={{width: `${inPct}%`}}
+                  />
+                )}
+                {outPct < 100 && (
+                  <div
+                    className="pointer-events-none absolute inset-y-0 right-0 bg-black/75 backdrop-blur-[1px]"
+                    style={{width: `${Math.max(0, 100 - outPct)}%`}}
+                  />
+                )}
+
+                {/* CapCut / VN High-Contrast White Clip Selection Frame */}
+                <div
+                  className="pointer-events-none absolute inset-y-0 border-y-2 border-white shadow-[inset_0_0_8px_rgba(255,255,255,0.18)]"
+                  style={{
+                    left: `${inPct}%`,
+                    width: `${Math.max(0, outPct - inPct)}%`,
+                  }}
+                />
+
+                {/* CapCut Tactile Left & Right Trim Handles */}
+                <div
+                  onPointerDown={(e) => handleTrackPointerDown(e, 'in')}
+                  onPointerMove={handleTrackPointerMove}
+                  onPointerUp={handleTrackPointerUp}
+                  onPointerCancel={handleTrackPointerUp}
+                  style={{left: `${inPct}%`}}
+                  className="absolute inset-y-0 z-10 flex w-4 cursor-ew-resize items-center justify-center rounded-l-md bg-white text-[#080B11] shadow-md"
                 >
-                  <Icon className="h-4 w-4" />
-                  <span className="truncate text-[10px] font-bold">{label}</span>
-                </button>
-              );
-            })}
+                  <span className="h-5 w-1 rounded-full bg-[#080B11]/85" />
+                </div>
+                <div
+                  onPointerDown={(e) => handleTrackPointerDown(e, 'out')}
+                  onPointerMove={handleTrackPointerMove}
+                  onPointerUp={handleTrackPointerUp}
+                  onPointerCancel={handleTrackPointerUp}
+                  style={{left: `calc(${outPct}% - 16px)`}}
+                  className="absolute inset-y-0 z-10 flex w-4 cursor-ew-resize items-center justify-center rounded-r-md bg-white text-[#080B11] shadow-md"
+                >
+                  <span className="h-5 w-1 rounded-full bg-[#080B11]/85" />
+                </div>
+
+                {/* CapCut / VN Crisp Vertical White Playhead Needle */}
+                <div
+                  className="pointer-events-none absolute inset-y-0 z-20 w-[2px] bg-white shadow-[0_0_10px_rgba(255,255,255,0.95)]"
+                  style={{left: `${Math.min(99.5, Math.max(0.2, playPct))}%`}}
+                >
+                  <span className="absolute -left-[4px] top-0 h-2.5 w-2.5 rotate-45 rounded-[2px] bg-white shadow" />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-      </div>
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-40 flex flex-col bg-[#070A10] text-white select-none">
+      {/* CapCut / VN Minimal Studio Header */}
+      <header className="shrink-0 border-b border-white/10 bg-[#0A0E17]/95 pt-safe backdrop-blur-md">
+        <div className="flex h-12 items-center justify-between gap-2 px-3 sm:px-5">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <button
+              type="button"
+              onClick={onBack}
+              aria-label={t('Back', lang)}
+              className="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#141A26] text-white transition-colors hover:border-[var(--accent)]"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <div className="min-w-0">
+              <p className="truncate text-xs font-extrabold leading-tight text-white sm:text-sm">
+                {file.name}
+              </p>
+              <p className="font-mono-num truncate text-[10px] font-semibold text-slate-400">
+                {activeChips.join(' · ')}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onPointerDown={() => setIsComparing(true)}
+              onPointerUp={() => setIsComparing(false)}
+              onPointerLeave={() => setIsComparing(false)}
+              onPointerCancel={() => setIsComparing(false)}
+              title={t('VeCompareHold', lang)}
+              className={`flex h-8.5 w-8.5 items-center justify-center rounded-xl border transition-colors ${
+                isComparing
+                  ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--accent)]'
+                  : 'border-white/10 bg-[#141A26] text-slate-400 hover:text-white'
+              }`}
+            >
+              <Eye className="h-3.5 w-3.5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowGuides((g) => !g)}
+              title={t('VeSafeGuides', lang)}
+              className={`flex h-8.5 w-8.5 items-center justify-center rounded-xl border transition-colors ${
+                showGuides
+                  ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--accent)]'
+                  : 'border-white/10 bg-[#141A26] text-slate-400 hover:text-white'
+              }`}
+            >
+              <Grid className="h-3.5 w-3.5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={handleToggleOrientation}
+              title={t('VeLandscapeToggle', lang)}
+              className={`flex h-8.5 w-8.5 items-center justify-center rounded-xl border transition-colors ${
+                isSideBySide
+                  ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--accent)]'
+                  : 'border-white/10 bg-[#141A26] text-slate-400 hover:text-white'
+              }`}
+            >
+              <Smartphone
+                className={`h-3.5 w-3.5 transition-transform ${isSideBySide ? 'rotate-90' : ''}`}
+              />
+            </button>
+
+            <select
+              aria-label={t('VeResolution', lang)}
+              value={state.resolution}
+              onChange={(e) =>
+                commitState((s) => ({
+                  ...s,
+                  resolution: e.target.value as VideoEditorState['resolution'],
+                }))
+              }
+              className="h-8.5 rounded-xl border border-white/10 bg-[#141A26] px-2 text-[11px] font-bold text-white outline-none focus:border-[var(--accent)]"
+            >
+              <option value="orig">{t('Original', lang)}</option>
+              <option value="1080">1080p</option>
+              <option value="720">720p</option>
+              <option value="480">480p</option>
+            </select>
+
+            <button
+              type="button"
+              onClick={() => {
+                setPlaying(false);
+                onExport(buildStudioOptions('export'));
+              }}
+              className="morph-accent-btn flex h-8.5 items-center gap-1 rounded-full px-3.5 text-xs font-bold shadow-md transition-transform active:scale-95"
+            >
+              <Check className="h-3.5 w-3.5" />
+              <span>{t('Export', lang)}</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* CapCut & VN Studio Workspace */}
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div
+          className={`flex min-h-0 flex-1 ${
+            isSideBySide ? 'flex-row gap-2.5 px-3 pt-2' : 'flex-col'
+          }`}
+        >
+          {/* Preview Monitor + Middle Control Strip */}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {/* Preview Canvas */}
+            <div
+              ref={stageRef}
+              onClick={showCropEditor ? undefined : togglePlay}
+              className={`relative flex min-h-[130px] flex-1 items-center justify-center overflow-hidden rounded-t-2xl border border-b-0 border-white/10 bg-[#04060A] ${
+                isSideBySide ? '' : 'mx-2.5 mt-1.5 sm:mx-5'
+              } ${showCropEditor ? '' : 'cursor-pointer'}`}
+            >
+              <div
+                className="relative flex items-center justify-center overflow-hidden bg-[#04060A]"
+                style={{
+                  width: monitorGeometry.frameW,
+                  height: monitorGeometry.frameH,
+                }}
+              >
+                {/* Blurred background replica when Aspect Fit Mode === 'blur' */}
+                {monitorGeometry.mode === 'canvas' &&
+                  state.fitMode === 'blur' &&
+                  videoUrl &&
+                  !isComparing && (
+                    <video
+                      ref={bgBlurVideoRef}
+                      src={videoUrl}
+                      poster={thumbnails[0] || TRANSPARENT_POSTER}
+                      muted
+                      playsInline
+                      preload="auto"
+                      className="pointer-events-none absolute shrink-0 object-cover opacity-80"
+                      style={{
+                        width: monitorGeometry.bgElemW,
+                        height: monitorGeometry.bgElemH,
+                        filter: `${liveCssFilter} blur(20px)`,
+                        transform: `rotate(${state.rotateDeg}deg) scaleX(${state.flipH ? -1 : 1}) scaleY(${state.flipV ? -1 : 1}) scale(${(state.zoom * 1.12).toFixed(2)})`,
+                      }}
+                    />
+                  )}
+
+                {/* Primary Foreground Video */}
+                {videoUrl && (
+                  <div
+                    className={
+                      monitorGeometry.mode === 'cropped-preview'
+                        ? 'pointer-events-none absolute flex items-center justify-center overflow-hidden'
+                        : 'pointer-events-none relative z-[1] flex items-center justify-center'
+                    }
+                    style={
+                      monitorGeometry.mode === 'cropped-preview'
+                        ? {
+                            left: monitorGeometry.offsetX,
+                            top: monitorGeometry.offsetY,
+                            width: monitorGeometry.srcW,
+                            height: monitorGeometry.srcH,
+                          }
+                        : {
+                            width: monitorGeometry.srcW,
+                            height: monitorGeometry.srcH,
+                          }
+                    }
+                  >
+                    <video
+                      ref={videoRef}
+                      src={videoUrl}
+                      poster={thumbnails[0] || TRANSPARENT_POSTER}
+                      playsInline
+                      preload="auto"
+                      onLoadedMetadata={(e) => {
+                        const vid = e.currentTarget;
+                        const dur = Number.isFinite(vid.duration) ? vid.duration : 0;
+                        setDuration(dur);
+                        if (vid.videoWidth && vid.videoHeight) {
+                          setVideoDims({w: vid.videoWidth, h: vid.videoHeight});
+                        }
+                        try {
+                          if (vid.currentTime === 0 && dur > 0.05) {
+                            vid.currentTime = 0.001;
+                          }
+                        } catch {
+                          // Ignore seek error
+                        }
+                        setState((s) => ({
+                          ...s,
+                          endSec: s.endSec > 0 ? Math.min(dur, s.endSec) : dur,
+                        }));
+                        setHistory((h) =>
+                          h.map((item) => ({
+                            ...item,
+                            endSec: item.endSec > 0 ? Math.min(dur, item.endSec) : dur,
+                          }))
+                        );
+                      }}
+                      className="pointer-events-none shrink-0 object-contain"
+                      style={{
+                        width: monitorGeometry.elemW,
+                        height: monitorGeometry.elemH,
+                        opacity: liveVideoFadeOpacity,
+                        filter: liveCssFilter,
+                        transform: isComparing
+                          ? 'none'
+                          : `rotate(${state.rotateDeg}deg) scaleX(${state.flipH ? -1 : 1}) scaleY(${state.flipV ? -1 : 1}) scale(${state.zoom.toFixed(2)})`,
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* On-Screen Interactive 8-Handle Crop Box */}
+                {showCropEditor && (
+                  <div
+                    onPointerDown={(e) => startCropDrag(e, 'move')}
+                    onPointerMove={moveCropDrag}
+                    onPointerUp={endCropDrag}
+                    onPointerCancel={endCropDrag}
+                    className="absolute z-[6] cursor-move touch-none border-[1.5px] border-[var(--accent)]"
+                    style={{
+                      left: state.cropBox.x * monitorGeometry.frameW,
+                      top: state.cropBox.y * monitorGeometry.frameH,
+                      width: state.cropBox.w * monitorGeometry.frameW,
+                      height: state.cropBox.h * monitorGeometry.frameH,
+                      boxShadow: '0 0 0 9999px rgba(4, 6, 10, 0.76)',
+                    }}
+                  >
+                    <div
+                      className={`pointer-events-none absolute inset-0 transition-opacity ${
+                        isDraggingCrop ? 'opacity-90' : 'opacity-45'
+                      }`}
+                    >
+                      <div className="absolute inset-y-0 left-1/3 w-px bg-white/30" />
+                      <div className="absolute inset-y-0 left-2/3 w-px bg-white/30" />
+                      <div className="absolute inset-x-0 top-1/3 h-px bg-white/30" />
+                      <div className="absolute inset-x-0 top-2/3 h-px bg-white/30" />
+                    </div>
+
+                    <span className="pointer-events-none absolute left-1.5 top-1.5 rounded-md bg-[#0B111B]/85 px-1.5 py-0.5 font-mono-num text-[9px] font-bold text-white">
+                      {targetDimsLabel}
+                    </span>
+
+                    <span
+                      onPointerDown={(e) => startCropDrag(e, 'nw')}
+                      onPointerMove={moveCropDrag}
+                      onPointerUp={endCropDrag}
+                      onPointerCancel={endCropDrag}
+                      className="absolute -left-2 -top-2 h-6 w-6 cursor-nwse-resize touch-none"
+                    >
+                      <span className="absolute left-1.5 top-1.5 h-3.5 w-3.5 rounded-tl border-l-[3px] border-t-[3px] border-[var(--accent)]" />
+                    </span>
+                    <span
+                      onPointerDown={(e) => startCropDrag(e, 'ne')}
+                      onPointerMove={moveCropDrag}
+                      onPointerUp={endCropDrag}
+                      onPointerCancel={endCropDrag}
+                      className="absolute -right-2 -top-2 h-6 w-6 cursor-nesw-resize touch-none"
+                    >
+                      <span className="absolute right-1.5 top-1.5 h-3.5 w-3.5 rounded-tr border-r-[3px] border-t-[3px] border-[var(--accent)]" />
+                    </span>
+                    <span
+                      onPointerDown={(e) => startCropDrag(e, 'sw')}
+                      onPointerMove={moveCropDrag}
+                      onPointerUp={endCropDrag}
+                      onPointerCancel={endCropDrag}
+                      className="absolute -bottom-2 -left-2 h-6 w-6 cursor-nesw-resize touch-none"
+                    >
+                      <span className="absolute bottom-1.5 left-1.5 h-3.5 w-3.5 rounded-bl border-b-[3px] border-l-[3px] border-[var(--accent)]" />
+                    </span>
+                    <span
+                      onPointerDown={(e) => startCropDrag(e, 'se')}
+                      onPointerMove={moveCropDrag}
+                      onPointerUp={endCropDrag}
+                      onPointerCancel={endCropDrag}
+                      className="absolute -bottom-2 -right-2 h-6 w-6 cursor-nwse-resize touch-none"
+                    >
+                      <span className="absolute bottom-1.5 right-1.5 h-3.5 w-3.5 rounded-br border-b-[3px] border-r-[3px] border-[var(--accent)]" />
+                    </span>
+
+                    <span
+                      onPointerDown={(e) => startCropDrag(e, 'n')}
+                      onPointerMove={moveCropDrag}
+                      onPointerUp={endCropDrag}
+                      onPointerCancel={endCropDrag}
+                      className="absolute -top-2 left-1/2 flex h-4 w-9 -translate-x-1/2 cursor-ns-resize items-center justify-center touch-none"
+                    >
+                      <span className="h-1 w-6 rounded-full bg-[var(--accent)]" />
+                    </span>
+                    <span
+                      onPointerDown={(e) => startCropDrag(e, 's')}
+                      onPointerMove={moveCropDrag}
+                      onPointerUp={endCropDrag}
+                      onPointerCancel={endCropDrag}
+                      className="absolute -bottom-2 left-1/2 flex h-4 w-9 -translate-x-1/2 cursor-ns-resize items-center justify-center touch-none"
+                    >
+                      <span className="h-1 w-6 rounded-full bg-[var(--accent)]" />
+                    </span>
+                    <span
+                      onPointerDown={(e) => startCropDrag(e, 'w')}
+                      onPointerMove={moveCropDrag}
+                      onPointerUp={endCropDrag}
+                      onPointerCancel={endCropDrag}
+                      className="absolute -left-2 top-1/2 flex h-9 w-4 -translate-y-1/2 cursor-ew-resize items-center justify-center touch-none"
+                    >
+                      <span className="h-6 w-1 rounded-full bg-[var(--accent)]" />
+                    </span>
+                    <span
+                      onPointerDown={(e) => startCropDrag(e, 'e')}
+                      onPointerMove={moveCropDrag}
+                      onPointerUp={endCropDrag}
+                      onPointerCancel={endCropDrag}
+                      className="absolute -right-2 top-1/2 flex h-9 w-4 -translate-y-1/2 cursor-ew-resize items-center justify-center touch-none"
+                    >
+                      <span className="h-6 w-1 rounded-full bg-[var(--accent)]" />
+                    </span>
+                  </div>
+                )}
+
+                {/* Live Text / Watermark Overlay */}
+                {!isComparing && state.overlayText.trim() && (
+                  <div
+                    className="pointer-events-none absolute z-[4] flex items-center justify-center px-3"
+                    style={{
+                      left: showCropEditor ? state.cropBox.x * monitorGeometry.frameW : undefined,
+                      top: showCropEditor ? state.cropBox.y * monitorGeometry.frameH : undefined,
+                      width: monitorGeometry.cropW,
+                      height: monitorGeometry.cropH,
+                      alignItems:
+                        state.textPos === 'top'
+                          ? 'flex-start'
+                          : state.textPos === 'center'
+                            ? 'center'
+                            : 'flex-end',
+                      paddingTop: state.textPos === 'top' ? '8%' : undefined,
+                      paddingBottom: state.textPos === 'bottom' ? '8%' : undefined,
+                    }}
+                  >
+                    <span
+                      className="max-w-[90%] break-words text-center font-bold leading-snug"
+                      style={{
+                        color: state.textColor,
+                        fontSize:
+                          state.textSize === 'sm' ? '12px' : state.textSize === 'lg' ? '20px' : '15px',
+                        padding: state.textBg ? '4px 10px' : undefined,
+                        borderRadius: state.textBg ? '8px' : undefined,
+                        backgroundColor: state.textBg ? 'rgba(10, 16, 26, 0.72)' : undefined,
+                        textShadow: state.textBg ? undefined : '0 2px 6px rgba(0,0,0,0.85)',
+                      }}
+                    >
+                      {state.overlayText}
+                    </span>
+                  </div>
+                )}
+
+                {/* Rule of Thirds & Social Safe Margins Guide */}
+                {showGuides && !showCropEditor && (
+                  <div
+                    className="pointer-events-none absolute z-[5]"
+                    style={{
+                      width: monitorGeometry.cropW,
+                      height: monitorGeometry.cropH,
+                    }}
+                  >
+                    <div className="absolute inset-y-0 left-1/3 w-px bg-white/25" />
+                    <div className="absolute inset-y-0 left-2/3 w-px bg-white/25" />
+                    <div className="absolute inset-x-0 top-1/3 h-px bg-white/25" />
+                    <div className="absolute inset-x-0 top-2/3 h-px bg-white/25" />
+                    <div className="absolute inset-[10%] rounded-sm border border-dashed border-[var(--accent)]/65" />
+                  </div>
+                )}
+              </div>
+
+              {isComparing && (
+                <div className="pointer-events-none absolute right-3 top-2.5 z-10 rounded-lg bg-[#0B111B]/85 px-2.5 py-1 text-[11px] font-bold text-white">
+                  {lang === 'tr' ? 'ORİJİNAL' : 'ORIGINAL'}
+                </div>
+              )}
+
+              {showCropEditor && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    togglePlay();
+                  }}
+                  className="absolute bottom-2.5 right-2.5 z-10 flex h-8 items-center gap-1 rounded-full border border-white/15 bg-[#0B111B]/85 px-2.5 text-[10px] font-bold text-white backdrop-blur-sm hover:border-[var(--accent)]"
+                >
+                  {playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3 fill-current" />}
+                  <span>
+                    {playing ? (lang === 'tr' ? 'Duraklat' : 'Pause') : lang === 'tr' ? 'Oynat' : 'Play'}
+                  </span>
+                </button>
+              )}
+
+              {!playing && !showCropEditor && (
+                <div className="pointer-events-none absolute z-10 flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-[#0B111B]/75 text-white shadow-lg backdrop-blur-sm">
+                  <Play className="ml-0.5 h-5 w-5 fill-current" />
+                </div>
+              )}
+
+              {statusNotice && (
+                <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-xl border border-[var(--accent)]/60 bg-[#0D111A]/95 px-3 py-1.5 text-center text-xs font-semibold text-white shadow-lg">
+                  {statusNotice}
+                </div>
+              )}
+            </div>
+
+            {/* CapCut & VN Middle Control Bar (Timecode | Play & Frame Step | Quick Split, Undo/Redo & Zoom) */}
+            <div className={`shrink-0 ${isSideBySide ? '' : 'px-2.5 sm:px-5'}`}>
+              <div className="flex h-10 items-center justify-between gap-1.5 rounded-b-2xl border border-white/10 bg-[#0D111A] px-2.5">
+                {/* Left: Timecode Readout */}
+                <div className="flex min-w-0 items-center gap-1 font-mono-num text-[11px] font-bold whitespace-nowrap">
+                  <span className="text-white">{fmtTime(playhead)}</span>
+                  <span className="text-slate-500">/ {fmtTime(duration)}</span>
+                </div>
+
+                {/* Center: Frame Step & Play/Pause */}
+                <div className="flex shrink-0 items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlaying(false);
+                      seekTo(playhead - 0.04);
+                    }}
+                    aria-label="-1 frame"
+                    className="flex h-7.5 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-white/5 hover:text-white"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={togglePlay}
+                    aria-label={playing ? 'Pause' : 'Play'}
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-[#070A10] shadow transition-transform active:scale-95"
+                  >
+                    {playing ? (
+                      <Pause className="h-3.5 w-3.5 fill-current" />
+                    ) : (
+                      <Play className="ml-0.5 h-3.5 w-3.5 fill-current" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlaying(false);
+                      seekTo(playhead + 0.04);
+                    }}
+                    aria-label="+1 frame"
+                    className="flex h-7.5 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-white/5 hover:text-white"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Right: Quick Split, Undo/Redo & Timeline Scale Zoom */}
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={handleSplitClick}
+                    title={lang === 'tr' ? 'İmleçten İkiye Böl' : 'Split at Playhead'}
+                    className="flex h-7 items-center gap-1 rounded-lg border border-white/10 bg-[#151C2A] px-2 text-[10px] font-bold text-white hover:border-[var(--accent)] active:scale-95"
+                  >
+                    <Scissors className="h-3 w-3 text-[var(--accent)]" />
+                    <span className="hidden sm:inline">{lang === 'tr' ? 'Böl' : 'Split'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleUndo}
+                    disabled={!canUndo}
+                    aria-label={t('VeUndo', lang)}
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 hover:bg-white/5 hover:text-white disabled:opacity-30"
+                  >
+                    <Undo2 className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRedo}
+                    disabled={!canRedo}
+                    aria-label={t('VeRedo', lang)}
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 hover:bg-white/5 hover:text-white disabled:opacity-30"
+                  >
+                    <Redo2 className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setTimelineZoom((z) => (z === 1 ? 2 : z === 2 ? 4 : 1))
+                    }
+                    title={t('VeTimelineZoom', lang)}
+                    className="h-7 rounded-lg border border-white/10 bg-[#151C2A] px-1.5 font-mono-num text-[10px] font-bold text-[var(--accent-end)] hover:border-[var(--accent-end)]"
+                  >
+                    {timelineZoom}×
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* In Landscape (isSideBySide), Contextual Tool Drawer + 6-Tab Dock sit on the Top-Right beside the Monitor */}
+          {isSideBySide && toolInspectorAndDock}
+        </div>
+
+        {/* Full-Width Multi-Track Timeline spans 100% width in BOTH Portrait & Landscape */}
+        {fullWidthTimelineDeck}
+
+        {/* In Portrait, Contextual Tool Drawer + 6-Tab Dock sit below the Timeline */}
+        {!isSideBySide && toolInspectorAndDock}
       </div>
     </div>
   );

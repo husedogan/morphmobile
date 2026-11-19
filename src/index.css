@@ -257,6 +257,18 @@ html[data-corners="soft"] .rounded-xl {
   display: none;
 }
 
+/* Suppress Android WebView giant default gray play poster/overlay on custom NLE video elements */
+video::-webkit-media-controls,
+video::-webkit-media-controls-enclosure,
+video::-webkit-media-controls-panel,
+video::-webkit-media-controls-play-button,
+video::-webkit-media-controls-start-playback-button,
+video::-webkit-media-controls-overlay-play-button {
+  display: none !important;
+  -webkit-appearance: none !important;
+  opacity: 0 !important;
+}
+
 @keyframes morph-cloud-rise {
   0% {
     opacity: 0;

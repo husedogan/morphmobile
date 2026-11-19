@@ -237,15 +237,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
   const handleInstallOrUpdateEngine = async (engineId: DownloadEngineId) => {
     setInstallingEngineId(engineId);
-    setTestBanner(null);
     try {
       const res = await installOrUpdateEngineModule(engineId, prefs, lang);
       await refreshNetworkAndEngines();
-      setTestBanner({ok: res.ok, text: res.message});
       onShowToast?.(res.message);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      setTestBanner({ok: false, text: msg});
       onShowToast?.(msg);
     } finally {
       setInstallingEngineId(null);
@@ -1207,22 +1204,31 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   statusText = (prefs.cobaltUrl || '').trim()
                     ? t('EngineBadgeReady', lang)
                     : t('EngineBadgeNeedUrl', lang);
-                } else if (!nativeApp) {
-                  statusText = t('EngineBadgeApkOnly', lang);
                 } else if (info?.installed) {
                   statusText = `${t('EngineBadgeReady', lang)}${info.version ? ` · ${info.version}` : ''}`;
+                } else if (!nativeApp) {
+                  statusText = t('EngineBadgeApkOnly', lang);
                 } else {
                   statusText = t('EngineBadgeNeedInstall', lang);
                 }
 
                 const showInstallBtn = id === 'ytdlp_native' || id === 'newpipe';
-                const installLabel = isInstalling
-                  ? t('EngineInstalling', lang)
-                  : id === 'ytdlp_native'
-                    ? info?.installed
-                      ? t('EngineUpdateBtn', lang)
-                      : t('EngineInstallBtn', lang)
-                    : t('EngineEnableBtn', lang);
+                let installLabel = t('EngineEnableBtn', lang);
+                if (id === 'ytdlp_native') {
+                  if (!info?.installed) {
+                    installLabel = isInstalling ? t('EngineInstalling', lang) : t('EngineInstallBtn', lang);
+                  } else if (needsUpdate) {
+                    installLabel = isInstalling ? t('EngineUpdating', lang) : t('EngineUpdateBtn', lang);
+                  } else {
+                    installLabel = isInstalling ? t('EngineChecking', lang) : t('EngineCheckBtn', lang);
+                  }
+                } else if (id === 'newpipe') {
+                  if (info?.installed) {
+                    installLabel = isInstalling ? t('EngineVerifying', lang) : t('EngineVerifyBtn', lang);
+                  } else {
+                    installLabel = isInstalling ? t('EngineVerifying', lang) : t('EngineEnableBtn', lang);
+                  }
+                }
 
                 return (
                   <div
@@ -1311,7 +1317,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     </div>
 
                     {showInstallBtn && (
-                      <div className="mt-3.5 flex items-center justify-end pt-1">
+                      <div className="mt-3.5 flex justify-end pt-1">
                         <button
                           type="button"
                           disabled={isInstalling}
@@ -1320,12 +1326,18 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                             handleInstallOrUpdateEngine(id);
                           }}
                           onKeyDown={(e) => e.stopPropagation()}
-                          className="flex min-h-[38px] items-center justify-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3.5 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] disabled:opacity-65 whitespace-nowrap shrink-0"
+                          className="flex min-h-[38px] min-w-[104px] items-center justify-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3.5 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] disabled:opacity-65 whitespace-nowrap shrink-0"
                         >
-                          {needsUpdate ? (
-                            <ArrowUp className="h-3.5 w-3.5 text-[var(--accent)]" />
+                          {isInstalling ? (
+                            <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--accent)]" />
+                          ) : !info?.installed ? (
+                            <Download className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                          ) : needsUpdate ? (
+                            <ArrowUp className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                          ) : id === 'newpipe' ? (
+                            <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
                           ) : (
-                            <Download className="h-3.5 w-3.5 text-[var(--accent)]" />
+                            <RefreshCw className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
                           )}
                           <span>{installLabel}</span>
                         </button>
