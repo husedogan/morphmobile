@@ -14,11 +14,13 @@ import {
   VolumeX,
 } from 'lucide-react';
 import {
+  DEFAULT_PIP_RECT,
   NleProjectState,
   TimelineTextClip,
   TimelineVideoClip,
   clipTimelineDuration,
   formatSmpteTimecode,
+  getClipTrackIndex,
 } from '../../engine/videoTimelineEngine';
 import {InterpolatedKeyframeState} from '../../engine/keyframeEngine';
 import {EvaluatedTransitionStyle} from '../../engine/previewEngine';
@@ -31,22 +33,29 @@ interface PreviewMonitorProps {
   isTr: boolean;
   project: NleProjectState;
   videoRef: React.RefObject<HTMLVideoElement | null>;
+  v2VideoRef: React.RefObject<HTMLVideoElement | null>;
+  compareVideoRef: React.RefObject<HTMLVideoElement | null>;
   previewStageRef: React.RefObject<HTMLDivElement | null>;
   activePreviewVideoSrc: string;
+  activeV2VideoSrc: string | null;
   blurBgVideoSrc: string;
   playhead: number;
   totalTimelineDur: number;
   isPlaying: boolean;
+  isInGap: boolean;
   isPortraitMode: boolean;
   isFullscreenPreview: boolean;
   previewHeightVh: number;
   isResizingPreview: boolean;
   compareOriginal: boolean;
+  splitCompareEnabled: boolean;
+  splitComparePct: number;
   showGrid: boolean;
   isCropTabActive: boolean;
-  trackVisibility: {t1: boolean; v1: boolean; a1: boolean; a2: boolean};
+  trackVisibility: {t1: boolean; v1: boolean; v2: boolean; a1: boolean; a2: boolean};
   selectedClip: TimelineVideoClip | undefined;
   activeTimelineClip: TimelineVideoClip | undefined;
+  activeV2Clip: TimelineVideoClip | undefined;
   activeTextOverlays: TimelineTextClip[];
   interpolatedKeyframe: InterpolatedKeyframeState;
   evaluatedTransition: EvaluatedTransitionStyle;
@@ -61,6 +70,8 @@ interface PreviewMonitorProps {
   onTimeUpdate: () => void;
   onSetPlaying: (playing: boolean) => void;
   onStartCropDrag: (e: React.PointerEvent, handle: 'move' | 'nw' | 'ne' | 'sw' | 'se') => void;
+  onStartPipDrag: (e: React.PointerEvent, clipId: string) => void;
+  onChangeSplitComparePct: (pct: number) => void;
   onStartPreviewResize: (e: React.PointerEvent) => void;
   onCyclePreviewHeight: () => void;
   onToggleFullscreen: () => void;
@@ -81,22 +92,29 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
   isTr,
   project,
   videoRef,
+  v2VideoRef,
+  compareVideoRef,
   previewStageRef,
   activePreviewVideoSrc,
+  activeV2VideoSrc,
   blurBgVideoSrc,
   playhead,
   totalTimelineDur,
   isPlaying,
+  isInGap,
   isPortraitMode,
   isFullscreenPreview,
   previewHeightVh,
   isResizingPreview,
   compareOriginal,
+  splitCompareEnabled,
+  splitComparePct,
   showGrid,
   isCropTabActive,
   trackVisibility,
   selectedClip,
   activeTimelineClip,
+  activeV2Clip,
   activeTextOverlays,
   interpolatedKeyframe,
   evaluatedTransition,
@@ -111,6 +129,8 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
   onTimeUpdate,
   onSetPlaying,
   onStartCropDrag,
+  onStartPipDrag,
+  onChangeSplitComparePct,
   onStartPreviewResize,
   onCyclePreviewHeight,
   onToggleFullscreen,
@@ -125,6 +145,38 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
   const tr = (t: string, e: string) => (isTr ? t : e);
   const playheadPct = totalTimelineDur > 0 ? Math.min(100, Math.max(0, (playhead / totalTimelineDur) * 100)) : 0;
   const externalAudios = project.audioClips.filter((a) => a.kind !== 'original');
+
+  const v1Opacity = compareOriginal
+    ? 1
+    : !trackVisibility.v1 || isInGap
+      ? 0
+      : ((interpolatedKeyframe.hasKeyframes
+          ? interpolatedKeyframe.opacity
+          : activeTimelineClip
+            ? activeTimelineClip.opacity
+            : 100) /
+          100) *
+        evaluatedTransition.opacityMultiplier;
+
+  const startSplitHandleDrag = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const stage = previewStageRef.current;
+    if (!stage) return;
+    const rect = stage.getBoundingClientRect();
+    const update = (clientX: number) => {
+      const pct = Math.min(94, Math.max(6, ((clientX - rect.left) / Math.max(1, rect.width)) * 100));
+      onChangeSplitComparePct(Math.round(pct));
+    };
+    update(e.clientX);
+    const onMove = (ev: PointerEvent) => update(ev.clientX);
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
 
   return (
     <div
@@ -145,7 +197,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
     >
       {/* Clean Unobstructed Video Viewport */}
       <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#050608] px-2 py-2 sm:px-4">
-        {project.aspectRatio !== 'orig' && project.fitMode === 'blur' && blurBgVideoSrc && (
+        {project.aspectRatio !== 'orig' && project.fitMode === 'blur' && blurBgVideoSrc && !isInGap && (
           <video
             src={blurBgVideoSrc}
             muted
@@ -171,21 +223,9 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
                       : project.aspectRatio === '3:4'
                         ? '3 / 4'
                         : undefined,
-            opacity: compareOriginal
-              ? 1
-              : !trackVisibility.v1
-                ? 0.04
-                : !activeTimelineClip && project.videoClips.length > 0
-                  ? 0.06
-                  : ((interpolatedKeyframe.hasKeyframes
-                      ? interpolatedKeyframe.opacity
-                      : selectedClip
-                        ? selectedClip.opacity
-                        : 100) /
-                      100) *
-                    evaluatedTransition.opacityMultiplier,
           }}
         >
+          {/* V1 Primary Video Layer (True solid black when isInGap === true for 1:1 FFmpeg parity) */}
           {activePreviewVideoSrc && (
             <video
               ref={videoRef}
@@ -199,6 +239,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
               onPlay={() => onSetPlaying(true)}
               onPause={() => onSetPlaying(false)}
               style={{
+                opacity: v1Opacity,
                 filter: cssFilter,
                 transform: previewTransform,
                 clipPath:
@@ -213,8 +254,74 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
             />
           )}
 
+          {/* Split-Screen Before/After Wipe Comparison Layer (Original Ungraded Left Half) */}
+          {splitCompareEnabled && !compareOriginal && !isInGap && activePreviewVideoSrc && (
+            <>
+              <video
+                ref={compareVideoRef}
+                src={activePreviewVideoSrc}
+                muted
+                playsInline
+                preload="auto"
+                poster={TRANSPARENT_POSTER}
+                style={{
+                  opacity: trackVisibility.v1 ? 1 : 0,
+                  filter: 'none',
+                  transform: previewTransform,
+                  clipPath: `inset(0 ${(100 - splitComparePct).toFixed(1)}% 0 0)`,
+                }}
+                className="pointer-events-none absolute inset-0 h-full w-full bg-black object-contain"
+              />
+              <div
+                onPointerDown={startSplitHandleDrag}
+                style={{left: `${splitComparePct}%`}}
+                className="absolute inset-y-0 z-20 w-5 -translate-x-1/2 cursor-ew-resize touch-none"
+              >
+                <div className="mx-auto h-full w-[2px] bg-[#F5B82E] shadow-[0_0_10px_rgba(245,184,46,0.9)]" />
+                <div className="absolute left-1/2 top-1/2 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-[#F5B82E] text-[9px] font-black text-black shadow-lg">
+                  ↔
+                </div>
+              </div>
+              <span className="pointer-events-none absolute left-2 top-2 z-20 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white/85">
+                {tr('Orijinal', 'Original')}
+              </span>
+              <span className="pointer-events-none absolute right-2 top-2 z-20 rounded bg-[#F5B82E]/90 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-black">
+                {tr('Renkli', 'Graded')}
+              </span>
+            </>
+          )}
+
+          {/* Synchronized V2 Overlay / Picture-in-Picture Layer (Draggable on Preview!) */}
+          {trackVisibility.v2 && activeV2Clip && activeV2VideoSrc && !compareOriginal && (
+            <div
+              onPointerDown={(e) => onStartPipDrag(e, activeV2Clip.id)}
+              style={{
+                left: `${(activeV2Clip.pipRect ?? DEFAULT_PIP_RECT).x * 100}%`,
+                top: `${(activeV2Clip.pipRect ?? DEFAULT_PIP_RECT).y * 100}%`,
+                width: `${(activeV2Clip.pipRect ?? DEFAULT_PIP_RECT).w * 100}%`,
+                height: `${(activeV2Clip.pipRect ?? DEFAULT_PIP_RECT).h * 100}%`,
+                opacity: Math.max(0.1, activeV2Clip.opacity / 100),
+              }}
+              className={`absolute z-10 cursor-move overflow-hidden rounded-md bg-black shadow-2xl touch-none ${
+                selectedClip?.id === activeV2Clip.id
+                  ? 'ring-2 ring-[#A855F7]'
+                  : 'ring-1 ring-white/35'
+              }`}
+            >
+              <video
+                ref={v2VideoRef}
+                src={activeV2VideoSrc}
+                muted
+                playsInline
+                preload="auto"
+                poster={TRANSPARENT_POSTER}
+                className="pointer-events-none h-full w-full object-cover"
+              />
+            </div>
+          )}
+
           {/* Vignette Overlay */}
-          {project.colorGrading.vignette > 5 && !compareOriginal && (
+          {project.colorGrading.vignette > 5 && !compareOriginal && !isInGap && (
             <div
               className="pointer-events-none absolute inset-0"
               style={{
@@ -368,7 +475,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
             />
           ))}
         </div>
-        {/* Video mini-band */}
+        {/* Video mini-band (V1 + V2 PiP) */}
         <div className="relative h-[2.5px] w-full overflow-hidden rounded-full bg-white/[0.06]">
           {project.videoClips.map((c) => (
             <div
@@ -378,7 +485,11 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
                 width: `${Math.max(2, (clipTimelineDuration(c) / totalTimelineDur) * 100)}%`,
               }}
               className={`absolute inset-y-0 rounded-full ${
-                selectedClip?.id === c.id ? 'bg-[#F5B82E]' : 'bg-[#60A5FA]/75'
+                getClipTrackIndex(c) >= 1
+                  ? 'bg-[#A855F7]'
+                  : selectedClip?.id === c.id
+                    ? 'bg-[#F5B82E]'
+                    : 'bg-[#60A5FA]/75'
               }`}
             />
           ))}

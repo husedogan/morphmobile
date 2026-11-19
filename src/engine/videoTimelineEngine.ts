@@ -1,3 +1,5 @@
+import {PRIMARY_MEDIA_ID, ProjectMediaAssetMeta} from './mediaLibraryEngine';
+
 export type ProjectFps = number;
 export type AspectRatioPreset = 'orig' | 'free' | '16:9' | '9:16' | '1:1' | '4:5' | '3:4';
 export type FitFillMode = 'crop' | 'blur' | 'pad';
@@ -48,9 +50,26 @@ export interface ClipKeyframe {
   easing?: KeyframeEasingType;
 }
 
+export interface PipOverlayRect {
+  x: number; // normalized 0..1 left
+  y: number; // normalized 0..1 top
+  w: number; // normalized 0.1..1 width
+  h: number; // normalized 0.1..1 height
+}
+
+export const DEFAULT_PIP_RECT: PipOverlayRect = {
+  x: 0.62,
+  y: 0.06,
+  w: 0.34,
+  h: 0.34,
+};
+
 export interface TimelineVideoClip {
   id: string;
   label: string;
+  mediaId?: string; // defaults to PRIMARY_MEDIA_ID ('media-primary')
+  trackIndex?: number; // 0 = V1 Main Track, 1 = V2 Overlay / PiP Track
+  pipRect?: PipOverlayRect;
   sourceStart: number;
   sourceEnd: number;
   timelineStart: number;
@@ -113,7 +132,26 @@ export interface ColorGradingSettings {
   shadows: number;
   sharpness: number;
   vignette: number;
+  lift?: number; // -40..+40 shadow lift
+  gamma?: number; // -40..+40 midtone gamma
+  gain?: number; // -40..+40 highlight gain
 }
+
+export interface AudioMasterDspSettings {
+  eqBass: number; // -12..+12 dB (100Hz)
+  eqMid: number; // -12..+12 dB (1000Hz)
+  eqTreble: number; // -12..+12 dB (8000Hz)
+  compressor: boolean;
+  limiter: boolean;
+}
+
+export const DEFAULT_AUDIO_DSP: AudioMasterDspSettings = {
+  eqBass: 0,
+  eqMid: 0,
+  eqTreble: 0,
+  compressor: false,
+  limiter: true,
+};
 
 export interface VisualEffectsSettings {
   stabilization: boolean;
@@ -137,6 +175,7 @@ export interface ExportProjectSettings {
 export interface NleProjectState {
   projectId: string;
   projectName: string;
+  sourceFileName?: string;
   updatedAt: number;
   fps: ProjectFps;
   snapEnabled: boolean;
@@ -150,12 +189,14 @@ export interface NleProjectState {
   colorFilter: ColorFilterPreset;
   colorGrading: ColorGradingSettings;
   vfx: VisualEffectsSettings;
+  mediaAssets?: ProjectMediaAssetMeta[];
   videoClips: TimelineVideoClip[];
   audioClips: TimelineAudioClip[];
   textClips: TimelineTextClip[];
   masterVolume: number;
   masterMuted: boolean;
   audioDucking: boolean;
+  audioDsp?: AudioMasterDspSettings;
   effectMode: 'none' | 'reverse' | 'boomerang' | 'loop';
   loopCount: 2 | 3 | 4;
   exportSettings: ExportProjectSettings;
@@ -222,11 +263,22 @@ export function computeTotalTimelineDuration(
   return Math.max(0.1, Number(maxEnd.toFixed(4)));
 }
 
+export function getClipTrackIndex(clip: TimelineVideoClip): number {
+  return typeof clip.trackIndex === 'number' && clip.trackIndex >= 1 ? 1 : 0;
+}
+
+export function getClipMediaId(clip: TimelineVideoClip): string {
+  return clip.mediaId && clip.mediaId.trim() ? clip.mediaId : PRIMARY_MEDIA_ID;
+}
+
 export function findVideoClipAtTime(
   videoClips: TimelineVideoClip[],
-  timelineSec: number
+  timelineSec: number,
+  trackIndex = 0
 ): TimelineVideoClip | null {
-  const sorted = [...videoClips].sort((a, b) => a.timelineStart - b.timelineStart);
+  const sorted = videoClips
+    .filter((c) => getClipTrackIndex(c) === trackIndex)
+    .sort((a, b) => a.timelineStart - b.timelineStart);
   for (const c of sorted) {
     const start = c.timelineStart;
     const end = clipTimelineEnd(c);
@@ -237,11 +289,24 @@ export function findVideoClipAtTime(
   return null;
 }
 
-export function timelineToSourceTime(
+export function findOverlayVideoClipAtTime(
   videoClips: TimelineVideoClip[],
   timelineSec: number
-): {clip: TimelineVideoClip | null; sourceTime: number; isInGap: boolean} {
-  const active = findVideoClipAtTime(videoClips, timelineSec);
+): TimelineVideoClip | null {
+  return findVideoClipAtTime(videoClips, timelineSec, 1);
+}
+
+export function timelineToSourceTime(
+  videoClips: TimelineVideoClip[],
+  timelineSec: number,
+  trackIndex = 0
+): {
+  clip: TimelineVideoClip | null;
+  nextClip?: TimelineVideoClip | null;
+  sourceTime: number;
+  isInGap: boolean;
+} {
+  const active = findVideoClipAtTime(videoClips, timelineSec, trackIndex);
   if (active) {
     if (active.isFreezeFrame) {
       return {clip: active, sourceTime: active.sourceStart, isInGap: false};
@@ -254,15 +319,14 @@ export function timelineToSourceTime(
     const clamped = Math.min(active.sourceEnd, Math.max(active.sourceStart, rawSource));
     return {clip: active, sourceTime: Number(clamped.toFixed(4)), isInGap: false};
   }
-  const sorted = [...videoClips].sort((a, b) => a.timelineStart - b.timelineStart);
-  const nextClip = sorted.find((c) => c.timelineStart > timelineSec);
-  if (nextClip) {
-    return {clip: nextClip, sourceTime: nextClip.sourceStart, isInGap: true};
-  }
-  const lastClip = sorted[sorted.length - 1] ?? null;
+  const sorted = videoClips
+    .filter((c) => getClipTrackIndex(c) === trackIndex)
+    .sort((a, b) => a.timelineStart - b.timelineStart);
+  const nextClip = sorted.find((c) => c.timelineStart > timelineSec) ?? null;
   return {
-    clip: lastClip,
-    sourceTime: lastClip ? lastClip.sourceEnd : 0,
+    clip: null,
+    nextClip,
+    sourceTime: nextClip ? nextClip.sourceStart : 0,
     isInGap: true,
   };
 }
@@ -299,6 +363,9 @@ export function createInitialNleProject(
       shadows: 0,
       sharpness: 0,
       vignette: 0,
+      lift: 0,
+      gamma: 0,
+      gain: 0,
     },
     vfx: {
       stabilization: false,
@@ -309,10 +376,24 @@ export function createInitialNleProject(
       maskShape: 'none',
       bgRemoveStrength: 0,
     },
+    mediaAssets: [
+      {
+        id: PRIMARY_MEDIA_ID,
+        name: fileName,
+        size: 0,
+        durationSec: safeDur,
+        width: 1280,
+        height: 720,
+        mime: 'video/mp4',
+        isPrimary: true,
+      },
+    ],
     videoClips: [
       {
         id: 'clip-main-1',
         label: 'Klip 1',
+        mediaId: PRIMARY_MEDIA_ID,
+        trackIndex: 0,
         sourceStart: 0,
         sourceEnd: safeDur,
         timelineStart: 0,
@@ -350,6 +431,7 @@ export function createInitialNleProject(
     masterVolume: 100,
     masterMuted: false,
     audioDucking: false,
+    audioDsp: {...DEFAULT_AUDIO_DSP},
     effectMode: 'none',
     loopCount: 2,
     exportSettings: {
@@ -471,12 +553,7 @@ export function splitVideoClipAtPlayhead(
     }
   }
 
-  const relabeled = nextClips
-    .sort((a, b) => a.timelineStart - b.timelineStart)
-    .map((c, idx) => ({
-      ...c,
-      label: c.isFreezeFrame ? `Donuk Kare ${idx + 1}` : `Klip ${idx + 1}`,
-    }));
+  const relabeled = relabelTrackClips(nextClips);
 
   return {
     clips: relabeled,
@@ -484,6 +561,27 @@ export function splitVideoClipAtPlayhead(
     secondClipId: idB,
     didSplit: true,
   };
+}
+
+function relabelTrackClips(videoClips: TimelineVideoClip[]): TimelineVideoClip[] {
+  const v1 = videoClips
+    .filter((c) => getClipTrackIndex(c) === 0)
+    .sort((a, b) => a.timelineStart - b.timelineStart)
+    .map((c, idx) => ({
+      ...c,
+      trackIndex: 0,
+      label: c.isFreezeFrame ? `Donuk Kare ${idx + 1}` : `Klip ${idx + 1}`,
+    }));
+  const v2 = videoClips
+    .filter((c) => getClipTrackIndex(c) >= 1)
+    .sort((a, b) => a.timelineStart - b.timelineStart)
+    .map((c, idx) => ({
+      ...c,
+      trackIndex: 1,
+      pipRect: c.pipRect ?? {...DEFAULT_PIP_RECT},
+      label: c.isFreezeFrame ? `PiP Donuk ${idx + 1}` : `PiP ${idx + 1}`,
+    }));
+  return [...v1, ...v2];
 }
 
 export function trimVideoClipHandle(
@@ -495,48 +593,65 @@ export function trimVideoClipHandle(
   fps: ProjectFps
 ): TimelineVideoClip[] {
   const minDur = framesToSec(3, fps);
-  const sorted = [...videoClips].sort((a, b) => a.timelineStart - b.timelineStart);
-  const updated = sorted.map((c) => {
+  const target = videoClips.find((c) => c.id === clipId);
+  if (!target) return videoClips;
+  const targetTrack = getClipTrackIndex(target);
+
+  const updated = videoClips.map((c) => {
     if (c.id !== clipId) return c;
     if (side === 'left') {
       const clampedStart = snapToFrame(
         Math.max(0, Math.min(c.sourceEnd - minDur, newSourceTimeSec)),
         fps
       );
-      return {
-        ...c,
-        sourceStart: clampedStart,
-      };
+      if (targetTrack >= 1) {
+        const deltaSrc = clampedStart - c.sourceStart;
+        const nextTimelineStart = Math.max(
+          0,
+          snapToFrame(c.timelineStart + deltaSrc / Math.max(0.25, c.speed || 1), fps)
+        );
+        return {...c, sourceStart: clampedStart, timelineStart: nextTimelineStart};
+      }
+      return {...c, sourceStart: clampedStart};
     } else {
       const clampedEnd = snapToFrame(
         Math.min(maxSourceDuration, Math.max(c.sourceStart + minDur, newSourceTimeSec)),
         fps
       );
-      return {
-        ...c,
-        sourceEnd: clampedEnd,
-      };
+      return {...c, sourceEnd: clampedEnd};
     }
   });
 
-  // Repack timelineStart sequentially so trimmed clips never collide or overlap on V1
+  if (targetTrack >= 1) {
+    // V2 overlays keep their independent timelineStart positions
+    return relabelTrackClips(updated);
+  }
+
+  // Repack V1 clips sequentially so trimmed clips never collide, preserving V2 overlay clips untouched
+  const v1Sorted = updated
+    .filter((c) => getClipTrackIndex(c) === 0)
+    .sort((a, b) => a.timelineStart - b.timelineStart);
+  const v2Clips = updated.filter((c) => getClipTrackIndex(c) >= 1);
   let cursor = 0;
-  return updated.map((c, idx) => {
+  const packedV1 = v1Sorted.map((c) => {
     const start = snapToFrame(cursor, fps);
     cursor = start + clipTimelineDuration(c);
-    return {
-      ...c,
-      timelineStart: start,
-      label: c.isFreezeFrame ? `Donuk Kare ${idx + 1}` : `Klip ${idx + 1}`,
-    };
+    return {...c, timelineStart: start};
   });
+  return relabelTrackClips([...packedV1, ...v2Clips]);
 }
 
 export function deleteClipKeepGap(
   videoClips: TimelineVideoClip[],
   clipId: string
 ): {clips: TimelineVideoClip[]; nextSelectedId: string | null; didDelete: boolean; reason?: string} {
-  if (videoClips.length <= 1) {
+  const target = videoClips.find((c) => c.id === clipId);
+  if (!target) {
+    return {clips: videoClips, nextSelectedId: videoClips[0]?.id ?? null, didDelete: false};
+  }
+  const targetTrack = getClipTrackIndex(target);
+  const v1Count = videoClips.filter((c) => getClipTrackIndex(c) === 0).length;
+  if (targetTrack === 0 && v1Count <= 1) {
     return {
       clips: videoClips,
       nextSelectedId: videoClips[0]?.id ?? null,
@@ -544,7 +659,7 @@ export function deleteClipKeepGap(
       reason: 'Ana video katmanındaki tek klip silinemez. Önce klibi bölün veya yeni klip ekleyin.',
     };
   }
-  const filtered = videoClips.filter((c) => c.id !== clipId);
+  const filtered = relabelTrackClips(videoClips.filter((c) => c.id !== clipId));
   return {
     clips: filtered,
     nextSelectedId: filtered[0]?.id ?? null,
@@ -567,45 +682,57 @@ export function deleteClipRipple(
   didDelete: boolean;
   reason?: string;
 } {
-  if (videoClips.length <= 1) {
+  const target = videoClips.find((c) => c.id === clipId);
+  if (!target) {
     return {
       videoClips,
       textClips,
       audioClips,
       nextSelectedId: videoClips[0]?.id ?? null,
+      didDelete: false,
+    };
+  }
+  const targetTrack = getClipTrackIndex(target);
+  if (targetTrack >= 1) {
+    // Deleting a V2 overlay clip simply removes it without shifting V1 main clips
+    const remaining = relabelTrackClips(videoClips.filter((c) => c.id !== clipId));
+    return {
+      videoClips: remaining,
+      textClips,
+      audioClips,
+      nextSelectedId: remaining[0]?.id ?? null,
+      didDelete: true,
+    };
+  }
+
+  const v1Sorted = videoClips
+    .filter((c) => getClipTrackIndex(c) === 0)
+    .sort((a, b) => a.timelineStart - b.timelineStart);
+  const v2Clips = videoClips.filter((c) => getClipTrackIndex(c) >= 1);
+
+  if (v1Sorted.length <= 1) {
+    return {
+      videoClips,
+      textClips,
+      audioClips,
+      nextSelectedId: v1Sorted[0]?.id ?? null,
       didDelete: false,
       reason: 'Ana video katmanındaki tek klip silinemez. Önce klibi bölün veya yeni klip ekleyin.',
     };
   }
-  const sorted = [...videoClips].sort((a, b) => a.timelineStart - b.timelineStart);
-  const targetIdx = sorted.findIndex((c) => c.id === clipId);
-  if (targetIdx === -1) {
-    return {
-      videoClips,
-      textClips,
-      audioClips,
-      nextSelectedId: videoClips[0]?.id ?? null,
-      didDelete: false,
-    };
-  }
-
-  const target = sorted[targetIdx];
+  const targetIdx = v1Sorted.findIndex((c) => c.id === clipId);
   const removedStart = target.timelineStart;
-  const nextClip = sorted[targetIdx + 1];
+  const nextClip = v1Sorted[targetIdx + 1];
   const shiftAmount = nextClip
     ? snapToFrame(nextClip.timelineStart - removedStart, fps)
     : clipTimelineDuration(target);
 
-  const remaining = sorted.filter((c) => c.id !== clipId);
+  const remainingV1 = v1Sorted.filter((c) => c.id !== clipId);
   let cursor = 0;
-  const packed = remaining.map((c, idx) => {
+  const packedV1 = remainingV1.map((c) => {
     const start = snapToFrame(cursor, fps);
     cursor = start + clipTimelineDuration(c);
-    return {
-      ...c,
-      timelineStart: start,
-      label: c.isFreezeFrame ? `Donuk Kare ${idx + 1}` : `Klip ${idx + 1}`,
-    };
+    return {...c, timelineStart: start};
   });
 
   let nextTexts = textClips;
@@ -623,9 +750,10 @@ export function deleteClipRipple(
     );
   }
 
-  const nextSel = packed[Math.min(targetIdx, packed.length - 1)]?.id ?? null;
+  const finalClips = relabelTrackClips([...packedV1, ...v2Clips]);
+  const nextSel = packedV1[Math.min(targetIdx, packedV1.length - 1)]?.id ?? finalClips[0]?.id ?? null;
   return {
-    videoClips: packed,
+    videoClips: finalClips,
     textClips: nextTexts,
     audioClips: nextAudios,
     nextSelectedId: nextSel,
@@ -639,26 +767,40 @@ export function reorderClipByStep(
   direction: -1 | 1,
   fps: ProjectFps
 ): TimelineVideoClip[] {
-  const sorted = [...videoClips].sort((a, b) => a.timelineStart - b.timelineStart);
-  const idx = sorted.findIndex((c) => c.id === clipId);
-  if (idx === -1) return videoClips;
-  const swapIdx = idx + direction;
-  if (swapIdx < 0 || swapIdx >= sorted.length) return videoClips;
+  const target = videoClips.find((c) => c.id === clipId);
+  if (!target) return videoClips;
+  const targetTrack = getClipTrackIndex(target);
 
-  const temp = sorted[idx];
-  sorted[idx] = sorted[swapIdx];
-  sorted[swapIdx] = temp;
+  if (targetTrack >= 1) {
+    // Shift V2 overlay clip by +/- 0.5s on timeline
+    return relabelTrackClips(
+      videoClips.map((c) =>
+        c.id === clipId
+          ? {...c, timelineStart: Math.max(0, snapToFrame(c.timelineStart + direction * 0.5, fps))}
+          : c
+      )
+    );
+  }
+
+  const v1Sorted = videoClips
+    .filter((c) => getClipTrackIndex(c) === 0)
+    .sort((a, b) => a.timelineStart - b.timelineStart);
+  const v2Clips = videoClips.filter((c) => getClipTrackIndex(c) >= 1);
+  const idx = v1Sorted.findIndex((c) => c.id === clipId);
+  const swapIdx = idx + direction;
+  if (idx === -1 || swapIdx < 0 || swapIdx >= v1Sorted.length) return videoClips;
+
+  const temp = v1Sorted[idx];
+  v1Sorted[idx] = v1Sorted[swapIdx];
+  v1Sorted[swapIdx] = temp;
 
   let cursor = 0;
-  return sorted.map((c, i) => {
+  const packedV1 = v1Sorted.map((c) => {
     const start = snapToFrame(cursor, fps);
     cursor = start + clipTimelineDuration(c);
-    return {
-      ...c,
-      timelineStart: start,
-      label: c.isFreezeFrame ? `Donuk Kare ${i + 1}` : `Klip ${i + 1}`,
-    };
+    return {...c, timelineStart: start};
   });
+  return relabelTrackClips([...packedV1, ...v2Clips]);
 }
 
 export function duplicateVideoClip(
@@ -666,30 +808,35 @@ export function duplicateVideoClip(
   clipId: string,
   fps: ProjectFps
 ): {clips: TimelineVideoClip[]; newClipId: string | null} {
-  const sorted = [...videoClips].sort((a, b) => a.timelineStart - b.timelineStart);
-  const idx = sorted.findIndex((c) => c.id === clipId);
-  if (idx === -1) return {clips: videoClips, newClipId: null};
-
-  const orig = sorted[idx];
+  const orig = videoClips.find((c) => c.id === clipId);
+  if (!orig) return {clips: videoClips, newClipId: null};
   const newId = `${orig.id}-copy-${Date.now().toString(36).slice(-4)}`;
-  const copyClip: TimelineVideoClip = {
-    ...orig,
-    id: newId,
-  };
 
-  sorted.splice(idx + 1, 0, copyClip);
+  if (getClipTrackIndex(orig) >= 1) {
+    const copyV2: TimelineVideoClip = {
+      ...orig,
+      id: newId,
+      timelineStart: snapToFrame(clipTimelineEnd(orig) + 0.1, fps),
+    };
+    return {clips: relabelTrackClips([...videoClips, copyV2]), newClipId: newId};
+  }
+
+  const v1Sorted = videoClips
+    .filter((c) => getClipTrackIndex(c) === 0)
+    .sort((a, b) => a.timelineStart - b.timelineStart);
+  const v2Clips = videoClips.filter((c) => getClipTrackIndex(c) >= 1);
+  const idx = v1Sorted.findIndex((c) => c.id === clipId);
+  const copyClip: TimelineVideoClip = {...orig, id: newId};
+  v1Sorted.splice(idx + 1, 0, copyClip);
+
   let cursor = 0;
-  const packed = sorted.map((c, i) => {
+  const packedV1 = v1Sorted.map((c) => {
     const start = snapToFrame(cursor, fps);
     cursor = start + clipTimelineDuration(c);
-    return {
-      ...c,
-      timelineStart: start,
-      label: c.isFreezeFrame ? `Donuk Kare ${i + 1}` : `Klip ${i + 1}`,
-    };
+    return {...c, timelineStart: start};
   });
 
-  return {clips: packed, newClipId: newId};
+  return {clips: relabelTrackClips([...packedV1, ...v2Clips]), newClipId: newId};
 }
 
 export function insertFreezeFrameAtPlayhead(
@@ -699,20 +846,22 @@ export function insertFreezeFrameAtPlayhead(
   freezeDurationSec: number,
   fps: ProjectFps
 ): {clips: TimelineVideoClip[]; freezeClipId: string | null; didInsert: boolean} {
+  const v1Clips = videoClips.filter((c) => getClipTrackIndex(c) === 0);
   const target =
-    findVideoClipAtTime(videoClips, playheadSec) ||
-    videoClips.find((c) => c.id === selectedClipId) ||
-    videoClips[0];
+    findVideoClipAtTime(videoClips, playheadSec, 0) ||
+    v1Clips.find((c) => c.id === selectedClipId) ||
+    v1Clips[0];
   if (!target) return {clips: videoClips, freezeClipId: null, didInsert: false};
 
-  const mapped = timelineToSourceTime(videoClips, playheadSec);
-  const freezeSourceTime = snapToFrame(mapped.sourceTime, fps);
+  const mapped = timelineToSourceTime(videoClips, playheadSec, 0);
+  const freezeSourceTime = snapToFrame(mapped.clip ? mapped.sourceTime : target.sourceStart, fps);
   const freezeId = `freeze-${Date.now().toString(36).slice(-4)}`;
 
   const freezeClip: TimelineVideoClip = {
     ...target,
     id: freezeId,
     label: 'Donuk Kare',
+    trackIndex: 0,
     sourceStart: freezeSourceTime,
     sourceEnd: snapToFrame(freezeSourceTime + freezeDurationSec, fps),
     timelineStart: clipTimelineEnd(target),
@@ -723,22 +872,128 @@ export function insertFreezeFrameAtPlayhead(
     volume: 0,
   };
 
-  const sorted = [...videoClips].sort((a, b) => a.timelineStart - b.timelineStart);
-  const idx = sorted.findIndex((c) => c.id === target.id);
-  sorted.splice(idx + 1, 0, freezeClip);
+  const v1Sorted = [...v1Clips].sort((a, b) => a.timelineStart - b.timelineStart);
+  const v2Clips = videoClips.filter((c) => getClipTrackIndex(c) >= 1);
+  const idx = v1Sorted.findIndex((c) => c.id === target.id);
+  v1Sorted.splice(idx + 1, 0, freezeClip);
 
   let cursor = 0;
-  const packed = sorted.map((c, i) => {
+  const packedV1 = v1Sorted.map((c) => {
     const start = snapToFrame(cursor, fps);
     cursor = start + clipTimelineDuration(c);
-    return {
-      ...c,
-      timelineStart: start,
-      label: c.isFreezeFrame ? `Donuk Kare ${i + 1}` : `Klip ${i + 1}`,
-    };
+    return {...c, timelineStart: start};
   });
 
-  return {clips: packed, freezeClipId: freezeId, didInsert: true};
+  return {clips: relabelTrackClips([...packedV1, ...v2Clips]), freezeClipId: freezeId, didInsert: true};
+}
+
+/**
+ * Appends a clip from any imported ProjectMediaAssetMeta onto V1 (end of timeline)
+ * or V2 Overlay/PiP (at current playhead).
+ */
+export function createAppendedVideoClip(
+  existingClips: TimelineVideoClip[],
+  asset: ProjectMediaAssetMeta,
+  targetTrackIndex: 0 | 1,
+  playheadSec: number,
+  fps: ProjectFps
+): {clips: TimelineVideoClip[]; newClipId: string} {
+  const v1Clips = existingClips.filter((c) => getClipTrackIndex(c) === 0);
+  const v1End = v1Clips.reduce((acc, c) => Math.max(acc, clipTimelineEnd(c)), 0);
+  const clipId = `clip-${targetTrackIndex === 1 ? 'pip' : 'src'}-${Date.now().toString(36).slice(-5)}`;
+  const safeDur = Math.max(0.4, Number(asset.durationSec.toFixed(3)));
+  const startSec =
+    targetTrackIndex === 1
+      ? snapToFrame(Math.max(0, playheadSec), fps)
+      : snapToFrame(v1End, fps);
+
+  const newClip: TimelineVideoClip = {
+    id: clipId,
+    label: targetTrackIndex === 1 ? 'PiP' : 'Klip',
+    mediaId: asset.id,
+    trackIndex: targetTrackIndex,
+    pipRect: targetTrackIndex === 1 ? {...DEFAULT_PIP_RECT} : undefined,
+    sourceStart: 0,
+    sourceEnd: safeDur,
+    timelineStart: startSec,
+    speed: 1,
+    reversed: false,
+    isFreezeFrame: false,
+    volume: targetTrackIndex === 1 ? 60 : 100,
+    muted: targetTrackIndex === 1,
+    audioDetached: false,
+    fadeInSec: 0,
+    fadeOutSec: 0,
+    opacity: 100,
+    transitionIn: targetTrackIndex === 0 && v1Clips.length > 0 ? 'dissolve' : 'none',
+    transitionDurationSec: 0.4,
+    keyframes: [],
+  };
+
+  return {
+    clips: relabelTrackClips([...existingClips, newClip]),
+    newClipId: clipId,
+  };
+}
+
+/**
+ * Moves a selected clip between V1 (Main Track) and V2 (Overlay / PiP Track).
+ */
+export function toggleClipTrackLayer(
+  videoClips: TimelineVideoClip[],
+  clipId: string,
+  fps: ProjectFps
+): {clips: TimelineVideoClip[]; movedToTrack: 0 | 1; didMove: boolean; reason?: string} {
+  const target = videoClips.find((c) => c.id === clipId);
+  if (!target) return {clips: videoClips, movedToTrack: 0, didMove: false};
+  const currentTrack = getClipTrackIndex(target);
+  const v1Clips = videoClips.filter((c) => getClipTrackIndex(c) === 0);
+
+  if (currentTrack === 0) {
+    if (v1Clips.length <= 1) {
+      return {
+        clips: videoClips,
+        movedToTrack: 0,
+        didMove: false,
+        reason: 'Ana katmanda en az 1 klip kalmalıdır. Önce klibi bölün veya başka video ekleyin.',
+      };
+    }
+    const nextV1 = v1Clips
+      .filter((c) => c.id !== clipId)
+      .sort((a, b) => a.timelineStart - b.timelineStart);
+    let cursor = 0;
+    const packedV1 = nextV1.map((c) => {
+      const start = snapToFrame(cursor, fps);
+      cursor = start + clipTimelineDuration(c);
+      return {...c, timelineStart: start};
+    });
+    const movedClip: TimelineVideoClip = {
+      ...target,
+      trackIndex: 1,
+      pipRect: target.pipRect ?? {...DEFAULT_PIP_RECT},
+      timelineStart: Math.min(target.timelineStart, Math.max(0, cursor - 0.5)),
+    };
+    const otherV2 = videoClips.filter((c) => getClipTrackIndex(c) >= 1);
+    return {
+      clips: relabelTrackClips([...packedV1, ...otherV2, movedClip]),
+      movedToTrack: 1,
+      didMove: true,
+    };
+  } else {
+    // Move V2 overlay down to end of V1
+    const v1End = v1Clips.reduce((acc, c) => Math.max(acc, clipTimelineEnd(c)), 0);
+    const movedClip: TimelineVideoClip = {
+      ...target,
+      trackIndex: 0,
+      timelineStart: snapToFrame(v1End, fps),
+    };
+    const nextClips = videoClips.map((c) => (c.id === clipId ? movedClip : c));
+    return {
+      clips: relabelTrackClips(nextClips),
+      movedToTrack: 0,
+      didMove: true,
+    };
+  }
 }
 
 /**
@@ -765,7 +1020,14 @@ export function autoCutSilenceIntervals(
   let removedCount = 0;
   let removedSec = 0;
 
-  for (const clip of [...videoClips].sort((a, b) => a.timelineStart - b.timelineStart)) {
+  const v1Clips = videoClips.filter((c) => getClipTrackIndex(c) === 0);
+  const v2Clips = videoClips.filter((c) => getClipTrackIndex(c) >= 1);
+
+  for (const clip of [...v1Clips].sort((a, b) => a.timelineStart - b.timelineStart)) {
+    if (getClipMediaId(clip) !== PRIMARY_MEDIA_ID) {
+      result.push(clip);
+      continue;
+    }
     let segStart = clip.sourceStart;
     const clipEnd = clip.sourceEnd;
     let pieceIdx = 0;
@@ -806,18 +1068,17 @@ export function autoCutSilenceIntervals(
   }
 
   let cursor = 0;
-  const packed = result.map((c, idx) => {
+  const packedV1 = result.map((c) => {
     const start = snapToFrame(cursor, fps);
     cursor = start + clipTimelineDuration(c);
     return {
       ...c,
       timelineStart: start,
-      label: c.isFreezeFrame ? `Donuk Kare ${idx + 1}` : `Klip ${idx + 1}`,
     };
   });
 
   return {
-    clips: packed,
+    clips: relabelTrackClips([...packedV1, ...v2Clips]),
     removedCount,
     removedSec: Number(removedSec.toFixed(2)),
   };

@@ -12,12 +12,19 @@ import {
   getAudioClipBlob,
   registerAudioClipBlob,
 } from './audioEngine';
+import {
+  PRIMARY_MEDIA_ID,
+  getAllRegisteredMediaBlobs,
+  getMediaAssetBlob,
+  registerMediaAssetBlob,
+} from './mediaLibraryEngine';
 
 const IDB_NAME = 'morph_nle_studio_db';
 const IDB_VERSION = 1;
 const STORE_PROJECTS = 'projects';
 const STORE_MEDIA = 'mediaBlobs';
-const MAX_IDB_VIDEO_BYTES = 180 * 1024 * 1024; // 180 MB safety cap for mobile IndexedDB
+const MAX_IDB_VIDEO_BYTES = 180 * 1024 * 1024; // 180 MB safety cap per video for mobile IndexedDB
+const MAX_IDB_EXTRA_VIDEOS_TOTAL_BYTES = 260 * 1024 * 1024;
 const MAX_MORPH_PKG_VIDEO_BYTES = 120 * 1024 * 1024;
 
 interface StoredProjectRecord {
@@ -27,6 +34,7 @@ interface StoredProjectRecord {
   durationSec: number;
   clipCount: number;
   sourceMediaKey?: string;
+  videoMediaKeys?: Record<string, string>;
   audioMediaKeys: Record<string, string>;
   state: NleProjectState;
 }
@@ -51,6 +59,7 @@ interface MorphPackageManifest {
   sourceVideoPath?: string;
   sourceVideoName?: string;
   sourceVideoMime?: string;
+  videoFiles?: Record<string, {path: string; name: string; mime: string}>;
   audioFiles: Record<string, {path: string; name: string; mime: string}>;
 }
 
@@ -161,20 +170,32 @@ export async function listNleProjectsIdb(): Promise<SavedNleProjectSummary[]> {
 export async function saveNleProjectIdb(
   project: NleProjectState,
   sourceVideoFile?: File | Blob | null
-): Promise<{projects: SavedNleProjectSummary[]; savedAudioCount: number; savedInIdb: boolean}> {
+): Promise<{
+  projects: SavedNleProjectSummary[];
+  savedAudioCount: number;
+  savedVideoCount: number;
+  savedInIdb: boolean;
+}> {
   const cleanState = stripTransientBlobUrls(project);
   // Keep lightweight localStorage mirror for instant boot fallback
   saveNleProjectToStorage(cleanState);
 
   const db = await openNleDatabase();
   if (!db) {
-    return {projects: loadSavedNleProjects(), savedAudioCount: 0, savedInIdb: false};
+    return {
+      projects: loadSavedNleProjects(),
+      savedAudioCount: 0,
+      savedVideoCount: 0,
+      savedInIdb: false,
+    };
   }
 
   try {
     const audioMediaKeys: Record<string, string> = {};
+    const videoMediaKeys: Record<string, string> = {};
     const mediaRecords: StoredMediaBlobRecord[] = [];
     let savedAudioCount = 0;
+    let savedVideoCount = 0;
 
     for (const aClip of project.audioClips) {
       if (aClip.kind === 'original') continue;
@@ -209,6 +230,40 @@ export async function saveNleProjectIdb(
       });
     }
 
+    // Persist secondary multi-source video blobs used in mediaAssets / videoClips
+    const usedSecondaryIds = new Set<string>();
+    for (const asset of project.mediaAssets || []) {
+      if (asset.id && asset.id !== PRIMARY_MEDIA_ID) usedSecondaryIds.add(asset.id);
+    }
+    for (const vClip of project.videoClips) {
+      if (vClip.mediaId && vClip.mediaId !== PRIMARY_MEDIA_ID) usedSecondaryIds.add(vClip.mediaId);
+    }
+
+    let extraVideoBytes = 0;
+    for (const mediaId of usedSecondaryIds) {
+      const reg = getMediaAssetBlob(mediaId);
+      if (
+        reg?.blob &&
+        reg.blob.size > 0 &&
+        reg.blob.size <= MAX_IDB_VIDEO_BYTES &&
+        extraVideoBytes + reg.blob.size <= MAX_IDB_EXTRA_VIDEOS_TOTAL_BYTES
+      ) {
+        const mediaKey = `${project.projectId}::video::${mediaId}`;
+        videoMediaKeys[mediaId] = mediaKey;
+        mediaRecords.push({
+          mediaKey,
+          projectId: project.projectId,
+          name: reg.fileName,
+          mime: reg.blob.type || 'video/mp4',
+          size: reg.blob.size,
+          updatedAt: Date.now(),
+          blob: reg.blob,
+        });
+        extraVideoBytes += reg.blob.size;
+        savedVideoCount++;
+      }
+    }
+
     const dur = computeTotalTimelineDuration(cleanState.videoClips, 10);
     const projectRecord: StoredProjectRecord = {
       projectId: cleanState.projectId,
@@ -217,6 +272,7 @@ export async function saveNleProjectIdb(
       durationSec: dur,
       clipCount: cleanState.videoClips.length,
       sourceMediaKey,
+      videoMediaKeys,
       audioMediaKeys,
       state: cleanState,
     };
@@ -234,9 +290,14 @@ export async function saveNleProjectIdb(
     });
 
     const list = await listNleProjectsIdb();
-    return {projects: list, savedAudioCount, savedInIdb: true};
+    return {projects: list, savedAudioCount, savedVideoCount, savedInIdb: true};
   } catch {
-    return {projects: loadSavedNleProjects(), savedAudioCount: 0, savedInIdb: false};
+    return {
+      projects: loadSavedNleProjects(),
+      savedAudioCount: 0,
+      savedVideoCount: 0,
+      savedInIdb: false,
+    };
   } finally {
     db.close();
   }
@@ -246,11 +307,12 @@ export async function loadNleProjectIdb(projectId: string): Promise<{
   state: NleProjectState;
   sourceVideoBlob?: Blob;
   restoredAudioCount: number;
+  restoredVideoCount: number;
 } | null> {
   const db = await openNleDatabase();
   if (!db) {
     const legacy = loadSavedNleProjects().find((p) => p.projectId === projectId);
-    return legacy ? {state: legacy.state, restoredAudioCount: 0} : null;
+    return legacy ? {state: legacy.state, restoredAudioCount: 0, restoredVideoCount: 0} : null;
   }
 
   try {
@@ -263,7 +325,7 @@ export async function loadNleProjectIdb(projectId: string): Promise<{
 
     if (!rec) {
       const legacy = loadSavedNleProjects().find((p) => p.projectId === projectId);
-      return legacy ? {state: legacy.state, restoredAudioCount: 0} : null;
+      return legacy ? {state: legacy.state, restoredAudioCount: 0, restoredVideoCount: 0} : null;
     }
 
     let restoredAudioCount = 0;
@@ -287,6 +349,22 @@ export async function loadNleProjectIdb(projectId: string): Promise<{
       })
     );
 
+    let restoredVideoCount = 0;
+    if (rec.videoMediaKeys) {
+      for (const [mediaId, mediaKey] of Object.entries(rec.videoMediaKeys)) {
+        const mRec = await new Promise<StoredMediaBlobRecord | undefined>((resolve) => {
+          const tx = db.transaction(STORE_MEDIA, 'readonly');
+          const req = tx.objectStore(STORE_MEDIA).get(mediaKey);
+          req.onsuccess = () => resolve(req.result as StoredMediaBlobRecord | undefined);
+          req.onerror = () => resolve(undefined);
+        });
+        if (mRec?.blob) {
+          registerMediaAssetBlob(mediaId, mRec.blob, mRec.name);
+          restoredVideoCount++;
+        }
+      }
+    }
+
     let sourceVideoBlob: Blob | undefined;
     if (rec.sourceMediaKey) {
       const vRec = await new Promise<StoredMediaBlobRecord | undefined>((resolve) => {
@@ -305,6 +383,7 @@ export async function loadNleProjectIdb(projectId: string): Promise<{
       },
       sourceVideoBlob,
       restoredAudioCount,
+      restoredVideoCount,
     };
   } finally {
     db.close();
@@ -363,11 +442,19 @@ export async function deleteNleProjectIdb(projectId: string): Promise<SavedNlePr
 export async function exportMorphPackage(
   project: NleProjectState,
   sourceVideoFile?: File | Blob | null
-): Promise<{fileName: string; blob: Blob; includedAudioCount: number; includesVideo: boolean}> {
+): Promise<{
+  fileName: string;
+  blob: Blob;
+  includedAudioCount: number;
+  includedVideoCount: number;
+  includesVideo: boolean;
+}> {
   const zip = new JSZip();
   const cleanState = stripTransientBlobUrls(project);
   const audioFiles: MorphPackageManifest['audioFiles'] = {};
+  const videoFiles: Record<string, {path: string; name: string; mime: string}> = {};
   let includedAudioCount = 0;
+  let includedVideoCount = 0;
 
   const registeredMap = getAllRegisteredAudioBlobs();
   for (const clip of project.audioClips) {
@@ -391,6 +478,7 @@ export async function exportMorphPackage(
   let sourceVideoPath: string | undefined;
   let sourceVideoName: string | undefined;
   let sourceVideoMime: string | undefined;
+  let bundledVideoBytes = 0;
 
   if (
     sourceVideoFile &&
@@ -403,19 +491,39 @@ export async function exportMorphPackage(
     const ext = extFromMimeOrName(sourceVideoName, sourceVideoMime);
     sourceVideoPath = `media/source.${ext}`;
     zip.file(sourceVideoPath, sourceVideoFile);
+    bundledVideoBytes += sourceVideoFile.size;
     includesVideo = true;
+  }
+
+  // Bundle any additional imported secondary videos (multi-source & V2 PiP)
+  const mediaMap = getAllRegisteredMediaBlobs();
+  for (const [mediaId, entry] of Array.from(mediaMap.entries())) {
+    if (mediaId === PRIMARY_MEDIA_ID) continue;
+    if (
+      entry.blob.size > 0 &&
+      bundledVideoBytes + entry.blob.size <= MAX_MORPH_PKG_VIDEO_BYTES * 1.5
+    ) {
+      const mime = entry.blob.type || 'video/mp4';
+      const ext = extFromMimeOrName(entry.fileName, mime);
+      const path = `media/video/${mediaId}.${ext}`;
+      zip.file(path, entry.blob);
+      videoFiles[mediaId] = {path, name: entry.fileName, mime};
+      bundledVideoBytes += entry.blob.size;
+      includedVideoCount++;
+    }
   }
 
   const manifest: MorphPackageManifest = {
     format: 'morph-nle-package',
     schemaVersion: 1,
-    appVersion: '1.1.21',
+    appVersion: '1.1.23',
     exportedAt: Date.now(),
     projectName: cleanState.projectName,
     hasSourceVideo: includesVideo,
     sourceVideoPath,
     sourceVideoName,
     sourceVideoMime,
+    videoFiles,
     audioFiles,
   };
 
@@ -433,18 +541,19 @@ export async function exportMorphPackage(
     .slice(0, 48);
   const fileName = `${safeSlug || 'morph-project'}.morph`;
 
-  return {fileName, blob: pkgBlob, includedAudioCount, includesVideo};
+  return {fileName, blob: pkgBlob, includedAudioCount, includedVideoCount, includesVideo};
 }
 
 /**
  * Imports a `.morph` project archive (or raw JSON project file),
- * rehydrates all bundled audio Blobs into audioEngine + fresh ObjectURLs,
+ * rehydrates all bundled audio & secondary video Blobs,
  * and saves the imported project directly to IndexedDB.
  */
 export async function importMorphPackage(file: File): Promise<{
   project: NleProjectState;
   sourceVideoBlob?: Blob;
   restoredAudioCount: number;
+  restoredVideoCount: number;
 }> {
   // Support plain JSON fallback
   if (file.name.toLowerCase().endsWith('.json')) {
@@ -452,7 +561,7 @@ export async function importMorphPackage(file: File): Promise<{
     if (!parsed || !Array.isArray(parsed.videoClips)) {
       throw new Error('Geçersiz Morph proje dosyası.');
     }
-    return {project: parsed, restoredAudioCount: 0};
+    return {project: parsed, restoredAudioCount: 0, restoredVideoCount: 0};
   }
 
   const zip = await JSZip.loadAsync(file);
@@ -489,6 +598,18 @@ export async function importMorphPackage(file: File): Promise<{
     })
   );
 
+  let restoredVideoCount = 0;
+  if (manifest?.videoFiles) {
+    for (const [mediaId, meta] of Object.entries(manifest.videoFiles)) {
+      const entry = zip.file(meta.path);
+      if (!entry) continue;
+      const buf = await entry.async('arraybuffer');
+      const blob = new Blob([buf], {type: meta.mime || 'video/mp4'});
+      registerMediaAssetBlob(mediaId, blob, meta.name);
+      restoredVideoCount++;
+    }
+  }
+
   let sourceVideoBlob: Blob | undefined;
   if (manifest?.hasSourceVideo && manifest.sourceVideoPath) {
     const vEntry = zip.file(manifest.sourceVideoPath);
@@ -511,5 +632,6 @@ export async function importMorphPackage(file: File): Promise<{
     project: hydratedProject,
     sourceVideoBlob,
     restoredAudioCount,
+    restoredVideoCount,
   };
 }

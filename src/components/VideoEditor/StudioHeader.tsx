@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   ChevronLeft,
+  Columns2,
   Eye,
   FolderOpen,
   Grid,
@@ -23,6 +24,8 @@ interface StudioHeaderProps {
   proxyRecommended: boolean;
   proxyReason: string;
   compareOriginal: boolean;
+  splitCompareEnabled?: boolean;
+  hasUnsavedChanges?: boolean;
   showGrid: boolean;
   isPortraitMode: boolean;
   onBack: () => void;
@@ -30,6 +33,7 @@ interface StudioHeaderProps {
   onOpenProjects: () => void;
   onToggleProxy: () => void;
   onSetCompareOriginal: (active: boolean) => void;
+  onToggleSplitCompare?: () => void;
   onToggleGrid: () => void;
   onToggleOrientation: () => void;
   onExport: () => void;
@@ -51,6 +55,8 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
   proxyRecommended,
   proxyReason,
   compareOriginal,
+  splitCompareEnabled = false,
+  hasUnsavedChanges = false,
   showGrid,
   isPortraitMode,
   onBack,
@@ -58,6 +64,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
   onOpenProjects,
   onToggleProxy,
   onSetCompareOriginal,
+  onToggleSplitCompare,
   onToggleGrid,
   onToggleOrientation,
   onExport,
@@ -126,12 +133,19 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
         </StudioTooltipBtn>
 
         <StudioTooltipBtn
-          tooltip={tr('Projeyi Kaydet (IndexedDB)', 'Save Project (IndexedDB)')}
+          tooltip={
+            hasUnsavedChanges
+              ? tr('Kaydedilmemiş Değişiklikler Var — Kaydet', 'Unsaved Changes — Save Project')
+              : tr('Projeyi Kaydet (IndexedDB)', 'Save Project (IndexedDB)')
+          }
           placement="bottom"
           onClick={onSaveProject}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-white/65 transition-colors hover:bg-white/[0.07] hover:text-white"
+          className="relative flex h-8 w-8 items-center justify-center rounded-lg text-white/65 transition-colors hover:bg-white/[0.07] hover:text-white"
         >
           <Save className="h-4 w-4" />
+          {hasUnsavedChanges && (
+            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#F5B82E] shadow-[0_0_6px_#F5B82E]" />
+          )}
         </StudioTooltipBtn>
 
         <StudioTooltipBtn
@@ -142,6 +156,25 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
         >
           <FolderOpen className="h-4 w-4" />
         </StudioTooltipBtn>
+
+        {onToggleSplitCompare && (
+          <StudioTooltipBtn
+            tooltip={
+              splitCompareEnabled
+                ? tr('Önce/Sonra Bölünmüş Karşılaştırmayı Kapat', 'Close Split Before/After')
+                : tr('Önce / Sonra Bölünmüş Renk Karşılaştırma', 'Split Before/After Color Compare')
+            }
+            placement="bottom"
+            onClick={onToggleSplitCompare}
+            className={`hidden h-8 w-8 items-center justify-center rounded-lg transition-colors sm:flex ${
+              splitCompareEnabled
+                ? 'bg-[#F5B82E]/20 text-[#F5B82E]'
+                : 'text-white/65 hover:bg-white/[0.07] hover:text-white'
+            }`}
+          >
+            <Columns2 className="h-4 w-4" />
+          </StudioTooltipBtn>
+        )}
 
         <StudioTooltipBtn
           tooltip={tr('Orijinali Görmek İçin Basılı Tut', 'Hold to Compare Original')}

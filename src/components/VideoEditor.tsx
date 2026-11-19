@@ -1,24 +1,29 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
+  ArrowUpDown,
   Bookmark,
   Check,
+  Columns2,
   Download,
+  FilePlus2,
+  Film,
   FlipHorizontal,
   FlipVertical,
   Image as ImageIcon,
   Mic,
   Minus,
   Music,
+  PictureInPicture2,
   Plus,
   RotateCcw,
   RotateCw,
   Save,
   Scissors,
+  Sliders,
   Sparkles,
   Trash2,
   Upload,
   Wand2,
-  X,
 } from 'lucide-react';
 import nleSampleImg from '../assets/images/nle_filter_reference_1795084645929.jpg';
 import {Lang} from '../data/i18n';
@@ -28,6 +33,8 @@ import {
   ClipTransitionType,
   ColorFilterPreset,
   ColorGradingSettings,
+  DEFAULT_AUDIO_DSP,
+  DEFAULT_PIP_RECT,
   ExportCodec,
   ExportFormat,
   ExportQualityCrf,
@@ -42,18 +49,21 @@ import {
   TimelineTextClip,
   TimelineVideoClip,
   autoCutSilenceIntervals,
-  clipSourceDuration,
   clipTimelineDuration,
   clipTimelineEnd,
   computeTotalTimelineDuration,
+  createAppendedVideoClip,
   createInitialNleProject,
   deleteClipKeepGap,
   deleteClipRipple,
   duplicateVideoClip,
   estimateOutputFileSizeBytes,
+  findOverlayVideoClipAtTime,
   findVideoClipAtTime,
   formatSecondsShort,
   formatSmpteTimecode,
+  getClipMediaId,
+  getClipTrackIndex,
   insertFreezeFrameAtPlayhead,
   loadSavedNleProjects,
   parseSrtSubtitles,
@@ -61,8 +71,17 @@ import {
   snapToFrame,
   splitVideoClipAtPlayhead,
   timelineToSourceTime,
+  toggleClipTrackLayer,
   trimVideoClipHandle,
 } from '../engine/videoTimelineEngine';
+import {
+  PRIMARY_MEDIA_ID,
+  ProjectMediaAssetMeta,
+  clearSecondaryMediaBlobs,
+  getMediaAssetUrl,
+  probeVideoAssetMetadata,
+  registerMediaAssetBlob,
+} from '../engine/mediaLibraryEngine';
 import {
   detectAudioSilences,
   extractRealAudioWaveform,
@@ -312,9 +331,15 @@ function buildCssFilterFromGrading(
   const contrast = g.contrast ?? 0;
   const saturation = g.saturation ?? 0;
   const temperature = g.temperature ?? 0;
+  const lift = g.lift ?? 0;
+  const gamma = g.gamma ?? 0;
+  const gain = g.gain ?? 0;
 
-  const b = 1 + (brightness + exposure * 0.65) / 100;
-  const c = 1 + contrast / 100;
+  const b = Math.max(
+    0.2,
+    1 + (brightness + exposure * 0.65 + gamma * 0.45 + lift * 0.25 + gain * 0.35) / 100
+  );
+  const c = Math.max(0.2, 1 + (contrast + (gain - lift) * 0.3) / 100);
   const s = Math.max(0, 1 + saturation / 100);
   const parts = [
     `brightness(${b.toFixed(2)})`,
@@ -442,6 +467,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const tr = useCallback((trText: string, enText: string) => (isTr ? trText : enText), [isTr]);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const v2VideoRef = useRef<HTMLVideoElement | null>(null);
+  const compareVideoRef = useRef<HTMLVideoElement | null>(null);
   const previewStageRef = useRef<HTMLDivElement | null>(null);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const timelineTrackRef = useRef<HTMLDivElement | null>(null);
@@ -450,6 +477,10 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const morphImportInputRef = useRef<HTMLInputElement | null>(null);
   const cubeLutInputRef = useRef<HTMLInputElement | null>(null);
   const relinkVideoInputRef = useRef<HTMLInputElement | null>(null);
+  const mediaImportInputRef = useRef<HTMLInputElement | null>(null);
+  const importTargetTrackRef = useRef<0 | 1>(0);
+  const hasInitializedMetadataRef = useRef<boolean>(false);
+  const pendingSourceSeekRef = useRef<{time: number; autoplay: boolean} | null>(null);
   const pinchStartDistRef = useRef<number | null>(null);
   const externalAudioElsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -472,6 +503,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const [filterPreviewMode, setFilterPreviewMode] = useState<'sample' | 'video'>('sample');
   const [showGrid, setShowGrid] = useState(false);
   const [compareOriginal, setCompareOriginal] = useState(false);
+  const [splitCompareEnabled, setSplitCompareEnabled] = useState(false);
+  const [splitComparePct, setSplitComparePct] = useState(50);
   const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
   const [timelineZoom, setTimelineZoom] = useState<1 | 2 | 4 | 8>(1);
   const [thumbnails, setThumbnails] = useState<string[]>([]);
@@ -479,6 +512,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const [trackVisibility, setTrackVisibility] = useState({
     t1: true,
     v1: true,
+    v2: true,
     a1: true,
     a2: true,
   });
@@ -487,6 +521,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   );
   const [activeCustomPresetId, setActiveCustomPresetId] = useState<string | null>(null);
   const [isCuttingSilence, setIsCuttingSilence] = useState(false);
+  const [isImportingMedia, setIsImportingMedia] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showUnsavedExitDialog, setShowUnsavedExitDialog] = useState(false);
   const [kfPosX, setKfPosX] = useState(0);
   const [kfPosY, setKfPosY] = useState(0);
   const [kfRotation, setKfRotation] = useState(0);
@@ -559,6 +596,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         setHistoryIdx((idx) => Math.min(35, idx + 1));
         return updated;
       });
+      setHasUnsavedChanges(true);
     },
     [historyIdx]
   );
@@ -587,14 +625,18 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     }
   };
 
-  // Load source video blob URL
+  // Load source video blob URL & register in multi-source Media Library
   useEffect(() => {
+    hasInitializedMetadataRef.current = false;
+    clearSecondaryMediaBlobs();
+    registerMediaAssetBlob(PRIMARY_MEDIA_ID, file.file, file.name);
     const url = URL.createObjectURL(file.file);
     setVideoUrl(url);
     setRelinkedVideoUrl(null);
     const cached = getCachedProxyUrl(file, '540') ?? getCachedProxyUrl(file, '720');
     setProxyUrl(cached?.url ?? null);
     setIsProxyEnabled(false);
+    setHasUnsavedChanges(false);
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
@@ -609,7 +651,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     [videoMeta.w, videoMeta.h, file.size]
   );
 
-  const activePreviewVideoSrc = useMemo(() => {
+  const primaryPreviewVideoSrc = useMemo(() => {
     if (isProxyEnabled && proxyUrl) return proxyUrl;
     if (relinkedVideoUrl) return relinkedVideoUrl;
     return videoUrl;
@@ -706,15 +748,46 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const selectedClip: TimelineVideoClip | undefined = useMemo(
     () =>
       project.videoClips.find((c) => c.id === selectedClipId) ||
-      findVideoClipAtTime(project.videoClips, playhead) ||
+      findVideoClipAtTime(project.videoClips, playhead, 0) ||
       project.videoClips[0],
     [project.videoClips, selectedClipId, playhead]
   );
 
   const activeTimelineClip = useMemo(
-    () => findVideoClipAtTime(project.videoClips, playhead),
+    () => findVideoClipAtTime(project.videoClips, playhead, 0),
     [project.videoClips, playhead]
   );
+
+  const activeV2Clip = useMemo(
+    () => findOverlayVideoClipAtTime(project.videoClips, playhead),
+    [project.videoClips, playhead]
+  );
+
+  const isInGap = useMemo(
+    () =>
+      !activeTimelineClip &&
+      project.videoClips.some((c) => getClipTrackIndex(c) === 0),
+    [activeTimelineClip, project.videoClips]
+  );
+
+  const activePreviewVideoSrc = useMemo(() => {
+    const targetClip = activeTimelineClip;
+    if (targetClip) {
+      const mid = getClipMediaId(targetClip);
+      if (mid !== PRIMARY_MEDIA_ID) {
+        const secUrl = getMediaAssetUrl(mid);
+        if (secUrl) return secUrl;
+      }
+    }
+    return primaryPreviewVideoSrc;
+  }, [activeTimelineClip, primaryPreviewVideoSrc]);
+
+  const activeV2VideoSrc = useMemo(() => {
+    if (!activeV2Clip) return null;
+    const mid = getClipMediaId(activeV2Clip);
+    if (mid === PRIMARY_MEDIA_ID) return primaryPreviewVideoSrc;
+    return getMediaAssetUrl(mid) ?? primaryPreviewVideoSrc;
+  }, [activeV2Clip, primaryPreviewVideoSrc]);
 
   const activeTextOverlays = useMemo(
     () =>
@@ -735,6 +808,25 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const handleLoadedMetadata = () => {
     const v = videoRef.current;
     if (!v) return;
+
+    // On multi-source clip switches after initial boot, just honor pending seek without resetting project!
+    if (hasInitializedMetadataRef.current) {
+      const pending = pendingSourceSeekRef.current;
+      if (pending) {
+        pendingSourceSeekRef.current = null;
+        try {
+          v.currentTime = Math.max(0, Math.min(v.duration || 3600, pending.time));
+        } catch {
+          // Ignore seek errors
+        }
+        if (pending.autoplay) {
+          void v.play().catch(() => {});
+        }
+      }
+      return;
+    }
+
+    hasInitializedMetadataRef.current = true;
     const d = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 10;
     const vw = v.videoWidth || 1280;
     const vh = v.videoHeight || 720;
@@ -742,6 +834,12 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     setVideoMeta({w: vw, h: vh});
 
     const initialProj = createInitialNleProject(file.name, d, 30);
+    if (initialProj.mediaAssets?.[0]) {
+      initialProj.mediaAssets[0].size = file.size;
+      initialProj.mediaAssets[0].width = vw;
+      initialProj.mediaAssets[0].height = vh;
+      initialProj.mediaAssets[0].mime = file.file.type || 'video/mp4';
+    }
     if (initialPreset) {
       if (initialPreset.cropAspect) initialProj.aspectRatio = initialPreset.cropAspect;
       if (initialPreset.rotateDeg !== undefined) initialProj.rotateDeg = initialPreset.rotateDeg;
@@ -768,11 +866,11 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     }
   };
 
-  // Keep HTML5 <video> element synchronized with multi-clip non-destructive timeline
+  // Keep HTML5 <video> element synchronized with multi-source & multi-clip V1 timeline
   const handleTimeUpdate = () => {
     const v = videoRef.current;
-    if (!v || !isPlaying) return;
-    const currentClip = activeTimelineClip || project.videoClips[0];
+    if (!v || !isPlaying || isInGap) return;
+    const currentClip = activeTimelineClip;
     if (!currentClip) return;
 
     const srcTime = v.currentTime;
@@ -781,11 +879,23 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       : (srcTime - currentClip.sourceStart) / currentClip.speed;
     const nextTimelineTime = Math.max(0, currentClip.timelineStart + clipOffset);
 
-    if (srcTime >= currentClip.sourceEnd - 0.03) {
-      const sorted = [...project.videoClips].sort((a, b) => a.timelineStart - b.timelineStart);
-      const curIdx = sorted.findIndex((c) => c.id === currentClip.id);
-      const nextClip = curIdx >= 0 && curIdx + 1 < sorted.length ? sorted[curIdx + 1] : null;
+    if (srcTime >= currentClip.sourceEnd - 0.035) {
+      const v1Sorted = project.videoClips
+        .filter((c) => getClipTrackIndex(c) === 0)
+        .sort((a, b) => a.timelineStart - b.timelineStart);
+      const curIdx = v1Sorted.findIndex((c) => c.id === currentClip.id);
+      const nextClip = curIdx >= 0 && curIdx + 1 < v1Sorted.length ? v1Sorted[curIdx + 1] : null;
+      const currentEnd = clipTimelineEnd(currentClip);
+
       if (nextClip) {
+        // If there is a real black gap before nextClip, step into gap so rAF clock plays black accurately
+        if (nextClip.timelineStart - currentEnd > 0.06) {
+          v.pause();
+          setPlayhead(Number((currentEnd + 0.02).toFixed(4)));
+          return;
+        }
+        const curMid = getClipMediaId(currentClip);
+        const nextMid = getClipMediaId(nextClip);
         setSelectedClipId(nextClip.id);
         setPlayhead(nextClip.timelineStart);
         v.playbackRate = Math.min(4, Math.max(0.25, nextClip.speed));
@@ -794,21 +904,116 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
           1,
           Math.max(0, (project.masterVolume / 100) * (nextClip.volume / 100))
         );
-        v.currentTime = nextClip.sourceStart;
-        void v.play().catch(() => {});
+        if (curMid !== nextMid) {
+          pendingSourceSeekRef.current = {time: nextClip.sourceStart, autoplay: true};
+        } else {
+          v.currentTime = nextClip.sourceStart;
+          void v.play().catch(() => {});
+        }
       } else {
         v.pause();
         setIsPlaying(false);
-        const firstClip = sorted[0];
+        const firstClip = v1Sorted[0];
         if (firstClip) {
           setPlayhead(firstClip.timelineStart);
-          v.currentTime = firstClip.sourceStart;
+          if (getClipMediaId(firstClip) !== getClipMediaId(currentClip)) {
+            pendingSourceSeekRef.current = {time: firstClip.sourceStart, autoplay: false};
+          } else {
+            v.currentTime = firstClip.sourceStart;
+          }
         }
       }
     } else {
       setPlayhead(Math.min(totalTimelineDur, nextTimelineTime));
     }
   };
+
+  // Real-time rAF clock when playing across true black timeline gaps
+  useEffect(() => {
+    if (!isPlaying || !isInGap) return;
+    let rafId = 0;
+    let lastTs = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.min(0.1, (now - lastTs) / 1000);
+      lastTs = now;
+      setPlayhead((prev) => {
+        const next = prev + dt;
+        if (next >= totalTimelineDur) {
+          setIsPlaying(false);
+          return 0;
+        }
+        const entering = findVideoClipAtTime(project.videoClips, next, 0);
+        if (entering) {
+          const v = videoRef.current;
+          const mapped = timelineToSourceTime(project.videoClips, next, 0);
+          pendingSourceSeekRef.current = {time: mapped.sourceTime, autoplay: true};
+          if (v && getClipMediaId(entering) === PRIMARY_MEDIA_ID) {
+            try {
+              v.currentTime = mapped.sourceTime;
+            } catch {
+              // Ignore
+            }
+            void v.play().catch(() => {});
+          }
+        }
+        return next;
+      });
+      rafId = window.requestAnimationFrame(tick);
+    };
+    rafId = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(rafId);
+  }, [isPlaying, isInGap, totalTimelineDur, project.videoClips]);
+
+  // Synchronize V2 Overlay/PiP <video> and Split-Screen Original Comparison <video>
+  useEffect(() => {
+    const v2 = v2VideoRef.current;
+    if (v2 && activeV2Clip && trackVisibility.v2) {
+      const mappedV2 = timelineToSourceTime(project.videoClips, playhead, 1);
+      v2.playbackRate = Math.min(4, Math.max(0.25, activeV2Clip.speed));
+      if (Math.abs(v2.currentTime - mappedV2.sourceTime) > 0.22) {
+        try {
+          v2.currentTime = mappedV2.sourceTime;
+        } catch {
+          // Ignore seek before metadata ready
+        }
+      }
+      if (isPlaying && v2.paused) {
+        void v2.play().catch(() => {});
+      } else if (!isPlaying && !v2.paused) {
+        v2.pause();
+      }
+    } else if (v2 && !v2.paused) {
+      v2.pause();
+    }
+
+    const cv = compareVideoRef.current;
+    const mainV = videoRef.current;
+    if (cv && mainV && splitCompareEnabled && !isInGap) {
+      if (Math.abs(cv.currentTime - mainV.currentTime) > 0.08) {
+        try {
+          cv.currentTime = mainV.currentTime;
+        } catch {
+          // Ignore
+        }
+      }
+      cv.playbackRate = mainV.playbackRate;
+      if (isPlaying && cv.paused) {
+        void cv.play().catch(() => {});
+      } else if (!isPlaying && !cv.paused) {
+        cv.pause();
+      }
+    } else if (cv && !cv.paused) {
+      cv.pause();
+    }
+  }, [
+    activeV2Clip,
+    trackVisibility.v2,
+    project.videoClips,
+    playhead,
+    isPlaying,
+    splitCompareEnabled,
+    isInGap,
+  ]);
 
   const seekTimelineTo = useCallback(
     (targetTimelineSec: number) => {
@@ -820,13 +1025,23 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
 
       const v = videoRef.current;
       if (!v) return;
-      const mapped = timelineToSourceTime(project.videoClips, clamped);
+      const mapped = timelineToSourceTime(project.videoClips, clamped, 0);
       if (mapped.clip) {
-        v.currentTime = Math.max(0, Math.min(duration || 3600, mapped.sourceTime));
+        const targetMid = getClipMediaId(mapped.clip);
+        const curMid = activeTimelineClip ? getClipMediaId(activeTimelineClip) : PRIMARY_MEDIA_ID;
+        if (targetMid !== curMid) {
+          pendingSourceSeekRef.current = {time: mapped.sourceTime, autoplay: isPlaying};
+        } else {
+          try {
+            v.currentTime = Math.max(0, Math.min(v.duration || duration || 3600, mapped.sourceTime));
+          } catch {
+            // Ignore
+          }
+        }
         v.playbackRate = Math.min(4, Math.max(0.25, mapped.clip.speed));
       }
     },
-    [totalTimelineDur, project.fps, project.videoClips, duration]
+    [totalTimelineDur, project.fps, project.videoClips, duration, activeTimelineClip, isPlaying]
   );
 
   // Sync audio & playback rate whenever project or selected clip settings change
@@ -951,13 +1166,20 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const togglePlay = () => {
     const v = videoRef.current;
     if (!v) return;
-    if (v.paused) {
-      const mapped = timelineToSourceTime(project.videoClips, playhead);
+    if (!isPlaying) {
+      const mapped = timelineToSourceTime(project.videoClips, playhead, 0);
+      if (mapped.isInGap) {
+        setIsPlaying(true);
+        return;
+      }
       if (mapped.clip) {
         v.currentTime = mapped.sourceTime;
-      } else if (project.videoClips[0]) {
-        setPlayhead(project.videoClips[0].timelineStart);
-        v.currentTime = project.videoClips[0].sourceStart;
+      } else {
+        const firstV1 = project.videoClips.find((c) => getClipTrackIndex(c) === 0);
+        if (firstV1) {
+          setPlayhead(firstV1.timelineStart);
+          v.currentTime = firstV1.sourceStart;
+        }
       }
       void v.play().catch(() => {});
       setIsPlaying(true);
@@ -1375,19 +1597,171 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   };
 
   // ============================================================================
-  // PROJECT SAVE / LOAD (IndexedDB + .morph Package Export/Import)
+  // MULTI-SOURCE VIDEO IMPORT (V1 APPEND / V2 PIP OVERLAY) & LAYER SWITCHING
   // ============================================================================
-  const handleSaveProject = async () => {
+  const triggerImportVideos = (targetTrack: 0 | 1) => {
+    importTargetTrackRef.current = targetTrack;
+    mediaImportInputRef.current?.click();
+  };
+
+  const handleImportMultiVideos = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+
+    setIsImportingMedia(true);
+    const targetTrack = importTargetTrackRef.current;
+    try {
+      const probedAssets: ProjectMediaAssetMeta[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        const mediaId = `media-${Date.now().toString(36)}-${i}`;
+        const meta = await probeVideoAssetMetadata(f, mediaId, f.name, false);
+        probedAssets.push(meta);
+      }
+
+      let lastNewClipId: string | null = null;
+      commitProject((prev) => {
+        let nextClips = [...prev.videoClips];
+        let cursorPlayhead = playhead;
+        for (const asset of probedAssets) {
+          const appended = createAppendedVideoClip(
+            nextClips,
+            asset,
+            targetTrack,
+            cursorPlayhead,
+            prev.fps
+          );
+          nextClips = appended.clips;
+          lastNewClipId = appended.newClipId;
+          if (targetTrack === 1) {
+            cursorPlayhead += Math.min(2, asset.durationSec);
+          }
+        }
+        return {
+          ...prev,
+          mediaAssets: [...(prev.mediaAssets || []), ...probedAssets],
+          videoClips: nextClips,
+        };
+      });
+      if (lastNewClipId) setSelectedClipId(lastNewClipId);
+      notifyStatus(
+        targetTrack === 1
+          ? tr(
+              `${probedAssets.length} video V2 PiP üst katmanına eklendi.`,
+              `Added ${probedAssets.length} video(s) to V2 PiP overlay track.`
+            )
+          : tr(
+              `${probedAssets.length} video ana zaman çizelgesine (V1) eklendi.`,
+              `Appended ${probedAssets.length} video(s) to V1 main timeline.`
+            )
+      );
+    } catch {
+      notifyStatus(tr('Video dosyası içe aktarılamadı.', 'Failed to import video clip(s).'));
+    } finally {
+      setIsImportingMedia(false);
+    }
+  };
+
+  const handleToggleSelectedClipLayer = () => {
+    if (!selectedClip) return;
+    const res = toggleClipTrackLayer(project.videoClips, selectedClip.id, project.fps);
+    if (!res.didMove) {
+      notifyStatus(
+        res.reason || tr('Bu klip katman değiştiremiyor.', 'Cannot switch track layer for this clip.')
+      );
+      return;
+    }
+    commitProject((prev) => ({
+      ...prev,
+      videoClips: res.clips,
+    }));
+    notifyStatus(
+      res.movedToTrack === 1
+        ? tr('Klip üst PiP katmanına (V2) taşındı.', 'Moved clip to V2 Overlay / PiP track.')
+        : tr('Klip ana katmana (V1) taşındı.', 'Moved clip to V1 Main track.')
+    );
+  };
+
+  const startPipDrag = (e: React.PointerEvent, clipId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const stage = previewStageRef.current;
+    const target = project.videoClips.find((c) => c.id === clipId);
+    if (!stage || !target) return;
+    setSelectedClipId(clipId);
+    const rect = stage.getBoundingClientRect();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const initPip = {...(target.pipRect ?? DEFAULT_PIP_RECT)};
+
+    const onMove = (ev: PointerEvent) => {
+      const dx = (ev.clientX - startX) / Math.max(1, rect.width);
+      const dy = (ev.clientY - startY) / Math.max(1, rect.height);
+      const nx = Math.max(0, Math.min(1 - initPip.w, initPip.x + dx));
+      const ny = Math.max(0, Math.min(1 - initPip.h, initPip.y + dy));
+      setProject((prev) => ({
+        ...prev,
+        videoClips: prev.videoClips.map((c) =>
+          c.id === clipId
+            ? {
+                ...c,
+                pipRect: {
+                  ...initPip,
+                  x: Number(nx.toFixed(4)),
+                  y: Number(ny.toFixed(4)),
+                },
+              }
+            : c
+        ),
+      }));
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      setHasUnsavedChanges(true);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  // ============================================================================
+  // PROJECT SAVE / LOAD + DEBOUNCED INDEXEDDB AUTOSAVE
+  // ============================================================================
+  const handleSaveProject = useCallback(async () => {
     const res = await saveNleProjectIdb(project, file.file);
     setSavedProjects(res.projects);
+    setHasUnsavedChanges(false);
     notifyStatus(
       res.savedInIdb
         ? tr(
-            `Proje "${project.projectName}" IndexedDB'ye kaydedildi (${res.savedAudioCount} ses katmanı).`,
-            `Project "${project.projectName}" saved to IndexedDB (${res.savedAudioCount} audio tracks).`
+            `Proje "${project.projectName}" kaydedildi (${res.savedVideoCount + 1} video · ${res.savedAudioCount} ses).`,
+            `Project "${project.projectName}" saved (${res.savedVideoCount + 1} video · ${res.savedAudioCount} audio).`
           )
         : tr(`Proje "${project.projectName}" kaydedildi.`, `Project "${project.projectName}" saved.`)
     );
+  }, [project, file.file, notifyStatus, tr]);
+
+  // Background debounced IndexedDB autosave (12s after edits) so progress is never lost
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const timer = window.setTimeout(() => {
+      void saveNleProjectIdb(project, file.file).then((res) => {
+        if (res.savedInIdb) {
+          setSavedProjects(res.projects);
+          setHasUnsavedChanges(false);
+        }
+      });
+    }, 12000);
+    return () => window.clearTimeout(timer);
+  }, [hasUnsavedChanges, project, file.file]);
+
+  const handleRequestExit = () => {
+    if (hasUnsavedChanges) {
+      setShowUnsavedExitDialog(true);
+    } else {
+      onBack();
+    }
   };
 
   const handleLoadProject = async (summary: SavedNleProjectSummary) => {
@@ -1396,13 +1770,14 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     setProject(nextState);
     setHistory([nextState]);
     setHistoryIdx(0);
+    setHasUnsavedChanges(false);
     setSelectedClipId(nextState.videoClips[0]?.id || 'clip-main-1');
     setShowProjectsModal(false);
     notifyStatus(
-      loaded && loaded.restoredAudioCount > 0
+      loaded && (loaded.restoredAudioCount > 0 || loaded.restoredVideoCount > 0)
         ? tr(
-            `"${summary.projectName}" yüklendi (${loaded.restoredAudioCount} ses dosyası geri yüklendi).`,
-            `Loaded "${summary.projectName}" (${loaded.restoredAudioCount} audio files restored).`
+            `"${summary.projectName}" yüklendi (${loaded.restoredVideoCount} ek video, ${loaded.restoredAudioCount} ses geri yüklendi).`,
+            `Loaded "${summary.projectName}" (${loaded.restoredVideoCount} extra videos, ${loaded.restoredAudioCount} audio restored).`
           )
         : tr(`"${summary.projectName}" projesi yüklendi.`, `Loaded project "${summary.projectName}".`)
     );
@@ -1662,6 +2037,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     const f = e.target.files?.[0];
     e.target.value = '';
     if (!f) return;
+    registerMediaAssetBlob(PRIMARY_MEDIA_ID, f, f.name);
     const nextUrl = URL.createObjectURL(f);
     setRelinkedVideoUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
@@ -2056,7 +2432,11 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     const g = project.colorGrading;
     const vfx = project.vfx;
     const exp = project.exportSettings;
+    const dsp = project.audioDsp ?? DEFAULT_AUDIO_DSP;
     const overlayPng = trackVisibility.t1 ? buildTextOverlayPngDataUrl() : '';
+    const effectiveVideoClips = trackVisibility.v2
+      ? project.videoClips
+      : project.videoClips.filter((c) => getClipTrackIndex(c) === 0);
     const effectiveAudioClips = project.audioClips.map((a) =>
       a.kind !== 'original' && !trackVisibility.a2 ? {...a, muted: true} : a
     );
@@ -2092,10 +2472,18 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       tint: String(g.tint),
       sharpness: String(g.sharpness),
       vignette: String(g.vignette),
+      lift: String(g.lift ?? 0),
+      gamma: String(g.gamma ?? 0),
+      gain: String(g.gain ?? 0),
       chromaKeyEnabled: vfx.chromaKeyEnabled ? '1' : '0',
       chromaKeyColor: vfx.chromaKeyColor,
       chromaKeySimilarity: String(vfx.chromaKeySimilarity),
       noiseReduction: project.audioClips.some((a) => a.noiseReduction) ? '1' : '0',
+      eqBass: String(dsp.eqBass),
+      eqMid: String(dsp.eqMid),
+      eqTreble: String(dsp.eqTreble),
+      audioCompressor: dsp.compressor ? '1' : '0',
+      audioLimiter: dsp.limiter ? '1' : '0',
       speed: String(selectedClip?.speed ?? 1),
       effect: project.effectMode,
       loopCount: String(project.loopCount),
@@ -2110,7 +2498,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       codec: exp.codec,
       audioBitrate: exp.audioBitrate,
       audioDucking: project.audioDucking ? '1' : '0',
-      clipsJson: JSON.stringify(project.videoClips),
+      clipsJson: JSON.stringify(effectiveVideoClips),
       audioClipsJson: JSON.stringify(effectiveAudioClips),
     };
     if (overlayPng) {
@@ -2177,8 +2565,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     );
   };
 
-  const handleToggleTrackVisibility = (track: "t1" | "v1" | "a1" | "a2") => {
-    if (track === "a1") {
+  const handleToggleTrackVisibility = (track: 't1' | 'v1' | 'v2' | 'a1' | 'a2') => {
+    if (track === 'a1') {
       const next = !trackVisibility.a1;
       setTrackVisibility((t) => ({...t, a1: next}));
       commitProject((prev) => ({...prev, masterMuted: !next}));
@@ -2247,16 +2635,188 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         </div>
 
         <div className="morph-nle-scroll flex-1 overflow-y-auto p-3">
-        {/* TAB 1: CLIP TRANSITIONS, OPACITY & SILENCE CUT */}
+        {/* TAB 1: MULTI-SOURCE MEDIA BIN, V2 PIP, CLIP TRANSITIONS, OPACITY & SILENCE CUT */}
         {activeTab === 'trim' && (
           <div className="space-y-3">
+            {/* Multi-Source Video Media Bin */}
+            <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <Film className="h-3.5 w-3.5 text-[#34D399]" />
+                  <span className="text-xs font-extrabold text-[var(--ink)]">
+                    {tr('Medya Havuzu (Çoklu Video)', 'Media Bin (Multi-Source)')}
+                  </span>
+                  <span className="font-mono-num rounded bg-white/[0.06] px-1.5 py-0.5 text-[9px] font-bold text-white/60">
+                    {1 + (project.mediaAssets?.length ?? 0)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    disabled={isImportingMedia}
+                    onClick={() => triggerImportVideos(0)}
+                    className="flex items-center gap-1 rounded-lg border border-[#34D399]/40 bg-[#34D399]/12 px-2.5 py-1 text-[11px] font-bold text-[#34D399] transition-colors hover:bg-[#34D399]/20 disabled:opacity-50"
+                  >
+                    <FilePlus2 className="h-3 w-3" />
+                    <span>
+                      {isImportingMedia ? tr('Ekleniyor…', 'Importing…') : tr('+ Video (V1)', '+ Video (V1)')}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isImportingMedia}
+                    onClick={() => triggerImportVideos(1)}
+                    className="flex items-center gap-1 rounded-lg border border-[#A855F7]/40 bg-[#A855F7]/12 px-2.5 py-1 text-[11px] font-bold text-[#C084FC] transition-colors hover:bg-[#A855F7]/20 disabled:opacity-50"
+                  >
+                    <PictureInPicture2 className="h-3 w-3" />
+                    <span>{tr('+ PiP (V2)', '+ PiP (V2)')}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="no-scrollbar flex gap-2 overflow-x-auto pb-0.5">
+                {/* Primary Source Card */}
+                <div className="flex w-[142px] shrink-0 items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--inset)] p-1.5">
+                  <div className="h-9 w-12 shrink-0 overflow-hidden rounded bg-black">
+                    {thumbnails[0] ? (
+                      <img src={thumbnails[0]} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-white/30">
+                        <Film className="h-3.5 w-3.5" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[10px] font-bold text-[var(--ink)]">
+                      {project.sourceFileName || file.name}
+                    </p>
+                    <div className="mt-1 flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const res = createAppendedVideoClip(
+                            project.videoClips,
+                            {
+                              id: PRIMARY_MEDIA_ID,
+                              name: project.sourceFileName || file.name,
+                              durationSec: Math.max(0.5, duration),
+                              width: videoMeta.w,
+                              height: videoMeta.h,
+                              size: file.size,
+                              mime: file.file.type || 'video/mp4',
+                              isPrimary: true,
+                              thumbnailDataUrl: thumbnails[0],
+                            },
+                            0,
+                            playhead,
+                            project.fps
+                          );
+                          commitProject((prev) => ({...prev, videoClips: res.clips}));
+                          setSelectedClipId(res.newClipId);
+                        }}
+                        className="rounded bg-[#34D399]/18 px-1.5 py-0.5 text-[9px] font-bold text-[#34D399] hover:bg-[#34D399]/30"
+                      >
+                        +V1
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const res = createAppendedVideoClip(
+                            project.videoClips,
+                            {
+                              id: PRIMARY_MEDIA_ID,
+                              name: project.sourceFileName || file.name,
+                              durationSec: Math.max(0.5, duration),
+                              width: videoMeta.w,
+                              height: videoMeta.h,
+                              size: file.size,
+                              mime: file.file.type || 'video/mp4',
+                              isPrimary: true,
+                              thumbnailDataUrl: thumbnails[0],
+                            },
+                            1,
+                            playhead,
+                            project.fps
+                          );
+                          commitProject((prev) => ({...prev, videoClips: res.clips}));
+                          setSelectedClipId(res.newClipId);
+                        }}
+                        className="rounded bg-[#A855F7]/20 px-1.5 py-0.5 text-[9px] font-bold text-[#C084FC] hover:bg-[#A855F7]/30"
+                      >
+                        +PiP
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Imported Secondary Media Cards */}
+                {(project.mediaAssets ?? []).map((asset) => (
+                  <div
+                    key={asset.id}
+                    className="flex w-[148px] shrink-0 items-center gap-2 rounded-lg border border-[#34D399]/30 bg-[var(--inset)] p-1.5"
+                  >
+                    <div className="h-9 w-12 shrink-0 overflow-hidden rounded bg-black">
+                      {asset.thumbnailDataUrl ? (
+                        <img src={asset.thumbnailDataUrl} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[#34D399]/60">
+                          <Film className="h-3.5 w-3.5" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[10px] font-bold text-[var(--ink)]">
+                        {asset.name}
+                      </p>
+                      <div className="mt-1 flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const res = createAppendedVideoClip(
+                              project.videoClips,
+                              asset,
+                              0,
+                              playhead,
+                              project.fps
+                            );
+                            commitProject((prev) => ({...prev, videoClips: res.clips}));
+                            setSelectedClipId(res.newClipId);
+                          }}
+                          className="rounded bg-[#34D399]/18 px-1.5 py-0.5 text-[9px] font-bold text-[#34D399] hover:bg-[#34D399]/30"
+                        >
+                          +V1
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const res = createAppendedVideoClip(
+                              project.videoClips,
+                              asset,
+                              1,
+                              playhead,
+                              project.fps
+                            );
+                            commitProject((prev) => ({...prev, videoClips: res.clips}));
+                            setSelectedClipId(res.newClipId);
+                          }}
+                          className="rounded bg-[#A855F7]/20 px-1.5 py-0.5 text-[9px] font-bold text-[#C084FC] hover:bg-[#A855F7]/30"
+                        >
+                          +PiP
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {selectedClip && (
               <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 space-y-3">
                 {/* Clip Transition Picker WITH VISUAL PREVIEW CARDS */}
                 <div>
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-[11px] font-bold text-[var(--muted)]">
-                      {tr('Klip Giriş Geçişi (Transition)', 'Clip In Transition')}
+                      {tr('Klip Giriş Geçişi (Transition · FFmpeg xfade)', 'Clip In Transition (xfade)')}
                     </span>
                     <span className="font-mono-num text-[10px] font-bold text-[var(--accent)]">
                       {selectedClip.transitionDurationSec.toFixed(1)}s
@@ -2426,6 +2986,50 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                   />
                 </div>
 
+                {/* V2 PiP Overlay Controls (when selected clip is on V2) */}
+                {getClipTrackIndex(selectedClip) === 1 && (
+                  <div className="rounded-lg border border-[#A855F7]/35 bg-[#A855F7]/10 p-2.5 space-y-2">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-[#D8B4FE]">
+                      <span className="flex items-center gap-1.5">
+                        <PictureInPicture2 className="h-3.5 w-3.5" />
+                        {tr('V2 PiP Üst Katman Boyutu', 'V2 PiP Overlay Size')}
+                      </span>
+                      <span className="text-[10px] font-medium text-white/60">
+                        {tr('Konumu ekrandan sürükle', 'Drag on preview to move')}
+                      </span>
+                    </div>
+                    <NleSlider
+                      label={tr('PiP Ölçeği', 'PiP Scale')}
+                      value={Math.round((selectedClip.pipRect?.w ?? DEFAULT_PIP_RECT.w) * 100)}
+                      min={18}
+                      max={100}
+                      step={2}
+                      defaultValue={36}
+                      valueText={`${Math.round((selectedClip.pipRect?.w ?? DEFAULT_PIP_RECT.w) * 100)}%`}
+                      onChange={(pct) => {
+                        const w = Number((pct / 100).toFixed(3));
+                        const h = w;
+                        commitProject((prev) => ({
+                          ...prev,
+                          videoClips: prev.videoClips.map((c) => {
+                            if (c.id !== selectedClip.id) return c;
+                            const cur = c.pipRect ?? DEFAULT_PIP_RECT;
+                            return {
+                              ...c,
+                              pipRect: {
+                                x: Math.min(cur.x, Math.max(0, 1 - w)),
+                                y: Math.min(cur.y, Math.max(0, 1 - h)),
+                                w,
+                                h,
+                              },
+                            };
+                          }),
+                        }));
+                      }}
+                    />
+                  </div>
+                )}
+
                 {/* Quick Smart Clip Actions */}
                 <div className="flex flex-wrap items-center gap-2 border-t border-[var(--line)] pt-2.5">
                   <button
@@ -2435,6 +3039,19 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                   >
                     <Scissors className="h-3.5 w-3.5" />
                     <span>{tr('İmleçten Böl', 'Split at Playhead')}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleToggleSelectedClipLayer}
+                    className="flex items-center gap-1.5 rounded-lg border border-[#A855F7]/40 bg-[#A855F7]/12 px-2.5 py-1.5 text-[11px] font-bold text-[#C084FC] transition-colors hover:bg-[#A855F7]/20"
+                  >
+                    <ArrowUpDown className="h-3.5 w-3.5" />
+                    <span>
+                      {getClipTrackIndex(selectedClip) === 1
+                        ? tr('Ana Katmana (V1) Al', 'Move to V1')
+                        : tr('Üst PiP Katmanına (V2) Al', 'Move to V2 PiP')}
+                    </span>
                   </button>
 
                   <button
@@ -2628,6 +3245,96 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* Pro Master Audio DSP: 3-Band EQ + Compressor + Limiter (FFmpeg equalizer/acompressor/alimiter) */}
+            {(() => {
+              const dsp = project.audioDsp ?? DEFAULT_AUDIO_DSP;
+              const updateDsp = (patch: Partial<typeof DEFAULT_AUDIO_DSP>) =>
+                commitProject((prev) => ({
+                  ...prev,
+                  audioDsp: {
+                    ...(prev.audioDsp ?? DEFAULT_AUDIO_DSP),
+                    ...patch,
+                  },
+                }));
+              return (
+                <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <Sliders className="h-3.5 w-3.5 text-[#34D399]" />
+                      <span className="text-xs font-extrabold text-[var(--ink)]">
+                        {tr('3 Bant EQ, Compressor & Limiter (DSP)', '3-Band EQ, Compressor & Limiter')}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => updateDsp({...DEFAULT_AUDIO_DSP})}
+                      className="text-[11px] font-bold text-[var(--muted)] hover:text-[var(--accent)]"
+                    >
+                      {tr('Sıfırla', 'Reset')}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <NleSlider
+                      label={tr('Bas (100 Hz)', 'Bass (100 Hz)')}
+                      value={dsp.eqBass}
+                      min={-12}
+                      max={12}
+                      step={1}
+                      defaultValue={0}
+                      valueText={`${dsp.eqBass > 0 ? '+' : ''}${dsp.eqBass} dB`}
+                      onChange={(val) => updateDsp({eqBass: val})}
+                    />
+                    <NleSlider
+                      label={tr('Orta / Vokal (1 kHz)', 'Mid / Vocal (1 kHz)')}
+                      value={dsp.eqMid}
+                      min={-12}
+                      max={12}
+                      step={1}
+                      defaultValue={0}
+                      valueText={`${dsp.eqMid > 0 ? '+' : ''}${dsp.eqMid} dB`}
+                      onChange={(val) => updateDsp({eqMid: val})}
+                    />
+                    <NleSlider
+                      label={tr('Tiz / Netlik (8 kHz)', 'Treble (8 kHz)')}
+                      value={dsp.eqTreble}
+                      min={-12}
+                      max={12}
+                      step={1}
+                      defaultValue={0}
+                      valueText={`${dsp.eqTreble > 0 ? '+' : ''}${dsp.eqTreble} dB`}
+                      onChange={(val) => updateDsp({eqTreble: val})}
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 border-t border-[var(--line)] pt-2.5">
+                    <button
+                      type="button"
+                      onClick={() => updateDsp({compressor: !dsp.compressor})}
+                      className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                        dsp.compressor
+                          ? 'border-[#34D399] bg-[#34D399]/18 text-[#34D399]'
+                          : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
+                      }`}
+                    >
+                      {tr('Dinamik Compressor (Ses Dengele)', 'Dynamic Compressor')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateDsp({limiter: !dsp.limiter})}
+                      className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                        dsp.limiter
+                          ? 'border-[#F5B82E] bg-[#F5B82E]/18 text-[#F5B82E]'
+                          : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
+                      }`}
+                    >
+                      {tr('Master Limiter (Patlama Önle)', 'Master Limiter')}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -2857,6 +3564,18 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                   </button>
                   <button
                     type="button"
+                    onClick={() => setSplitCompareEnabled((s) => !s)}
+                    className={`flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-bold transition-colors ${
+                      splitCompareEnabled
+                        ? 'border-[#38BDF8] bg-[#38BDF8]/18 text-[#38BDF8]'
+                        : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:border-[#38BDF8]/60 hover:text-[var(--ink)]'
+                    }`}
+                  >
+                    <Columns2 className="h-3 w-3" />
+                    <span>{tr('Bölünmüş Önce/Sonra', 'Split Wipe')}</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() =>
                       setFilterPreviewMode((m) => (m === 'sample' ? 'video' : 'sample'))
                     }
@@ -2879,6 +3598,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                         colorGrading: {
                           ...prev.colorGrading,
                           ...COLOR_PRESET_VALUES.orig.grading,
+                          lift: 0,
+                          gamma: 0,
+                          gain: 0,
                         },
                       }));
                     }}
@@ -3008,7 +3730,41 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
               label={tr('Canlı RGB Renk Histogramı (Scope)', 'Live RGB Color Scope')}
             />
 
-            <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3">
+            <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 space-y-3">
+              {/* Pro Color Wheels / Tonal Balance: Lift / Gamma / Gain */}
+              <div className="grid grid-cols-3 gap-3 border-b border-[var(--line)] pb-3">
+                {(
+                  [
+                    {key: 'lift', label: tr('Lift (Siyahlar)', 'Lift (Shadows)')},
+                    {key: 'gamma', label: tr('Gamma (Orta Ton)', 'Gamma (Midtones)')},
+                    {key: 'gain', label: tr('Gain (Parlaklık)', 'Gain (Highlights)')},
+                  ] as {key: 'lift' | 'gamma' | 'gain'; label: string}[]
+                ).map((wheel) => {
+                  const val = project.colorGrading[wheel.key] ?? 0;
+                  return (
+                    <NleSlider
+                      key={wheel.key}
+                      label={wheel.label}
+                      value={val}
+                      min={-40}
+                      max={40}
+                      step={2}
+                      defaultValue={0}
+                      valueText={val > 0 ? `+${val}` : String(val)}
+                      onChange={(next) =>
+                        commitProject((prev) => ({
+                          ...prev,
+                          colorGrading: {
+                            ...prev.colorGrading,
+                            [wheel.key]: next,
+                          },
+                        }))
+                      }
+                    />
+                  );
+                })}
+              </div>
+
               <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-5">
                 {(
                   [
@@ -3028,31 +3784,30 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                     min: number;
                     max: number;
                   }[]
-                ).map((ctrl) => (
-                  <NleSlider
-                    key={ctrl.key}
-                    label={ctrl.label}
-                    value={project.colorGrading[ctrl.key]}
-                    min={ctrl.min}
-                    max={ctrl.max}
-                    step={2}
-                    defaultValue={0}
-                    valueText={
-                      project.colorGrading[ctrl.key] > 0
-                        ? `+${project.colorGrading[ctrl.key]}`
-                        : String(project.colorGrading[ctrl.key])
-                    }
-                    onChange={(val) =>
-                      commitProject((prev) => ({
-                        ...prev,
-                        colorGrading: {
-                          ...prev.colorGrading,
-                          [ctrl.key]: val,
-                        },
-                      }))
-                    }
-                  />
-                ))}
+                ).map((ctrl) => {
+                  const val = project.colorGrading[ctrl.key] ?? 0;
+                  return (
+                    <NleSlider
+                      key={ctrl.key}
+                      label={ctrl.label}
+                      value={val}
+                      min={ctrl.min}
+                      max={ctrl.max}
+                      step={2}
+                      defaultValue={0}
+                      valueText={val > 0 ? `+${val}` : String(val)}
+                      onChange={(nextVal) =>
+                        commitProject((prev) => ({
+                          ...prev,
+                          colorGrading: {
+                            ...prev.colorGrading,
+                            [ctrl.key]: nextVal,
+                          },
+                        }))
+                      }
+                    />
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -3957,16 +4712,19 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       proxyRecommended={proxyRecommendation.recommended}
       proxyReason={tr(proxyRecommendation.reasonTr, proxyRecommendation.reasonEn)}
       compareOriginal={compareOriginal}
+      splitCompareEnabled={splitCompareEnabled}
+      hasUnsavedChanges={hasUnsavedChanges}
       showGrid={showGrid}
       isPortraitMode={isPortraitMode}
-      onBack={onBack}
-      onSaveProject={handleSaveProject}
+      onBack={handleRequestExit}
+      onSaveProject={() => void handleSaveProject()}
       onOpenProjects={() => {
         setSavedProjects(loadSavedNleProjects());
         setShowProjectsModal(true);
       }}
       onToggleProxy={() => void handleToggleProxyPreview()}
       onSetCompareOriginal={setCompareOriginal}
+      onToggleSplitCompare={() => setSplitCompareEnabled((s) => !s)}
       onToggleGrid={() => setShowGrid((g) => !g)}
       onToggleOrientation={toggleOrientationLock}
       onExport={() => onExport(buildPayload('export'))}
@@ -3978,22 +4736,29 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       isTr={isTr}
       project={project}
       videoRef={videoRef}
+      v2VideoRef={v2VideoRef}
+      compareVideoRef={compareVideoRef}
       previewStageRef={previewStageRef}
       activePreviewVideoSrc={activePreviewVideoSrc}
-      blurBgVideoSrc={videoUrl}
+      activeV2VideoSrc={activeV2VideoSrc}
+      blurBgVideoSrc={activePreviewVideoSrc}
       playhead={playhead}
       totalTimelineDur={totalTimelineDur}
       isPlaying={isPlaying}
+      isInGap={isInGap}
       isPortraitMode={isPortraitMode}
       isFullscreenPreview={isFullscreenPreview}
       previewHeightVh={previewHeightVh}
       isResizingPreview={isResizingPreview}
       compareOriginal={compareOriginal}
+      splitCompareEnabled={splitCompareEnabled}
+      splitComparePct={splitComparePct}
       showGrid={showGrid}
       isCropTabActive={activeTab === 'transform' && (!isPortraitMode || isInspectorOpen)}
       trackVisibility={trackVisibility}
       selectedClip={selectedClip}
       activeTimelineClip={activeTimelineClip ?? undefined}
+      activeV2Clip={activeV2Clip ?? undefined}
       activeTextOverlays={activeTextOverlays}
       interpolatedKeyframe={interpolatedKeyframe}
       evaluatedTransition={evaluatedTransition}
@@ -4008,6 +4773,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       onTimeUpdate={handleTimeUpdate}
       onSetPlaying={setIsPlaying}
       onStartCropDrag={startCropDrag}
+      onStartPipDrag={startPipDrag}
+      onChangeSplitComparePct={setSplitComparePct}
       onStartPreviewResize={startPreviewResize}
       onCyclePreviewHeight={cyclePreviewHeight}
       onToggleFullscreen={() => setIsFullscreenPreview((f) => !f)}
@@ -4049,6 +4816,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         setActiveTab('text');
         if (isPortraitMode) setIsInspectorOpen(true);
       }}
+      onImportVideos={triggerImportVideos}
+      onToggleSelectedClipLayer={handleToggleSelectedClipLayer}
       onOpenFxOrColor={(tab) => {
         setActiveTab(tab);
         if (isPortraitMode) setIsInspectorOpen(true);
@@ -4118,7 +4887,15 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         </div>
       )}
 
-      {/* Hidden .morph Package & Source Relink Inputs */}
+      {/* Hidden Multi-Video Import, .morph Package & Source Relink Inputs */}
+      <input
+        ref={mediaImportInputRef}
+        type="file"
+        accept="video/*"
+        multiple
+        className="hidden"
+        onChange={(e) => void handleImportMultiVideos(e)}
+      />
       <input
         ref={morphImportInputRef}
         type="file"
@@ -4149,6 +4926,55 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         onDuplicateProject={(id) => void duplicateNleProjectIdb(id).then(setSavedProjects)}
         onDeleteProject={(id) => void deleteNleProjectIdb(id).then(setSavedProjects)}
       />
+
+      {/* Safe Unsaved-Changes Exit Confirmation Dialog */}
+      {showUnsavedExitDialog && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-white/[0.12] bg-[#141720] p-4 shadow-2xl">
+            <h3 className="text-sm font-extrabold text-white">
+              {tr('Kaydedilmemiş Değişiklikler Var', 'Unsaved Changes')}
+            </h3>
+            <p className="mt-1.5 text-xs leading-relaxed text-white/65">
+              {tr(
+                'Editörden çıkmadan önce projenizi IndexedDB üzerine kaydetmek ister misiniz? Tüm klipler, V2 PiP katmanları ve ses miksajınız korunur.',
+                'Save your project to IndexedDB before leaving the editor? All video clips, V2 PiP overlays, and audio mixes will be preserved.'
+              )}
+            </p>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowUnsavedExitDialog(false)}
+                className="rounded-lg border border-white/[0.12] bg-white/[0.05] px-3 py-1.5 text-xs font-bold text-white/80 hover:bg-white/[0.1]"
+              >
+                {tr('İptal', 'Cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowUnsavedExitDialog(false);
+                  setHasUnsavedChanges(false);
+                  onBack();
+                }}
+                className="rounded-lg border border-rose-500/40 bg-rose-500/15 px-3 py-1.5 text-xs font-bold text-rose-300 hover:bg-rose-500/25"
+              >
+                {tr('Kaydetmeden Çık', 'Discard & Exit')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void handleSaveProject().then(() => {
+                    setShowUnsavedExitDialog(false);
+                    onBack();
+                  });
+                }}
+                className="rounded-lg bg-[#F5B82E] px-3.5 py-1.5 text-xs font-extrabold text-[#0B0D12] hover:bg-[#F7C64E]"
+              >
+                {tr('Kaydet & Çık', 'Save & Exit')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
