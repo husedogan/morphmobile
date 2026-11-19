@@ -931,6 +931,136 @@ public class MorphEnginesPlugin extends Plugin {
         call.resolve(ret);
     }
 
+    @PluginMethod
+    public void downloadAndInstallApk(PluginCall call) {
+        final String rawUrl = call.getString("url", "");
+        final String rawName = call.getString("fileName", "Morph-update.apk");
+        if (rawUrl == null || rawUrl.trim().isEmpty()) {
+            call.reject("Geçerli bir APK indirme bağlantısı bulunamadı.");
+            return;
+        }
+        final String targetUrl = rawUrl.trim().replace(
+            "github.com/husedogan/morph/",
+            "github.com/husedogan/morphmobile/"
+        );
+        final Context appCtx = getContext().getApplicationContext();
+
+        executor.execute(() -> {
+            File tempFile = null;
+            try {
+                File docsMorph = getPublicMorphDir(appCtx);
+                String cleanName = sanitizeFileName(rawName.endsWith(".apk") ? rawName : (rawName + ".apk"));
+                tempFile = new File(docsMorph, cleanName + ".part");
+                File finalDest = new File(docsMorph, cleanName);
+
+                String currentUrl = targetUrl;
+                HttpURLConnection conn = null;
+                for (int hop = 0; hop < 8; hop++) {
+                    conn = (HttpURLConnection) new URL(currentUrl).openConnection();
+                    conn.setConnectTimeout(20_000);
+                    conn.setReadTimeout(45_000);
+                    conn.setInstanceFollowRedirects(false);
+                    conn.setRequestProperty("User-Agent", USER_AGENT);
+                    conn.setRequestProperty("Accept", "application/octet-stream,*/*");
+                    int code = conn.getResponseCode();
+                    if (code == HttpURLConnection.HTTP_MOVED_TEMP
+                        || code == HttpURLConnection.HTTP_MOVED_PERM
+                        || code == HttpURLConnection.HTTP_SEE_OTHER
+                        || code == 307
+                        || code == 308) {
+                        String loc = conn.getHeaderField("Location");
+                        conn.disconnect();
+                        if (loc == null || loc.isEmpty()) {
+                            throw new IOException("APK yönlendirme adresi boş.");
+                        }
+                        currentUrl = new URL(new URL(currentUrl), loc).toString();
+                        continue;
+                    }
+                    if (code >= 400) {
+                        conn.disconnect();
+                        throw new IOException("GitHub APK HTTP " + code);
+                    }
+                    break;
+                }
+
+                if (conn == null) {
+                    throw new IOException("APK sunucusuna bağlanılamadı.");
+                }
+
+                long totalBytes = conn.getContentLengthLong();
+                long downloaded = 0L;
+                long lastEmit = 0L;
+
+                try (InputStream in = conn.getInputStream();
+                     OutputStream out = new FileOutputStream(tempFile)) {
+                    byte[] buf = new byte[64 * 1024];
+                    int r;
+                    while ((r = in.read(buf)) != -1) {
+                        out.write(buf, 0, r);
+                        downloaded += r;
+                        long now = System.currentTimeMillis();
+                        if (now - lastEmit >= 120 || (totalBytes > 0 && downloaded >= totalBytes)) {
+                            lastEmit = now;
+                            double pct = totalBytes > 0
+                                ? Math.min(99.0, (downloaded * 100.0) / totalBytes)
+                                : 50.0;
+                            JSObject ev = new JSObject();
+                            ev.put("progress", pct);
+                            ev.put("downloadedBytes", downloaded);
+                            ev.put("totalBytes", totalBytes > 0 ? totalBytes : downloaded);
+                            notifyListeners("apkProgress", ev);
+                        }
+                    }
+                } finally {
+                    conn.disconnect();
+                }
+
+                if (finalDest.exists()) {
+                    //noinspection ResultOfMethodCallIgnored
+                    finalDest.delete();
+                }
+                moveOrCopyFile(tempFile, finalDest);
+
+                JSObject doneEv = new JSObject();
+                doneEv.put("progress", 100.0);
+                doneEv.put("downloadedBytes", finalDest.length());
+                doneEv.put("totalBytes", finalDest.length());
+                notifyListeners("apkProgress", doneEv);
+
+                boolean installerLaunched = false;
+                try {
+                    Uri contentUri = androidx.core.content.FileProvider.getUriForFile(
+                        appCtx,
+                        appCtx.getPackageName() + ".fileprovider",
+                        finalDest
+                    );
+                    android.content.Intent installIntent = new android.content.Intent(android.content.Intent.ACTION_VIEW);
+                    installIntent.setDataAndType(contentUri, "application/vnd.android.package-archive");
+                    installIntent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    installIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                    appCtx.startActivity(installIntent);
+                    installerLaunched = true;
+                } catch (Exception ignored) {
+                    installerLaunched = false;
+                }
+
+                JSObject ret = new JSObject();
+                ret.put("filePath", finalDest.getAbsolutePath());
+                ret.put("fileName", finalDest.getName());
+                ret.put("size", finalDest.length());
+                ret.put("uri", Uri.fromFile(finalDest).toString());
+                ret.put("installerLaunched", installerLaunched);
+                call.resolve(ret);
+            } catch (Exception e) {
+                if (tempFile != null && tempFile.exists()) {
+                    //noinspection ResultOfMethodCallIgnored
+                    tempFile.delete();
+                }
+                call.reject("APK indirme hatası: " + e.getMessage(), e);
+            }
+        });
+    }
+
     private static File getPublicMorphDir(Context appCtx) {
         File docsMorph = new File(
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),

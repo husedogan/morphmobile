@@ -269,10 +269,10 @@ const DICT: Record<string, {tr: string; en: string}> = {
   },
   NoExportsYet: {tr: 'Henüz geçmiş kaydı yok.', en: 'No history items yet.'},
   FilterAll: {tr: 'Tümü', en: 'All'},
-  FilterImages: {tr: 'Görseller', en: 'Images'},
+  FilterImages: {tr: 'Görsel', en: 'Images'},
   FilterPdf: {tr: 'PDF', en: 'PDF'},
   FilterZip: {tr: 'ZIP', en: 'ZIP'},
-  FilterOther: {tr: 'Medya / Diğer', en: 'Media / Other'},
+  FilterOther: {tr: 'Medya', en: 'Media'},
   ClearLibrary: {tr: 'Geçmişi Temizle', en: 'Clear History'},
   ConfirmClearLibrary: {tr: 'Kitaplık geçmişindeki tüm kayıtlar silinsin mi?', en: 'Clear all items in your library history?'},
   OriginalSafeNote: {
@@ -721,6 +721,9 @@ const DICT: Record<string, {tr: string; en: string}> = {
   VeCropFree: {tr: 'Serbest', en: 'Free'},
   VeCropReset: {tr: 'Sıfırla', en: 'Reset'},
   VeCropDragHint: {tr: 'Videonun köşelerinden veya içinden sürükleyerek kırp', en: 'Drag corners or inside frame to crop on screen'},
+  VeLandscapeToggle: {tr: 'Ekranı Yan / Dik Çevir', en: 'Toggle Landscape / Portrait'},
+  VeRotateLeft90: {tr: '90° Sol', en: '90° Left'},
+  VeRotateRight90: {tr: '90° Sağ', en: '90° Right'},
 };
 
 export function t(key: string, lang: Lang): string {

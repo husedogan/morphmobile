@@ -39,6 +39,7 @@ if (fs.existsSync(manifestPath)) {
     '<uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />',
     '<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />',
     '<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />',
+    '<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />',
   ];
 
   for (const perm of permissions) {

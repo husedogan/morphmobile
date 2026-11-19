@@ -55,7 +55,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   serverReady,
   updateInfo = null,
   checkingUpdate = false,
-  showIntegratedEngines = true,
+  showIntegratedEngines = false,
   activeEngineAction = 'update',
   onChangeEngineAction,
   onChangeEngineSegment,

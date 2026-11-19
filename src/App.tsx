@@ -76,10 +76,11 @@ import {
 import {applyThemeTokens} from './data/themes';
 import {computeBatchRenamedNames} from './engine/fileInspector';
 import {
-  GITHUB_REPO,
   GithubUpdateInfo,
+  UpdateDownloadProgress,
   applyPwaUpdateIfWaiting,
   checkGithubUpdates,
+  downloadMorphApkInApp,
 } from './engine/githubUpdater';
 import {
   clearAllExports,
@@ -208,6 +209,7 @@ export default function App() {
   const [showGearCloud, setShowGearCloud] = useState<boolean>(false);
   const [updateInfo, setUpdateInfo] = useState<GithubUpdateInfo | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateDownload, setUpdateDownload] = useState<UpdateDownloadProgress | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const activeServerJobIdRef = useRef<string | null>(null);
@@ -282,28 +284,37 @@ export default function App() {
     setTimeout(() => setToast((cur) => (cur === msg ? null : cur)), 2800);
   }, []);
 
-  const triggerUpdateDownload = useCallback(async (info: GithubUpdateInfo | null) => {
-    const reloaded = await applyPwaUpdateIfWaiting();
-    if (reloaded) return;
-    const targetUrl =
-      info?.apkDownloadUrl ??
-      info?.releasesUrl ??
-      `https://github.com/${GITHUB_REPO}/releases/latest`;
-    if (isNativeApp() || info?.apkDownloadUrl || info?.hasUpdate) {
-      const a = document.createElement('a');
-      a.href = targetUrl;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      if (info?.apkDownloadUrl) {
-        a.download = '';
+  const triggerUpdateDownload = useCallback(
+    async (info: GithubUpdateInfo | null) => {
+      if (updateDownload?.active) return;
+      const reloaded = await applyPwaUpdateIfWaiting();
+      if (reloaded) return;
+      try {
+        const res = await downloadMorphApkInApp(info, (state) => {
+          setUpdateDownload(state);
+        });
+        if (res.message) {
+          showToast(res.message);
+        }
+        setTimeout(() => {
+          setUpdateDownload((cur) => (cur?.phase === 'done' ? null : cur));
+        }, 4000);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Güncelleme indirilemedi.';
+        setUpdateDownload({
+          active: false,
+          percent: 0,
+          downloadedBytes: 0,
+          totalBytes: 0,
+          fileName: 'Morph.apk',
+          phase: 'error',
+          message: msg,
+        });
+        showToast(msg);
       }
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      return;
-    }
-    window.location.reload();
-  }, []);
+    },
+    [showToast, updateDownload?.active]
+  );
 
   const handleCheckUpdate = useCallback(async () => {
     setCheckingUpdate(true);
@@ -313,7 +324,8 @@ export default function App() {
       if (info.error) {
         showToast(info.error);
       } else if (info.hasUpdate) {
-        showToast(t('DownloadingUpdate', lang));
+        const tagSuffix = info.releaseTag ? ` (${info.releaseTag})` : '';
+        showToast(`${t('DownloadingUpdate', lang)}${tagSuffix}`);
         await triggerUpdateDownload(info);
       } else {
         showToast(t('UpToDate', lang));
@@ -1376,6 +1388,7 @@ export default function App() {
             serverStatus={serverStatus}
             updateInfo={updateInfo}
             checkingUpdate={checkingUpdate}
+            updateDownload={updateDownload}
             initialCategory={settingsCategory}
             onChangePrefs={setPrefs}
             onTestServer={handleTestServer}
@@ -1392,7 +1405,7 @@ export default function App() {
             serverReady={serverReady}
             updateInfo={updateInfo}
             checkingUpdate={checkingUpdate}
-            showIntegratedEngines={prefs.showIntegratedEngines !== false}
+            showIntegratedEngines={Boolean(prefs.showIntegratedEngines)}
             activeEngineAction={prefs.lastEngineAction ?? 'update'}
             activeEngineSegment={prefs.lastEngineSegment ?? null}
             onChangeEngineAction={(action) =>

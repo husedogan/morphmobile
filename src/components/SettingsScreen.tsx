@@ -36,6 +36,7 @@ import {
   VideoQualityPref,
   WheelIconStylePref,
   WheelSidePref,
+  formatBytes,
 } from '../data/models';
 import {THEME_PRESETS} from '../data/themes';
 import {
@@ -47,7 +48,14 @@ import {
   loadDiagnosticReports,
   shareDiagnosticText,
 } from '../engine/downloadDiagnostics';
-import {APP_VERSION, GITHUB_REPO, GithubUpdateInfo, getVersionChannel} from '../engine/githubUpdater';
+import {
+  APP_VERSION,
+  GITHUB_REPO_URL,
+  GithubUpdateInfo,
+  UpdateDownloadProgress,
+  getVersionChannel,
+  normalizeMorphRepoUrl,
+} from '../engine/githubUpdater';
 import {
   EngineCardInfo,
   MorphNetworkStatus,
@@ -74,6 +82,7 @@ interface SettingsScreenProps {
   serverStatus: string;
   updateInfo: GithubUpdateInfo | null;
   checkingUpdate: boolean;
+  updateDownload?: UpdateDownloadProgress | null;
   initialCategory?: SettingsCategory;
   onChangePrefs: (updater: (prev: Prefs) => Prefs) => void;
   onTestServer: () => void;
@@ -89,6 +98,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   serverStatus,
   updateInfo,
   checkingUpdate,
+  updateDownload = null,
   initialCategory = 'appearance',
   onChangePrefs,
   onTestServer,
@@ -297,7 +307,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const cornerStyle: CornerStylePref = prefs.cornerStyle ?? 'balanced';
   const wheelSide: WheelSidePref = prefs.wheelSide ?? 'right';
   const wheelIconStyle: WheelIconStylePref = prefs.wheelIconStyle ?? 'wheel';
-  const showIntegratedEngines = prefs.showIntegratedEngines !== false;
+  const showIntegratedEngines = Boolean(prefs.showIntegratedEngines);
   const reducedMotion = Boolean(prefs.reducedMotion);
   const hapticsEnabled = prefs.hapticsEnabled !== false;
 
@@ -681,7 +691,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             <button
               type="button"
               onClick={() =>
-                onChangePrefs((p) => ({...p, showIntegratedEngines: p.showIntegratedEngines === false}))
+                onChangePrefs((p) => ({...p, showIntegratedEngines: !p.showIntegratedEngines}))
               }
               className="mt-3 flex min-h-[64px] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
             >
@@ -1632,21 +1642,52 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 <button
                   type="button"
                   onClick={onApplyUpdate}
-                  className="morph-accent-btn flex h-12 w-full min-w-0 items-center justify-center gap-2 rounded-2xl px-4 text-xs font-semibold shadow transition-transform active:scale-[0.98] whitespace-nowrap"
+                  disabled={Boolean(updateDownload?.active)}
+                  className="morph-accent-btn flex h-12 w-full min-w-0 items-center justify-center gap-2 rounded-2xl px-4 text-xs font-semibold shadow transition-transform active:scale-[0.98] disabled:opacity-75 whitespace-nowrap"
                 >
-                  <Download className="h-4 w-4 shrink-0" />
-                  <span>{t('DownloadUpdate', lang)}</span>
+                  {updateDownload?.active ? (
+                    <RefreshCw className="h-4 w-4 shrink-0 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 shrink-0" />
+                  )}
+                  <span>
+                    {updateDownload?.active
+                      ? `${t('DownloadingUpdate', lang)} (%${updateDownload.percent})`
+                      : `${t('DownloadUpdate', lang)}${updateInfo.releaseTag ? ` (${updateInfo.releaseTag})` : ''}`}
+                  </span>
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={onCheckUpdate}
-                  disabled={checkingUpdate}
+                  disabled={checkingUpdate || Boolean(updateDownload?.active)}
                   className="morph-tonal-btn flex h-12 w-full min-w-0 items-center justify-center gap-2 rounded-2xl px-4 text-xs font-semibold transition-all active:scale-[0.98] disabled:opacity-70 whitespace-nowrap"
                 >
                   <RefreshCw className={`h-4 w-4 shrink-0 text-[var(--accent)] ${checkingUpdate ? 'animate-spin' : ''}`} />
                   <span>{checkingUpdate ? t('CheckingUpdates', lang) : t('CheckUpdates', lang)}</span>
                 </button>
+              )}
+
+              {/* In-App APK Download Progress Card */}
+              {updateDownload && (updateDownload.active || updateDownload.phase === 'done') && (
+                <div className="rounded-2xl border border-[var(--accent)]/45 bg-[var(--inset)] p-3">
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="truncate font-semibold text-[var(--ink)]">
+                      {updateDownload.fileName}
+                    </span>
+                    <span className="font-mono-num shrink-0 font-bold text-[var(--accent)]">
+                      {updateDownload.totalBytes > 0
+                        ? `${formatBytes(updateDownload.downloadedBytes)} / ${formatBytes(updateDownload.totalBytes)} · %${updateDownload.percent}`
+                        : `%${updateDownload.percent}`}
+                    </span>
+                  </div>
+                  <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[var(--surface)]">
+                    <div
+                      className="morph-accent-solid h-full rounded-full transition-all duration-150"
+                      style={{width: `${Math.max(4, Math.min(100, updateDownload.percent))}%`}}
+                    />
+                  </div>
+                </div>
               )}
 
               {/* Single clean version & status row (exact same h-12 height, no text collision) */}
@@ -1666,7 +1707,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   {updateInfo?.error
                     ? updateInfo.error
                     : updateInfo?.hasUpdate
-                      ? t('UpdateAvailable', lang)
+                      ? `${t('UpdateAvailable', lang)}${updateInfo.releaseTag ? ` · ${updateInfo.releaseTag}` : ''}`
                       : t('UpToDateShort', lang)}
                 </span>
               </div>
@@ -1674,17 +1715,23 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               {!isNativeApp() && <PWAInstallButton lang={lang} variant="card" />}
 
               <div className="grid grid-cols-2 gap-2.5">
-                <a
-                  href={updateInfo?.apkDownloadUrl ?? `https://github.com/${GITHUB_REPO}/releases`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex h-12 min-w-0 items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-semibold text-[var(--ink)] whitespace-nowrap transition-colors hover:border-[var(--accent)]"
+                <button
+                  type="button"
+                  onClick={onApplyUpdate}
+                  disabled={Boolean(updateDownload?.active)}
+                  className="flex h-12 min-w-0 items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-semibold text-[var(--ink)] whitespace-nowrap transition-colors hover:border-[var(--accent)] disabled:opacity-65"
                 >
-                  <Download className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                  <span className="truncate">{t('DownloadApk', lang)}</span>
-                </a>
+                  {updateDownload?.active ? (
+                    <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--accent)]" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                  )}
+                  <span className="truncate">
+                    {updateDownload?.active ? `%${updateDownload.percent}` : t('DownloadApk', lang)}
+                  </span>
+                </button>
                 <a
-                  href={updateInfo?.repoUrl ?? `https://github.com/${GITHUB_REPO}`}
+                  href={normalizeMorphRepoUrl(updateInfo?.repoUrl ?? GITHUB_REPO_URL)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex h-12 min-w-0 items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-semibold text-[var(--ink)] whitespace-nowrap transition-colors hover:border-[var(--accent)]"

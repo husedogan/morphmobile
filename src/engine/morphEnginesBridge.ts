@@ -82,6 +82,16 @@ export interface MorphEnginesPlugin {
     processId: string;
   }): Promise<NativeYtDlpDownloadResult>;
   cancelYtDlp(options: {processId: string}): Promise<{cancelled: boolean}>;
+  downloadAndInstallApk(options: {
+    url: string;
+    fileName: string;
+  }): Promise<{
+    filePath: string;
+    fileName: string;
+    size: number;
+    uri: string;
+    installerLaunched: boolean;
+  }>;
   addListener(
     eventName: 'ytdlpProgress',
     listenerFunc: (event: {processId: string; progress: number; etaSec: number; line: string}) => void
@@ -89,6 +99,10 @@ export interface MorphEnginesPlugin {
   addListener(
     eventName: 'newpipeProgress',
     listenerFunc: (event: {processId: string; progress: number; line: string}) => void
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    eventName: 'apkProgress',
+    listenerFunc: (event: {progress: number; downloadedBytes: number; totalBytes: number}) => void
   ): Promise<PluginListenerHandle>;
 }
 

@@ -121,12 +121,14 @@ jobs:
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: Morph ${{ steps.meta.outputs.version }}
-          prerelease: ${{ steps.meta.outputs.prerelease }}
+          prerelease: false
+          make_latest: 'true'
           generate_release_notes: true
           body: |
-            ### Morph ${{ steps.meta.outputs.version }}
+            ### Morph ${{ steps.meta.outputs.version }} (${{ steps.meta.outputs.channel }})
 
-            - **Android Kurulum Paketi:** `Morph-${{ steps.meta.outputs.tag }}.apk`
+            - **Android Kurulum Paketi (APK):** `Morph-${{ steps.meta.outputs.tag }}.apk`
+            - **Canlı Web & PWA (Tarayıcı / iOS / Masaüstü / Android):** [morph-ucanbizon.vercel.app](https://morph-ucanbizon.vercel.app)
             - **Doğrulama Özeti:** `checksums.sha256`
           files: |
             release-assets/Morph-${{ steps.meta.outputs.tag }}.apk

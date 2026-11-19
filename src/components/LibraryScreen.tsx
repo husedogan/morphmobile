@@ -1,5 +1,19 @@
 import React, {useMemo, useState} from 'react';
-import {Download, Eye, FolderOpen, Share2, Trash2, X} from 'lucide-react';
+import {
+  Archive,
+  Clock,
+  Download,
+  Eye,
+  FileText,
+  Film,
+  FolderOpen,
+  Image as ImageIcon,
+  LayoutGrid,
+  Share2,
+  ShieldCheck,
+  Trash2,
+  X,
+} from 'lucide-react';
 import {Lang, t} from '../data/i18n';
 import {ExportItem, detectFileKind, formatBytes, formatDate} from '../data/models';
 import {FileThumb} from './FileThumb';
@@ -48,14 +62,26 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
     setPreviewItem(null);
   };
 
+  const filterTabs: Array<{
+    id: FilterKind;
+    label: string;
+    Icon: React.ComponentType<{className?: string}>;
+  }> = [
+    {id: 'all', label: t('FilterAll', lang), Icon: LayoutGrid},
+    {id: 'image', label: t('FilterImages', lang), Icon: ImageIcon},
+    {id: 'pdf', label: t('FilterPdf', lang), Icon: FileText},
+    {id: 'archive', label: t('FilterZip', lang), Icon: Archive},
+    {id: 'other', label: t('FilterOther', lang), Icon: Film},
+  ];
+
   return (
     <div className="mx-auto w-full max-w-5xl px-4 pb-28 pt-5 sm:px-6 lg:pb-12 lg:pt-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-[var(--ink)] sm:text-3xl">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="truncate text-2xl font-extrabold tracking-tight text-[var(--ink)] sm:text-3xl">
             {t('Library', lang)}
           </h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">
+          <p className="mt-0.5 truncate text-xs text-[var(--muted)] sm:text-sm">
             {items.length === 0
               ? t('LibrarySubtitleEmpty', lang)
               : `${t('HistoryLabel', lang)} · ${items.length} ${t('HistoryRecords', lang)}`}
@@ -66,39 +92,32 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
           <button
             type="button"
             onClick={() => setConfirmClear(true)}
-            className="flex min-h-[42px] items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--surface)] px-4 text-xs font-semibold text-[var(--accent)] hover:border-[var(--accent)]"
+            className="flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3.5 text-xs font-semibold whitespace-nowrap text-[var(--accent)] hover:border-[var(--accent)] sm:min-h-[42px] sm:px-4"
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Trash2 className="h-3.5 w-3.5 shrink-0" />
             <span>{t('ClearLibrary', lang)}</span>
           </button>
         )}
       </div>
 
-      {/* Interactive Filter Tabs */}
+      {/* Single-Line Interactive Filter Tabs with Icons */}
       {items.length > 0 && (
-        <div className="mt-5 flex flex-wrap gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-1.5 sm:inline-flex">
-          {(
-            [
-              ['all', t('FilterAll', lang)],
-              ['image', t('FilterImages', lang)],
-              ['pdf', t('FilterPdf', lang)],
-              ['archive', t('FilterZip', lang)],
-              ['other', t('FilterOther', lang)],
-            ] as const
-          ).map(([id, label]) => {
+        <div className="no-scrollbar mt-4 flex w-full flex-nowrap items-center gap-1 overflow-x-auto rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-1 sm:inline-flex sm:w-auto sm:gap-1.5 sm:p-1.5">
+          {filterTabs.map(({id, label, Icon}) => {
             const active = filter === id;
             return (
               <button
                 key={id}
                 type="button"
                 onClick={() => setFilter(id)}
-                className={`min-h-[38px] rounded-xl px-3.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                className={`flex min-h-[34px] flex-1 items-center justify-center gap-1 rounded-xl px-2 text-[11px] font-semibold whitespace-nowrap transition-colors shrink-0 sm:min-h-[36px] sm:flex-initial sm:gap-1.5 sm:px-3.5 sm:text-xs ${
                   active
-                    ? 'morph-accent-solid'
-                    : 'text-[var(--muted)] hover:text-[var(--ink)]'
+                    ? 'morph-accent-solid shadow-sm'
+                    : 'text-[var(--muted)] hover:bg-[var(--inset)]/60 hover:text-[var(--ink)]'
                 }`}
               >
-                {label}
+                <Icon className="h-3.5 w-3.5 shrink-0" />
+                <span>{label}</span>
               </button>
             );
           })}
@@ -106,7 +125,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
       )}
 
       {/* Items List */}
-      <div className="mt-5">
+      <div className="mt-4">
         {filtered.length === 0 ? (
           <div className="flex items-center gap-4 rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-6">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
@@ -118,29 +137,32 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
             {filtered.map((item) => {
               const kind = detectFileKind(item.name, item.mime);
               const canPreview = kind === 'image' || kind === 'pdf';
               return (
                 <div
                   key={item.id}
-                  className="flex items-center gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-3"
+                  className="flex items-center gap-2.5 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-2.5 sm:gap-3 sm:p-3"
                 >
-                  <FileThumb previewUrl={item.previewUrl} kind={kind} alt={item.name} sizeClass="h-12 w-12" />
+                  <FileThumb previewUrl={item.previewUrl} kind={kind} alt={item.name} sizeClass="h-11 w-11 sm:h-12 sm:w-12" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-[var(--ink)]">{item.name}</p>
-                    <p className="font-mono-num mt-0.5 text-xs text-[var(--muted)]">
-                      {formatBytes(item.size)} · {formatDate(item.createdAt, lang)}
+                    <p className="font-mono-num mt-0.5 flex items-center gap-1 truncate text-[11px] whitespace-nowrap text-[var(--muted)] sm:text-xs">
+                      <span>{formatBytes(item.size)}</span>
+                      <span>·</span>
+                      <Clock className="h-3 w-3 shrink-0 opacity-75" />
+                      <span className="truncate">{formatDate(item.createdAt, lang)}</span>
                     </p>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
                     {canPreview && (
                       <button
                         type="button"
                         onClick={() => openPreview(item)}
                         aria-label={t('Preview', lang)}
-                        className="flex min-h-[40px] min-w-[40px] items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)]"
+                        className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)] sm:h-10 sm:w-10"
                       >
                         <Eye className="h-4 w-4" />
                       </button>
@@ -149,7 +171,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                       type="button"
                       onClick={() => onShare(item)}
                       aria-label={t('Share', lang)}
-                      className="flex min-h-[40px] min-w-[40px] items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)]"
+                      className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)] sm:h-10 sm:w-10"
                     >
                       <Share2 className="h-4 w-4" />
                     </button>
@@ -157,7 +179,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                       type="button"
                       onClick={() => onDownload(item)}
                       aria-label={t('Download', lang)}
-                      className="flex min-h-[40px] min-w-[40px] items-center justify-center rounded-full text-[var(--accent)] hover:bg-[var(--inset)]"
+                      className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--accent)] hover:bg-[var(--inset)] sm:h-10 sm:w-10"
                     >
                       <Download className="h-4 w-4" />
                     </button>
@@ -165,7 +187,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                       type="button"
                       onClick={() => onDelete(item.id)}
                       aria-label={t('Remove', lang)}
-                      className="flex min-h-[40px] min-w-[40px] items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)]"
+                      className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)] sm:h-10 sm:w-10"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -177,7 +199,10 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
         )}
       </div>
 
-      <p className="mt-5 text-xs text-[var(--muted)]">{t('OriginalSafeNote', lang)}</p>
+      <p className="mt-4 flex items-center gap-1.5 text-[11px] text-[var(--muted)] sm:text-xs">
+        <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+        <span className="truncate">{t('OriginalSafeNote', lang)}</span>
+      </p>
 
       {/* Confirm Clear Modal */}
       {confirmClear && (

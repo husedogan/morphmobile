@@ -13,7 +13,7 @@ export const DEFAULT_PREFS: Prefs = {
   serverToken: '',
   wheelSide: 'right',
   wheelIconStyle: 'wheel',
-  showIntegratedEngines: true,
+  showIntegratedEngines: false,
   lastEngineAction: 'update',
   lastEngineSegment: null,
   downloadEngine: 'builtin',
@@ -32,10 +32,14 @@ export function loadPrefs(): Prefs {
   try {
     const raw = localStorage.getItem(PREFS_KEY);
     if (!raw) return DEFAULT_PREFS;
-    const parsed = JSON.parse(raw) as Partial<Prefs>;
+    const parsed = JSON.parse(raw) as Partial<Prefs> & {enginesDefaultV2?: boolean};
+    const showIntegratedEngines = parsed.enginesDefaultV2
+      ? Boolean(parsed.showIntegratedEngines)
+      : false;
     return {
       ...DEFAULT_PREFS,
       ...parsed,
+      showIntegratedEngines,
       wheelConfig: {
         ...DEFAULT_WHEEL_CONFIG,
         ...(parsed.wheelConfig ?? {}),
@@ -48,7 +52,7 @@ export function loadPrefs(): Prefs {
 
 export function savePrefs(prefs: Prefs): void {
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+    localStorage.setItem(PREFS_KEY, JSON.stringify({...prefs, enginesDefaultV2: true}));
   } catch {
     // Ignore quota errors
   }

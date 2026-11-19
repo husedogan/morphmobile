@@ -23,6 +23,7 @@ import {
   SkipBack,
   SkipForward,
   SlidersHorizontal,
+  Smartphone,
   Type,
   Undo2,
   Volume2,
@@ -336,6 +337,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const [showGuides, setShowGuides] = useState(false);
   const [isComparing, setIsComparing] = useState(false);
   const [isDraggingCrop, setIsDraggingCrop] = useState(false);
+  const [isLandscapeViewport, setIsLandscapeViewport] = useState(false);
+  const [forceSideLayout, setForceSideLayout] = useState(false);
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
 
   const mergedInitial = useMemo<VideoEditorState>(
@@ -375,20 +378,50 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     };
   }, [file]);
 
-  // Measure monitor stage
+  // Measure monitor stage & track viewport orientation (auto switch to split-screen in phone landscape)
   useEffect(() => {
     const el = stageRef.current;
-    if (!el) return;
-    const update = () => setStageSize({w: el.clientWidth, h: el.clientHeight});
+    const update = () => {
+      if (el) setStageSize({w: el.clientWidth, h: el.clientHeight});
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      setIsLandscapeViewport(vw > vh && vh < 560);
+    };
     update();
-    if (typeof ResizeObserver !== 'undefined') {
+    if (el && typeof ResizeObserver !== 'undefined') {
       const ro = new ResizeObserver(update);
       ro.observe(el);
-      return () => ro.disconnect();
+      window.addEventListener('resize', update);
+      return () => {
+        ro.disconnect();
+        window.removeEventListener('resize', update);
+      };
     }
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
   }, []);
+
+  const isSideBySide = isLandscapeViewport || forceSideLayout;
+
+  const handleToggleOrientation = useCallback(async () => {
+    const nextSide = !isSideBySide;
+    setForceSideLayout(nextSide);
+    try {
+      const scr = window.screen as Screen & {
+        orientation?: ScreenOrientation & {lock?: (o: string) => Promise<void>; unlock?: () => void};
+      };
+      if (scr?.orientation?.lock) {
+        await scr.orientation.lock(nextSide ? 'landscape' : 'portrait');
+      }
+    } catch {
+      // Browser/WebView without full-screen orientation lock falls back to instant side-by-side NLE layout
+    }
+    window.setTimeout(() => {
+      if (stageRef.current) {
+        setStageSize({w: stageRef.current.clientWidth, h: stageRef.current.clientHeight});
+      }
+    }, 60);
+  }, [isSideBySide]);
 
   // Build filmstrip thumbnails (12 frames) asynchronously
   useEffect(() => {
@@ -1284,6 +1317,19 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
               <Grid className="h-4 w-4" />
             </button>
 
+            <button
+              type="button"
+              onClick={handleToggleOrientation}
+              title={t('VeLandscapeToggle', lang)}
+              className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-colors ${
+                isSideBySide
+                  ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--accent)]'
+                  : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)]'
+              }`}
+            >
+              <Smartphone className={`h-4 w-4 transition-transform ${isSideBySide ? 'rotate-90' : ''}`} />
+            </button>
+
             <select
               aria-label={t('VeResolution', lang)}
               value={state.resolution}
@@ -1316,14 +1362,26 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         </div>
       </header>
 
-      {/* 2. Pro Monitor Stage (Interactive On-Screen Crop, Live Blur Pad, Color Grade, Fade, Text, Safe Guides) */}
+      {/* Main Responsive Workspace: Vertical in Portrait, Side-by-Side Split Studio in Landscape */}
       <div
-        ref={stageRef}
-        onClick={showCropEditor ? undefined : togglePlay}
-        className={`relative mx-3 mt-2 flex flex-1 min-h-[168px] items-center justify-center overflow-hidden rounded-2xl border border-[var(--line)]/85 bg-[#06090F] ${
-          showCropEditor ? '' : 'cursor-pointer'
+        className={`flex min-h-0 flex-1 ${
+          isSideBySide ? 'flex-row gap-2 px-3 pb-safe pt-2' : 'flex-col'
         }`}
       >
+        {/* Left/Top Column: Monitor Stage + Transport Bar */}
+        <div
+          className={`flex min-h-0 flex-col ${
+            isSideBySide ? 'min-w-0 flex-1' : 'min-h-0 flex-1'
+          }`}
+        >
+          {/* 2. Pro Monitor Stage (Interactive On-Screen Crop, Live Blur Pad, Color Grade, Fade, Text, Safe Guides) */}
+          <div
+            ref={stageRef}
+            onClick={showCropEditor ? undefined : togglePlay}
+            className={`relative flex flex-1 min-h-[140px] items-center justify-center overflow-hidden rounded-2xl border border-[var(--line)]/85 bg-[#06090F] ${
+              isSideBySide ? '' : 'mx-3 mt-2'
+            } ${showCropEditor ? '' : 'cursor-pointer'}`}
+          >
         <div
           className="relative flex items-center justify-center overflow-hidden bg-[#06090F]"
           style={{
@@ -1617,7 +1675,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       </div>
 
       {/* 3. Pro Transport Bar (Frame Step, Play/Pause, Jump In/Out, Timecode, Undo/Redo) */}
-      <div className="shrink-0 px-3 pt-1.5 sm:px-5">
+      <div className={`shrink-0 pt-1.5 ${isSideBySide ? '' : 'px-3 sm:px-5'}`}>
         <div className="flex items-center justify-between gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5">
           <div className="min-w-0 font-mono-num text-[11px] font-bold text-[var(--ink)]">
             <span>{fmtTime(playhead)}</span>
@@ -1714,9 +1772,18 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
           </div>
         </div>
       </div>
+      </div>
 
+      {/* Right/Bottom Column: Multi-Track NLE Timeline + 6-Tab Dock */}
+      <div
+        className={`flex flex-col ${
+          isSideBySide
+            ? 'no-scrollbar w-[50%] max-w-[440px] shrink-0 justify-between gap-1.5 overflow-y-auto'
+            : 'shrink-0'
+        }`}
+      >
       {/* 4. Multi-Track NLE Timeline (V1 Video Filmstrip + T1 Text + A1 Waveform + Zoom) */}
-      <div className="shrink-0 px-3 pt-1.5 sm:px-5">
+      <div className={`shrink-0 ${isSideBySide ? '' : 'px-3 pt-1.5 sm:px-5'}`}>
         <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-2">
           {/* Timeline Header Bar: Track Legend + Timeline Scale Zoom */}
           <div className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
@@ -1925,7 +1992,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       </div>
 
       {/* 5. Pro 6-Tab Studio Control Dock */}
-      <div className="shrink-0 px-3 pb-safe pt-1.5 sm:px-5">
+      <div className={`shrink-0 ${isSideBySide ? '' : 'px-3 pb-safe pt-1.5 sm:px-5'}`}>
         <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-2.5">
           {/* TAB 1: TRIM & SPLIT */}
           {activeTab === 'trim' && (
@@ -2094,7 +2161,30 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                 )}
               </div>
 
-              <div className="grid grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-4 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() =>
+                    commitState((s) => {
+                      const nextRotate = ((s.rotateDeg + 270) % 360) as 0 | 90 | 180 | 270;
+                      const nextVisualRatio = 1 / monitorGeometry.visualRatio;
+                      const nextAsp = s.cropAspect === 'free' ? 'orig' : s.cropAspect;
+                      return {
+                        ...s,
+                        rotateDeg: nextRotate,
+                        cropAspect: nextAsp,
+                        cropBox:
+                          s.fitMode === 'crop' && nextAsp !== 'orig'
+                            ? fitAspectCropBox(nextAsp, nextVisualRatio)
+                            : FULL_CROP,
+                      };
+                    })
+                  }
+                  className="flex min-h-[30px] items-center justify-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-1 text-[11px] font-semibold text-[var(--ink)] hover:border-[var(--accent)]"
+                >
+                  <RotateCcw className="h-3.5 w-3.5 text-[var(--accent)]" />
+                  <span className="truncate">{t('VeRotateLeft90', lang)}</span>
+                </button>
                 <button
                   type="button"
                   onClick={() =>
@@ -2113,34 +2203,34 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                       };
                     })
                   }
-                  className="flex min-h-[30px] items-center justify-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[11px] font-semibold text-[var(--ink)] hover:border-[var(--accent)]"
+                  className="flex min-h-[30px] items-center justify-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-1 text-[11px] font-semibold text-[var(--ink)] hover:border-[var(--accent)]"
                 >
                   <RotateCw className="h-3.5 w-3.5 text-[var(--accent)]" />
-                  <span>{t('VeRotate90', lang)}</span>
+                  <span className="truncate">{t('VeRotateRight90', lang)}</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => commitState((s) => ({...s, flipH: !s.flipH}))}
-                  className={`flex min-h-[30px] items-center justify-center gap-1 rounded-xl border text-[11px] font-semibold ${
+                  className={`flex min-h-[30px] items-center justify-center gap-1 rounded-xl border px-1 text-[11px] font-semibold ${
                     state.flipH
                       ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
                       : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
                   }`}
                 >
                   <FlipHorizontal className="h-3.5 w-3.5" />
-                  <span>{lang === 'tr' ? 'Yatay' : 'Flip H'}</span>
+                  <span className="truncate">{lang === 'tr' ? 'Yatay' : 'Flip H'}</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => commitState((s) => ({...s, flipV: !s.flipV}))}
-                  className={`flex min-h-[30px] items-center justify-center gap-1 rounded-xl border text-[11px] font-semibold ${
+                  className={`flex min-h-[30px] items-center justify-center gap-1 rounded-xl border px-1 text-[11px] font-semibold ${
                     state.flipV
                       ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
                       : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
                   }`}
                 >
                   <FlipVertical className="h-3.5 w-3.5" />
-                  <span>{lang === 'tr' ? 'Dikey' : 'Flip V'}</span>
+                  <span className="truncate">{lang === 'tr' ? 'Dikey' : 'Flip V'}</span>
                 </button>
               </div>
             </div>
@@ -2538,6 +2628,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             })}
           </div>
         </div>
+      </div>
+      </div>
       </div>
     </div>
   );
