@@ -54,6 +54,7 @@ import {
   GithubUpdateInfo,
   UpdateDownloadProgress,
   getVersionChannel,
+  isUpdateApkDownloaded,
   normalizeMorphRepoUrl,
 } from '../engine/githubUpdater';
 import {
@@ -1651,23 +1652,33 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             {/* Uniform 48px (h-12) rows with matching rounded-2xl geometry */}
             <div className="mt-4 space-y-2.5">
               {updateInfo?.hasUpdate ? (
-                <button
-                  type="button"
-                  onClick={onApplyUpdate}
-                  disabled={Boolean(updateDownload?.active)}
-                  className="morph-accent-btn flex h-12 w-full min-w-0 items-center justify-center gap-2 rounded-2xl px-4 text-xs font-semibold shadow transition-transform active:scale-[0.98] disabled:opacity-75 whitespace-nowrap"
-                >
-                  {updateDownload?.active ? (
-                    <RefreshCw className="h-4 w-4 shrink-0 animate-spin" />
-                  ) : (
-                    <Download className="h-4 w-4 shrink-0" />
-                  )}
-                  <span>
-                    {updateDownload?.active
-                      ? `${t('DownloadingUpdate', lang)} (%${updateDownload.percent})`
-                      : `${t('DownloadUpdate', lang)}${updateInfo.releaseTag ? ` (${updateInfo.releaseTag})` : ''}`}
-                  </span>
-                </button>
+                (() => {
+                  const apkDownloaded =
+                    updateDownload?.phase === 'done' || isUpdateApkDownloaded(updateInfo);
+                  return (
+                    <button
+                      type="button"
+                      onClick={onApplyUpdate}
+                      disabled={Boolean(updateDownload?.active)}
+                      className="morph-accent-btn flex h-12 w-full min-w-0 items-center justify-center gap-2 rounded-2xl px-4 text-xs font-semibold shadow transition-transform active:scale-[0.98] disabled:opacity-75 whitespace-nowrap"
+                    >
+                      {updateDownload?.active ? (
+                        <RefreshCw className="h-4 w-4 shrink-0 animate-spin" />
+                      ) : apkDownloaded ? (
+                        <Check className="h-4 w-4 shrink-0" />
+                      ) : (
+                        <Download className="h-4 w-4 shrink-0" />
+                      )}
+                      <span>
+                        {updateDownload?.active
+                          ? `${t('DownloadingUpdate', lang)} (%${updateDownload.percent})`
+                          : apkDownloaded
+                            ? `${t('InstallUpdate', lang)}${updateInfo.releaseTag ? ` (${updateInfo.releaseTag})` : ''}`
+                            : `${t('DownloadUpdate', lang)}${updateInfo.releaseTag ? ` (${updateInfo.releaseTag})` : ''}`}
+                      </span>
+                    </button>
+                  );
+                })()
               ) : (
                 <button
                   type="button"
@@ -1727,21 +1738,33 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               {!isNativeApp() && <PWAInstallButton lang={lang} variant="card" />}
 
               <div className="grid grid-cols-2 gap-2.5">
-                <button
-                  type="button"
-                  onClick={onApplyUpdate}
-                  disabled={Boolean(updateDownload?.active)}
-                  className="flex h-12 min-w-0 items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-semibold text-[var(--ink)] whitespace-nowrap transition-colors hover:border-[var(--accent)] disabled:opacity-65"
-                >
-                  {updateDownload?.active ? (
-                    <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--accent)]" />
-                  ) : (
-                    <Download className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                  )}
-                  <span className="truncate">
-                    {updateDownload?.active ? `%${updateDownload.percent}` : t('DownloadApk', lang)}
-                  </span>
-                </button>
+                {(() => {
+                  const apkDownloaded =
+                    updateDownload?.phase === 'done' || isUpdateApkDownloaded(updateInfo);
+                  return (
+                    <button
+                      type="button"
+                      onClick={onApplyUpdate}
+                      disabled={Boolean(updateDownload?.active)}
+                      className="flex h-12 min-w-0 items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-semibold text-[var(--ink)] whitespace-nowrap transition-colors hover:border-[var(--accent)] disabled:opacity-65"
+                    >
+                      {updateDownload?.active ? (
+                        <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--accent)]" />
+                      ) : apkDownloaded ? (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                      ) : (
+                        <Download className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                      )}
+                      <span className="truncate">
+                        {updateDownload?.active
+                          ? `%${updateDownload.percent}`
+                          : apkDownloaded
+                            ? t('InstallDownloadedApk', lang)
+                            : t('DownloadApk', lang)}
+                      </span>
+                    </button>
+                  );
+                })()}
                 <a
                   href={normalizeMorphRepoUrl(updateInfo?.repoUrl ?? GITHUB_REPO_URL)}
                   target="_blank"

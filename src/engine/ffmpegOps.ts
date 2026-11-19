@@ -464,21 +464,29 @@ export async function runLocalFfmpegTool(
     const action = options.action || 'export';
     const cropAspect = options.cropAspect || 'orig';
     const fitMode = options.fitMode || 'crop';
-    const zoom = Math.min(2, Math.max(1, Number(options.zoom) || 1));
+    const zoom = Math.min(3, Math.max(1, Number(options.zoom) || 1));
     const rotateMode = options.rotateMode || '0';
     const flipH = options.flipH === '1';
     const flipV = options.flipV === '1';
-    const speed = Math.min(2, Math.max(0.5, Number(options.speed) || 1));
+    const speed = Math.min(4, Math.max(0.25, Number(options.speed) || 1));
     const effect = options.effect || 'none';
     const loopCount = Math.min(4, Math.max(2, Number(options.loopCount) || 2));
     const mute = options.mute === '1';
     const volumePct = Math.min(200, Math.max(0, Number(options.volume ?? '100') || 0));
-    const audioFadeSec = Math.min(4, Math.max(0, Number(options.audioFadeSec) || 0));
+    const audioFadeSec = Math.min(5, Math.max(0, Number(options.audioFadeSec) || 0));
     const videoFadeSec = Math.min(3, Math.max(0, Number(options.videoFadeSec) || 0));
     const brightnessPct = Math.min(50, Math.max(-50, Number(options.brightness) || 0));
     const contrastPct = Math.min(60, Math.max(-50, Number(options.contrast) || 0));
     const saturationPct = Math.min(100, Math.max(-100, Number(options.saturation) || 0));
+    const exposurePct = Math.min(50, Math.max(-50, Number(options.exposure) || 0));
     const tempPct = Math.min(40, Math.max(-40, Number(options.temperature) || 0));
+    const tintPct = Math.min(40, Math.max(-40, Number(options.tint) || 0));
+    const sharpnessPct = Math.min(100, Math.max(0, Number(options.sharpness) || 0));
+    const vignettePct = Math.min(100, Math.max(0, Number(options.vignette) || 0));
+    const chromaKeyEnabled = options.chromaKeyEnabled === '1';
+    const chromaKeyColor = (options.chromaKeyColor || '#00FF00').replace('#', '0x');
+    const chromaKeySim = Math.min(0.6, Math.max(0.05, (Number(options.chromaKeySimilarity) || 25) / 100));
+    const noiseReduction = options.noiseReduction === '1';
     const cropX = Math.max(0, Math.min(0.9, Number(options.cropX ?? '0') || 0));
     const cropY = Math.max(0, Math.min(0.9, Number(options.cropY ?? '0') || 0));
     const cropW = Math.max(0.1, Math.min(1 - cropX, Number(options.cropW ?? '1') || 1));
@@ -486,8 +494,12 @@ export async function runLocalFfmpegTool(
     const hasCustomCropBox = cropW < 0.992 || cropH < 0.992 || cropX > 0.008 || cropY > 0.008;
     const overlayPngData = options.overlayPng || '';
     const resolution = options.resolution || 'orig';
-    const crf = options.quality || '26';
+    const crf = options.quality || '23';
     const targetFmt = (options.format || 'mp4').toLowerCase();
+    const targetFps = Math.min(60, Math.max(0, Number(options.fps) || 0));
+    const audioBitrate = ['128k', '192k', '256k', '320k'].includes(options.audioBitrate || '')
+      ? options.audioBitrate
+      : '192k';
 
     signal?.addEventListener('abort', onAbortSpecial, {once: true});
     await ffmpeg.writeFile(inName, await fetchFile(first.file));
@@ -515,6 +527,7 @@ export async function runLocalFfmpegTool(
         '16:9': 16 / 9,
         '9:16': 9 / 16,
         '4:5': 4 / 5,
+        '3:4': 3 / 4,
       };
       const targetRatio = aspectRatioMap[cropAspect] ?? null;
 
@@ -547,7 +560,17 @@ export async function runLocalFfmpegTool(
       }
 
       const resCap =
-        resolution === '1080' ? 1080 : resolution === '720' ? 720 : resolution === '480' ? 480 : 0;
+        resolution === '2160'
+          ? 2160
+          : resolution === '1440'
+            ? 1440
+            : resolution === '1080'
+              ? 1080
+              : resolution === '720'
+                ? 720
+                : resolution === '480'
+                  ? 480
+                  : 0;
       if (resCap > 0) {
         const minEdge = Math.min(outW, outH);
         if (minEdge > resCap) {
@@ -578,7 +601,7 @@ export async function runLocalFfmpegTool(
         }
       }
 
-      // Build pre-framing filters: Rotate, Flip, On-Screen CropBox, Zoom, Color Grading
+      // Build pre-framing filters: Rotate, Flip, On-Screen CropBox, Zoom, Color Grading, Sharpness, Vignette, ChromaKey
       const buildPreFilters = (): string[] => {
         const f: string[] = [];
         if (rotateMode === '90') f.push('transpose=1');
@@ -594,20 +617,34 @@ export async function runLocalFfmpegTool(
         if (zoom > 1.01) {
           f.push(`crop='trunc(iw/${zoom.toFixed(2)}/2)*2':'trunc(ih/${zoom.toFixed(2)}/2)*2'`);
         }
+        const effBright = brightnessPct + exposurePct * 0.65;
         const hasEq =
-          Math.abs(brightnessPct) > 0.5 ||
+          Math.abs(effBright) > 0.5 ||
           Math.abs(contrastPct) > 0.5 ||
           Math.abs(saturationPct) > 0.5;
         if (hasEq) {
-          const b = (brightnessPct / 150).toFixed(3);
+          const b = (effBright / 150).toFixed(3);
           const c = (1 + contrastPct / 100).toFixed(3);
           const s = Math.max(0, 1 + saturationPct / 100).toFixed(3);
           f.push(`eq=brightness=${b}:contrast=${c}:saturation=${s}`);
         }
-        if (Math.abs(tempPct) > 0.5) {
+        if (Math.abs(tempPct) > 0.5 || Math.abs(tintPct) > 0.5) {
           const shift = (tempPct / 240).toFixed(3);
           const negShift = (-tempPct / 240).toFixed(3);
-          f.push(`colorbalance=rs=${shift}:bs=${negShift}:rm=${shift}:bm=${negShift}`);
+          const gShift = (-tintPct / 260).toFixed(3);
+          f.push(
+            `colorbalance=rs=${shift}:gs=${gShift}:bs=${negShift}:rm=${shift}:gm=${gShift}:bm=${negShift}`
+          );
+        }
+        if (sharpnessPct > 2) {
+          const amount = Math.min(2.5, Number((sharpnessPct / 50).toFixed(2)) || 0.8);
+          f.push(`unsharp=5:5:${amount}:5:5:0.0`);
+        }
+        if (vignettePct > 5) {
+          f.push('vignette=PI/4');
+        }
+        if (chromaKeyEnabled) {
+          f.push(`colorkey=${chromaKeyColor}:${chromaKeySim.toFixed(2)}:0.1`);
         }
         return f;
       };
@@ -616,8 +653,14 @@ export async function runLocalFfmpegTool(
       const buildVideoComplexGraph = (
         clipDurationSec: number,
         mode: 'normal' | 'reverse' | 'boomerang' | 'snapshot',
-        forGif: boolean
+        forGif: boolean,
+        clipSpeedOverride?: number,
+        clipFadeInOverride?: number,
+        clipFadeOutOverride?: number
       ): {complex: string; outPad: string} => {
+        const effSpeed = clipSpeedOverride ?? speed;
+        const effFadeIn = clipFadeInOverride ?? videoFadeSec;
+        const effFadeOut = clipFadeOutOverride ?? videoFadeSec;
         const lines: string[] = [];
         const pre = buildPreFilters();
         let curPad = '0:v';
@@ -650,13 +693,15 @@ export async function runLocalFfmpegTool(
               cropSteps.push("crop='trunc(min(iw,ih*9/16)/2)*2':'trunc(min(ih,iw*16/9)/2)*2'");
             else if (cropAspect === '4:5')
               cropSteps.push("crop='trunc(min(iw,ih*4/5)/2)*2':'trunc(min(ih,iw*5/4)/2)*2'");
+            else if (cropAspect === '3:4')
+              cropSteps.push("crop='trunc(min(iw,ih*3/4)/2)*2':'trunc(min(ih,iw*4/3)/2)*2'");
           }
           cropSteps.push(`scale=${outW}:${outH}`);
           lines.push(`[${curPad}]${cropSteps.join(',')}[vframed]`);
           curPad = 'vframed';
         }
 
-        // Overlay text PNG before time effects so watermark stays crisp even on boomerang/fade
+        // Overlay text PNG before time effects so watermark stays crisp
         if (hasOverlayPng) {
           lines.push(`[1:v]scale=${outW}:${outH},format=rgba[vovr]`);
           lines.push(`[${curPad}][vovr]overlay=0:0[vovred]`);
@@ -665,22 +710,27 @@ export async function runLocalFfmpegTool(
 
         if (mode !== 'snapshot') {
           const post: string[] = [];
-          if (Math.abs(speed - 1) > 0.01) {
-            post.push(`setpts=${(1 / speed).toFixed(3)}*PTS`);
+          if (Math.abs(effSpeed - 1) > 0.01) {
+            post.push(`setpts=${(1 / effSpeed).toFixed(3)}*PTS`);
           }
           if (mode === 'reverse') {
             post.push('reverse');
           }
-          if (videoFadeSec > 0.05) {
-            const effDur = (clipDurationSec > 0 ? clipDurationSec : 5) / speed;
-            const dFade = Math.min(videoFadeSec, Math.max(0.2, effDur * 0.4));
-            post.push(`fade=t=in:st=0:d=${dFade.toFixed(2)}`);
-            if (effDur > dFade * 2.1) {
-              post.push(`fade=t=out:st=${(effDur - dFade).toFixed(2)}:d=${dFade.toFixed(2)}`);
+          const effDur = (clipDurationSec > 0 ? clipDurationSec : 5) / effSpeed;
+          if (effFadeIn > 0.05) {
+            const dIn = Math.min(effFadeIn, Math.max(0.15, effDur * 0.45));
+            post.push(`fade=t=in:st=0:d=${dIn.toFixed(2)}`);
+          }
+          if (effFadeOut > 0.05) {
+            const dOut = Math.min(effFadeOut, Math.max(0.15, effDur * 0.45));
+            if (effDur > dOut * 1.4) {
+              post.push(`fade=t=out:st=${Math.max(0, effDur - dOut).toFixed(2)}:d=${dOut.toFixed(2)}`);
             }
           }
           if (forGif) {
             post.push('fps=12');
+          } else if (targetFps > 0) {
+            post.push(`fps=${targetFps}`);
           }
           post.push('scale=trunc(iw/2)*2:trunc(ih/2)*2');
 
@@ -701,23 +751,49 @@ export async function runLocalFfmpegTool(
         return {complex: lines.join(';'), outPad: curPad};
       };
 
-      const buildAudioChain = (clipDurationSec: number, reversed: boolean): string[] => {
+      const buildAtempoChain = (spd: number): string[] => {
+        if (Math.abs(spd - 1) <= 0.01) return [];
+        if (spd < 0.5) {
+          return ['atempo=0.5', `atempo=${Math.max(0.5, spd / 0.5).toFixed(3)}`];
+        }
+        if (spd > 2.0) {
+          return ['atempo=2.0', `atempo=${Math.min(2.0, spd / 2.0).toFixed(3)}`];
+        }
+        return [`atempo=${spd.toFixed(3)}`];
+      };
+
+      const buildAudioChain = (
+        clipDurationSec: number,
+        reversed: boolean,
+        clipVolOverride?: number,
+        clipSpeedOverride?: number,
+        clipFadeInOverride?: number,
+        clipFadeOutOverride?: number
+      ): string[] => {
+        const effVol = clipVolOverride ?? volumePct;
+        const effSpeed = clipSpeedOverride ?? speed;
+        const effFadeIn = clipFadeInOverride ?? audioFadeSec;
+        const effFadeOut = clipFadeOutOverride ?? audioFadeSec;
         const af: string[] = [];
-        if (Math.abs(volumePct - 100) > 1) {
-          af.push(`volume=${(volumePct / 100).toFixed(2)}`);
+        if (noiseReduction) {
+          af.push('highpass=f=85,lowpass=f=11500');
         }
-        if (Math.abs(speed - 1) > 0.01) {
-          af.push(`atempo=${speed}`);
+        if (Math.abs(effVol - 100) > 1) {
+          af.push(`volume=${(effVol / 100).toFixed(2)}`);
         }
+        af.push(...buildAtempoChain(effSpeed));
         if (reversed) {
           af.push('areverse');
         }
-        if (audioFadeSec > 0.05) {
-          const effDur = (clipDurationSec > 0 ? clipDurationSec : 5) / speed;
-          const dFade = Math.min(audioFadeSec, Math.max(0.2, effDur * 0.4));
-          af.push(`afade=t=in:st=0:d=${dFade.toFixed(2)}`);
-          if (effDur > dFade * 2.1) {
-            af.push(`afade=t=out:st=${(effDur - dFade).toFixed(2)}:d=${dFade.toFixed(2)}`);
+        const effDur = (clipDurationSec > 0 ? clipDurationSec : 5) / effSpeed;
+        if (effFadeIn > 0.05) {
+          const dIn = Math.min(effFadeIn, Math.max(0.15, effDur * 0.45));
+          af.push(`afade=t=in:st=0:d=${dIn.toFixed(2)}`);
+        }
+        if (effFadeOut > 0.05) {
+          const dOut = Math.min(effFadeOut, Math.max(0.15, effDur * 0.45));
+          if (effDur > dOut * 1.4) {
+            af.push(`afade=t=out:st=${Math.max(0, effDur - dOut).toFixed(2)}:d=${dOut.toFixed(2)}`);
           }
         }
         return af;
@@ -738,7 +814,7 @@ export async function runLocalFfmpegTool(
 
       const extraInputs = hasOverlayPng ? ['-i', 'overlay.png'] : [];
 
-      // Action 1: Capture current frame snapshot (includes crop, blur/pad, color grading, text overlay!)
+      // Action 1: Capture current frame snapshot
       if (action === 'snapshot') {
         const frameSec = Math.max(0, Number(options.playheadSec) || startSec);
         const outFrame = `${first.baseName}-frame.jpg`;
@@ -769,7 +845,7 @@ export async function runLocalFfmpegTool(
         return [{name: outFrame, blob: new Blob([uint8], {type: 'image/jpeg'})}];
       }
 
-      // Action 2: Extract MP3 audio (honoring trim, volume, fade & speed!)
+      // Action 2: Extract MP3 audio
       if (action === 'extract_audio') {
         if (!info.hasAudio) {
           throw new Error('Bu videoda çıkarılacak ses kanalı bulunamadı.');
@@ -790,8 +866,8 @@ export async function runLocalFfmpegTool(
           ...(af.length > 0 ? ['-af', af.join(',')] : []),
           '-c:a',
           'libmp3lame',
-          '-q:a',
-          '2',
+          '-b:a',
+          audioBitrate,
           '-y',
           outAudio,
         ]);
@@ -802,7 +878,7 @@ export async function runLocalFfmpegTool(
         return [{name: outAudio, blob: new Blob([uint8], {type: 'audio/mpeg'})}];
       }
 
-      // Action 3: Split into 2 parts at splitSec
+      // Action 3: Export 2 physical split files (optional direct split export)
       if (action === 'split') {
         const splitSec = Number(options.splitSec) || (trimDur > 0 ? startSec + trimDur / 2 : 5);
         const d1 = Math.max(0.2, Number((splitSec - startSec).toFixed(3)));
@@ -829,7 +905,7 @@ export async function runLocalFfmpegTool(
           '-map',
           `[${p1Pad}]`,
           ...g1.audioMapArgs,
-          ...(keepAudio ? ['-c:a', 'aac', '-b:a', '160k'] : []),
+          ...(keepAudio ? ['-c:a', 'aac', '-b:a', audioBitrate] : []),
           '-pix_fmt',
           'yuv420p',
           '-c:v',
@@ -862,7 +938,7 @@ export async function runLocalFfmpegTool(
           '-map',
           `[${p2Pad}]`,
           ...g2.audioMapArgs,
-          ...(keepAudio ? ['-c:a', 'aac', '-b:a', '160k'] : []),
+          ...(keepAudio ? ['-c:a', 'aac', '-b:a', audioBitrate] : []),
           '-pix_fmt',
           'yuv420p',
           '-c:v',
@@ -895,7 +971,7 @@ export async function runLocalFfmpegTool(
         ];
       }
 
-      // Action 4: Combined Pro Video Studio Export
+      // Action 4: Combined Pro Video Studio Export (Supports Multi-Clip Timeline via clipsJson!)
       const outFmt = ['mp4', 'mov', 'webm', 'mkv', 'gif'].includes(targetFmt) ? targetFmt : 'mp4';
       const outFile = `${first.baseName}-edited.${outFmt}`;
       tempFilesToClean.push(outFile);
@@ -905,20 +981,46 @@ export async function runLocalFfmpegTool(
       const isBoomerang = effect === 'boomerang';
       const isLoop = effect === 'loop' && !isGif;
 
-      const seekArgs = [
-        ...(hasTrimStart ? ['-ss', String(startSec)] : []),
-        ...(isBoomerang
-          ? ['-t', String(trimDur > 0 ? Math.min(trimDur, 9) : 8)]
-          : hasTrimEnd && trimDur > 0
-            ? ['-t', String(trimDur)]
-            : []),
-        '-i',
-        inName,
-        ...extraInputs,
-      ];
+      interface ParsedSeg {
+        sourceStart: number;
+        sourceEnd: number;
+        timelineStart: number;
+        speed: number;
+        reversed: boolean;
+        muted: boolean;
+        volume: number;
+        fadeInSec: number;
+        fadeOutSec: number;
+        transitionIn: string;
+        transitionDurationSec: number;
+      }
 
-      const effectiveClipDur = trimDur > 0 ? trimDur : totalDur;
-      const keepAudio = info.hasAudio && !mute && volumePct > 0 && !isGif && !isBoomerang;
+      let multiSegments: ParsedSeg[] = [];
+      if (options.clipsJson) {
+        try {
+          const rawArr = JSON.parse(options.clipsJson);
+          if (Array.isArray(rawArr) && rawArr.length > 1) {
+            multiSegments = rawArr
+              .map((c: Record<string, unknown>) => ({
+                sourceStart: Math.max(0, Number(c.sourceStart) || 0),
+                sourceEnd: Math.max(0.1, Number(c.sourceEnd) || totalDur),
+                timelineStart: Math.max(0, Number(c.timelineStart) || 0),
+                speed: Math.min(4, Math.max(0.25, Number(c.speed) || speed)),
+                reversed: Boolean(c.reversed) || isReverse,
+                muted: Boolean(c.muted) || mute,
+                volume: Number.isFinite(Number(c.volume)) ? Number(c.volume) : volumePct,
+                fadeInSec: Math.max(0, Number(c.fadeInSec) || 0),
+                fadeOutSec: Math.max(0, Number(c.fadeOutSec) || 0),
+                transitionIn: String(c.transitionIn || 'none'),
+                transitionDurationSec: Math.max(0, Number(c.transitionDurationSec) || 0.4),
+              }))
+              .filter((c) => c.sourceEnd - c.sourceStart >= 0.08)
+              .sort((a, b) => a.timelineStart - b.timelineStart);
+          }
+        } catch {
+          multiSegments = [];
+        }
+      }
 
       const progressHandler = ({progress}: {progress: number}) => {
         if (Number.isFinite(progress)) {
@@ -928,93 +1030,197 @@ export async function runLocalFfmpegTool(
       ffmpeg.on('progress', progressHandler);
 
       try {
-        if (isLoop) {
-          const segName = 'studio_seg.mp4';
-          tempFilesToClean.push(segName);
-          onProgress(0.2, outFile);
-          const {complex, outPad} = buildVideoComplexGraph(effectiveClipDur, 'normal', false);
-          const segAf = keepAudio ? buildAudioChain(effectiveClipDur, false) : [];
-          const gSeg = attachAudioComplex(complex, segAf, keepAudio);
-          const rcSeg = await ffmpeg.exec([
-            ...seekArgs,
-            '-filter_complex',
-            gSeg.fullComplex,
-            '-map',
-            `[${outPad}]`,
-            ...gSeg.audioMapArgs,
-            ...(keepAudio ? ['-c:a', 'aac', '-b:a', '160k'] : []),
-            '-pix_fmt',
-            'yuv420p',
-            '-c:v',
-            'libx264',
-            '-preset',
-            'ultrafast',
-            '-crf',
-            crf,
-            '-y',
-            segName,
-          ]);
-          if (signal?.aborted) throw new Error('Cancelled');
-          if (rcSeg !== 0) throw new Error('Video segmenti hazırlanamadı.');
+        // Multi-clip NLE timeline rendering & concatenation
+        if (multiSegments.length > 1 && !isGif && !isBoomerang) {
+          const segFiles: string[] = [];
+          const anyAudio = info.hasAudio && !mute;
 
-          onProgress(0.75, outFile);
-          const rcLoop = await ffmpeg.exec([
-            '-stream_loop',
-            String(loopCount - 1),
+          for (let idx = 0; idx < multiSegments.length; idx++) {
+            const seg = multiSegments[idx];
+            const segDur = Math.max(0.08, Number((seg.sourceEnd - seg.sourceStart).toFixed(3)));
+            const segName = `nle_seg_${idx}.mp4`;
+            tempFilesToClean.push(segName);
+            segFiles.push(segName);
+
+            onProgress(0.15 + (idx / multiSegments.length) * 0.65, outFile);
+            const effFadeIn =
+              seg.transitionIn !== 'none'
+                ? Math.max(seg.fadeInSec, seg.transitionDurationSec)
+                : seg.fadeInSec;
+            const {complex, outPad} = buildVideoComplexGraph(
+              segDur,
+              seg.reversed ? 'reverse' : 'normal',
+              false,
+              seg.speed,
+              effFadeIn,
+              seg.fadeOutSec
+            );
+            const segKeepAudio = anyAudio && !seg.muted && seg.volume > 0;
+            const afList = segKeepAudio
+              ? buildAudioChain(
+                  segDur,
+                  seg.reversed,
+                  seg.volume,
+                  seg.speed,
+                  effFadeIn,
+                  seg.fadeOutSec
+                )
+              : [];
+            const gSeg = attachAudioComplex(complex, afList, segKeepAudio);
+
+            const rcSeg = await ffmpeg.exec([
+              ...(seg.sourceStart > 0.03 ? ['-ss', String(seg.sourceStart)] : []),
+              '-t',
+              String(segDur),
+              '-i',
+              inName,
+              ...extraInputs,
+              '-filter_complex',
+              gSeg.fullComplex,
+              '-map',
+              `[${outPad}]`,
+              ...gSeg.audioMapArgs,
+              ...(segKeepAudio ? ['-c:a', 'aac', '-b:a', audioBitrate] : ['-an']),
+              '-pix_fmt',
+              'yuv420p',
+              '-c:v',
+              'libx264',
+              '-preset',
+              'ultrafast',
+              '-crf',
+              crf,
+              '-y',
+              segName,
+            ]);
+            if (signal?.aborted) throw new Error('Cancelled');
+            if (rcSeg !== 0) throw new Error(`Klip #${idx + 1} işlenemedi.`);
+          }
+
+          const listFile = 'nle_concat.txt';
+          tempFilesToClean.push(listFile);
+          const listBody = segFiles.map((f) => `file '${f}'`).join('\n');
+          await ffmpeg.writeFile(listFile, new TextEncoder().encode(listBody));
+
+          onProgress(0.86, outFile);
+          const rcConcat = await ffmpeg.exec([
+            '-f',
+            'concat',
+            '-safe',
+            '0',
             '-i',
-            segName,
+            listFile,
             ...(outFmt === 'webm'
-              ? ['-c:v', 'libvpx', '-b:v', '1.5M', ...(keepAudio ? ['-c:a', 'libvorbis'] : ['-an'])]
+              ? ['-c:v', 'libvpx', '-b:v', '1.8M', ...(anyAudio ? ['-c:a', 'libvorbis'] : ['-an'])]
               : ['-c', 'copy']),
             '-y',
             outFile,
           ]);
           if (signal?.aborted) throw new Error('Cancelled');
-          if (rcLoop !== 0) throw new Error('Video döngüsü oluşturulamadı.');
+          if (rcConcat !== 0) throw new Error('Timeline klipleri birleştirilemedi.');
         } else {
-          const mode = isBoomerang ? 'boomerang' : isReverse ? 'reverse' : 'normal';
-          const {complex, outPad} = buildVideoComplexGraph(effectiveClipDur, mode, isGif);
-          const afList = keepAudio ? buildAudioChain(effectiveClipDur, isReverse) : [];
-          const gMain = attachAudioComplex(complex, afList, keepAudio);
-          onProgress(0.22, outFile);
+          const seekArgs = [
+            ...(hasTrimStart ? ['-ss', String(startSec)] : []),
+            ...(isBoomerang
+              ? ['-t', String(trimDur > 0 ? Math.min(trimDur, 9) : 8)]
+              : hasTrimEnd && trimDur > 0
+                ? ['-t', String(trimDur)]
+                : []),
+            '-i',
+            inName,
+            ...extraInputs,
+          ];
 
-          const codecArgs = isGif
-            ? []
-            : outFmt === 'webm'
-              ? [
-                  '-c:v',
-                  'libvpx',
-                  '-b:v',
-                  '1.5M',
-                  '-crf',
-                  crf,
-                  ...(keepAudio ? ['-c:a', 'libvorbis'] : []),
-                ]
-              : [
-                  '-pix_fmt',
-                  'yuv420p',
-                  '-c:v',
-                  'libx264',
-                  '-preset',
-                  'ultrafast',
-                  '-crf',
-                  crf,
-                  ...(keepAudio ? ['-c:a', 'aac', '-b:a', '160k'] : []),
-                ];
+          const effectiveClipDur = trimDur > 0 ? trimDur : totalDur;
+          const keepAudio = info.hasAudio && !mute && volumePct > 0 && !isGif && !isBoomerang;
 
-          const rc = await ffmpeg.exec([
-            ...seekArgs,
-            '-filter_complex',
-            gMain.fullComplex,
-            '-map',
-            `[${outPad}]`,
-            ...gMain.audioMapArgs,
-            ...codecArgs,
-            '-y',
-            outFile,
-          ]);
-          if (signal?.aborted) throw new Error('Cancelled');
-          if (rc !== 0) throw new Error('Video düzenlemesi dışa aktarılamadı.');
+          if (isLoop) {
+            const segName = 'studio_seg.mp4';
+            tempFilesToClean.push(segName);
+            onProgress(0.2, outFile);
+            const {complex, outPad} = buildVideoComplexGraph(effectiveClipDur, 'normal', false);
+            const segAf = keepAudio ? buildAudioChain(effectiveClipDur, false) : [];
+            const gSeg = attachAudioComplex(complex, segAf, keepAudio);
+            const rcSeg = await ffmpeg.exec([
+              ...seekArgs,
+              '-filter_complex',
+              gSeg.fullComplex,
+              '-map',
+              `[${outPad}]`,
+              ...gSeg.audioMapArgs,
+              ...(keepAudio ? ['-c:a', 'aac', '-b:a', audioBitrate] : []),
+              '-pix_fmt',
+              'yuv420p',
+              '-c:v',
+              'libx264',
+              '-preset',
+              'ultrafast',
+              '-crf',
+              crf,
+              '-y',
+              segName,
+            ]);
+            if (signal?.aborted) throw new Error('Cancelled');
+            if (rcSeg !== 0) throw new Error('Video segmenti hazırlanamadı.');
+
+            onProgress(0.75, outFile);
+            const rcLoop = await ffmpeg.exec([
+              '-stream_loop',
+              String(loopCount - 1),
+              '-i',
+              segName,
+              ...(outFmt === 'webm'
+                ? ['-c:v', 'libvpx', '-b:v', '1.5M', ...(keepAudio ? ['-c:a', 'libvorbis'] : ['-an'])]
+                : ['-c', 'copy']),
+              '-y',
+              outFile,
+            ]);
+            if (signal?.aborted) throw new Error('Cancelled');
+            if (rcLoop !== 0) throw new Error('Video döngüsü oluşturulamadı.');
+          } else {
+            const mode = isBoomerang ? 'boomerang' : isReverse ? 'reverse' : 'normal';
+            const {complex, outPad} = buildVideoComplexGraph(effectiveClipDur, mode, isGif);
+            const afList = keepAudio ? buildAudioChain(effectiveClipDur, isReverse) : [];
+            const gMain = attachAudioComplex(complex, afList, keepAudio);
+            onProgress(0.22, outFile);
+
+            const codecArgs = isGif
+              ? []
+              : outFmt === 'webm'
+                ? [
+                    '-c:v',
+                    'libvpx',
+                    '-b:v',
+                    '1.8M',
+                    '-crf',
+                    crf,
+                    ...(keepAudio ? ['-c:a', 'libvorbis'] : []),
+                  ]
+                : [
+                    '-pix_fmt',
+                    'yuv420p',
+                    '-c:v',
+                    'libx264',
+                    '-preset',
+                    'ultrafast',
+                    '-crf',
+                    crf,
+                    ...(keepAudio ? ['-c:a', 'aac', '-b:a', audioBitrate] : []),
+                  ];
+
+            const rc = await ffmpeg.exec([
+              ...seekArgs,
+              '-filter_complex',
+              gMain.fullComplex,
+              '-map',
+              `[${outPad}]`,
+              ...gMain.audioMapArgs,
+              ...codecArgs,
+              '-y',
+              outFile,
+            ]);
+            if (signal?.aborted) throw new Error('Cancelled');
+            if (rc !== 0) throw new Error('Video düzenlemesi dışa aktarılamadı.');
+          }
         }
 
         const outData = await ffmpeg.readFile(outFile);

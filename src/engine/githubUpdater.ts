@@ -225,19 +225,48 @@ export async function applyPwaUpdateIfWaiting(): Promise<boolean> {
   return false;
 }
 
+const DOWNLOADED_APK_KEY = 'morph_downloaded_apk_meta_v1';
+const downloadedApkBlobs = new Map<string, Blob>();
+const downloadedApkUris = new Map<string, {uri: string; size: number}>();
+
+function getTargetApkFileName(info?: GithubUpdateInfo | null): string {
+  const tag = info?.releaseTag || `v${APP_VERSION}`;
+  const normalizedTag = tag.startsWith('v') ? tag : `v${tag}`;
+  return `Morph-${normalizedTag}.apk`;
+}
+
+function markApkAsDownloaded(fileName: string, size: number, uri?: string, blob?: Blob): void {
+  if (blob) downloadedApkBlobs.set(fileName, blob);
+  if (uri) downloadedApkUris.set(fileName, {uri, size});
+  try {
+    localStorage.setItem(
+      DOWNLOADED_APK_KEY,
+      JSON.stringify({fileName, size, uri: uri || '', ts: Date.now()})
+    );
+  } catch {
+    // Ignore storage error
+  }
+}
+
+export function isUpdateApkDownloaded(info?: GithubUpdateInfo | null): boolean {
+  const fileName = getTargetApkFileName(info);
+  if (downloadedApkBlobs.has(fileName) || downloadedApkUris.has(fileName)) {
+    return true;
+  }
+  try {
+    const raw = localStorage.getItem(DOWNLOADED_APK_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as {fileName?: string; size?: number};
+    return parsed.fileName === fileName && (parsed.size || 0) > 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function downloadMorphApkInApp(
-  existingInfo: GithubUpdateInfo | null,
+  existingInfo?: GithubUpdateInfo | null,
   onProgress?: (state: UpdateDownloadProgress) => void
 ): Promise<{ok: boolean; fileName: string; installerLaunched?: boolean; message: string}> {
-  onProgress?.({
-    active: true,
-    percent: 2,
-    downloadedBytes: 0,
-    totalBytes: existingInfo?.apkSizeBytes ?? 0,
-    fileName: 'Morph.apk',
-    phase: 'checking',
-  });
-
   let info = existingInfo;
   if (!info?.apkDownloadUrl) {
     info = await checkGithubUpdates();
@@ -251,17 +280,49 @@ export async function downloadMorphApkInApp(
       `https://github.com/${GITHUB_REPO}/releases/download/${normalizedTag}/${fileName}`
   );
   const expectedSize = info?.apkSizeBytes ?? 0;
+  const alreadyCached = isUpdateApkDownloaded(info);
 
-  onProgress?.({
-    active: true,
-    percent: 5,
-    downloadedBytes: 0,
-    totalBytes: expectedSize,
-    fileName,
-    phase: 'downloading',
-  });
+  // If already downloaded in memory (Web/PWA) or URI cache (Legacy Native), install/trigger immediately without re-downloading!
+  if (alreadyCached && !isNativeApp() && downloadedApkBlobs.has(fileName)) {
+    const cachedBlob = downloadedApkBlobs.get(fileName)!;
+    triggerWebDownload(cachedBlob, fileName);
+    onProgress?.({
+      active: false,
+      percent: 100,
+      downloadedBytes: cachedBlob.size,
+      totalBytes: cachedBlob.size,
+      fileName,
+      phase: 'done',
+    });
+    return {
+      ok: true,
+      fileName,
+      installerLaunched: true,
+      message: `${fileName} zaten indirildi, kurulum paketi açılıyor.`,
+    };
+  }
 
-  // 1. Native Android APK: stream directly to Documents/Morph and trigger system APK installer in-app
+  if (!alreadyCached) {
+    onProgress?.({
+      active: true,
+      percent: 5,
+      downloadedBytes: 0,
+      totalBytes: expectedSize,
+      fileName,
+      phase: 'downloading',
+    });
+  } else {
+    onProgress?.({
+      active: true,
+      percent: 99,
+      downloadedBytes: expectedSize,
+      totalBytes: expectedSize,
+      fileName,
+      phase: 'installing',
+    });
+  }
+
+  // 1. Native Android APK: stream directly to Documents/Morph (or reuse existing file if already downloaded) and trigger system APK installer in-app
   if (isNativeApp()) {
     await ensureStoragePermission(true);
     let handle: {remove: () => Promise<void>} | null = null;
@@ -282,11 +343,14 @@ export async function downloadMorphApkInApp(
         fileName,
       });
 
+      const finalSize = res.size || expectedSize || 15_000_000;
+      markApkAsDownloaded(res.fileName || fileName, finalSize, res.uri);
+
       onProgress?.({
         active: false,
         percent: 100,
-        downloadedBytes: res.size || expectedSize,
-        totalBytes: res.size || expectedSize,
+        downloadedBytes: finalSize,
+        totalBytes: finalSize,
         fileName: res.fileName || fileName,
         phase: 'done',
       });
@@ -295,12 +359,36 @@ export async function downloadMorphApkInApp(
         ok: true,
         fileName: res.fileName || fileName,
         installerLaunched: res.installerLaunched,
-        message: res.installerLaunched
-          ? `${res.fileName || fileName} indirildi, kurulum ekranı açılıyor.`
-          : `${res.fileName || fileName} Belgeler/Morph klasörüne kaydedildi.`,
+        message: alreadyCached
+          ? `${res.fileName || fileName} hazır, kurulum ekranı açılıyor.`
+          : res.installerLaunched
+            ? `${res.fileName || fileName} indirildi, kurulum ekranı açılıyor.`
+            : `${res.fileName || fileName} indirildi. Kurmak için "Güncellemeyi Kur" butonuna dokun.`,
       };
     } catch {
-      // Fallback for older native builds: stream via server/fetch and write chunked to Documents/Morph
+      // Fallback for older native builds: check cached URI first before re-downloading
+      const cachedNative = downloadedApkUris.get(fileName);
+      if (cachedNative?.uri) {
+        try {
+          await Share.share({title: fileName, files: [cachedNative.uri]});
+        } catch {
+          // Ignore share dismissal
+        }
+        onProgress?.({
+          active: false,
+          percent: 100,
+          downloadedBytes: cachedNative.size,
+          totalBytes: cachedNative.size,
+          fileName,
+          phase: 'done',
+        });
+        return {
+          ok: true,
+          fileName,
+          installerLaunched: true,
+          message: `${fileName} hazır, kurulum ekranı açılıyor.`,
+        };
+      }
     } finally {
       if (handle) {
         await handle.remove().catch(() => {});
@@ -357,12 +445,14 @@ export async function downloadMorphApkInApp(
           phase: 'installing',
         });
         const uri = await writeBlobToNativeChunked(blob, `Morph/${fileName}`, Directory.Documents);
+        markApkAsDownloaded(fileName, blob.size, uri, blob);
         try {
           await Share.share({title: fileName, files: [uri]});
         } catch {
           // Ignore share dismissal
         }
       } else {
+        markApkAsDownloaded(fileName, blob.size, undefined, blob);
         triggerWebDownload(blob, fileName);
       }
 
@@ -379,8 +469,8 @@ export async function downloadMorphApkInApp(
         ok: true,
         fileName,
         message: isNativeApp()
-          ? `${fileName} Belgeler/Morph klasörüne indirildi.`
-          : `${fileName} uygulama içinden indirildi.`,
+          ? `${fileName} indirildi. Kurmak için "Güncellemeyi Kur" butonuna dokunabilirsin.`
+          : `${fileName} indirildi. Kurmak için tekrar dokunabilirsin.`,
       };
     }
   } catch {
@@ -396,6 +486,8 @@ export async function downloadMorphApkInApp(
   a.click();
   a.remove();
 
+  markApkAsDownloaded(fileName, expectedSize || 15_000_000);
+
   onProgress?.({
     active: false,
     percent: 100,
@@ -408,7 +500,7 @@ export async function downloadMorphApkInApp(
   return {
     ok: true,
     fileName,
-    message: `${fileName} indirme işlemi başlatıldı.`,
+    message: `${fileName} indirildi.`,
   };
 }
 

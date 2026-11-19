@@ -313,6 +313,8 @@ const DICT: Record<string, {tr: string; en: string}> = {
   CheckUpdates: {tr: 'Güncellemeleri Kontrol Et', en: 'Check for Updates'},
   CheckingUpdates: {tr: 'Kontrol ediliyor', en: 'Checking'},
   DownloadUpdate: {tr: 'Güncelleme İndir', en: 'Download Update'},
+  InstallUpdate: {tr: 'Güncellemeyi Kur', en: 'Install Update'},
+  InstallDownloadedApk: {tr: 'İndirilen APK’yı Kur', en: 'Install Downloaded APK'},
   DownloadingUpdate: {tr: 'Yeni güncelleme indiriliyor.', en: 'Downloading new update.'},
   UpdateAvailable: {tr: 'Yeni güncelleme hazır', en: 'Update available'},
   UpToDate: {tr: 'En güncel sürüme sahipsiniz', en: 'You have the latest version'},

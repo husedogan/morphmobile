@@ -207,29 +207,39 @@ html[data-corners="soft"] .rounded-xl {
 .morph-nle-range {
   -webkit-appearance: none;
   appearance: none;
+  width: 100%;
   height: 6px;
   border-radius: 9999px;
   border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
   background: linear-gradient(
     90deg,
     var(--accent) 0%,
-    var(--accent) var(--nle-pct, 50%),
-    var(--inset) var(--nle-pct, 50%),
-    var(--inset) 100%
+    var(--accent-end) var(--nle-pct, 50%),
+    color-mix(in srgb, var(--ink) 10%, var(--inset)) var(--nle-pct, 50%),
+    color-mix(in srgb, var(--ink) 10%, var(--inset)) 100%
   );
   outline: none;
   cursor: pointer;
 }
 
+.morph-nle-range::-webkit-slider-runnable-track {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 9999px;
+  background: transparent;
+}
+
 .morph-nle-range::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
   border-radius: 9999px;
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-end) 100%);
   border: 2px solid var(--paper);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent), 0 2px 6px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent) 65%, transparent), 0 2px 6px rgba(0, 0, 0, 0.45);
   cursor: pointer;
   transition: transform 0.12s ease;
 }
@@ -238,13 +248,20 @@ html[data-corners="soft"] .rounded-xl {
   transform: scale(1.18);
 }
 
-.morph-nle-range::-moz-range-thumb {
-  width: 15px;
-  height: 15px;
+.morph-nle-range::-moz-range-track {
+  height: 6px;
   border-radius: 9999px;
-  background: var(--accent);
+  background: transparent;
+  border: none;
+}
+
+.morph-nle-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-end) 100%);
   border: 2px solid var(--paper);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent), 0 2px 6px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent) 65%, transparent), 0 2px 6px rgba(0, 0, 0, 0.45);
   cursor: pointer;
 }
 
@@ -255,6 +272,40 @@ html[data-corners="soft"] .rounded-xl {
 
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* Sleek thin theme-aware scrollbar (zero native OS arrows in Chrome/Edge/WebView) */
+@supports not selector(::-webkit-scrollbar) {
+  .morph-nle-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--accent) 40%, var(--line)) transparent;
+  }
+}
+
+.morph-nle-scroll::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.morph-nle-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.morph-nle-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--accent) 42%, var(--line));
+  border-radius: 9999px;
+}
+
+.morph-nle-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+.morph-nle-scroll::-webkit-scrollbar-button,
+.morph-nle-scroll::-webkit-scrollbar-button:start:decrement,
+.morph-nle-scroll::-webkit-scrollbar-button:end:increment {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 /* Suppress Android WebView giant default gray play poster/overlay on custom NLE video elements */

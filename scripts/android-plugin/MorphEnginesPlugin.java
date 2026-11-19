@@ -952,6 +952,42 @@ public class MorphEnginesPlugin extends Plugin {
                 String cleanName = sanitizeFileName(rawName.endsWith(".apk") ? rawName : (rawName + ".apk"));
                 tempFile = new File(docsMorph, cleanName + ".part");
                 File finalDest = new File(docsMorph, cleanName);
+                boolean forceRedownload = Boolean.TRUE.equals(call.getBoolean("forceRedownload", false));
+
+                if (!forceRedownload && finalDest.exists() && finalDest.length() > 1_000_000L) {
+                    JSObject doneEv = new JSObject();
+                    doneEv.put("progress", 100.0);
+                    doneEv.put("downloadedBytes", finalDest.length());
+                    doneEv.put("totalBytes", finalDest.length());
+                    notifyListeners("apkProgress", doneEv);
+
+                    boolean installerLaunched = false;
+                    try {
+                        Uri contentUri = androidx.core.content.FileProvider.getUriForFile(
+                            appCtx,
+                            appCtx.getPackageName() + ".fileprovider",
+                            finalDest
+                        );
+                        android.content.Intent installIntent = new android.content.Intent(android.content.Intent.ACTION_VIEW);
+                        installIntent.setDataAndType(contentUri, "application/vnd.android.package-archive");
+                        installIntent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        installIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                        appCtx.startActivity(installIntent);
+                        installerLaunched = true;
+                    } catch (Exception ignored) {
+                        installerLaunched = false;
+                    }
+
+                    JSObject ret = new JSObject();
+                    ret.put("filePath", finalDest.getAbsolutePath());
+                    ret.put("fileName", finalDest.getName());
+                    ret.put("size", finalDest.length());
+                    ret.put("uri", Uri.fromFile(finalDest).toString());
+                    ret.put("installerLaunched", installerLaunched);
+                    ret.put("alreadyDownloaded", true);
+                    call.resolve(ret);
+                    return;
+                }
 
                 String currentUrl = targetUrl;
                 HttpURLConnection conn = null;
