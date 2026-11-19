@@ -82,29 +82,60 @@ jobs:
           npm run lint
           npm run build
 
+      - name: Prepare CI release signing configuration
+        env:
+          SECRET_KEYSTORE_B64: ${{ secrets.MORPH_KEYSTORE_BASE64 }}
+          SECRET_KEYSTORE_PASS: ${{ secrets.MORPH_KEYSTORE_PASSWORD }}
+          SECRET_KEY_ALIAS: ${{ secrets.MORPH_KEY_ALIAS }}
+          SECRET_KEY_PASS: ${{ secrets.MORPH_KEY_PASSWORD }}
+        run: |
+          if [ -n "$SECRET_KEYSTORE_B64" ] && [ -n "$SECRET_KEYSTORE_PASS" ]; then
+            echo "$SECRET_KEYSTORE_B64" | base64 --decode > /tmp/morph-release.p12
+            ALIAS="${SECRET_KEY_ALIAS:-morphkey}"
+            KEY_PASS="${SECRET_KEY_PASS:-$SECRET_KEYSTORE_PASS}"
+            echo "MORPH_KEYSTORE_PATH=/tmp/morph-release.p12" >> "$GITHUB_ENV"
+            echo "MORPH_KEYSTORE_PASSWORD=$SECRET_KEYSTORE_PASS" >> "$GITHUB_ENV"
+            echo "MORPH_KEY_ALIAS=$ALIAS" >> "$GITHUB_ENV"
+            echo "MORPH_KEY_PASSWORD=$KEY_PASS" >> "$GITHUB_ENV"
+            echo "Using configured GitHub Secrets for permanent release APK signing."
+          else
+            echo "::warning::MORPH_KEYSTORE_* GitHub Secrets are not configured; generating an ephemeral PKCS12 signing key for this CI run so the APK still builds. Configure MORPH_KEYSTORE_BASE64, MORPH_KEYSTORE_PASSWORD, MORPH_KEY_ALIAS, and MORPH_KEY_PASSWORD for permanent in-place update signing."
+            EPHEM_PASS=$(openssl rand -hex 16)
+            echo "::add-mask::$EPHEM_PASS"
+            keytool -genkeypair -noprompt \
+              -keystore /tmp/morph-release.p12 \
+              -storetype PKCS12 \
+              -alias morphkey \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 3650 \
+              -storepass "$EPHEM_PASS" \
+              -keypass "$EPHEM_PASS" \
+              -dname "CN=Morph CI, O=Morph, L=Istanbul, C=TR"
+            echo "MORPH_KEYSTORE_PATH=/tmp/morph-release.p12" >> "$GITHUB_ENV"
+            echo "MORPH_KEYSTORE_PASSWORD=$EPHEM_PASS" >> "$GITHUB_ENV"
+            echo "MORPH_KEY_ALIAS=morphkey" >> "$GITHUB_ENV"
+            echo "MORPH_KEY_PASSWORD=$EPHEM_PASS" >> "$GITHUB_ENV"
+          fi
+
       - name: Prepare Capacitor Android project
         env:
           CAPACITOR_TELEMETRY: 'false'
           MORPH_REQUIRE_SIGNING: 'true'
           MORPH_ENABLE_SELF_UPDATE_APK: 'true'
-          MORPH_KEYSTORE_BASE64: ${{ secrets.MORPH_KEYSTORE_BASE64 }}
-          MORPH_KEYSTORE_PASSWORD: ${{ secrets.MORPH_KEYSTORE_PASSWORD }}
-          MORPH_KEY_ALIAS: ${{ secrets.MORPH_KEY_ALIAS }}
-          MORPH_KEY_PASSWORD: ${{ secrets.MORPH_KEY_PASSWORD }}
         run: |
           if [ ! -d "android" ]; then
             npx cap add android
           fi
           npx cap sync android
           node scripts/prepare-android.mjs
+          rm -f /tmp/morph-release.p12
 
       - name: Verify signing key & Build Android APK
         working-directory: android
-        env:
-          MORPH_KEYSTORE_PASSWORD: ${{ secrets.MORPH_KEYSTORE_PASSWORD }}
         run: |
           if [ -z "$MORPH_KEYSTORE_PASSWORD" ] || [ ! -f "app/morph-release.p12" ]; then
-            echo "ERROR: Signing keystore or password secret is missing." >&2
+            echo "ERROR: Signing keystore or password is missing." >&2
             exit 1
           fi
           keytool -list -keystore app/morph-release.p12 -storepass "$MORPH_KEYSTORE_PASSWORD" -storetype PKCS12 >/dev/null

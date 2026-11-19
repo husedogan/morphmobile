@@ -13,7 +13,7 @@ export const PWA_WEB_URL = 'https://morphmobile.vercel.app';
 export const APP_VERSION: string =
   typeof __MORPH_VERSION__ === 'string' && __MORPH_VERSION__.trim().length > 0
     ? __MORPH_VERSION__
-    : '1.1.125';
+    : '1.1.25';
 
 export type VersionChannel = 'stable' | 'preview';
 
@@ -126,8 +126,8 @@ export async function checkGithubUpdates(githubToken?: string): Promise<GithubUp
   let apkSizeBytes: number | null = null;
   let releaseTag: string | null = null;
   let releaseChannel: VersionChannel | null = null;
-  let commitMessage: string | null = null;
-  let commitDate: string | null = null;
+  const commitMessage: string | null = null;
+  const commitDate: string | null = null;
   let error: string | undefined;
   let errorType: GithubUpdateInfo['errorType'];
   let retryAfterSec: number | undefined;
@@ -140,19 +140,10 @@ export async function checkGithubUpdates(githubToken?: string): Promise<GithubUp
   }
 
   try {
-    const [relsRes, commitRes, pkgRes] = await Promise.all([
-      fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=20`, {
-        headers: ghHeaders,
-        cache: 'no-store',
-      }),
-      fetch(`https://api.github.com/repos/${GITHUB_REPO}/commits/main`, {
-        headers: ghHeaders,
-        cache: 'no-store',
-      }),
-      fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/package.json`, {
-        cache: 'no-store',
-      }).catch(() => null),
-    ]);
+    const relsRes = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=20`, {
+      headers: ghHeaders,
+      cache: 'no-store',
+    });
 
     if (relsRes.ok) {
       const list = (await relsRes.json()) as GithubReleaseEntry[];
@@ -160,65 +151,45 @@ export async function checkGithubUpdates(githubToken?: string): Promise<GithubUp
         ? list.filter((r) => !r.draft && Boolean(r.tag_name))
         : [];
 
-      // Always sort all published releases by highest semantic version (never skip odd/prerelease versions)
+      // Always sort published releases by highest semantic version (never skip odd/prerelease versions)
       const sorted = [...published].sort((a, b) =>
         compareVersions(b.tag_name || '0.0.0', a.tag_name || '0.0.0')
       );
 
-      const best = sorted[0];
-      if (best?.tag_name) {
-        releaseTag = best.tag_name;
+      // Keep releaseTag, releasesUrl, apkDownloadUrl, and apkSizeBytes strictly atomic from the
+      // highest published release that actually ships a real .apk asset (prevents downloading an older APK).
+      const bestWithApk = sorted.find(
+        (r) =>
+          Array.isArray(r.assets) &&
+          r.assets.some((a) => a.name?.toLowerCase().endsWith('.apk') && Boolean(a.browser_download_url))
+      );
+
+      if (bestWithApk?.tag_name) {
+        releaseTag = bestWithApk.tag_name;
         releaseChannel = getVersionChannel(releaseTag);
-        if (best.html_url) {
-          releasesUrl = normalizeMorphRepoUrl(best.html_url);
+        if (bestWithApk.html_url) {
+          releasesUrl = normalizeMorphRepoUrl(bestWithApk.html_url);
         }
-        const assets = Array.isArray(best.assets) ? best.assets : [];
-        const apkAsset =
-          assets.find((a) => a.name?.toLowerCase().endsWith('.apk')) ??
-          sorted
-            .flatMap((r) => (Array.isArray(r.assets) ? r.assets : []))
-            .find((a) => a.name?.toLowerCase().endsWith('.apk')) ??
-          null;
+        const apkAsset = bestWithApk.assets!.find(
+          (a) => a.name?.toLowerCase().endsWith('.apk') && Boolean(a.browser_download_url)
+        );
         if (apkAsset?.browser_download_url) {
           apkDownloadUrl = normalizeMorphRepoUrl(apkAsset.browser_download_url);
           apkSizeBytes = typeof apkAsset.size === 'number' ? apkAsset.size : null;
-        } else {
-          const normalizedTag = releaseTag.startsWith('v') ? releaseTag : `v${releaseTag}`;
-          apkDownloadUrl = `https://github.com/${GITHUB_REPO}/releases/download/${normalizedTag}/Morph-${normalizedTag}.apk`;
+        }
+      } else if (sorted[0]?.tag_name) {
+        releaseTag = sorted[0].tag_name;
+        releaseChannel = getVersionChannel(releaseTag);
+        if (sorted[0].html_url) {
+          releasesUrl = normalizeMorphRepoUrl(sorted[0].html_url);
         }
       }
-    }
-
-    // Fallback: also inspect main branch package.json version in case a release workflow is still running
-    if (pkgRes && pkgRes.ok) {
-      try {
-        const pkgJson = (await pkgRes.json()) as {version?: string};
-        if (typeof pkgJson?.version === 'string' && pkgJson.version.trim()) {
-          const mainVer = pkgJson.version.trim();
-          if (!releaseTag || compareVersions(mainVer, releaseTag) > 0) {
-            releaseTag = mainVer.startsWith('v') ? mainVer : `v${mainVer}`;
-            releaseChannel = getVersionChannel(releaseTag);
-            if (!apkDownloadUrl && relsRes.ok) {
-              apkDownloadUrl = `https://github.com/${GITHUB_REPO}/releases/download/${releaseTag}/Morph-${releaseTag}.apk`;
-            }
-          }
-        }
-      } catch {
-        // Ignore package.json parse failure
-      }
-    }
-
-    if (commitRes.ok) {
-      const c = await commitRes.json();
-      commitMessage = typeof c.commit?.message === 'string' ? c.commit.message.split('\n')[0] : null;
-      commitDate = typeof c.commit?.committer?.date === 'string' ? c.commit.committer?.date : null;
-    } else if (!relsRes.ok) {
-      const status = relsRes.status || commitRes.status;
+    } else {
+      const status = relsRes.status;
       if (status === 403 || status === 429) {
         errorType = 'rate_limit';
-        const retryHeader = relsRes.headers.get('retry-after') || commitRes.headers.get('retry-after');
-        const resetHeader =
-          relsRes.headers.get('x-ratelimit-reset') || commitRes.headers.get('x-ratelimit-reset');
+        const retryHeader = relsRes.headers.get('retry-after');
+        const resetHeader = relsRes.headers.get('x-ratelimit-reset');
         if (retryHeader && Number.isFinite(Number(retryHeader))) {
           retryAfterSec = Math.max(1, Number(retryHeader));
         } else if (resetHeader && Number.isFinite(Number(resetHeader))) {
@@ -237,8 +208,9 @@ export async function checkGithubUpdates(githubToken?: string): Promise<GithubUp
     error = err instanceof Error ? err.message : 'GitHub bağlantısı kurulamadı.';
   }
 
-  const hasNewerRelease =
-    Boolean(releaseTag) && compareVersions(releaseTag as string, APP_VERSION) > 0;
+  const hasNewerApk =
+    Boolean(releaseTag && apkDownloadUrl) && compareVersions(releaseTag as string, APP_VERSION) > 0;
+  const hasUpdate = isNativeApp() ? hasNewerApk : hasNewerApk || swUpdated;
 
   return {
     checkedAt: Date.now(),
@@ -250,7 +222,7 @@ export async function checkGithubUpdates(githubToken?: string): Promise<GithubUp
     releaseChannel,
     commitMessage,
     commitDate,
-    hasUpdate: hasNewerRelease || swUpdated,
+    hasUpdate,
     swUpdated,
     error,
     errorType,

@@ -1,6 +1,6 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {LucideIcon, X} from 'lucide-react';
-import {Lang, t} from '../data/i18n';
+import {LucideIcon} from 'lucide-react';
+import {Lang} from '../data/i18n';
 import {MAX_WHEEL_SLICES, WheelIconStylePref, WheelSidePref} from '../data/models';
 
 export interface WheelActionItem {
@@ -533,25 +533,14 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
       aria-modal="true"
       aria-label={title || (lang === 'tr' ? 'Hızlı çark menüsü' : 'Quick wheel menu')}
     >
-      <div
-        className="flex max-w-[92vw] items-center gap-2"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {title && (
-          <div className="flex min-h-[44px] items-center gap-2 truncate rounded-full border border-[var(--line)] bg-[var(--surface)]/95 px-4 text-xs font-bold tracking-wide text-[var(--ink)] shadow-lg whitespace-nowrap">
-            <span>{title}</span>
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={onDismiss}
-          aria-label={t('Close', lang)}
-          title={`${t('Close', lang)} (Esc)`}
-          className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface)]/95 text-[var(--ink)] shadow-lg transition-colors hover:border-[var(--accent)]"
+      {title && (
+        <div
+          className="flex max-w-[90vw] items-center gap-2 truncate rounded-full border border-[var(--line)] bg-[var(--surface)]/95 px-4 py-1.5 text-xs font-bold tracking-wide text-[var(--ink)] shadow-lg whitespace-nowrap"
+          onClick={(e) => e.stopPropagation()}
         >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
+          <span>{title}</span>
+        </div>
+      )}
 
       {/* Responsive square wheel container with single or dual concentric rings */}
       <div
