@@ -144,6 +144,46 @@ export const DEFAULT_WHEEL_CONFIG: WheelConfigPrefs = {
   ],
 };
 
+export type MainWheelCategory = 'all' | 'nav' | 'media' | 'tools';
+
+export interface MainWheelItemDef {
+  id: string;
+  labelKey: string;
+  descKey: string;
+  category: Exclude<MainWheelCategory, 'all'>;
+}
+
+export const DEFAULT_MAIN_WHEEL_ITEMS: string[] = [
+  'nav:studio',
+  'nav:library',
+  'nav:server',
+  'open:web',
+  'pick:files',
+  'pick:photos',
+];
+
+export const ALL_MAIN_WHEEL_CATALOG: MainWheelItemDef[] = [
+  {id: 'nav:studio', labelKey: 'Studio', descKey: 'MainWheelDescStudio', category: 'nav'},
+  {id: 'nav:library', labelKey: 'Library', descKey: 'MainWheelDescLibrary', category: 'nav'},
+  {id: 'nav:settings', labelKey: 'Settings', descKey: 'MainWheelDescSettings', category: 'nav'},
+  {id: 'nav:server', labelKey: 'WheelCloud', descKey: 'MainWheelDescServer', category: 'nav'},
+  {id: 'pick:files', labelKey: 'WheelPick', descKey: 'MainWheelDescPickFiles', category: 'media'},
+  {id: 'pick:photos', labelKey: 'WheelPhotos', descKey: 'MainWheelDescPickPhotos', category: 'media'},
+  {id: 'open:web', labelKey: 'WheelLink', descKey: 'MainWheelDescLink', category: 'media'},
+  {id: 'open:video_editor', labelKey: 'MainWheelVideoEditor', descKey: 'MainWheelDescVideoEditor', category: 'media'},
+  {id: 'open:convert', labelKey: 'Convert', descKey: 'MainWheelDescConvert', category: 'tools'},
+  {id: 'open:tools', labelKey: 'Tools', descKey: 'MainWheelDescTools', category: 'tools'},
+  {id: 'action:sheet', labelKey: 'FileActions', descKey: 'MainWheelDescFileActions', category: 'tools'},
+  {id: 'action:share', labelKey: 'WheelShare', descKey: 'MainWheelDescShare', category: 'tools'},
+  {id: 'action:save', labelKey: 'WheelSaveSource', descKey: 'MainWheelDescSave', category: 'tools'},
+  {id: 'action:clear', labelKey: 'WheelClear', descKey: 'MainWheelDescClear', category: 'tools'},
+  {id: 'local:COMPRESS', labelKey: 'ToolCompress', descKey: 'ToolCompressDesc', category: 'tools'},
+  {id: 'local:SCAN_DOC', labelKey: 'ToolScanDoc', descKey: 'ToolScanDocDesc', category: 'tools'},
+  {id: 'local:PDF_CREATE', labelKey: 'ToolPdfCreate', descKey: 'ToolPdfCreateDesc', category: 'tools'},
+  {id: 'local:PDF_MERGE', labelKey: 'ToolPdfMerge', descKey: 'ToolPdfMergeDesc', category: 'tools'},
+  {id: 'local:ZIP_CREATE', labelKey: 'ToolZipCreate', descKey: 'ToolZipCreateDesc', category: 'tools'},
+];
+
 export type UiScalePref = 'compact' | 'default' | 'large';
 export type CornerStylePref = 'sharp' | 'balanced' | 'soft';
 export type WheelSidePref = 'left' | 'center' | 'right';
@@ -155,6 +195,8 @@ export interface Prefs {
   lang: 'tr' | 'en';
   serverUrl: string;
   serverToken: string;
+  showQuickWheel?: boolean;
+  mainWheelItems?: string[];
   wheelSide?: WheelSidePref;
   wheelIconStyle?: WheelIconStylePref;
   uiScale?: UiScalePref;

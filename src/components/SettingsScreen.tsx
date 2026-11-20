@@ -11,6 +11,8 @@ import {
   Cpu,
   Download,
   ExternalLink,
+  Eye,
+  EyeOff,
   FolderCheck,
   GitBranch,
   Image as ImageIcon,
@@ -90,6 +92,7 @@ interface SettingsScreenProps {
   onCheckUpdate: () => void;
   onApplyUpdate: () => void;
   onOpenWheelCustomize?: () => void;
+  onOpenMainWheelCustomize?: () => void;
   onShowToast?: (msg: string) => void;
 }
 
@@ -106,6 +109,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onCheckUpdate,
   onApplyUpdate,
   onOpenWheelCustomize,
+  onOpenMainWheelCustomize,
   onShowToast,
 }) => {
   const lang: Lang = prefs.lang;
@@ -433,6 +437,47 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       {/* CATEGORY 1: APPEARANCE, THEMES, INTERFACE CONTROLS & RADIAL WHEELS */}
       {category === 'appearance' && (
         <div className="mt-5 space-y-5">
+          {/* Instant Recovery Card in Appearance when the Home Quick Wheel is turned OFF */}
+          {prefs.showQuickWheel === false && (
+            <section className="flex flex-col gap-3 rounded-3xl border border-[var(--accent)]/45 bg-[var(--accent)]/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[var(--accent)]/40 bg-[var(--surface)] text-[var(--accent)]">
+                  <EyeOff className="h-4.5 w-4.5" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-extrabold text-[var(--ink)]">
+                    {t('QuickWheelHiddenBannerTitle', lang)}
+                  </h3>
+                  <p className="mt-0.5 text-xs leading-snug text-[var(--muted)]">
+                    {t('QuickWheelHiddenBannerDesc', lang)}
+                  </p>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {onOpenMainWheelCustomize && (
+                  <button
+                    type="button"
+                    onClick={onOpenMainWheelCustomize}
+                    className="min-h-[40px] rounded-full border border-[var(--line)] bg-[var(--surface)] px-3.5 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] whitespace-nowrap"
+                  >
+                    {t('MainWheelCustomizeTitle', lang)}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChangePrefs((p) => ({...p, showQuickWheel: true}));
+                    onShowToast?.(t('QuickWheelEnabledToast', lang));
+                  }}
+                  className="morph-accent-btn flex min-h-[40px] items-center gap-1.5 rounded-full px-4 text-xs font-bold whitespace-nowrap"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  <span>{t('QuickWheelEnableNow', lang)}</span>
+                </button>
+              </div>
+            </section>
+          )}
+
           {/* Themes & Separate System + Single Sun/Crescent Icon Mode Switcher */}
           <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
             <div className="flex items-center justify-between gap-3">
@@ -775,21 +820,71 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </button>
           </section>
 
-          {/* Dedicated Quick Wheel Position (Left / Center / Right) & Icon Design Card */}
+          {/* Dedicated Quick Wheel Visibility, Customization, Position & Icon Design Card */}
           <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
-            <div className="flex items-start gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
-                <SlidersHorizontal className="h-4 w-4" />
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
+                  <SlidersHorizontal className="h-4 w-4" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold leading-tight text-[var(--ink)]">
+                    {t('WheelFabSectionTitle', lang)}
+                  </h2>
+                  <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
+                    {t('WheelFabSectionDesc', lang)}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-base font-bold leading-tight text-[var(--ink)]">
-                  {t('WheelFabSectionTitle', lang)}
-                </h2>
-                <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
-                  {t('WheelFabSectionDesc', lang)}
-                </p>
-              </div>
+
+              {onOpenMainWheelCustomize && (
+                <button
+                  type="button"
+                  onClick={onOpenMainWheelCustomize}
+                  className="flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-full border border-[var(--accent)]/45 bg-[var(--accent)]/12 px-3.5 text-xs font-bold text-[var(--ink)] transition-colors hover:bg-[var(--accent)]/20 whitespace-nowrap"
+                >
+                  <SlidersHorizontal className="h-3.5 w-3.5 text-[var(--accent)]" />
+                  <span>{t('MainWheelCustomizeBtn', lang)}</span>
+                </button>
+              )}
             </div>
+
+            {/* Home Screen Quick Wheel Show / Hide Switch */}
+            <button
+              type="button"
+              onClick={() => {
+                const nextEnabled = prefs.showQuickWheel === false;
+                onChangePrefs((p) => ({...p, showQuickWheel: nextEnabled}));
+                onShowToast?.(
+                  nextEnabled ? t('QuickWheelEnabledToast', lang) : t('QuickWheelDisabledToast', lang)
+                );
+              }}
+              className="mt-4 flex min-h-[64px] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--accent)]">
+                  {prefs.showQuickWheel !== false ? (
+                    <Eye className="h-4 w-4" />
+                  ) : (
+                    <EyeOff className="h-4 w-4 text-[var(--muted)]" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-[var(--ink)]">
+                    {t('ShowQuickWheelLabel', lang)}
+                  </p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
+                    {t('ShowQuickWheelDesc', lang)}
+                  </p>
+                </div>
+              </div>
+              <span
+                className="morph-switch shrink-0"
+                data-checked={prefs.showQuickWheel !== false ? 'true' : 'false'}
+              >
+                <span className="morph-switch-thumb" />
+              </span>
+            </button>
 
             <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
               {/* 3-Step Position Slider: Sol Alt | Orta Alt | Sağ Alt */}

@@ -6,15 +6,18 @@ import {
   Diamond,
   Maximize2,
   Minimize2,
+  Move,
   Pause,
   Play,
   Redo2,
+  RotateCcw,
   Undo2,
   Volume2,
   VolumeX,
 } from 'lucide-react';
 import {
   DEFAULT_PIP_RECT,
+  DEFAULT_WATERMARK,
   NleProjectState,
   TimelineTextClip,
   TimelineVideoClip,
@@ -45,6 +48,7 @@ interface PreviewMonitorProps {
   isInGap: boolean;
   isPortraitMode: boolean;
   isInspectorOpen?: boolean;
+  isExpandedWheelMode?: boolean;
   isFullscreenPreview: boolean;
   previewHeightVh: number;
   isResizingPreview: boolean;
@@ -53,8 +57,12 @@ interface PreviewMonitorProps {
   splitComparePct: number;
   showGrid: boolean;
   isCropTabActive: boolean;
-  trackVisibility: {t1: boolean; v1: boolean; v2: boolean; a1: boolean; a2: boolean};
+  isWatermarkTabActive?: boolean;
+  freePositionMode?: boolean;
+  snapCenterGuides?: {x: boolean; y: boolean};
+  trackVisibility: {t1: boolean; v1: boolean; v2: boolean; a1: boolean; a2: boolean; w1: boolean};
   selectedClip: TimelineVideoClip | undefined;
+  selectedTextId?: string | null;
   activeTimelineClip: TimelineVideoClip | undefined;
   activeV2Clip: TimelineVideoClip | undefined;
   activeTextOverlays: TimelineTextClip[];
@@ -70,8 +78,13 @@ interface PreviewMonitorProps {
   onLoadedMetadata: () => void;
   onTimeUpdate: () => void;
   onSetPlaying: (playing: boolean) => void;
+  onToggleFreePositionMode?: () => void;
+  onResetCanvasPosition?: () => void;
+  onStartVideoCanvasDrag?: (e: React.PointerEvent) => void;
+  onStartTextDrag?: (e: React.PointerEvent, textId: string) => void;
   onStartCropDrag: (e: React.PointerEvent, handle: 'move' | 'nw' | 'ne' | 'sw' | 'se') => void;
   onStartPipDrag: (e: React.PointerEvent, clipId: string) => void;
+  onStartWatermarkDrag: (e: React.PointerEvent) => void;
   onChangeSplitComparePct: (pct: number) => void;
   onStartPreviewResize: (e: React.PointerEvent) => void;
   onCyclePreviewHeight: () => void;
@@ -86,8 +99,8 @@ interface PreviewMonitorProps {
 }
 
 /**
- * Unobstructed cinematic Preview Monitor + LumaFusion-style Multi-Track Overview Strip
- * + Minimalist Centered Transport Bar with ProCut 1-Tap Keyframe Diamond & Undo/Redo.
+ * Unobstructed cinematic Preview Monitor + Clip-Aligned Multi-Track Overview Strip
+ * + Live Draggable Watermark Overlay + Near-Fullscreen Resize Handle (transforms bottom dock into Radial Wheel!).
  */
 export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
   isTr,
@@ -105,6 +118,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
   isInGap,
   isPortraitMode,
   isInspectorOpen = false,
+  isExpandedWheelMode = false,
   isFullscreenPreview,
   previewHeightVh,
   isResizingPreview,
@@ -113,8 +127,12 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
   splitComparePct,
   showGrid,
   isCropTabActive,
+  isWatermarkTabActive = false,
+  freePositionMode = false,
+  snapCenterGuides = {x: false, y: false},
   trackVisibility,
   selectedClip,
+  selectedTextId = null,
   activeTimelineClip,
   activeV2Clip,
   activeTextOverlays,
@@ -130,8 +148,13 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
   onLoadedMetadata,
   onTimeUpdate,
   onSetPlaying,
+  onToggleFreePositionMode,
+  onResetCanvasPosition,
+  onStartVideoCanvasDrag,
+  onStartTextDrag,
   onStartCropDrag,
   onStartPipDrag,
+  onStartWatermarkDrag,
   onChangeSplitComparePct,
   onStartPreviewResize,
   onCyclePreviewHeight,
@@ -145,8 +168,22 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
   onCaptureSnapshot,
 }) => {
   const tr = (t: string, e: string) => (isTr ? t : e);
-  const playheadPct = totalTimelineDur > 0 ? Math.min(100, Math.max(0, (playhead / totalTimelineDur) * 100)) : 0;
+  const safeTotalDur = Math.max(0.2, totalTimelineDur);
+  const playheadPct = Math.min(100, Math.max(0, (playhead / safeTotalDur) * 100));
+  const v1Clips = project.videoClips.filter((c) => getClipTrackIndex(c) === 0);
   const externalAudios = project.audioClips.filter((a) => a.kind !== 'original');
+  const activeVisualFx = compareOriginal ? 'none' : project.vfx.visualFx ?? 'none';
+  const fxStrength = Math.max(0.1, Math.min(1, (project.vfx.visualFxIntensity ?? 75) / 100));
+  const hasCanvasOffset =
+    Math.abs(project.canvasPosX ?? 0) > 0.2 || Math.abs(project.canvasPosY ?? 0) > 0.2;
+
+  const watermark = project.watermark ?? DEFAULT_WATERMARK;
+  const isWatermarkVisibleNow =
+    trackVisibility.w1 &&
+    watermark.mode !== 'none' &&
+    !compareOriginal &&
+    (watermark.fullDuration ||
+      (playhead >= watermark.startSec - 0.02 && playhead <= watermark.endSec + 0.02));
 
   const v1Opacity = compareOriginal
     ? 1
@@ -180,16 +217,56 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
     window.addEventListener('pointerup', onUp);
   };
 
+  const renderWatermarkMarkContent = (forTile = false) => {
+    if (watermark.mode === 'image') {
+      const src = watermark.imageDataUrl || '/morph-mark.png';
+      const basePx = forTile ? 28 : 44;
+      const sz = Math.round(basePx * watermark.scale);
+      return (
+        <img
+          src={src}
+          alt="Watermark"
+          draggable={false}
+          style={{
+            width: `${sz}px`,
+            height: `${sz}px`,
+            filter: watermark.shadowEnabled ? 'drop-shadow(0 2px 6px rgba(0,0,0,0.7))' : 'none',
+          }}
+          className="pointer-events-none object-contain"
+        />
+      );
+    }
+
+    const label = watermark.text.trim() || '@morph';
+    const fontPx = Math.max(10, Math.round((forTile ? 13 : 16) * watermark.scale));
+    return (
+      <span
+        style={{
+          color: watermark.textColor,
+          fontFamily: watermark.fontFamily,
+          fontSize: `${fontPx}px`,
+          backgroundColor: watermark.bgEnabled ? watermark.bgColor : 'transparent',
+          textShadow: watermark.shadowEnabled ? '0 2px 6px rgba(0,0,0,0.85)' : 'none',
+        }}
+        className={`pointer-events-none whitespace-nowrap font-extrabold tracking-tight ${
+          watermark.bgEnabled ? 'rounded-md px-2 py-0.5' : ''
+        }`}
+      >
+        {label}
+      </span>
+    );
+  };
+
   return (
     <div
       style={
         !isFullscreenPreview && isPortraitMode
-          ? isInspectorOpen
+          ? isInspectorOpen && !isExpandedWheelMode
             ? {height: 'clamp(146px, 24dvh, 215px)', minHeight: '146px', maxHeight: '215px'}
-            : {height: `${previewHeightVh}dvh`, minHeight: '170px', maxHeight: '52dvh'}
+            : {height: `${previewHeightVh}dvh`, minHeight: '170px', maxHeight: '82dvh'}
           : undefined
       }
-      className={`flex flex-col bg-[#07080B] ${
+      className={`flex flex-col bg-[#08080A] ${
         isResizingPreview ? '' : 'transition-[height] duration-150'
       } ${
         isFullscreenPreview
@@ -200,7 +277,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
       }`}
     >
       {/* Clean Unobstructed Video Viewport */}
-      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#050608] px-1.5 py-1 sm:px-3 sm:py-1.5">
+      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#050507] px-1.5 py-1 sm:px-3 sm:py-1.5">
         {project.aspectRatio !== 'orig' && project.fitMode === 'blur' && blurBgVideoSrc && !isInGap && (
           <video
             src={blurBgVideoSrc}
@@ -231,36 +308,78 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
                         : undefined,
           }}
         >
-          {/* V1 Primary Video Layer (True solid black when isInGap === true for 1:1 FFmpeg parity) */}
+          {/* V1 Primary Video Layer (Wrapped for live Shake / Zoom-Pulse FX & Free Canvas Drag) */}
           {activePreviewVideoSrc && (
-            <video
-              ref={videoRef}
-              src={activePreviewVideoSrc}
-              playsInline
-              preload="auto"
-              poster={TRANSPARENT_POSTER}
-              onClick={onTogglePlay}
-              onLoadedMetadata={onLoadedMetadata}
-              onTimeUpdate={onTimeUpdate}
-              onPlay={() => onSetPlaying(true)}
-              onPause={() => onSetPlaying(false)}
-              style={{
-                opacity: v1Opacity,
-                filter: cssFilter,
-                transform: previewTransform,
-                clipPath:
-                  evaluatedTransition.clipPathOverride ||
-                  (project.vfx.maskShape === 'circle'
-                    ? 'circle(42% at 50% 50%)'
-                    : project.vfx.maskShape === 'rect'
-                      ? 'inset(10% 10% 10% 10% round 16px)'
-                      : undefined),
+            <div
+              onPointerDown={(e) => {
+                if (freePositionMode && onStartVideoCanvasDrag) {
+                  onStartVideoCanvasDrag(e);
+                }
               }}
-              className="h-full w-full cursor-pointer bg-black object-contain transition-transform duration-100"
-            />
+              className={`relative h-full w-full ${
+                activeVisualFx === 'shake'
+                  ? 'morph-fx-anim-shake'
+                  : activeVisualFx === 'zoom_pulse'
+                    ? 'morph-fx-anim-zoom-pulse'
+                    : ''
+              } ${freePositionMode ? 'cursor-grab touch-none active:cursor-grabbing' : ''}`}
+            >
+              <video
+                ref={videoRef}
+                src={activePreviewVideoSrc}
+                playsInline
+                preload="auto"
+                poster={TRANSPARENT_POSTER}
+                onClick={() => {
+                  if (!freePositionMode) onTogglePlay();
+                }}
+                onLoadedMetadata={onLoadedMetadata}
+                onTimeUpdate={onTimeUpdate}
+                onPlay={() => onSetPlaying(true)}
+                onPause={() => onSetPlaying(false)}
+                style={{
+                  opacity: v1Opacity,
+                  filter: cssFilter,
+                  transform: previewTransform,
+                  clipPath:
+                    evaluatedTransition.clipPathOverride ||
+                    (project.vfx.maskShape === 'circle'
+                      ? 'circle(42% at 50% 50%)'
+                      : project.vfx.maskShape === 'rect'
+                        ? 'inset(10% 10% 10% 10% round 16px)'
+                        : undefined),
+                }}
+                className={`h-full w-full bg-black object-contain transition-transform duration-100 ${
+                  freePositionMode ? 'pointer-events-none' : 'cursor-pointer'
+                }`}
+              />
+              {/* Live Split Mirror FX reflection */}
+              {activeVisualFx === 'mirror' && !isInGap && (
+                <div
+                  style={{
+                    opacity: Math.min(0.95, 0.45 + fxStrength * 0.5),
+                    clipPath: 'inset(0 0 0 50%)',
+                  }}
+                  className="pointer-events-none absolute inset-0 overflow-hidden"
+                >
+                  <video
+                    src={activePreviewVideoSrc}
+                    muted
+                    playsInline
+                    poster={TRANSPARENT_POSTER}
+                    style={{
+                      opacity: v1Opacity,
+                      filter: cssFilter,
+                      transform: `${previewTransform} scaleX(-1)`,
+                    }}
+                    className="h-full w-full bg-black object-contain"
+                  />
+                </div>
+              )}
+            </div>
           )}
 
-          {/* Split-Screen Before/After Wipe Comparison Layer (Original Ungraded Left Half) */}
+          {/* Split-Screen Before/After Wipe Comparison Layer */}
           {splitCompareEnabled && !compareOriginal && !isInGap && activePreviewVideoSrc && (
             <>
               <video
@@ -283,21 +402,21 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
                 style={{left: `${splitComparePct}%`}}
                 className="absolute inset-y-0 z-20 w-5 -translate-x-1/2 cursor-ew-resize touch-none"
               >
-                <div className="mx-auto h-full w-[2px] bg-[#F5B82E] shadow-[0_0_10px_rgba(245,184,46,0.9)]" />
-                <div className="absolute left-1/2 top-1/2 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-[#F5B82E] text-[9px] font-black text-black shadow-lg">
+                <div className="mx-auto h-full w-[2px] bg-[#F43F5E] shadow-[0_0_10px_rgba(244,63,94,0.9)]" />
+                <div className="absolute left-1/2 top-1/2 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-[#F43F5E] text-[9px] font-black text-white shadow-lg">
                   ↔
                 </div>
               </div>
               <span className="pointer-events-none absolute left-2 top-2 z-20 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white/85">
                 {tr('Orijinal', 'Original')}
               </span>
-              <span className="pointer-events-none absolute right-2 top-2 z-20 rounded bg-[#F5B82E]/90 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-black">
+              <span className="pointer-events-none absolute right-2 top-2 z-20 rounded bg-[#F43F5E]/90 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider text-white">
                 {tr('Renkli', 'Graded')}
               </span>
             </>
           )}
 
-          {/* Synchronized V2 Overlay / Picture-in-Picture Layer (Draggable on Preview!) */}
+          {/* Synchronized V2 Overlay / Picture-in-Picture Layer */}
           {trackVisibility.v2 && activeV2Clip && activeV2VideoSrc && !compareOriginal && (
             <div
               onPointerDown={(e) => onStartPipDrag(e, activeV2Clip.id)}
@@ -338,6 +457,136 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
             />
           )}
 
+          {/* LIVE VISUAL FX PROCEDURAL OVERLAYS (VHS, Glitch, Film Grain, Neon, Dreamy, Fisheye, CRT, Duotone) */}
+          {!isInGap && activeVisualFx === 'vhs' && (
+            <>
+              <div
+                style={{
+                  opacity: 0.35 + fxStrength * 0.45,
+                  backgroundImage:
+                    'repeating-linear-gradient(0deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 1px, transparent 1px, transparent 4px)',
+                }}
+                className="morph-fx-anim-vhs pointer-events-none absolute inset-0 z-12 mix-blend-overlay"
+              />
+              <div
+                style={{
+                  opacity: 0.22 * fxStrength,
+                  background:
+                    'linear-gradient(90deg, rgba(244,63,94,0.45), transparent 16%, transparent 84%, rgba(56,189,248,0.45))',
+                }}
+                className="pointer-events-none absolute inset-0 z-12 mix-blend-screen"
+              />
+            </>
+          )}
+
+          {!isInGap && activeVisualFx === 'glitch' && (
+            <>
+              <div
+                style={{
+                  opacity: 0.35 * fxStrength,
+                  background:
+                    'repeating-linear-gradient(0deg, rgba(244,63,94,0.22) 0px, transparent 3px, rgba(56,189,248,0.22) 6px, transparent 14px)',
+                }}
+                className="morph-fx-anim-glitch pointer-events-none absolute inset-0 z-12 mix-blend-screen"
+              />
+              <div
+                style={{
+                  opacity: 0.28 * fxStrength,
+                  boxShadow: 'inset 4px 0 0 rgba(244,63,94,0.7), inset -4px 0 0 rgba(56,189,248,0.7)',
+                }}
+                className="pointer-events-none absolute inset-0 z-12"
+              />
+            </>
+          )}
+
+          {!isInGap && activeVisualFx === 'cinema_grain' && (
+            <>
+              <div
+                style={{
+                  opacity: 0.22 * fxStrength,
+                  backgroundImage:
+                    'radial-gradient(rgba(255,255,255,0.25) 1px, transparent 0), radial-gradient(rgba(0,0,0,0.35) 1px, transparent 0)',
+                  backgroundSize: '4px 4px',
+                  backgroundPosition: '0 0, 2px 2px',
+                }}
+                className="pointer-events-none absolute inset-0 z-12 mix-blend-overlay"
+              />
+              <div
+                style={{height: `${Math.round(9 * fxStrength)}%`}}
+                className="pointer-events-none absolute inset-x-0 top-0 z-12 bg-black/95"
+              />
+              <div
+                style={{height: `${Math.round(9 * fxStrength)}%`}}
+                className="pointer-events-none absolute inset-x-0 bottom-0 z-12 bg-black/95"
+              />
+            </>
+          )}
+
+          {!isInGap && activeVisualFx === 'neon_glow' && (
+            <div
+              style={{
+                opacity: 0.42 * fxStrength,
+                background:
+                  'radial-gradient(circle at 20% 20%, rgba(192,132,252,0.55), transparent 55%), radial-gradient(circle at 80% 80%, rgba(244,63,94,0.5), transparent 55%)',
+              }}
+              className="pointer-events-none absolute inset-0 z-12 mix-blend-screen"
+            />
+          )}
+
+          {!isInGap && activeVisualFx === 'dreamy' && (
+            <div
+              style={{
+                opacity: 0.4 * fxStrength,
+                background:
+                  'radial-gradient(circle at 50% 35%, rgba(255,244,248,0.52), rgba(56,189,248,0.18) 55%, transparent 85%)',
+              }}
+              className="pointer-events-none absolute inset-0 z-12 mix-blend-screen"
+            />
+          )}
+
+          {!isInGap && activeVisualFx === 'fisheye' && (
+            <div
+              style={{
+                boxShadow: `inset 0 0 ${Math.round(54 * fxStrength)}px ${Math.round(
+                  26 * fxStrength
+                )}px rgba(0,0,0,0.92)`,
+                borderRadius: '18%',
+              }}
+              className="pointer-events-none absolute inset-0 z-12"
+            />
+          )}
+
+          {!isInGap && activeVisualFx === 'crt' && (
+            <div
+              style={{
+                opacity: 0.42 + fxStrength * 0.4,
+                backgroundImage:
+                  'repeating-linear-gradient(0deg, rgba(0,0,0,0.52) 0px, rgba(0,0,0,0.52) 1px, transparent 1px, transparent 3px)',
+                boxShadow: 'inset 0 0 36px rgba(45,212,191,0.22)',
+              }}
+              className="pointer-events-none absolute inset-0 z-12"
+            />
+          )}
+
+          {!isInGap && activeVisualFx === 'duotone' && (
+            <div
+              style={{
+                opacity: 0.58 * fxStrength,
+                background:
+                  'linear-gradient(135deg, rgba(244,63,94,0.85) 0%, rgba(168,85,247,0.45) 50%, rgba(56,189,248,0.85) 100%)',
+              }}
+              className="pointer-events-none absolute inset-0 z-12 mix-blend-color"
+            />
+          )}
+
+          {/* Magnetic Center Snap Alignment Guides (Visible while dragging in Free Mode) */}
+          {snapCenterGuides.x && (
+            <div className="pointer-events-none absolute inset-y-0 left-1/2 z-30 w-px -translate-x-1/2 bg-[#F43F5E] shadow-[0_0_8px_#F43F5E]" />
+          )}
+          {snapCenterGuides.y && (
+            <div className="pointer-events-none absolute inset-x-0 top-1/2 z-30 h-px -translate-y-1/2 bg-[#F43F5E] shadow-[0_0_8px_#F43F5E]" />
+          )}
+
           {/* Rule of Thirds Grid */}
           {showGrid && (
             <div className="pointer-events-none absolute inset-0 grid grid-cols-3 grid-rows-3">
@@ -359,86 +608,193 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
                   height: `${project.cropBox.h * 100}%`,
                   boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.62)',
                 }}
-                className="pointer-events-auto absolute cursor-move border-[1.5px] border-[#F5B82E]"
+                className="pointer-events-auto absolute cursor-move border-[1.5px] border-[#F43F5E]"
               >
                 <div
                   onPointerDown={(e) => onStartCropDrag(e, 'nw')}
-                  className="absolute -left-2 -top-2 h-4 w-4 cursor-nwse-resize rounded-xs border-2 border-white bg-[#F5B82E]"
+                  className="absolute -left-2 -top-2 h-4 w-4 cursor-nwse-resize rounded-xs border-2 border-white bg-[#F43F5E]"
                 />
                 <div
                   onPointerDown={(e) => onStartCropDrag(e, 'ne')}
-                  className="absolute -right-2 -top-2 h-4 w-4 cursor-nesw-resize rounded-xs border-2 border-white bg-[#F5B82E]"
+                  className="absolute -right-2 -top-2 h-4 w-4 cursor-nesw-resize rounded-xs border-2 border-white bg-[#F43F5E]"
                 />
                 <div
                   onPointerDown={(e) => onStartCropDrag(e, 'sw')}
-                  className="absolute -bottom-2 -left-2 h-4 w-4 cursor-nesw-resize rounded-xs border-2 border-white bg-[#F5B82E]"
+                  className="absolute -bottom-2 -left-2 h-4 w-4 cursor-nesw-resize rounded-xs border-2 border-white bg-[#F43F5E]"
                 />
                 <div
                   onPointerDown={(e) => onStartCropDrag(e, 'se')}
-                  className="absolute -bottom-2 -right-2 h-4 w-4 cursor-nwse-resize rounded-xs border-2 border-white bg-[#F5B82E]"
+                  className="absolute -bottom-2 -right-2 h-4 w-4 cursor-nwse-resize rounded-xs border-2 border-white bg-[#F43F5E]"
                 />
               </div>
             </div>
           )}
 
-          {/* Synchronized Text & SRT Overlays */}
+          {/* Live Watermark Overlay (Single Draggable OR Tiled Diagonal Grid!) */}
+          {isWatermarkVisibleNow && (
+            watermark.tiled ? (
+              <div
+                style={{opacity: Math.max(0.1, Math.min(1, watermark.opacity / 100))}}
+                className="pointer-events-none absolute inset-0 z-15 grid grid-cols-3 grid-rows-3 place-items-center overflow-hidden p-4"
+              >
+                {Array.from({length: 9}).map((_, idx) => (
+                  <div
+                    key={idx}
+                    style={{transform: `rotate(${watermark.rotation}deg)`}}
+                    className="flex items-center justify-center"
+                  >
+                    {renderWatermarkMarkContent(true)}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div
+                onPointerDown={onStartWatermarkDrag}
+                title={tr('Filigranı taşımak için sürükleyin', 'Drag to reposition watermark')}
+                style={{
+                  left: `${watermark.posX * 100}%`,
+                  top: `${watermark.posY * 100}%`,
+                  opacity: Math.max(0.1, Math.min(1, watermark.opacity / 100)),
+                  transform: `translate(-50%, -50%) rotate(${watermark.rotation}deg)`,
+                }}
+                className={`absolute z-15 flex cursor-move touch-none items-center justify-center rounded-md p-1 transition-shadow ${
+                  isWatermarkTabActive
+                    ? 'ring-1 ring-[#FB923C] ring-offset-1 ring-offset-black/40'
+                    : 'hover:ring-1 hover:ring-white/40'
+                }`}
+              >
+                {renderWatermarkMarkContent(false)}
+              </div>
+            )
+          )}
+
+          {/* Synchronized Text & SRT Overlays (Supports BOTH Preset Alignment AND Free 2D Drag!) */}
           {trackVisibility.t1 && activeTextOverlays.length > 0 && !compareOriginal && (
-            <div className="pointer-events-none absolute inset-x-3 inset-y-3 flex flex-col justify-between">
-              {activeTextOverlays.map((tItem) => (
-                <div
-                  key={tItem.id}
-                  className={`flex w-full ${
-                    tItem.posY === 'top'
-                      ? 'items-start'
-                      : tItem.posY === 'center'
-                        ? 'my-auto items-center'
-                        : 'mt-auto items-end'
-                  } ${
-                    tItem.align === 'left'
-                      ? 'justify-start'
-                      : tItem.align === 'right'
-                        ? 'justify-end'
-                        : 'justify-center'
-                  }`}
-                >
-                  <span
-                    style={{
-                      color: tItem.textColor,
-                      fontFamily: tItem.fontFamily,
-                      backgroundColor: tItem.bgEnabled ? tItem.bgColor : 'transparent',
-                      WebkitTextStroke:
-                        tItem.strokeWidth > 0
-                          ? `${tItem.strokeWidth}px ${tItem.strokeColor}`
-                          : undefined,
-                      textShadow: tItem.shadowEnabled ? '0 2px 6px rgba(0,0,0,0.85)' : 'none',
+            <div className="pointer-events-none absolute inset-0 z-16">
+              {activeTextOverlays.map((tItem) => {
+                const hasCustom =
+                  typeof tItem.customPosX === 'number' && typeof tItem.customPosY === 'number';
+                const leftPct = hasCustom
+                  ? tItem.customPosX! * 100
+                  : tItem.align === 'left'
+                    ? 14
+                    : tItem.align === 'right'
+                      ? 86
+                      : 50;
+                const topPct = hasCustom
+                  ? tItem.customPosY! * 100
+                  : tItem.posY === 'top'
+                    ? 14
+                    : tItem.posY === 'center'
+                      ? 50
+                      : 84;
+                const isSelectedText = selectedTextId === tItem.id;
+                return (
+                  <div
+                    key={tItem.id}
+                    onPointerDown={(e) => {
+                      if (freePositionMode && onStartTextDrag) {
+                        onStartTextDrag(e, tItem.id);
+                      }
                     }}
-                    className={`max-w-[92%] whitespace-pre-line break-words rounded-md px-2.5 py-1 font-extrabold tracking-tight ${
-                      tItem.fontSize === 'sm'
-                        ? 'text-xs'
-                        : tItem.fontSize === 'lg'
-                          ? 'text-lg'
-                          : tItem.fontSize === 'xl'
-                            ? 'text-xl'
-                            : 'text-sm'
+                    title={
+                      freePositionMode
+                        ? tr('Metni taşımak için sürükleyin', 'Drag to reposition text')
+                        : undefined
+                    }
+                    style={{
+                      left: `${leftPct}%`,
+                      top: `${topPct}%`,
+                      transform: 'translate(-50%, -50%)',
+                    }}
+                    className={`absolute max-w-[90%] ${
+                      freePositionMode
+                        ? `pointer-events-auto cursor-move touch-none rounded-lg p-0.5 ${
+                            isSelectedText
+                              ? 'ring-1.5 ring-[#38BDF8] shadow-[0_0_12px_rgba(56,189,248,0.45)]'
+                              : 'ring-1 ring-white/40 hover:ring-[#38BDF8]'
+                          }`
+                        : 'pointer-events-none'
                     }`}
                   >
-                    {tItem.text}
-                  </span>
-                </div>
-              ))}
+                    <span
+                      style={{
+                        color: tItem.textColor,
+                        fontFamily: tItem.fontFamily,
+                        backgroundColor: tItem.bgEnabled ? tItem.bgColor : 'transparent',
+                        WebkitTextStroke:
+                          tItem.strokeWidth > 0
+                            ? `${tItem.strokeWidth}px ${tItem.strokeColor}`
+                            : undefined,
+                        textShadow: tItem.shadowEnabled ? '0 2px 6px rgba(0,0,0,0.85)' : 'none',
+                      }}
+                      className={`block whitespace-pre-line break-words rounded-md px-2.5 py-1 text-center font-extrabold tracking-tight ${
+                        tItem.fontSize === 'sm'
+                          ? 'text-xs'
+                          : tItem.fontSize === 'lg'
+                            ? 'text-lg'
+                            : tItem.fontSize === 'xl'
+                              ? 'text-xl'
+                              : 'text-sm'
+                      }`}
+                    >
+                      {tItem.text}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
+          )}
+
+          {/* Center Reset Chip (only visible when canvas has been dragged off-center in Free Mode) */}
+          {freePositionMode && hasCanvasOffset && onResetCanvasPosition && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onResetCanvasPosition();
+              }}
+              title={tr('Video konumunu ortala', 'Center video position')}
+              className="pointer-events-auto absolute left-2 top-2 z-25 flex items-center gap-1 rounded-lg border border-[#38BDF8]/45 bg-[#141418]/90 px-2 py-1 text-[10px] font-bold text-[#38BDF8] shadow-lg backdrop-blur-md hover:bg-[#1E1E24]"
+            >
+              <RotateCcw className="h-3 w-3" />
+              <span>{tr('Ortala', 'Center')}</span>
+            </button>
           )}
         </div>
 
         {/* Transient Action Toast */}
         {statusBanner && (
-          <div className="pointer-events-none absolute left-1/2 top-2.5 z-30 -translate-x-1/2 rounded-lg border border-white/15 bg-[#151821]/92 px-3 py-1 text-[11px] font-semibold text-white shadow-xl backdrop-blur-md">
+          <div className="pointer-events-none absolute left-1/2 top-2.5 z-30 max-w-[92%] -translate-x-1/2 truncate rounded-lg border border-white/15 bg-[#141418]/95 px-3 py-1 text-[11px] font-semibold text-white shadow-xl backdrop-blur-md">
             {statusBanner}
           </div>
         )}
 
+        {/* Floating Bottom-Left Free Positioning Corner Toggle (symmetric with Fullscreen) */}
+        {onToggleFreePositionMode && (
+          <div className="absolute bottom-2 left-2.5 z-20">
+            <StudioTooltipBtn
+              tooltip={
+                freePositionMode
+                  ? tr('Serbest Yerleşim Açık (Kapatmak için dokun)', 'Free Positioning ON (Tap to lock)')
+                  : tr('Serbest Yerleşim (Sürükleyerek Konumlandır)', 'Free Positioning Mode (Drag layers)')
+              }
+              align="left"
+              onClick={onToggleFreePositionMode}
+              className={`flex h-7 items-center justify-center rounded-lg backdrop-blur-sm transition-colors ${
+                freePositionMode
+                  ? 'gap-1 border border-[#38BDF8]/55 bg-[#0F172A]/85 px-2 text-[10px] font-bold text-[#38BDF8] shadow-[0_2px_10px_rgba(56,189,248,0.28)]'
+                  : 'w-7 bg-black/55 text-white/75 hover:bg-black/80 hover:text-white'
+              }`}
+            >
+              <Move className="h-3.5 w-3.5 shrink-0" />
+              {freePositionMode && <span>{tr('Serbest', 'Free')}</span>}
+            </StudioTooltipBtn>
+          </div>
+        )}
+
         {/* Minimal Floating Fullscreen Corner Trigger */}
-        <div className="absolute bottom-2 right-2.5">
+        <div className="absolute bottom-2 right-2.5 z-20">
           <StudioTooltipBtn
             tooltip={
               isFullscreenPreview
@@ -458,66 +814,92 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
         </div>
       </div>
 
-      {/* LumaFusion-Inspired Multi-Track Overview Mini-Bar (Click/Scrub Full Project) */}
+      {/* Multi-Track Overview Mini-Bar (Clip-Aligned Audio + Text + Video + Watermark) */}
       <div
         onPointerDown={(e) => {
           const rect = e.currentTarget.getBoundingClientRect();
           const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / Math.max(1, rect.width)));
-          onSeekTimelineTo(ratio * totalTimelineDur);
+          onSeekTimelineTo(ratio * safeTotalDur);
         }}
         title={tr('Proje genel görünüm çubuğu — atlamak için dokunun', 'Project overview bar — tap to jump')}
-        className="relative flex h-3.5 shrink-0 cursor-ew-resize flex-col justify-center gap-[2px] border-t border-white/[0.06] bg-[#0B0D12] px-2"
+        className="relative flex h-4 shrink-0 cursor-ew-resize touch-none flex-col justify-center gap-[2px] border-t border-white/[0.06] bg-[#0B0B0E] px-2"
       >
-        {/* Text mini-band */}
+        {/* Text + Watermark mini-band */}
         <div className="relative h-[2px] w-full overflow-hidden rounded-full bg-white/[0.06]">
           {project.textClips.map((t) => (
             <div
               key={t.id}
               style={{
-                left: `${(t.timelineStart / totalTimelineDur) * 100}%`,
-                width: `${Math.max(3, (t.durationSec / totalTimelineDur) * 100)}%`,
+                left: `${(t.timelineStart / safeTotalDur) * 100}%`,
+                width: `${Math.max(3, (t.durationSec / safeTotalDur) * 100)}%`,
               }}
               className="absolute inset-y-0 rounded-full bg-[#38BDF8]"
             />
           ))}
+          {watermark.mode !== 'none' && trackVisibility.w1 && (
+            <div
+              style={{
+                left: `${((watermark.fullDuration ? 0 : watermark.startSec) / safeTotalDur) * 100}%`,
+                width: `${
+                  (((watermark.fullDuration ? safeTotalDur : watermark.endSec) -
+                    (watermark.fullDuration ? 0 : watermark.startSec)) /
+                    safeTotalDur) *
+                  100
+                }%`,
+              }}
+              className="absolute inset-y-0 rounded-full bg-[#FB923C]/80"
+            />
+          )}
         </div>
+
         {/* Video mini-band (V1 + V2 PiP) */}
         <div className="relative h-[2.5px] w-full overflow-hidden rounded-full bg-white/[0.06]">
           {project.videoClips.map((c) => (
             <div
               key={c.id}
               style={{
-                left: `${(c.timelineStart / totalTimelineDur) * 100}%`,
-                width: `${Math.max(2, (clipTimelineDuration(c) / totalTimelineDur) * 100)}%`,
+                left: `${(c.timelineStart / safeTotalDur) * 100}%`,
+                width: `${Math.max(2, (clipTimelineDuration(c) / safeTotalDur) * 100)}%`,
               }}
               className={`absolute inset-y-0 rounded-full ${
                 getClipTrackIndex(c) >= 1
                   ? 'bg-[#A855F7]'
                   : selectedClip?.id === c.id
-                    ? 'bg-[#F5B82E]'
-                    : 'bg-[#60A5FA]/75'
+                    ? 'bg-[#F43F5E]'
+                    : 'bg-white/45'
               }`}
             />
           ))}
         </div>
-        {/* Audio mini-band */}
+
+        {/* Audio mini-band — Strictly aligned to V1 clips + A2 clips */}
         <div className="relative h-[2px] w-full overflow-hidden rounded-full bg-white/[0.06]">
-          <div
-            className={`absolute inset-0 rounded-full ${
-              project.masterMuted || !trackVisibility.a1 ? 'bg-rose-500/40' : 'bg-[#34D399]/75'
-            }`}
-          />
+          {v1Clips.map((c) => (
+            <div
+              key={`mini-a1-${c.id}`}
+              style={{
+                left: `${(c.timelineStart / safeTotalDur) * 100}%`,
+                width: `${Math.max(2, (clipTimelineDuration(c) / safeTotalDur) * 100)}%`,
+              }}
+              className={`absolute inset-y-0 rounded-full ${
+                project.masterMuted || !trackVisibility.a1 || c.muted || c.audioDetached
+                  ? 'bg-rose-500/35'
+                  : 'bg-[#34D399]/80'
+              }`}
+            />
+          ))}
           {externalAudios.map((a) => (
             <div
               key={a.id}
               style={{
-                left: `${(a.timelineStart / totalTimelineDur) * 100}%`,
-                width: `${Math.max(4, (Math.max(0.4, a.sourceEnd - a.sourceStart) / totalTimelineDur) * 100)}%`,
+                left: `${(a.timelineStart / safeTotalDur) * 100}%`,
+                width: `${Math.max(4, (Math.max(0.4, a.sourceEnd - a.sourceStart) / safeTotalDur) * 100)}%`,
               }}
               className="absolute inset-y-0 rounded-full bg-[#818CF8]"
             />
           ))}
         </div>
+
         {/* Overview Playhead Needle */}
         <div
           style={{left: `calc(8px + (100% - 16px) * ${(playheadPct / 100).toFixed(4)})`}}
@@ -525,9 +907,8 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
         />
       </div>
 
-      {/* Minimalist Transport Bar (ClipCraft + ProCut Fusion) */}
-      <div className="relative z-30 flex h-11 shrink-0 items-center justify-between gap-2 border-y border-white/[0.07] bg-[#0E1016] px-2.5 sm:px-3.5">
-        {/* Left: Primary Play/Pause + Frame Step */}
+      {/* Minimalist Transport Bar */}
+      <div className="relative z-30 flex h-11 shrink-0 items-center justify-between gap-2 border-y border-white/[0.07] bg-[#0D0D10] px-2.5 sm:px-3.5">
         <div className="flex items-center gap-0.5">
           <StudioTooltipBtn
             tooltip={isPlaying ? tr('Duraklat (Boşluk)', 'Pause (Space)') : tr('Oynat (Boşluk)', 'Play (Space)')}
@@ -559,17 +940,17 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
           </StudioTooltipBtn>
         </div>
 
-        {/* Center: Crisp Tabular Timecode (Clean Typography, Zero Clutter) */}
-        <div className="font-mono-num flex min-w-0 items-baseline gap-1 text-xs font-bold tracking-tight">
+        {/* Center: Crisp Tabular Timecode */}
+        <div className="font-mono-num flex shrink-0 items-baseline gap-1 whitespace-nowrap text-xs font-bold tracking-tight">
           <span className="text-white">{formatSmpteTimecode(playhead, project.fps)}</span>
           <span className="text-white/25">/</span>
-          <span className="truncate text-[11px] font-medium text-white/45">
-            {formatSmpteTimecode(totalTimelineDur, project.fps)}
+          <span className="text-[11px] font-medium text-white/45">
+            {formatSmpteTimecode(safeTotalDur, project.fps)}
           </span>
         </div>
 
-        {/* Right: Undo/Redo + ProCut 1-Tap Keyframe Diamond + Mute + Snapshot */}
-        <div className="flex items-center gap-0.5">
+        {/* Right: Undo/Redo + Keyframe Diamond + Mute + Snapshot */}
+        <div className="flex shrink-0 items-center gap-0.5">
           <StudioTooltipBtn
             tooltip={tr('Geri Al (Undo)', 'Undo')}
             onClick={onUndo}
@@ -597,8 +978,8 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
             onClick={onQuickToggleKeyframe}
             className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
               hasKeyframeAtPlayhead
-                ? 'bg-[#F5B82E]/20 text-[#F5B82E]'
-                : 'text-white/65 hover:bg-white/[0.06] hover:text-[#F5B82E]'
+                ? 'bg-[#F43F5E]/20 text-[#FB7185]'
+                : 'text-white/65 hover:bg-white/[0.06] hover:text-[#FB7185]'
             }`}
           >
             <Diamond className={`h-3.5 w-3.5 ${hasKeyframeAtPlayhead ? 'fill-current' : ''}`} />
@@ -631,18 +1012,35 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
         </div>
       </div>
 
-      {/* Subtle Draggable Monitor Height Handle in Portrait Mode */}
+      {/* Tactile Draggable Monitor Height Handle in Portrait Mode (Drag down -> Armadillo Roll-Up into Cinema Reel Wheel!) */}
       {isPortraitMode && !isFullscreenPreview && (
         <div
           onPointerDown={onStartPreviewResize}
           onDoubleClick={onCyclePreviewHeight}
           title={tr(
-            'Video ekranını büyütmek/küçültmek için sürükleyin veya çift dokunun',
-            'Drag or double-tap to resize preview height'
+            'Aşağı sürükleyerek alt çubuğu çarka katlayın, yukarı çekerek geri açın',
+            'Drag down to roll bottom dock into Cinema Wheel, drag up to unfold'
           )}
-          className="group flex h-2.5 shrink-0 cursor-ns-resize touch-none items-center justify-center bg-[#0B0D12] hover:bg-white/[0.04]"
+          className={`group flex h-5 shrink-0 cursor-ns-resize touch-none items-center justify-center gap-2 border-b border-white/[0.05] transition-colors ${
+            previewHeightVh >= 50
+              ? 'bg-[#F43F5E]/12 hover:bg-[#F43F5E]/18'
+              : 'bg-[#0B0B0E] hover:bg-white/[0.05]'
+          }`}
         >
-          <span className="h-[3px] w-9 rounded-full bg-white/15 transition-colors group-hover:bg-[#F5B82E]" />
+          <span
+            className={`h-[3px] w-11 rounded-full transition-colors ${
+              previewHeightVh >= 50 || isResizingPreview
+                ? 'bg-[#F43F5E]'
+                : 'bg-white/25 group-hover:bg-[#FB7185]'
+            }`}
+          />
+          {previewHeightVh >= 50 && (
+            <span className="text-[9px] font-bold tracking-wide text-[#FB7185]">
+              {isExpandedWheelMode
+                ? tr('Sinema Çarkı · Yukarı çek', 'Cinema Wheel · Drag up')
+                : tr('Çarka katlanıyor…', 'Rolling into wheel…')}
+            </span>
+          )}
         </div>
       )}
     </div>

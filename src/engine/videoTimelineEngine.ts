@@ -91,6 +91,7 @@ export interface TimelineAudioClip {
   id: string;
   label: string;
   kind: 'original' | 'music' | 'voiceover';
+  trackRow?: 0 | 1; // 0 = A1 Primary Audio Row, 1 = A2 Secondary Audio Row
   sourceStart: number;
   sourceEnd: number;
   timelineStart: number;
@@ -98,6 +99,8 @@ export interface TimelineAudioClip {
   muted: boolean;
   fadeInSec: number;
   fadeOutSec: number;
+  transitionIn?: ClipTransitionType;
+  transitionDurationSec?: number;
   noiseReduction: boolean;
   ducking: boolean;
   blobUrl?: string;
@@ -106,6 +109,7 @@ export interface TimelineAudioClip {
 export interface TimelineTextClip {
   id: string;
   text: string;
+  trackRow?: 0 | 1; // 0 = T1 Primary Text Row, 1 = T2 Upper Text Row
   timelineStart: number;
   durationSec: number;
   fontFamily: string;
@@ -118,7 +122,11 @@ export interface TimelineTextClip {
   shadowEnabled: boolean;
   align: 'left' | 'center' | 'right';
   posY: 'top' | 'center' | 'bottom';
+  customPosX?: number; // 0.06..0.94 normalized free X position on preview canvas
+  customPosY?: number; // 0.06..0.94 normalized free Y position on preview canvas
   animation: TextAnimationPreset;
+  transitionIn?: ClipTransitionType;
+  transitionDurationSec?: number;
 }
 
 export interface ColorGradingSettings {
@@ -153,6 +161,20 @@ export const DEFAULT_AUDIO_DSP: AudioMasterDspSettings = {
   limiter: true,
 };
 
+export type VideoVisualFxPreset =
+  | 'none'
+  | 'vhs'
+  | 'glitch'
+  | 'cinema_grain'
+  | 'neon_glow'
+  | 'dreamy'
+  | 'shake'
+  | 'zoom_pulse'
+  | 'fisheye'
+  | 'crt'
+  | 'duotone'
+  | 'mirror';
+
 export interface VisualEffectsSettings {
   stabilization: boolean;
   motionBlur: number;
@@ -161,6 +183,8 @@ export interface VisualEffectsSettings {
   chromaKeySimilarity: number;
   maskShape: 'none' | 'circle' | 'rect' | 'linear';
   bgRemoveStrength: number;
+  visualFx?: VideoVisualFxPreset;
+  visualFxIntensity?: number; // 10..100
 }
 
 export interface ExportProjectSettings {
@@ -171,6 +195,79 @@ export interface ExportProjectSettings {
   format: ExportFormat;
   audioBitrate: '128k' | '192k' | '256k' | '320k';
 }
+
+export type WatermarkMode = 'none' | 'text' | 'image';
+
+export type WatermarkPositionPreset =
+  | 'top-left'
+  | 'top-center'
+  | 'top-right'
+  | 'mid-left'
+  | 'center'
+  | 'mid-right'
+  | 'bottom-left'
+  | 'bottom-center'
+  | 'bottom-right'
+  | 'custom';
+
+export interface WatermarkSettings {
+  mode: WatermarkMode;
+  text: string;
+  imageDataUrl: string;
+  imagePreset: 'custom' | 'morph';
+  positionPreset: WatermarkPositionPreset;
+  posX: number; // 0.05..0.95 normalized center X
+  posY: number; // 0.05..0.95 normalized center Y
+  opacity: number; // 10..100
+  scale: number; // 0.35..2.4
+  rotation: number; // -45..45 degrees
+  tiled: boolean;
+  fontFamily: string;
+  textColor: string;
+  bgEnabled: boolean;
+  bgColor: string;
+  shadowEnabled: boolean;
+  fullDuration: boolean;
+  startSec: number;
+  endSec: number;
+}
+
+export const WATERMARK_PRESET_COORDS: Record<
+  Exclude<WatermarkPositionPreset, 'custom'>,
+  {x: number; y: number}
+> = {
+  'top-left': {x: 0.14, y: 0.11},
+  'top-center': {x: 0.5, y: 0.11},
+  'top-right': {x: 0.86, y: 0.11},
+  'mid-left': {x: 0.14, y: 0.5},
+  center: {x: 0.5, y: 0.5},
+  'mid-right': {x: 0.86, y: 0.5},
+  'bottom-left': {x: 0.14, y: 0.89},
+  'bottom-center': {x: 0.5, y: 0.89},
+  'bottom-right': {x: 0.86, y: 0.89},
+};
+
+export const DEFAULT_WATERMARK: WatermarkSettings = {
+  mode: 'none',
+  text: '@morph',
+  imageDataUrl: '',
+  imagePreset: 'morph',
+  positionPreset: 'bottom-right',
+  posX: 0.86,
+  posY: 0.89,
+  opacity: 65,
+  scale: 1,
+  rotation: 0,
+  tiled: false,
+  fontFamily: 'Plus Jakarta Sans, system-ui, sans-serif',
+  textColor: '#FFFFFF',
+  bgEnabled: false,
+  bgColor: 'rgba(10, 12, 18, 0.62)',
+  shadowEnabled: true,
+  fullDuration: true,
+  startSec: 0,
+  endSec: 10,
+};
 
 export interface NleProjectState {
   projectId: string;
@@ -186,6 +283,8 @@ export interface NleProjectState {
   flipH: boolean;
   flipV: boolean;
   zoom: number;
+  canvasPosX?: number; // -55..+55 free drag offset % for main video canvas
+  canvasPosY?: number; // -55..+55 free drag offset % for main video canvas
   colorFilter: ColorFilterPreset;
   colorGrading: ColorGradingSettings;
   vfx: VisualEffectsSettings;
@@ -193,6 +292,7 @@ export interface NleProjectState {
   videoClips: TimelineVideoClip[];
   audioClips: TimelineAudioClip[];
   textClips: TimelineTextClip[];
+  watermark?: WatermarkSettings;
   masterVolume: number;
   masterMuted: boolean;
   audioDucking: boolean;
@@ -352,6 +452,8 @@ export function createInitialNleProject(
     flipH: false,
     flipV: false,
     zoom: 1,
+    canvasPosX: 0,
+    canvasPosY: 0,
     colorFilter: 'orig',
     colorGrading: {
       brightness: 0,
@@ -376,6 +478,8 @@ export function createInitialNleProject(
       chromaKeySimilarity: 25,
       maskShape: 'none',
       bgRemoveStrength: 0,
+      visualFx: 'none',
+      visualFxIntensity: 75,
     },
     mediaAssets: [
       {
@@ -429,6 +533,11 @@ export function createInitialNleProject(
       },
     ],
     textClips: [],
+    watermark: {
+      ...DEFAULT_WATERMARK,
+      startSec: 0,
+      endSec: safeDur,
+    },
     masterVolume: 100,
     masterMuted: false,
     audioDucking: false,
@@ -593,30 +702,29 @@ export function trimVideoClipHandle(
   maxSourceDuration: number,
   fps: ProjectFps
 ): TimelineVideoClip[] {
-  const minDur = framesToSec(3, fps);
+  const minDur = Math.max(0.15, framesToSec(4, fps));
   const target = videoClips.find((c) => c.id === clipId);
   if (!target) return videoClips;
   const targetTrack = getClipTrackIndex(target);
 
   const updated = videoClips.map((c) => {
     if (c.id !== clipId) return c;
+    const speed = Math.max(0.25, c.speed || 1);
     if (side === 'left') {
       const clampedStart = snapToFrame(
         Math.max(0, Math.min(c.sourceEnd - minDur, newSourceTimeSec)),
         fps
       );
-      if (targetTrack >= 1) {
-        const deltaSrc = clampedStart - c.sourceStart;
-        const nextTimelineStart = Math.max(
-          0,
-          snapToFrame(c.timelineStart + deltaSrc / Math.max(0.25, c.speed || 1), fps)
-        );
-        return {...c, sourceStart: clampedStart, timelineStart: nextTimelineStart};
-      }
-      return {...c, sourceStart: clampedStart};
+      const deltaSrc = clampedStart - c.sourceStart;
+      const nextTimelineStart = Math.max(
+        0,
+        snapToFrame(c.timelineStart + deltaSrc / speed, fps)
+      );
+      return {...c, sourceStart: clampedStart, timelineStart: nextTimelineStart};
     } else {
+      const safeMax = c.isFreezeFrame ? Math.max(maxSourceDuration, c.sourceStart + 30) : maxSourceDuration;
       const clampedEnd = snapToFrame(
-        Math.min(maxSourceDuration, Math.max(c.sourceStart + minDur, newSourceTimeSec)),
+        Math.min(safeMax, Math.max(c.sourceStart + minDur, newSourceTimeSec)),
         fps
       );
       return {...c, sourceEnd: clampedEnd};
@@ -624,22 +732,23 @@ export function trimVideoClipHandle(
   });
 
   if (targetTrack >= 1) {
-    // V2 overlays keep their independent timelineStart positions
+    // V2 overlays keep their completely independent timelineStart positions
     return relabelTrackClips(updated);
   }
 
-  // Repack V1 clips sequentially so trimmed clips never collide, preserving V2 overlay clips untouched
+  // For V1 clips: preserve intentional gaps & positions, only nudging overlapping neighbors!
   const v1Sorted = updated
     .filter((c) => getClipTrackIndex(c) === 0)
     .sort((a, b) => a.timelineStart - b.timelineStart);
   const v2Clips = updated.filter((c) => getClipTrackIndex(c) >= 1);
-  let cursor = 0;
-  const packedV1 = v1Sorted.map((c) => {
-    const start = snapToFrame(cursor, fps);
-    cursor = start + clipTimelineDuration(c);
+
+  let prevEnd = 0;
+  const resolvedV1 = v1Sorted.map((c, idx) => {
+    const start = idx === 0 ? Math.max(0, snapToFrame(c.timelineStart, fps)) : Math.max(prevEnd, snapToFrame(c.timelineStart, fps));
+    prevEnd = snapToFrame(start + clipTimelineDuration(c), fps);
     return {...c, timelineStart: start};
   });
-  return relabelTrackClips([...packedV1, ...v2Clips]);
+  return relabelTrackClips([...resolvedV1, ...v2Clips]);
 }
 
 export function deleteClipKeepGap(
@@ -995,6 +1104,323 @@ export function toggleClipTrackLayer(
       didMove: true,
     };
   }
+}
+
+/**
+ * Directly moves a video clip along the timeline (drag-to-reposition & drag-to-reorder).
+ * - V2 overlay clips slide freely anywhere >= 0s.
+ * - V1 main clips swap order automatically when dragged past another V1 clip's center,
+ *   or slide into open space / gaps without overlapping neighboring V1 clips.
+ */
+export function moveVideoClipOnTimeline(
+  videoClips: TimelineVideoClip[],
+  clipId: string,
+  targetTimelineStart: number,
+  fps: ProjectFps,
+  freeMode = false
+): TimelineVideoClip[] {
+  const target = videoClips.find((c) => c.id === clipId);
+  if (!target) return videoClips;
+  const clampedStart = Math.max(0, snapToFrame(targetTimelineStart, fps));
+
+  if (freeMode || getClipTrackIndex(target) >= 1) {
+    return relabelTrackClips(
+      videoClips.map((c) => (c.id === clipId ? {...c, timelineStart: clampedStart} : c))
+    );
+  }
+
+  const v1Sorted = videoClips
+    .filter((c) => getClipTrackIndex(c) === 0)
+    .sort((a, b) => a.timelineStart - b.timelineStart);
+  const v2Clips = videoClips.filter((c) => getClipTrackIndex(c) >= 1);
+
+  if (v1Sorted.length <= 1) {
+    return relabelTrackClips([
+      {...target, timelineStart: clampedStart},
+      ...v2Clips,
+    ]);
+  }
+
+  const targetDur = clipTimelineDuration(target);
+  const targetCenter = clampedStart + targetDur / 2;
+  const others = v1Sorted.filter((c) => c.id !== clipId);
+
+  // Check if dragging across another clip's midpoint triggers clean reorder
+  const origIdx = v1Sorted.findIndex((c) => c.id === clipId);
+  let insertIdx = others.length;
+  for (let i = 0; i < others.length; i++) {
+    const otherCenter = others[i].timelineStart + clipTimelineDuration(others[i]) / 2;
+    if (targetCenter < otherCenter) {
+      insertIdx = i;
+      break;
+    }
+  }
+
+  if (insertIdx !== origIdx) {
+    const reordered = [...others];
+    reordered.splice(insertIdx, 0, target);
+    let cursor = 0;
+    const packedV1 = reordered.map((c) => {
+      const start = snapToFrame(cursor, fps);
+      cursor = start + clipTimelineDuration(c);
+      return {...c, timelineStart: start};
+    });
+    return relabelTrackClips([...packedV1, ...v2Clips]);
+  }
+
+  // Otherwise slide freely between previous clip end and next clip start (preserving gaps)
+  const prevClip = origIdx > 0 ? v1Sorted[origIdx - 1] : null;
+  const nextClip = origIdx < v1Sorted.length - 1 ? v1Sorted[origIdx + 1] : null;
+  const minStart = prevClip ? clipTimelineEnd(prevClip) : 0;
+  const maxStart = nextClip ? Math.max(minStart, nextClip.timelineStart - targetDur) : Number.MAX_SAFE_INTEGER;
+  const safeStart = snapToFrame(Math.min(maxStart, Math.max(minStart, clampedStart)), fps);
+
+  return relabelTrackClips([
+    ...v1Sorted.map((c) => (c.id === clipId ? {...c, timelineStart: safeStart} : c)),
+    ...v2Clips,
+  ]);
+}
+
+export function moveVideoClip2D(
+  videoClips: TimelineVideoClip[],
+  clipId: string,
+  targetTimelineStart: number,
+  targetTrackIndex: 0 | 1,
+  fps: ProjectFps,
+  freeMode = false
+): TimelineVideoClip[] {
+  const target = videoClips.find((c) => c.id === clipId);
+  if (!target) return videoClips;
+  const curTrack = getClipTrackIndex(target);
+  const clampedStart = Math.max(0, snapToFrame(targetTimelineStart, fps));
+
+  if (targetTrackIndex !== curTrack) {
+    const v1Count = videoClips.filter((c) => getClipTrackIndex(c) === 0).length;
+    if (targetTrackIndex === 1 && curTrack === 0 && v1Count <= 1) {
+      // Keep at least one clip on V1 main track — still allow free horizontal slide!
+      return moveVideoClipOnTimeline(videoClips, clipId, clampedStart, fps, freeMode);
+    }
+    const switched = videoClips.map((c) =>
+      c.id === clipId
+        ? {
+            ...c,
+            trackIndex: targetTrackIndex,
+            timelineStart: clampedStart,
+            pipRect: targetTrackIndex === 1 ? c.pipRect ?? {...DEFAULT_PIP_RECT} : c.pipRect,
+          }
+        : c
+    );
+    return moveVideoClipOnTimeline(relabelTrackClips(switched), clipId, clampedStart, fps, freeMode);
+  }
+
+  return moveVideoClipOnTimeline(videoClips, clipId, clampedStart, fps, freeMode);
+}
+
+export function moveTextClipOnTimeline(
+  textClips: TimelineTextClip[],
+  textId: string,
+  targetStartSec: number,
+  fps: ProjectFps,
+  targetRow?: 0 | 1
+): TimelineTextClip[] {
+  const safeStart = Math.max(0, snapToFrame(targetStartSec, fps));
+  return textClips.map((t) =>
+    t.id === textId
+      ? {
+          ...t,
+          timelineStart: safeStart,
+          ...(targetRow !== undefined ? {trackRow: targetRow} : {}),
+        }
+      : t
+  );
+}
+
+export function duplicateTextClip(
+  textClips: TimelineTextClip[],
+  textId: string,
+  fps: ProjectFps
+): {textClips: TimelineTextClip[]; newId: string | null} {
+  const orig = textClips.find((t) => t.id === textId);
+  if (!orig) return {textClips, newId: null};
+  const newId = `txt-${Date.now().toString(36).slice(-5)}`;
+  const copy: TimelineTextClip = {
+    ...orig,
+    id: newId,
+    timelineStart: snapToFrame(orig.timelineStart + orig.durationSec + 0.1, fps),
+  };
+  return {textClips: [...textClips, copy], newId};
+}
+
+export function trimTextClipHandle(
+  textClips: TimelineTextClip[],
+  textId: string,
+  side: 'left' | 'right',
+  targetSec: number,
+  maxTimelineDur: number,
+  fps: ProjectFps
+): TimelineTextClip[] {
+  const minDur = Math.max(0.25, framesToSec(6, fps));
+  return textClips.map((t) => {
+    if (t.id !== textId) return t;
+    const endSec = t.timelineStart + t.durationSec;
+    if (side === 'left') {
+      const nextStart = Math.max(0, Math.min(endSec - minDur, snapToFrame(targetSec, fps)));
+      const nextDur = Math.max(minDur, snapToFrame(endSec - nextStart, fps));
+      return {...t, timelineStart: nextStart, durationSec: nextDur};
+    }
+    const clampedEnd = Math.min(
+      Math.max(maxTimelineDur, endSec + 5),
+      Math.max(t.timelineStart + minDur, snapToFrame(targetSec, fps))
+    );
+    return {...t, durationSec: Math.max(minDur, snapToFrame(clampedEnd - t.timelineStart, fps))};
+  });
+}
+
+export function splitTextClipAtPlayhead(
+  textClips: TimelineTextClip[],
+  textId: string | null,
+  playheadSec: number,
+  fps: ProjectFps
+): {textClips: TimelineTextClip[]; secondId: string | null; didSplit: boolean} {
+  const minDur = 0.25;
+  const snapped = snapToFrame(playheadSec, fps);
+  const target =
+    (textId ? textClips.find((t) => t.id === textId) : null) ||
+    textClips.find((t) => snapped > t.timelineStart + minDur && snapped < t.timelineStart + t.durationSec - minDur);
+  if (!target) return {textClips, secondId: null, didSplit: false};
+  const end = target.timelineStart + target.durationSec;
+  if (snapped <= target.timelineStart + minDur || snapped >= end - minDur) {
+    return {textClips, secondId: null, didSplit: false};
+  }
+  const stamp = Date.now().toString(36).slice(-4);
+  const first: TimelineTextClip = {
+    ...target,
+    durationSec: snapToFrame(snapped - target.timelineStart, fps),
+  };
+  const secondId = `${target.id}-b-${stamp}`;
+  const second: TimelineTextClip = {
+    ...target,
+    id: secondId,
+    timelineStart: snapped,
+    durationSec: snapToFrame(end - snapped, fps),
+  };
+  const next: TimelineTextClip[] = [];
+  for (const t of textClips) {
+    if (t.id === target.id) next.push(first, second);
+    else next.push(t);
+  }
+  return {textClips: next, secondId, didSplit: true};
+}
+
+export function moveAudioClipOnTimeline(
+  audioClips: TimelineAudioClip[],
+  audioId: string,
+  targetStartSec: number,
+  fps: ProjectFps,
+  targetRow?: 0 | 1
+): TimelineAudioClip[] {
+  const safeStart = Math.max(0, snapToFrame(targetStartSec, fps));
+  return audioClips.map((a) =>
+    a.id === audioId
+      ? {
+          ...a,
+          timelineStart: safeStart,
+          ...(targetRow !== undefined ? {trackRow: targetRow} : {}),
+        }
+      : a
+  );
+}
+
+export function duplicateAudioClip(
+  audioClips: TimelineAudioClip[],
+  audioId: string,
+  fps: ProjectFps
+): {audioClips: TimelineAudioClip[]; newId: string | null} {
+  const orig = audioClips.find((a) => a.id === audioId);
+  if (!orig) return {audioClips, newId: null};
+  const dur = Math.max(0.25, orig.sourceEnd - orig.sourceStart);
+  const newId = `aud-${Date.now().toString(36).slice(-5)}`;
+  const copy: TimelineAudioClip = {
+    ...orig,
+    id: newId,
+    timelineStart: snapToFrame(orig.timelineStart + dur + 0.1, fps),
+  };
+  return {audioClips: [...audioClips, copy], newId};
+}
+
+export function trimAudioClipHandle(
+  audioClips: TimelineAudioClip[],
+  audioId: string,
+  side: 'left' | 'right',
+  targetTimelineSec: number,
+  fps: ProjectFps
+): TimelineAudioClip[] {
+  const minDur = 0.25;
+  return audioClips.map((a) => {
+    if (a.id !== audioId) return a;
+    const curDur = Math.max(minDur, a.sourceEnd - a.sourceStart);
+    const curEnd = a.timelineStart + curDur;
+    if (side === 'left') {
+      const clampedStart = Math.max(0, Math.min(curEnd - minDur, snapToFrame(targetTimelineSec, fps)));
+      const delta = clampedStart - a.timelineStart;
+      const nextSourceStart = Math.max(0, snapToFrame(a.sourceStart + delta, fps));
+      const actualDelta = nextSourceStart - a.sourceStart;
+      return {
+        ...a,
+        sourceStart: nextSourceStart,
+        timelineStart: Math.max(0, snapToFrame(a.timelineStart + actualDelta, fps)),
+      };
+    }
+    const nextDur = Math.max(minDur, snapToFrame(targetTimelineSec - a.timelineStart, fps));
+    return {
+      ...a,
+      sourceEnd: snapToFrame(a.sourceStart + nextDur, fps),
+    };
+  });
+}
+
+export function splitAudioClipAtPlayhead(
+  audioClips: TimelineAudioClip[],
+  audioId: string | null,
+  playheadSec: number,
+  fps: ProjectFps
+): {audioClips: TimelineAudioClip[]; secondId: string | null; didSplit: boolean} {
+  const minDur = 0.25;
+  const snapped = snapToFrame(playheadSec, fps);
+  const external = audioClips.filter((a) => a.kind !== 'original');
+  const target =
+    (audioId ? external.find((a) => a.id === audioId) : null) ||
+    external.find((a) => {
+      const end = a.timelineStart + Math.max(0.25, a.sourceEnd - a.sourceStart);
+      return snapped > a.timelineStart + minDur && snapped < end - minDur;
+    });
+  if (!target) return {audioClips, secondId: null, didSplit: false};
+  const dur = Math.max(0.25, target.sourceEnd - target.sourceStart);
+  const end = target.timelineStart + dur;
+  if (snapped <= target.timelineStart + minDur || snapped >= end - minDur) {
+    return {audioClips, secondId: null, didSplit: false};
+  }
+  const offset = snapToFrame(snapped - target.timelineStart, fps);
+  const srcSplit = snapToFrame(target.sourceStart + offset, fps);
+  const secondId = `${target.id}-b-${Date.now().toString(36).slice(-4)}`;
+  const first: TimelineAudioClip = {
+    ...target,
+    sourceEnd: srcSplit,
+    fadeOutSec: 0,
+  };
+  const second: TimelineAudioClip = {
+    ...target,
+    id: secondId,
+    sourceStart: srcSplit,
+    timelineStart: snapped,
+    fadeInSec: 0,
+  };
+  const next: TimelineAudioClip[] = [];
+  for (const a of audioClips) {
+    if (a.id === target.id) next.push(first, second);
+    else next.push(a);
+  }
+  return {audioClips: next, secondId, didSplit: true};
 }
 
 /**

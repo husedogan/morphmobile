@@ -31,6 +31,16 @@ export function removeAudioClipBlob(clipId: string): void {
   audioClipBlobRegistry.delete(clipId);
 }
 
+export function cloneAudioClipBlob(fromClipId: string, toClipId: string): void {
+  const entry = audioClipBlobRegistry.get(fromClipId);
+  if (!entry || !toClipId) return;
+  audioClipBlobRegistry.set(toClipId, {
+    blob: entry.blob,
+    fileName: entry.fileName,
+    updatedAt: Date.now(),
+  });
+}
+
 /**
  * Decodes real PCM samples from a video/audio Blob via Web Audio API
  * and computes normalized RMS waveform bars for Track A1.

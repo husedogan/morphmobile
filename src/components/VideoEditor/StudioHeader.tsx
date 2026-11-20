@@ -73,7 +73,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
   const resTag = `${Math.max(targetWidth, targetHeight)}p`;
 
   return (
-    <header className="pt-safe relative z-40 flex h-12 shrink-0 items-center justify-between gap-2 border-b border-white/[0.07] bg-[#0B0D12] px-2.5 sm:px-3.5">
+    <header className="pt-safe relative z-40 flex h-12 shrink-0 items-center justify-between gap-2 border-b border-white/[0.07] bg-[#0B0B0E] px-2.5 sm:px-3.5">
       {/* Left: Back + Stacked Project Title & Clean Unboxed Technical Metadata */}
       <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
         <StudioTooltipBtn
@@ -122,7 +122,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
             isProxyEnabled
               ? 'bg-[#34D399]/18 text-[#34D399]'
               : proxyRecommended
-                ? 'bg-[#F5B82E]/18 text-[#F5B82E]'
+                ? 'bg-[#F43F5E]/18 text-[#FB7185]'
                 : 'text-white/60 hover:bg-white/[0.07] hover:text-white'
           }`}
         >
@@ -144,7 +144,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
         >
           <Save className="h-4 w-4" />
           {hasUnsavedChanges && (
-            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#F5B82E] shadow-[0_0_6px_#F5B82E]" />
+            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#F43F5E] shadow-[0_0_6px_#F43F5E]" />
           )}
         </StudioTooltipBtn>
 
@@ -168,7 +168,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
             onClick={onToggleSplitCompare}
             className={`hidden h-8 w-8 items-center justify-center rounded-lg transition-colors sm:flex ${
               splitCompareEnabled
-                ? 'bg-[#F5B82E]/20 text-[#F5B82E]'
+                ? 'bg-[#F43F5E]/20 text-[#FB7185]'
                 : 'text-white/65 hover:bg-white/[0.07] hover:text-white'
             }`}
           >
@@ -184,7 +184,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           onPointerLeave={() => onSetCompareOriginal(false)}
           className={`hidden h-8 w-8 items-center justify-center rounded-lg transition-colors min-[380px]:flex ${
             compareOriginal
-              ? 'bg-[#F5B82E]/20 text-[#F5B82E]'
+              ? 'bg-[#F43F5E]/20 text-[#FB7185]'
               : 'text-white/65 hover:bg-white/[0.07] hover:text-white'
           }`}
         >
@@ -197,7 +197,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           onClick={onToggleGrid}
           className={`hidden h-8 w-8 items-center justify-center rounded-lg transition-colors sm:flex ${
             showGrid
-              ? 'bg-[#38BDF8]/20 text-[#38BDF8]'
+              ? 'bg-[#A78BFA]/20 text-[#C4B5FD]'
               : 'text-white/65 hover:bg-white/[0.07] hover:text-white'
           }`}
         >

@@ -49,13 +49,16 @@ import {ErrorView, ResultView} from './components/ResultView';
 import {SettingsCategory, SettingsScreen} from './components/SettingsScreen';
 import {StudioScreen} from './components/StudioScreen';
 import {ToolFlow} from './components/ToolFlow';
+import {MainWheelCustomizeModal} from './components/MainWheelCustomizeModal';
 import {CustomizeWheelTab, WheelCustomizeModal} from './components/WheelCustomizeModal';
 import {WheelActionItem, WheelFab, WheelMenu} from './components/WheelMenu';
 import {t} from './data/i18n';
 import {
   ALL_CONVERT_FORMATS_CATALOG,
+  ALL_MAIN_WHEEL_CATALOG,
   ALL_TOOLS,
   ALL_WHEEL_ACTIONS_CATALOG,
+  DEFAULT_MAIN_WHEEL_ITEMS,
   DEFAULT_WHEEL_CONFIG,
   ExportItem,
   JobState,
@@ -200,6 +203,7 @@ export default function App() {
     open: false,
     tab: 'tools',
   });
+  const [showMainWheelCustomize, setShowMainWheelCustomize] = useState(false);
   const [showManageTools, setShowManageTools] = useState(false);
   const [showFileActions, setShowFileActions] = useState(false);
   const [previewTarget, setPreviewTarget] = useState<PickedFile | null>(null);
@@ -216,6 +220,7 @@ export default function App() {
   const activeServerJobIdRef = useRef<string | null>(null);
   const wheelDocInputRef = useRef<HTMLInputElement>(null);
   const wheelPhotoInputRef = useRef<HTMLInputElement>(null);
+  const wheelVideoInputRef = useRef<HTMLInputElement>(null);
 
   const lang = prefs.lang;
   const serverReady = prefs.serverUrl.trim().length > 0;
@@ -275,6 +280,9 @@ export default function App() {
           if (prev) URL.revokeObjectURL(prev);
           return null;
         });
+      } else if (showMainWheelCustomize) {
+        e.preventDefault();
+        setShowMainWheelCustomize(false);
       } else if (customizeModal.open) {
         e.preventDefault();
         setCustomizeModal((m) => ({...m, open: false}));
@@ -291,11 +299,12 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [previewTarget, customizeModal.open, showManageTools, showFileActions, wheelKind]);
+  }, [previewTarget, showMainWheelCustomize, customizeModal.open, showManageTools, showFileActions, wheelKind]);
 
   // Android / browser hardware Back button closes modals/tool flows instead of exiting app (U-10, A-9)
   const hasOverlayOrSubView = Boolean(
     previewTarget ||
+      showMainWheelCustomize ||
       customizeModal.open ||
       showManageTools ||
       showFileActions ||
@@ -332,6 +341,10 @@ export default function App() {
         });
         return;
       }
+      if (showMainWheelCustomize) {
+        setShowMainWheelCustomize(false);
+        return;
+      }
       if (customizeModal.open) {
         setCustomizeModal((m) => ({...m, open: false}));
         return;
@@ -364,6 +377,7 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPopState);
   }, [
     previewTarget,
+    showMainWheelCustomize,
     customizeModal.open,
     showManageTools,
     showFileActions,
@@ -1233,22 +1247,93 @@ export default function App() {
       };
     }
 
-    // Default main navigation wheel
+    // Customizable main navigation wheel
+    const iconForMainItem = (itemId: string) => {
+      switch (itemId) {
+        case 'nav:studio':
+          return Sparkles;
+        case 'nav:library':
+          return Grid;
+        case 'nav:settings':
+          return Settings;
+        case 'nav:server':
+          return Cloud;
+        case 'pick:files':
+          return Plus;
+        case 'pick:photos':
+          return ImageIcon;
+        case 'open:web':
+          return Download;
+        case 'open:video_editor':
+          return Film;
+        case 'open:convert':
+          return ArrowLeftRight;
+        case 'open:tools':
+          return SlidersHorizontal;
+        case 'action:sheet':
+          return SlidersHorizontal;
+        case 'action:share':
+          return Share2;
+        case 'action:save':
+          return Download;
+        case 'action:clear':
+          return Trash2;
+        default:
+          if (itemId.startsWith('local:')) {
+            return wheelIconForLocalTool(itemId.slice(6) as ToolId);
+          }
+          return Sparkles;
+      }
+    };
+
+    const mainCatalogMap = new Map(ALL_MAIN_WHEEL_CATALOG.map((item) => [item.id, item]));
+    const configuredMainIds =
+      Array.isArray(prefs.mainWheelItems) && prefs.mainWheelItems.length > 0
+        ? prefs.mainWheelItems.filter((id) => mainCatalogMap.has(id)).slice(0, MAX_WHEEL_SLICES)
+        : DEFAULT_MAIN_WHEEL_ITEMS;
+    const finalMainIds =
+      configuredMainIds.length > 0 ? configuredMainIds : DEFAULT_MAIN_WHEEL_ITEMS;
+
+    const mainActions: WheelActionItem[] = finalMainIds.map((itemId) => {
+      const def = mainCatalogMap.get(itemId)!;
+      const requiresFiles =
+        itemId === 'open:convert' ||
+        itemId === 'open:tools' ||
+        itemId === 'action:sheet' ||
+        itemId === 'action:share' ||
+        itemId === 'action:save' ||
+        itemId === 'action:clear' ||
+        itemId.startsWith('local:');
+      return {
+        id: itemId,
+        label: itemId.startsWith('local:')
+          ? shortWheelToolLabel(itemId.slice(6), lang, t(def.labelKey, lang))
+          : t(def.labelKey, lang),
+        icon: iconForMainItem(itemId),
+        disabled: requiresFiles && files.length === 0,
+      };
+    });
+
     return {
       wheelTitle: undefined,
-      wheelActions: [
-        {id: 'nav:studio', label: t('Studio', lang), icon: Sparkles},
-        {id: 'nav:library', label: t('Library', lang), icon: Grid},
-        {id: 'nav:server', label: t('WheelCloud', lang), icon: Cloud},
-        {id: 'open:web', label: t('WheelLink', lang), icon: Download},
-        {id: 'pick:files', label: t('WheelPick', lang), icon: Plus},
-        {id: 'pick:photos', label: t('WheelPhotos', lang), icon: ImageIcon},
-      ],
+      wheelActions: mainActions,
     };
-  }, [wheelKind, files, lang, wheelConfig]);
+  }, [wheelKind, files, lang, wheelConfig, prefs.mainWheelItems]);
 
   const handleWheelSelect = (id: string) => {
     setWheelKind(null);
+    if (id === 'open:video_editor') {
+      const videoStudioDef = SERVER_TOOLS.find((s) => s.id === 'video_studio') ?? null;
+      const hasVideo = files.some((f) => f.kind === 'video');
+      if (hasVideo && videoStudioDef) {
+        openToolMode('tools', {serverTool: videoStudioDef});
+      } else {
+        setToolMode(null);
+        setTab('studio');
+        wheelVideoInputRef.current?.click();
+      }
+      return;
+    }
     if (id.startsWith('fmt:')) {
       const fmt = id.slice(4);
       openToolMode('convert', {format: fmt});
@@ -1355,6 +1440,22 @@ export default function App() {
         className="hidden"
         onChange={(e) => {
           if (e.target.files?.length) addFiles(e.target.files);
+          e.target.value = '';
+        }}
+      />
+      <input
+        ref={wheelVideoInputRef}
+        type="file"
+        accept="video/*"
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files?.length) {
+            addFiles(e.target.files);
+            const videoStudioDef = SERVER_TOOLS.find((s) => s.id === 'video_studio') ?? null;
+            if (videoStudioDef) {
+              openToolMode('tools', {serverTool: videoStudioDef});
+            }
+          }
           e.target.value = '';
         }}
       />
@@ -1538,6 +1639,7 @@ export default function App() {
             onCheckUpdate={handleCheckUpdate}
             onApplyUpdate={handleApplyUpdate}
             onOpenWheelCustomize={() => setCustomizeModal({open: true, tab: 'tools'})}
+            onOpenMainWheelCustomize={() => setShowMainWheelCustomize(true)}
             onShowToast={showToast}
           />
         ) : (
@@ -1574,7 +1676,7 @@ export default function App() {
       </main>
 
       {/* Draggable Corner-Snapping Radial Wheel Menu FAB + Hover Info Cloud */}
-      {!toolMode && job.status === 'idle' && tab !== 'settings' && (
+      {prefs.showQuickWheel !== false && !toolMode && job.status === 'idle' && tab !== 'settings' && (
         <WheelFab
           hidden={wheelKind !== null}
           side={prefs.wheelSide ?? 'right'}
@@ -1625,19 +1727,50 @@ export default function App() {
         onSelect={handleWheelSelect}
         onDisabledSelect={() => showToast(t('SliceDisabledToast', lang))}
         onOpenCustomize={
-          wheelKind === 'convert' || wheelKind === 'tools' || wheelKind === 'actions'
+          wheelKind === 'main'
             ? () => {
-                const initialTab: CustomizeWheelTab =
-                  wheelKind === 'convert'
-                    ? 'convert'
-                    : wheelKind === 'actions'
-                      ? 'actions'
-                      : 'tools';
                 setWheelKind(null);
-                setCustomizeModal({open: true, tab: initialTab});
+                setShowMainWheelCustomize(true);
               }
-            : undefined
+            : wheelKind === 'convert' || wheelKind === 'tools' || wheelKind === 'actions'
+              ? () => {
+                  const initialTab: CustomizeWheelTab =
+                    wheelKind === 'convert'
+                      ? 'convert'
+                      : wheelKind === 'actions'
+                        ? 'actions'
+                        : 'tools';
+                  setWheelKind(null);
+                  setCustomizeModal({open: true, tab: initialTab});
+                }
+              : undefined
         }
+      />
+
+      <MainWheelCustomizeModal
+        open={showMainWheelCustomize}
+        enabled={prefs.showQuickWheel !== false}
+        items={prefs.mainWheelItems ?? DEFAULT_MAIN_WHEEL_ITEMS}
+        lang={lang}
+        onToggleEnabled={(nextEnabled) => {
+          setPrefs((prev) => ({...prev, showQuickWheel: nextEnabled}));
+          showToast(
+            nextEnabled ? t('QuickWheelEnabledToast', lang) : t('QuickWheelDisabledToast', lang)
+          );
+        }}
+        onChangeItems={(nextItems) => {
+          setPrefs((prev) => ({...prev, mainWheelItems: nextItems}));
+        }}
+        onResetDefaults={() => {
+          setPrefs((prev) => ({
+            ...prev,
+            showQuickWheel: true,
+            mainWheelItems: DEFAULT_MAIN_WHEEL_ITEMS,
+          }));
+          showToast(t('WheelSettingsSavedToast', lang));
+        }}
+        onClose={() => setShowMainWheelCustomize(false)}
+        onShowToast={showToast}
       />
 
       <WheelCustomizeModal

@@ -225,30 +225,30 @@ export const THEME_PRESETS: ThemePreset[] = [
     },
   },
   {
-    id: 'graphite',
-    nameTr: 'Grafit',
-    nameEn: 'Graphite',
+    id: 'studio',
+    nameTr: 'Stüdyo',
+    nameEn: 'Studio',
     dark: {
-      paper: '#15181D',
-      sidebar: '#0F1216',
-      surface: '#1F242B',
-      inset: '#191D23',
-      ink: '#F3F5F8',
-      muted: '#9CA6B4',
-      line: '#2F3640',
-      accent: '#F0B429',
-      accentEnd: '#D97706',
+      paper: '#08080A',
+      sidebar: '#0B0B0E',
+      surface: '#141418',
+      inset: '#0F0F13',
+      ink: '#F5F5F7',
+      muted: '#9A9AA6',
+      line: '#24242C',
+      accent: '#F43F5E',
+      accentEnd: '#FB7185',
     },
     light: {
-      paper: '#EEEFF2',
-      sidebar: '#E2E5EA',
-      surface: '#F9FAFB',
-      inset: '#E7E9EE',
-      ink: '#1B2027',
-      muted: '#576270',
-      line: '#CCD2DA',
-      accent: '#B4690E',
-      accentEnd: '#92400E',
+      paper: '#F4F4F6',
+      sidebar: '#EAEAEF',
+      surface: '#FFFFFF',
+      inset: '#EFEFF3',
+      ink: '#0E0E12',
+      muted: '#575762',
+      line: '#DBDCE2',
+      accent: '#E11D48',
+      accentEnd: '#F43F5E',
     },
   },
   {
@@ -524,7 +524,8 @@ export const THEME_PRESETS: ThemePreset[] = [
 ];
 
 export function getPreset(id: string): ThemePreset {
-  return THEME_PRESETS.find((t) => t.id === id) ?? THEME_PRESETS[0];
+  const normalizedId = id === 'graphite' ? 'studio' : id;
+  return THEME_PRESETS.find((t) => t.id === normalizedId) ?? THEME_PRESETS[0];
 }
 
 function hexToRgb(hex: string): [number, number, number] {

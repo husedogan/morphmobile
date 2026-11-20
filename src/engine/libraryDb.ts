@@ -1,4 +1,4 @@
-import {DEFAULT_WHEEL_CONFIG, ExportItem, Prefs} from '../data/models';
+import {DEFAULT_MAIN_WHEEL_ITEMS, DEFAULT_WHEEL_CONFIG, ExportItem, Prefs} from '../data/models';
 
 const PREFS_KEY = 'morph_studio_prefs_v1';
 const DB_NAME = 'morph_studio_db';
@@ -31,6 +31,8 @@ export const DEFAULT_PREFS: Prefs = {
   lang: 'tr',
   serverUrl: '',
   serverToken: '',
+  showQuickWheel: true,
+  mainWheelItems: DEFAULT_MAIN_WHEEL_ITEMS,
   wheelSide: 'right',
   wheelIconStyle: 'wheel',
   showIntegratedEngines: false,
@@ -56,9 +58,15 @@ export function loadPrefs(): Prefs {
     const showIntegratedEngines = parsed.enginesDefaultV2
       ? Boolean(parsed.showIntegratedEngines)
       : false;
+    const mainWheelItems =
+      Array.isArray(parsed.mainWheelItems) && parsed.mainWheelItems.length > 0
+        ? parsed.mainWheelItems
+        : DEFAULT_MAIN_WHEEL_ITEMS;
     return {
       ...DEFAULT_PREFS,
       ...parsed,
+      showQuickWheel: parsed.showQuickWheel !== false,
+      mainWheelItems,
       showIntegratedEngines,
       wheelConfig: {
         ...DEFAULT_WHEEL_CONFIG,

@@ -532,6 +532,15 @@ async function runLocalFfmpegToolInternal(
     const cropH = Math.max(0.1, Math.min(1 - cropY, Number(options.cropH ?? '1') || 1));
     const hasCustomCropBox = cropW < 0.992 || cropH < 0.992 || cropX > 0.008 || cropY > 0.008;
     const overlayPngData = options.overlayPng || '';
+    const watermarkPngData = options.watermarkPng || '';
+    const wmStartNum = Number(options.watermarkStart);
+    const wmEndNum = Number(options.watermarkEnd);
+    const hasWmRange =
+      options.watermarkStart !== undefined &&
+      options.watermarkEnd !== undefined &&
+      Number.isFinite(wmStartNum) &&
+      Number.isFinite(wmEndNum) &&
+      wmEndNum > wmStartNum + 0.05;
     const resolution = options.resolution || 'orig';
     const crf = options.quality || '23';
     const targetFmt = (options.format || 'mp4').toLowerCase();
@@ -637,6 +646,16 @@ async function runLocalFfmpegToolInternal(
           await ffmpeg.writeFile('overlay.png', bytes);
           tempFilesToClean.push('overlay.png');
           hasOverlayPng = true;
+        }
+      }
+
+      let hasWatermarkPng = false;
+      if (watermarkPngData) {
+        const wmBytes = dataUrlToUint8Array(watermarkPngData);
+        if (wmBytes && wmBytes.length > 64) {
+          await ffmpeg.writeFile('watermark.png', wmBytes);
+          tempFilesToClean.push('watermark.png');
+          hasWatermarkPng = true;
         }
       }
 
@@ -884,17 +903,26 @@ async function runLocalFfmpegToolInternal(
         const outFrame = `${first.baseName}-frame.jpg`;
         tempFilesToClean.push(outFrame);
         const {complex, outPad} = buildVideoComplexGraph(1, 'snapshot', false);
+        const snapIncludeWm =
+          hasWatermarkPng && (!hasWmRange || (frameSec >= wmStartNum && frameSec <= wmEndNum));
+        const snapInputs = [...extraInputs, ...(snapIncludeWm ? ['-i', 'watermark.png'] : [])];
+        const wmInpIdx = hasOverlayPng ? 2 : 1;
+        const snapComplex = snapIncludeWm
+          ? `${complex};[${wmInpIdx}:v]scale=${outW}:${outH},format=rgba[swm];[${outPad}][swm]overlay=0:0[vsnap]`
+          : complex;
+        const snapOutPad = snapIncludeWm ? 'vsnap' : outPad;
+
         onProgress(0.35, outFrame);
         const rc = await ffmpeg.exec([
           '-ss',
           String(frameSec),
           '-i',
           inName,
-          ...extraInputs,
+          ...snapInputs,
           '-filter_complex',
-          complex,
+          snapComplex,
           '-map',
-          `[${outPad}]`,
+          `[${snapOutPad}]`,
           '-frames:v',
           '1',
           '-q:v',
@@ -1721,6 +1749,58 @@ async function runLocalFfmpegToolInternal(
               pipBytes instanceof Uint8Array ? new Uint8Array(pipBytes) : new Uint8Array()
             );
             await cleanupVfsFiles(ffmpeg, [pipOut]);
+          }
+        }
+
+        // Dedicated High-Res Timed Watermark Compositing Pass (Supports Logo PNG, Text, & 3x3 Diagonal Tile)
+        if (hasWatermarkPng) {
+          onProgress(0.84, outFile);
+          const wmOut = `nle_wm_${outFile}`;
+          tempFilesToClean.push(wmOut);
+          const wmEnable = hasWmRange
+            ? `:enable='between(t,${Math.max(0, wmStartNum).toFixed(3)},${wmEndNum.toFixed(3)})'`
+            : '';
+          const wmFilter = isGif
+            ? `[1:v]scale=${outW}:${outH},format=rgba[wm];[0:v][wm]overlay=0:0${wmEnable},split[ga][gb];[ga]palettegen[gp];[gb][gp]paletteuse[vwm]`
+            : `[1:v]scale=${outW}:${outH},format=rgba[wm];[0:v][wm]overlay=0:0${wmEnable}[vwm]`;
+          const wmCodecArgs = isGif
+            ? ['-an']
+            : outFmt === 'webm'
+              ? ['-c:v', 'libvpx', '-b:v', '1.8M', ...(renderedHasAudio ? ['-c:a', 'copy'] : ['-an'])]
+              : [
+                  '-pix_fmt',
+                  'yuv420p',
+                  '-c:v',
+                  'libx264',
+                  '-preset',
+                  'ultrafast',
+                  '-crf',
+                  crf,
+                  ...(renderedHasAudio ? ['-c:a', 'copy'] : ['-an']),
+                ];
+
+          const rcWm = await ffmpeg.exec([
+            '-i',
+            outFile,
+            '-i',
+            'watermark.png',
+            '-filter_complex',
+            wmFilter,
+            '-map',
+            '[vwm]',
+            ...(!isGif && renderedHasAudio ? ['-map', '0:a:0?'] : []),
+            ...wmCodecArgs,
+            '-y',
+            wmOut,
+          ]);
+          if (signal?.aborted) throw new Error('Cancelled');
+          if (rcWm === 0) {
+            const wmOutBytes = await ffmpeg.readFile(wmOut);
+            await ffmpeg.writeFile(
+              outFile,
+              wmOutBytes instanceof Uint8Array ? new Uint8Array(wmOutBytes) : new Uint8Array()
+            );
+            await cleanupVfsFiles(ffmpeg, [wmOut]);
           }
         }
 

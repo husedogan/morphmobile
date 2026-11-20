@@ -1,18 +1,23 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ArrowUpDown,
+  AudioLines,
   Bookmark,
   Check,
   Columns2,
+  Crop,
   Download,
   FilePlus2,
   Film,
   FlipHorizontal,
   FlipVertical,
+  Gauge,
   Image as ImageIcon,
   Mic,
   Minus,
+  Move,
   Music,
+  Palette,
   PictureInPicture2,
   Plus,
   RotateCcw,
@@ -20,14 +25,17 @@ import {
   Save,
   Scissors,
   Sliders,
+  SlidersHorizontal,
   Sparkles,
+  Stamp,
   Trash2,
+  Type,
   Upload,
   Wand2,
 } from 'lucide-react';
 import nleSampleImg from '../assets/images/nle_filter_reference_1795084645929.jpg';
 import {Lang} from '../data/i18n';
-import {PickedFile, formatBytes} from '../data/models';
+import {PickedFile, WheelSidePref, formatBytes} from '../data/models';
 import {
   AspectRatioPreset,
   ClipTransitionType,
@@ -35,6 +43,7 @@ import {
   ColorGradingSettings,
   DEFAULT_AUDIO_DSP,
   DEFAULT_PIP_RECT,
+  DEFAULT_WATERMARK,
   ExportCodec,
   ExportFormat,
   ExportQualityCrf,
@@ -48,6 +57,7 @@ import {
   TimelineAudioClip,
   TimelineTextClip,
   TimelineVideoClip,
+  WatermarkSettings,
   autoCutSilenceIntervals,
   clipTimelineDuration,
   clipTimelineEnd,
@@ -56,6 +66,8 @@ import {
   createInitialNleProject,
   deleteClipKeepGap,
   deleteClipRipple,
+  duplicateAudioClip,
+  duplicateTextClip,
   duplicateVideoClip,
   estimateOutputFileSizeBytes,
   findOverlayVideoClipAtTime,
@@ -66,12 +78,18 @@ import {
   getClipTrackIndex,
   insertFreezeFrameAtPlayhead,
   loadSavedNleProjects,
+  moveAudioClipOnTimeline,
+  moveTextClipOnTimeline,
+  moveVideoClip2D,
   parseSrtSubtitles,
-  reorderClipByStep,
   snapToFrame,
+  splitAudioClipAtPlayhead,
+  splitTextClipAtPlayhead,
   splitVideoClipAtPlayhead,
   timelineToSourceTime,
   toggleClipTrackLayer,
+  trimAudioClipHandle,
+  trimTextClipHandle,
   trimVideoClipHandle,
 } from '../engine/videoTimelineEngine';
 import {
@@ -83,6 +101,7 @@ import {
   registerMediaAssetBlob,
 } from '../engine/mediaLibraryEngine';
 import {
+  cloneAudioClipBlob,
   detectAudioSilences,
   extractRealAudioWaveform,
   registerAudioClipBlob,
@@ -98,7 +117,11 @@ import {
   loadNleProjectIdb,
   saveNleProjectIdb,
 } from '../engine/projectStorage';
-import {evaluateClipTransition} from '../engine/previewEngine';
+import {
+  VISUAL_FX_PRESETS,
+  buildVisualFxCssFilter,
+  evaluateClipTransition,
+} from '../engine/previewEngine';
 import {
   evaluateProxyRecommendation,
   generateProxyPreviewUrl,
@@ -115,10 +138,31 @@ import {RgbScopeCanvas} from './VideoEditor/RgbScopeCanvas';
 import {ProjectsModal, SocialProjectTemplate} from './VideoEditor/ProjectsModal';
 import {StudioHeader} from './VideoEditor/StudioHeader';
 import {PreviewMonitor} from './VideoEditor/PreviewMonitor';
-import {MultiTrackTimeline} from './VideoEditor/MultiTrackTimeline';
+import {
+  ActiveDragLaneHint,
+  MultiTrackTimeline,
+  SelectedLayerType,
+  TimelineDragMode,
+} from './VideoEditor/MultiTrackTimeline';
 import {StudioDock} from './VideoEditor/StudioDock';
+import {ArmadilloReelDock} from './VideoEditor/ArmadilloReelDock';
+import {WatermarkPanel} from './VideoEditor/WatermarkPanel';
+import {
+  ClipQuickActionPopup,
+  ExportConfirmPopup,
+  MediaLayerQuickPopup,
+  TransitionPickerPopup,
+} from './VideoEditor/EditorPopups';
 
-export type VideoEditorTab = 'trim' | 'audio' | 'transform' | 'color' | 'text' | 'fx' | 'export';
+export type VideoEditorTab =
+  | 'trim'
+  | 'audio'
+  | 'transform'
+  | 'color'
+  | 'text'
+  | 'watermark'
+  | 'fx'
+  | 'export';
 export type CropAspect = AspectRatioPreset;
 export type FitMode = FitFillMode;
 export type ColorPreset = ColorFilterPreset;
@@ -489,6 +533,12 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const [splitCompareEnabled, setSplitCompareEnabled] = useState(false);
   const [splitComparePct, setSplitComparePct] = useState(50);
   const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
+  const [freePositionMode, setFreePositionMode] = useState(false);
+  const [freeTimelineMode, setFreeTimelineMode] = useState(false);
+  const [snapCenterGuides, setSnapCenterGuides] = useState<{x: boolean; y: boolean}>({
+    x: false,
+    y: false,
+  });
   const [timelineZoom, setTimelineZoom] = useState<1 | 2 | 4 | 8>(1);
   const [thumbnails, setThumbnails] = useState<string[]>([]);
   const [realWaveformBars, setRealWaveformBars] = useState<number[] | null>(null);
@@ -499,6 +549,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     v2: true,
     a1: true,
     a2: true,
+    w1: true,
   });
   const [customColorPresets, setCustomColorPresets] = useState<CustomColorPreset[]>(() =>
     loadCustomColorPresets()
@@ -508,6 +559,20 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const [isImportingMedia, setIsImportingMedia] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showUnsavedExitDialog, setShowUnsavedExitDialog] = useState(false);
+  const [selectedLayerType, setSelectedLayerType] = useState<SelectedLayerType>('video');
+  const [activeDragLaneHint, setActiveDragLaneHint] = useState<ActiveDragLaneHint>(null);
+  const [itemPopup, setItemPopup] = useState<{
+    type: 'video' | 'audio' | 'text';
+    id: string;
+  } | null>(null);
+  const [seamTransition, setSeamTransition] = useState<{
+    type: 'video' | 'audio' | 'text';
+    id: string;
+  } | null>(null);
+  const [showExportConfirm, setShowExportConfirm] = useState(false);
+  const [isPreparingExport, setIsPreparingExport] = useState(false);
+  const [wheelMenuOpen, setWheelMenuOpen] = useState(false);
+  const [editorWheelSide, setEditorWheelSide] = useState<WheelSidePref>('right');
   const [kfPosX, setKfPosX] = useState(0);
   const [kfPosY, setKfPosY] = useState(0);
   const [kfRotation, setKfRotation] = useState(0);
@@ -523,6 +588,19 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   );
   const [isBusyPackage, setIsBusyPackage] = useState(false);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+
+  // Near-fullscreen expanded preview finishes the Armadillo roll-up into Morph's Cinema Reel Wheel
+  const isExpandedWheelMode = isPortraitMode && !isFullscreenPreview && previewHeightVh >= 65;
+  const prevExpandedWheelRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    if (isExpandedWheelMode && !prevExpandedWheelRef.current) {
+      setIsInspectorOpen(false);
+    } else if (!isExpandedWheelMode && prevExpandedWheelRef.current) {
+      setWheelMenuOpen(false);
+    }
+    prevExpandedWheelRef.current = isExpandedWheelMode;
+  }, [isExpandedWheelMode]);
 
   const previewThumbSrc = useMemo(() => {
     if (filterPreviewMode === 'video' && thumbnails.length > 0) {
@@ -556,7 +634,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
 
   const [selectedClipId, setSelectedClipId] = useState<string>('clip-main-1');
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
-  const [, setSelectedAudioId] = useState<string | null>('aud-orig-1');
+  const [selectedAudioId, setSelectedAudioId] = useState<string | null>('aud-orig-1');
 
   const notifyStatus = useCallback((msg: string) => {
     setStatusBanner(msg);
@@ -720,7 +798,19 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (showUnsavedExitDialog) {
+      if (wheelMenuOpen) {
+        e.preventDefault();
+        setWheelMenuOpen(false);
+      } else if (showExportConfirm) {
+        e.preventDefault();
+        setShowExportConfirm(false);
+      } else if (seamTransition) {
+        e.preventDefault();
+        setSeamTransition(null);
+      } else if (itemPopup) {
+        e.preventDefault();
+        setItemPopup(null);
+      } else if (showUnsavedExitDialog) {
         e.preventDefault();
         setShowUnsavedExitDialog(false);
       } else if (showProjectsModal) {
@@ -733,7 +823,15 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [showUnsavedExitDialog, showProjectsModal, isFullscreenPreview]);
+  }, [
+    wheelMenuOpen,
+    showExportConfirm,
+    seamTransition,
+    itemPopup,
+    showUnsavedExitDialog,
+    showProjectsModal,
+    isFullscreenPreview,
+  ]);
 
   // Hydrate IndexedDB project list on mount & when modal opens
   useEffect(() => {
@@ -748,10 +846,25 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
 
   const waveformBars = realWaveformBars ?? [];
 
-  const totalTimelineDur = useMemo(
-    () => Math.max(0.5, computeTotalTimelineDuration(project.videoClips, duration || 10)),
-    [project.videoClips, duration]
-  );
+  const totalTimelineDur = useMemo(() => {
+    let maxEnd = computeTotalTimelineDuration(project.videoClips, duration || 10);
+    for (const a of project.audioClips) {
+      if (a.kind === 'original') continue;
+      const end = a.timelineStart + Math.max(0.25, a.sourceEnd - a.sourceStart);
+      if (end > maxEnd) maxEnd = end;
+    }
+    for (const t of project.textClips) {
+      const end = t.timelineStart + Math.max(0.25, t.durationSec);
+      if (end > maxEnd) maxEnd = end;
+    }
+    return Math.max(0.5, Number(maxEnd.toFixed(4)));
+  }, [project.videoClips, project.audioClips, project.textClips, duration]);
+
+  // Decoupled timeline canvas span: shrinking a clip to 0.15s NEVER collapses the ruler or traps the clip!
+  const canvasDuration = useMemo(() => {
+    const srcSpan = Math.max(duration || 10, 8);
+    return Math.max(srcSpan * 1.2, totalTimelineDur + Math.max(4, srcSpan * 0.35), 10);
+  }, [duration, totalTimelineDur]);
 
   const selectedClip: TimelineVideoClip | undefined = useMemo(
     () =>
@@ -1229,9 +1342,150 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   };
 
   // ============================================================================
-  // IN-TIMELINE SPLIT, TRIM, DELETE, RIPPLE DELETE, MOVE, FREEZE
+  // AUTO-DETACH ORIGINAL AUDIO + CONTEXT-AWARE SPLIT, DELETE, MOVE, DUPLICATE
   // ============================================================================
+  const detachOriginalAudioClip = useCallback(
+    (v1ClipId: string, silent = false): string | null => {
+      const vc = project.videoClips.find((c) => c.id === v1ClipId);
+      if (!vc) return null;
+      const newId = `aud-detached-${Date.now().toString(36).slice(-5)}`;
+      const mediaId = getClipMediaId(vc);
+      const srcUrl =
+        mediaId === PRIMARY_MEDIA_ID
+          ? videoUrl
+          : getMediaAssetUrl(mediaId) || videoUrl;
+      registerAudioClipBlob(newId, file.file, file.name);
+      const detachedClip: TimelineAudioClip = {
+        id: newId,
+        label: `${tr('Video Sesi', 'Video Audio')} · ${vc.label}`,
+        kind: 'music',
+        trackRow: 0,
+        sourceStart: vc.sourceStart,
+        sourceEnd: vc.sourceEnd,
+        timelineStart: vc.timelineStart,
+        volume: vc.volume,
+        muted: vc.muted,
+        fadeInSec: vc.fadeInSec,
+        fadeOutSec: vc.fadeOutSec,
+        transitionIn: 'none',
+        transitionDurationSec: 0.4,
+        noiseReduction: false,
+        ducking: false,
+        blobUrl: srcUrl,
+      };
+      commitProject((prev) => ({
+        ...prev,
+        videoClips: prev.videoClips.map((c) =>
+          c.id === v1ClipId ? {...c, audioDetached: true, muted: true} : c
+        ),
+        audioClips: [...prev.audioClips, detachedClip],
+      }));
+      setSelectedAudioId(newId);
+      setSelectedLayerType('audio');
+      if (!silent) {
+        notifyStatus(
+          tr(
+            'Video sesi bağımsız ses kartına ayrıldı — artık serbestçe taşıyıp kesebilirsiniz.',
+            'Video audio detached — drag, trim, and split freely.'
+          )
+        );
+      }
+      return newId;
+    },
+    [project.videoClips, videoUrl, file.file, file.name, commitProject, notifyStatus, tr]
+  );
+
   const handleSplitAtPlayhead = () => {
+    // 1. Active Text Layer Split
+    if (selectedLayerType === 'text') {
+      const res = splitTextClipAtPlayhead(project.textClips, selectedTextId, playhead, project.fps);
+      if (!res.didSplit) {
+        notifyStatus(
+          tr(
+            'Metni bölmek için imleci seçili metin kartının içine getirin.',
+            'Move playhead inside the text clip to split.'
+          )
+        );
+        return;
+      }
+      commitProject((prev) => ({...prev, textClips: res.textClips}));
+      if (res.secondId) setSelectedTextId(res.secondId);
+      notifyStatus(
+        tr(
+          `Metin ${formatSmpteTimecode(playhead, project.fps)} karesinde ikiye bölündü.`,
+          `Text split at ${formatSmpteTimecode(playhead, project.fps)}.`
+        )
+      );
+      return;
+    }
+
+    // 2. Active Audio Layer Split (auto-detaches original audio if needed!)
+    if (selectedLayerType === 'audio') {
+      let targetAudioId = selectedAudioId;
+      let workingAudioClips = project.audioClips;
+      let nextVideoClips = project.videoClips;
+
+      if (targetAudioId && targetAudioId.startsWith('orig:')) {
+        const v1Id = targetAudioId.slice(5);
+        const vc = project.videoClips.find((c) => c.id === v1Id);
+        if (vc && playhead > vc.timelineStart + 0.25 && playhead < clipTimelineEnd(vc) - 0.25) {
+          const newId = `aud-detached-${Date.now().toString(36).slice(-5)}`;
+          registerAudioClipBlob(newId, file.file, file.name);
+          const detachedClip: TimelineAudioClip = {
+            id: newId,
+            label: `${tr('Video Sesi', 'Video Audio')} · ${vc.label}`,
+            kind: 'music',
+            trackRow: 0,
+            sourceStart: vc.sourceStart,
+            sourceEnd: vc.sourceEnd,
+            timelineStart: vc.timelineStart,
+            volume: vc.volume,
+            muted: vc.muted,
+            fadeInSec: vc.fadeInSec,
+            fadeOutSec: vc.fadeOutSec,
+            transitionIn: 'none',
+            transitionDurationSec: 0.4,
+            noiseReduction: false,
+            ducking: false,
+            blobUrl: videoUrl,
+          };
+          workingAudioClips = [...project.audioClips, detachedClip];
+          nextVideoClips = project.videoClips.map((c) =>
+            c.id === v1Id ? {...c, audioDetached: true, muted: true} : c
+          );
+          targetAudioId = newId;
+        }
+      }
+
+      const res = splitAudioClipAtPlayhead(workingAudioClips, targetAudioId, playhead, project.fps);
+      if (!res.didSplit) {
+        notifyStatus(
+          tr(
+            'Sesi bölmek için imleci seçili ses kartının içine getirin.',
+            'Move playhead inside the audio clip to split.'
+          )
+        );
+        return;
+      }
+      if (targetAudioId && res.secondId) {
+        cloneAudioClipBlob(targetAudioId, res.secondId);
+      }
+      commitProject((prev) => ({
+        ...prev,
+        videoClips: nextVideoClips,
+        audioClips: res.audioClips,
+      }));
+      if (res.secondId) setSelectedAudioId(res.secondId);
+      notifyStatus(
+        tr(
+          `Ses ${formatSmpteTimecode(playhead, project.fps)} karesinde ikiye bölündü.`,
+          `Audio split at ${formatSmpteTimecode(playhead, project.fps)}.`
+        )
+      );
+      return;
+    }
+
+    // 3. Default Video Layer Split
     const res = splitVideoClipAtPlayhead(
       project.videoClips,
       selectedClip?.id || null,
@@ -1263,6 +1517,161 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     );
   };
 
+  const handleCutAtPlayhead = (side: 'left' | 'right') => {
+    const safeDur = Math.max(1, duration || totalTimelineDur || 10);
+
+    // 1. Active Text Layer Cut
+    if (selectedLayerType === 'text') {
+      const target =
+        (selectedTextId ? project.textClips.find((t) => t.id === selectedTextId) : null) ||
+        project.textClips.find(
+          (t) => playhead > t.timelineStart + 0.25 && playhead < t.timelineStart + t.durationSec - 0.25
+        );
+      if (
+        !target ||
+        playhead <= target.timelineStart + 0.25 ||
+        playhead >= target.timelineStart + target.durationSec - 0.25
+      ) {
+        notifyStatus(
+          tr(
+            'Kesmek için imleci seçili metin kartının içine getirin.',
+            'Move playhead inside the text clip to trim.'
+          )
+        );
+        return;
+      }
+      commitProject((prev) => ({
+        ...prev,
+        textClips: trimTextClipHandle(prev.textClips, target.id, side, playhead, Math.max(canvasDuration, safeDur), prev.fps),
+      }));
+      setSelectedTextId(target.id);
+      notifyStatus(
+        side === 'left'
+          ? tr('Metnin imleçten solu kesildi.', 'Text trimmed from left at playhead.')
+          : tr('Metnin imleçten sağı kesildi.', 'Text trimmed from right at playhead.')
+      );
+      return;
+    }
+
+    // 2. Active Audio Layer Cut (auto-detaches original audio if needed)
+    if (selectedLayerType === 'audio') {
+      let targetAudioId = selectedAudioId;
+      let workingAudioClips = project.audioClips;
+      let nextVideoClips = project.videoClips;
+
+      if (targetAudioId && targetAudioId.startsWith('orig:')) {
+        const v1Id = targetAudioId.slice(5);
+        const vc = project.videoClips.find((c) => c.id === v1Id);
+        if (vc && playhead > vc.timelineStart + 0.25 && playhead < clipTimelineEnd(vc) - 0.25) {
+          const newId = `aud-detached-${Date.now().toString(36).slice(-5)}`;
+          registerAudioClipBlob(newId, file.file, file.name);
+          const detachedClip: TimelineAudioClip = {
+            id: newId,
+            label: `${tr('Video Sesi', 'Video Audio')} · ${vc.label}`,
+            kind: 'music',
+            trackRow: 0,
+            sourceStart: vc.sourceStart,
+            sourceEnd: vc.sourceEnd,
+            timelineStart: vc.timelineStart,
+            volume: vc.volume,
+            muted: vc.muted,
+            fadeInSec: vc.fadeInSec,
+            fadeOutSec: vc.fadeOutSec,
+            transitionIn: 'none',
+            transitionDurationSec: 0.4,
+            noiseReduction: false,
+            ducking: false,
+            blobUrl: videoUrl,
+          };
+          workingAudioClips = [...project.audioClips, detachedClip];
+          nextVideoClips = project.videoClips.map((c) =>
+            c.id === v1Id ? {...c, audioDetached: true, muted: true} : c
+          );
+          targetAudioId = newId;
+        }
+      }
+
+      const targetAud =
+        (targetAudioId ? workingAudioClips.find((a) => a.id === targetAudioId) : null) ||
+        workingAudioClips.find((a) => {
+          if (a.kind === 'original') return false;
+          const end = a.timelineStart + Math.max(0.25, a.sourceEnd - a.sourceStart);
+          return playhead > a.timelineStart + 0.25 && playhead < end - 0.25;
+        });
+
+      const audEnd = targetAud
+        ? targetAud.timelineStart + Math.max(0.25, targetAud.sourceEnd - targetAud.sourceStart)
+        : 0;
+      if (!targetAud || playhead <= targetAud.timelineStart + 0.25 || playhead >= audEnd - 0.25) {
+        notifyStatus(
+          tr(
+            'Kesmek için imleci seçili ses kartının içine getirin.',
+            'Move playhead inside the audio clip to trim.'
+          )
+        );
+        return;
+      }
+
+      const trimmedAuds = trimAudioClipHandle(workingAudioClips, targetAud.id, side, playhead, project.fps);
+      commitProject((prev) => ({
+        ...prev,
+        videoClips: nextVideoClips,
+        audioClips: trimmedAuds,
+      }));
+      setSelectedAudioId(targetAud.id);
+      notifyStatus(
+        side === 'left'
+          ? tr('Sesin imleçten solu kesildi.', 'Audio trimmed from left at playhead.')
+          : tr('Sesin imleçten sağı kesildi.', 'Audio trimmed from right at playhead.')
+      );
+      return;
+    }
+
+    // 3. Default Video Layer Cut
+    const targetClip =
+      (selectedClip &&
+      playhead > selectedClip.timelineStart + 0.15 &&
+      playhead < clipTimelineEnd(selectedClip) - 0.15
+        ? selectedClip
+        : null) ||
+      project.videoClips.find(
+        (c) => playhead > c.timelineStart + 0.15 && playhead < clipTimelineEnd(c) - 0.15
+      );
+
+    if (!targetClip) {
+      notifyStatus(
+        tr(
+          'Kesmek için imleci klibin iç kısmına getirin.',
+          'Move playhead inside the clip to trim.'
+        )
+      );
+      return;
+    }
+
+    const speed = Math.max(0.25, targetClip.speed || 1);
+    const targetSourceSec = targetClip.sourceStart + (playhead - targetClip.timelineStart) * speed;
+    const assetDur =
+      project.mediaAssets?.find((a) => a.id === getClipMediaId(targetClip))?.durationSec || safeDur;
+    const trimmedClips = trimVideoClipHandle(
+      project.videoClips,
+      targetClip.id,
+      side,
+      targetSourceSec,
+      Math.max(assetDur, targetClip.sourceEnd),
+      project.fps
+    );
+    commitProject((prev) => ({
+      ...prev,
+      videoClips: trimmedClips,
+    }));
+    setSelectedClipId(targetClip.id);
+    notifyStatus(
+      side === 'left'
+        ? tr('Klibin imleçten solu kesildi.', 'Clip trimmed from left at playhead.')
+        : tr('Klibin imleçten sağı kesildi.', 'Clip trimmed from right at playhead.')
+    );
+  };
+
   const startPreviewResize = (e: React.PointerEvent) => {
     e.preventDefault();
     const startY = e.clientY;
@@ -1270,7 +1679,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     setIsResizingPreview(true);
     const onMove = (ev: PointerEvent) => {
       const deltaVh = ((ev.clientY - startY) / Math.max(320, window.innerHeight)) * 100;
-      const nextVh = Math.min(62, Math.max(22, Math.round(startVh + deltaVh)));
+      const nextVh = Math.min(82, Math.max(22, Math.round(startVh + deltaVh)));
       setPreviewHeightVh(nextVh);
     };
     const onUp = () => {
@@ -1283,10 +1692,56 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   };
 
   const cyclePreviewHeight = () => {
-    setPreviewHeightVh((prev) => (prev < 34 ? 42 : prev < 52 ? 56 : 28));
+    setPreviewHeightVh((prev) => (prev < 34 ? 46 : prev < 64 ? 74 : 28));
   };
 
   const handleNormalDelete = () => {
+    if (selectedLayerType === 'text' && selectedTextId) {
+      commitProject((prev) => ({
+        ...prev,
+        textClips: prev.textClips.filter((t) => t.id !== selectedTextId),
+      }));
+      setSelectedTextId(null);
+      setSelectedLayerType('video');
+      notifyStatus(tr('Metin katmanı silindi.', 'Text clip deleted.'));
+      return;
+    }
+
+    if (selectedLayerType === 'audio' && selectedAudioId) {
+      if (selectedAudioId.startsWith('orig:')) {
+        const v1Id = selectedAudioId.slice(5);
+        commitProject((prev) => ({
+          ...prev,
+          videoClips: prev.videoClips.map((c) =>
+            c.id === v1Id ? {...c, audioDetached: true, muted: true} : c
+          ),
+        }));
+        setSelectedAudioId(null);
+        setSelectedLayerType('video');
+        notifyStatus(tr('Video klibinin orijinal sesi kaldırıldı.', 'Video clip original audio removed.'));
+        return;
+      }
+      removeAudioClipBlob(selectedAudioId);
+      commitProject((prev) => ({
+        ...prev,
+        audioClips: prev.audioClips.filter((a) => a.id !== selectedAudioId),
+      }));
+      setSelectedAudioId(null);
+      setSelectedLayerType('video');
+      notifyStatus(tr('Ses kartı silindi.', 'Audio clip deleted.'));
+      return;
+    }
+
+    if (selectedLayerType === 'watermark') {
+      commitProject((prev) => ({
+        ...prev,
+        watermark: {...(prev.watermark ?? DEFAULT_WATERMARK), mode: 'none'},
+      }));
+      setSelectedLayerType('video');
+      notifyStatus(tr('Filigran kaldırıldı.', 'Watermark removed.'));
+      return;
+    }
+
     if (!selectedClip) return;
     const res = deleteClipKeepGap(project.videoClips, selectedClip.id);
     if (!res.didDelete) {
@@ -1300,12 +1755,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       videoClips: res.clips,
     }));
     if (res.nextSelectedId) setSelectedClipId(res.nextSelectedId);
-    notifyStatus(
-      tr(
-        'Klip silindi (Boşluk korundu).',
-        'Clip deleted (Gap preserved).'
-      )
-    );
+    notifyStatus(tr('Klip silindi (Boşluk korundu).', 'Clip deleted (Gap preserved).'));
   };
 
   const handleRippleDelete = () => {
@@ -1339,26 +1789,38 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     );
   };
 
-  const handleMoveClipStep = (direction: -1 | 1) => {
-    if (!selectedClip) return;
-    const nextClips = reorderClipByStep(
-      project.videoClips,
-      selectedClip.id,
-      direction,
-      project.fps
-    );
-    commitProject((prev) => ({
-      ...prev,
-      videoClips: nextClips,
-    }));
-    notifyStatus(
-      direction === -1
-        ? tr('Klip sola taşındı.', 'Clip moved left.')
-        : tr('Klip sağa taşındı.', 'Clip moved right.')
-    );
-  };
-
   const handleDuplicateClip = () => {
+    if (selectedLayerType === 'text' && selectedTextId) {
+      const res = duplicateTextClip(project.textClips, selectedTextId, project.fps);
+      commitProject((prev) => ({...prev, textClips: res.textClips}));
+      if (res.newId) setSelectedTextId(res.newId);
+      notifyStatus(tr('Seçili metin çoğaltıldı.', 'Selected text duplicated.'));
+      return;
+    }
+
+    if (selectedLayerType === 'audio' && selectedAudioId) {
+      let targetId = selectedAudioId;
+      if (targetId.startsWith('orig:')) {
+        const detached = detachOriginalAudioClip(targetId.slice(5), true);
+        if (!detached) return;
+        targetId = detached;
+      }
+      setProject((prev) => {
+        const res = duplicateAudioClip(prev.audioClips, targetId, prev.fps);
+        if (res.newId) {
+          cloneAudioClipBlob(targetId, res.newId);
+          setSelectedAudioId(res.newId);
+        }
+        const next = {...prev, audioClips: res.audioClips, updatedAt: Date.now()};
+        setHistory((h) => [...h.slice(0, historyIdx + 1).slice(-35), next]);
+        setHistoryIdx((idx) => Math.min(35, idx + 1));
+        return next;
+      });
+      setHasUnsavedChanges(true);
+      notifyStatus(tr('Seçili ses çoğaltıldı.', 'Selected audio duplicated.'));
+      return;
+    }
+
     if (!selectedClip) return;
     const res = duplicateVideoClip(project.videoClips, selectedClip.id, project.fps);
     commitProject((prev) => ({
@@ -1404,36 +1866,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   // ============================================================================
   const handleDetachAudio = () => {
     if (!selectedClip) return;
-    commitProject((prev) => {
-      const nextVideoClips = prev.videoClips.map((c) =>
-        c.id === selectedClip.id ? {...c, audioDetached: true, muted: true} : c
-      );
-      const detachedAudio: TimelineAudioClip = {
-        id: `aud-detached-${Date.now()}`,
-        label: `${selectedClip.label} (Ayrılmış Ses)`,
-        kind: 'original',
-        sourceStart: selectedClip.sourceStart,
-        sourceEnd: selectedClip.sourceEnd,
-        timelineStart: selectedClip.timelineStart,
-        volume: selectedClip.volume,
-        muted: false,
-        fadeInSec: selectedClip.fadeInSec,
-        fadeOutSec: selectedClip.fadeOutSec,
-        noiseReduction: false,
-        ducking: false,
-      };
-      return {
-        ...prev,
-        videoClips: nextVideoClips,
-        audioClips: [...prev.audioClips, detachedAudio],
-      };
-    });
-    notifyStatus(
-      tr(
-        'Videonun sesi bağımsız ses katmanına (A1) ayrıldı.',
-        'Audio detached to independent audio track (A1).'
-      )
-    );
+    detachOriginalAudioClip(selectedClip.id, false);
   };
 
   const handleImportExternalAudio = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1672,6 +2105,54 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   };
 
   const handleToggleSelectedClipLayer = () => {
+    if (selectedLayerType === 'text' && selectedTextId) {
+      const target = project.textClips.find((t) => t.id === selectedTextId);
+      if (!target) return;
+      const nextRow: 0 | 1 = (target.trackRow ?? 0) === 0 ? 1 : 0;
+      commitProject((prev) => ({
+        ...prev,
+        textClips: moveTextClipOnTimeline(
+          prev.textClips,
+          selectedTextId,
+          target.timelineStart,
+          prev.fps,
+          nextRow
+        ),
+      }));
+      notifyStatus(
+        nextRow === 1
+          ? tr('Metin üst satıra (T2) taşındı.', 'Moved text to upper row (T2).')
+          : tr('Metin ana satıra (T1) taşındı.', 'Moved text to main row (T1).')
+      );
+      return;
+    }
+
+    if (selectedLayerType === 'audio' && selectedAudioId) {
+      let targetId = selectedAudioId;
+      if (targetId.startsWith('orig:')) {
+        const detached = detachOriginalAudioClip(targetId.slice(5), true);
+        if (!detached) return;
+        targetId = detached;
+      }
+      commitProject((prev) => {
+        const item = prev.audioClips.find((a) => a.id === targetId);
+        if (!item) return prev;
+        const nextRow: 0 | 1 = (item.trackRow ?? 0) === 0 ? 1 : 0;
+        return {
+          ...prev,
+          audioClips: moveAudioClipOnTimeline(
+            prev.audioClips,
+            targetId,
+            item.timelineStart,
+            prev.fps,
+            nextRow
+          ),
+        };
+      });
+      notifyStatus(tr('Ses katman satırı değiştirildi (A1 ↔ A2).', 'Switched audio track row (A1 ↔ A2).'));
+      return;
+    }
+
     if (!selectedClip) return;
     const res = toggleClipTrackLayer(project.videoClips, selectedClip.id, project.fps);
     if (!res.didMove) {
@@ -1691,6 +2172,79 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     );
   };
 
+  const handleUpdateSeamTransition = (
+    type: 'video' | 'audio' | 'text',
+    id: string,
+    transitionIn: ClipTransitionType,
+    durationSec: number
+  ) => {
+    if (type === 'video') {
+      commitProject((prev) => ({
+        ...prev,
+        videoClips: prev.videoClips.map((c) =>
+          c.id === id ? {...c, transitionIn, transitionDurationSec: durationSec} : c
+        ),
+      }));
+      return;
+    }
+    if (type === 'audio') {
+      const fadeSec = transitionIn === 'none' ? 0 : Math.max(0.15, Number(durationSec.toFixed(2)));
+      commitProject((prev) => {
+        const target = prev.audioClips.find((a) => a.id === id);
+        if (!target) return prev;
+        const row = target.trackRow ?? 0;
+        // Find immediately preceding audio clip on the same row to apply matching fadeOut for crossfade
+        const prevNeighbor = prev.audioClips
+          .filter((a) => a.kind !== 'original' && a.id !== id && (a.trackRow ?? 0) === row)
+          .find((a) => {
+            const end = a.timelineStart + Math.max(0.25, a.sourceEnd - a.sourceStart);
+            return Math.abs(target.timelineStart - end) < 0.25;
+          });
+        return {
+          ...prev,
+          audioClips: prev.audioClips.map((a) => {
+            if (a.id === id) {
+              return {
+                ...a,
+                transitionIn,
+                transitionDurationSec: durationSec,
+                fadeInSec: fadeSec,
+              };
+            }
+            if (prevNeighbor && a.id === prevNeighbor.id && transitionIn !== 'none') {
+              return {...a, fadeOutSec: fadeSec};
+            }
+            return a;
+          }),
+        };
+      });
+      return;
+    }
+    if (type === 'text') {
+      const mappedAnim: TextAnimationPreset =
+        transitionIn === 'slide'
+          ? 'slide_up'
+          : transitionIn === 'zoom'
+            ? 'pop'
+            : transitionIn === 'none'
+              ? 'none'
+              : 'fade';
+      commitProject((prev) => ({
+        ...prev,
+        textClips: prev.textClips.map((t) =>
+          t.id === id
+            ? {
+                ...t,
+                transitionIn,
+                transitionDurationSec: durationSec,
+                animation: mappedAnim,
+              }
+            : t
+        ),
+      }));
+    }
+  };
+
   const startPipDrag = (e: React.PointerEvent, clipId: string) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1706,8 +2260,13 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     const onMove = (ev: PointerEvent) => {
       const dx = (ev.clientX - startX) / Math.max(1, rect.width);
       const dy = (ev.clientY - startY) / Math.max(1, rect.height);
-      const nx = Math.max(0, Math.min(1 - initPip.w, initPip.x + dx));
-      const ny = Math.max(0, Math.min(1 - initPip.h, initPip.y + dy));
+      let nx = Math.max(0, Math.min(1 - initPip.w, initPip.x + dx));
+      let ny = Math.max(0, Math.min(1 - initPip.h, initPip.y + dy));
+      const snapX = Math.abs(nx + initPip.w / 2 - 0.5) < 0.025;
+      const snapY = Math.abs(ny + initPip.h / 2 - 0.5) < 0.025;
+      if (snapX) nx = Math.max(0, Math.min(1 - initPip.w, 0.5 - initPip.w / 2));
+      if (snapY) ny = Math.max(0, Math.min(1 - initPip.h, 0.5 - initPip.h / 2));
+      setSnapCenterGuides({x: snapX, y: snapY});
       setProject((prev) => ({
         ...prev,
         videoClips: prev.videoClips.map((c) =>
@@ -1727,6 +2286,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      setSnapCenterGuides({x: false, y: false});
       setHasUnsavedChanges(true);
     };
     window.addEventListener('pointermove', onMove);
@@ -2086,107 +2646,691 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   };
 
   // ============================================================================
-  // TIMELINE SCRUBBING & HANDLE TRIMMING
+  // TIMELINE SCRUBBING, 2D DRAG & EXPANDABLE TRIM (V1/V2, T1/T2, W1, A1/A2)
   // ============================================================================
-  const clientXToTimelineSec = useCallback(
-    (clientX: number): number => {
+  const locatePlayheadInTimeline = useCallback(
+    (smooth = true) => {
+      const scroller = timelineScrollRef.current;
       const track = timelineTrackRef.current;
-      if (!track || totalTimelineDur <= 0) return 0;
-      const rect = track.getBoundingClientRect();
-      const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / Math.max(1, rect.width)));
-      const rawSec = ratio * totalTimelineDur;
+      if (!scroller || !track || canvasDuration <= 0) return;
+      const playheadPx = (playhead / Math.max(0.1, canvasDuration)) * track.scrollWidth;
+      const targetScroll = Math.max(0, playheadPx - scroller.clientWidth * 0.45);
+      scroller.scrollTo({
+        left: targetScroll,
+        behavior: smooth ? 'smooth' : 'auto',
+      });
+    },
+    [playhead, canvasDuration]
+  );
 
-      if (project.snapEnabled) {
-        const snapThresholdSec = Math.max(0.08, totalTimelineDur * 0.015);
-        for (const c of project.videoClips) {
-          const cStart = c.timelineStart;
-          const cEnd = clipTimelineEnd(c);
-          if (Math.abs(rawSec - cStart) <= snapThresholdSec) {
-            setSnapGuideTime(cStart);
-            return snapToFrame(cStart, project.fps);
-          }
-          if (Math.abs(rawSec - cEnd) <= snapThresholdSec) {
-            setSnapGuideTime(cEnd);
-            return snapToFrame(cEnd, project.fps);
-          }
+  // Keep playhead centered immediately whenever zoom level changes
+  useEffect(() => {
+    const id = window.requestAnimationFrame(() => locatePlayheadInTimeline(false));
+    return () => window.cancelAnimationFrame(id);
+  }, [timelineZoom]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Gently follow playhead during active playback when zoomed in
+  useEffect(() => {
+    if (!isPlaying || timelineZoom <= 1) return;
+    const scroller = timelineScrollRef.current;
+    const track = timelineTrackRef.current;
+    if (!scroller || !track || canvasDuration <= 0) return;
+    const playheadPx = (playhead / Math.max(0.1, canvasDuration)) * track.scrollWidth;
+    const viewLeft = scroller.scrollLeft;
+    const viewRight = viewLeft + scroller.clientWidth;
+    if (playheadPx > viewRight - 36 || playheadPx < viewLeft + 16) {
+      scroller.scrollLeft = Math.max(0, playheadPx - scroller.clientWidth * 0.25);
+    }
+  }, [isPlaying, playhead, canvasDuration, timelineZoom]);
+
+  const snapTimelineSec = useCallback(
+    (
+      rawSec: number,
+      excludeClipId?: string,
+      refSpan = canvasDuration,
+      bypassSnap = false
+    ): number => {
+      const clamped = Math.max(0, rawSec);
+      if (!project.snapEnabled || bypassSnap) {
+        setSnapGuideTime(null);
+        return snapToFrame(clamped, project.fps);
+      }
+      const snapThresholdSec = Math.max(0.08, refSpan * 0.015);
+      const targets: number[] = [0, playhead];
+      for (const c of project.videoClips) {
+        if (c.id === excludeClipId) continue;
+        targets.push(c.timelineStart, clipTimelineEnd(c));
+      }
+      for (const t of project.textClips) {
+        if (t.id === excludeClipId) continue;
+        targets.push(t.timelineStart, t.timelineStart + t.durationSec);
+      }
+      for (const a of project.audioClips) {
+        if (a.kind === 'original' || a.id === excludeClipId) continue;
+        targets.push(a.timelineStart, a.timelineStart + Math.max(0.25, a.sourceEnd - a.sourceStart));
+      }
+      for (const t of targets) {
+        if (Math.abs(clamped - t) <= snapThresholdSec) {
+          setSnapGuideTime(t);
+          return snapToFrame(t, project.fps);
         }
       }
       setSnapGuideTime(null);
-      return snapToFrame(rawSec, project.fps);
+      return snapToFrame(clamped, project.fps);
     },
-    [totalTimelineDur, project.snapEnabled, project.videoClips, project.fps]
+    [
+      project.snapEnabled,
+      project.fps,
+      project.videoClips,
+      project.textClips,
+      project.audioClips,
+      canvasDuration,
+      playhead,
+    ]
   );
 
   const startTimelineDrag = (
     e: React.PointerEvent,
-    mode: 'playhead' | 'trim-left' | 'trim-right',
-    targetClipId?: string
+    mode: TimelineDragMode,
+    rawTargetId?: string
   ) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const v = videoRef.current;
-    if (v && !v.paused) {
-      v.pause();
-      setIsPlaying(false);
+    const isMoveMode =
+      mode === 'move-video' ||
+      mode === 'move-text' ||
+      mode === 'move-audio' ||
+      mode === 'move-watermark';
+
+    const isSelectedCard =
+      (mode === 'move-video' && selectedLayerType === 'video' && selectedClip?.id === rawTargetId) ||
+      (mode === 'move-text' && selectedLayerType === 'text' && selectedTextId === rawTargetId) ||
+      (mode === 'move-audio' && selectedLayerType === 'audio' && selectedAudioId === rawTargetId) ||
+      (mode === 'move-watermark' && selectedLayerType === 'watermark');
+
+    // Trim handles, playhead ruler, already-selected cards, and Free Timeline Mode capture pointer immediately!
+    if (!isMoveMode || isSelectedCard || freeTimelineMode) {
+      e.preventDefault();
+      e.stopPropagation();
     }
 
-    if (targetClipId) {
-      setSelectedClipId(targetClipId);
+    const pausePlayback = () => {
+      const v = videoRef.current;
+      if (v && !v.paused) {
+        v.pause();
+        setIsPlaying(false);
+      }
+    };
+
+    const track = timelineTrackRef.current;
+    const trackRect = track?.getBoundingClientRect();
+    const trackWidthPx = Math.max(140, trackRect?.width || 320);
+    const trackLeftPx = trackRect?.left ?? 0;
+    const dragCanvasDur = Math.max(4, canvasDuration);
+    const startClientX = e.clientX;
+    const startClientY = e.clientY;
+    const pointerType = e.pointerType;
+
+    // Resolve targetId (auto-detaching original audio on immediate trim!)
+    let targetId = rawTargetId;
+    if (
+      (mode === 'trim-audio-left' || mode === 'trim-audio-right') &&
+      targetId &&
+      targetId.startsWith('orig:')
+    ) {
+      const detached = detachOriginalAudioClip(targetId.slice(5), true);
+      if (!detached) return;
+      targetId = detached;
     }
 
-    const applyAt = (clientX: number) => {
-      const sec = clientXToTimelineSec(clientX);
+    if (!isMoveMode) {
+      pausePlayback();
+      if ((mode === 'trim-left' || mode === 'trim-right') && targetId) {
+        setSelectedClipId(targetId);
+        setSelectedLayerType('video');
+      } else if ((mode === 'trim-text-left' || mode === 'trim-text-right') && targetId) {
+        setSelectedTextId(targetId);
+        setSelectedLayerType('text');
+      } else if ((mode === 'trim-audio-left' || mode === 'trim-audio-right') && targetId) {
+        setSelectedAudioId(targetId);
+        setSelectedLayerType('audio');
+      } else if (mode === 'trim-watermark-left' || mode === 'trim-watermark-right') {
+        setSelectedLayerType('watermark');
+      }
+    }
+
+    // Freeze starting snapshot ONCE on pointerdown so shrinking/expanding NEVER drifts or gets trapped!
+    let initStartSec = 0;
+    let initSpanSec = 2;
+    let initSourceStart = 0;
+    let initSourceEnd = duration || 10;
+    let initSpeed = 1;
+    let initRow: 0 | 1 = 0;
+    let maxSrcDur = Math.max(duration || 10, 1);
+
+    if ((mode === 'move-video' || mode === 'trim-left' || mode === 'trim-right') && targetId) {
+      const vc = project.videoClips.find((c) => c.id === targetId);
+      if (!vc) return;
+      initStartSec = vc.timelineStart;
+      initSpanSec = clipTimelineDuration(vc);
+      initSourceStart = vc.sourceStart;
+      initSourceEnd = vc.sourceEnd;
+      initSpeed = Math.max(0.25, vc.speed || 1);
+      initRow = getClipTrackIndex(vc) >= 1 ? 1 : 0;
+      const mediaId = getClipMediaId(vc);
+      const assetMeta = (project.mediaAssets || []).find((m) => m.id === mediaId);
+      maxSrcDur = Math.max(assetMeta?.durationSec || duration || 10, vc.sourceEnd);
+    } else if (
+      (mode === 'move-text' || mode === 'trim-text-left' || mode === 'trim-text-right') &&
+      targetId
+    ) {
+      const tc = project.textClips.find((t) => t.id === targetId);
+      if (!tc) return;
+      initStartSec = tc.timelineStart;
+      initSpanSec = tc.durationSec;
+      initRow = (tc.trackRow ?? 0) === 1 ? 1 : 0;
+    } else if (
+      (mode === 'move-audio' || mode === 'trim-audio-left' || mode === 'trim-audio-right') &&
+      targetId
+    ) {
+      if (targetId.startsWith('orig:')) {
+        const vc = project.videoClips.find((c) => c.id === targetId!.slice(5));
+        if (!vc) return;
+        initStartSec = vc.timelineStart;
+        initSpanSec = clipTimelineDuration(vc);
+        initSourceStart = vc.sourceStart;
+        initSourceEnd = vc.sourceEnd;
+        initRow = 0;
+      } else {
+        const ac = project.audioClips.find((a) => a.id === targetId);
+        if (!ac) {
+          // Detached synchronously above — compute from matching V1 clip fallback
+          const v1Fallback = project.videoClips.find(
+            (c) => rawTargetId?.startsWith('orig:') && c.id === rawTargetId.slice(5)
+          );
+          if (!v1Fallback) return;
+          initStartSec = v1Fallback.timelineStart;
+          initSpanSec = clipTimelineDuration(v1Fallback);
+          initSourceStart = v1Fallback.sourceStart;
+          initSourceEnd = v1Fallback.sourceEnd;
+          initRow = 0;
+        } else {
+          initStartSec = ac.timelineStart;
+          initSpanSec = Math.max(0.25, ac.sourceEnd - ac.sourceStart);
+          initSourceStart = ac.sourceStart;
+          initSourceEnd = ac.sourceEnd;
+          initRow = (ac.trackRow ?? 0) === 1 ? 1 : 0;
+        }
+      }
+    } else if (
+      mode === 'move-watermark' ||
+      mode === 'trim-watermark-left' ||
+      mode === 'trim-watermark-right'
+    ) {
+      const wm = project.watermark ?? DEFAULT_WATERMARK;
+      initStartSec = !wm.fullDuration ? wm.startSec : 0;
+      const wmEnd = !wm.fullDuration ? wm.endSec : totalTimelineDur;
+      initSpanSec = Math.max(0.4, wmEnd - initStartSec);
+    }
+
+    let dragActivated = !isMoveMode;
+    let didMutate = false;
+
+    const applyAt = (clientX: number, clientY: number) => {
       if (mode === 'playhead') {
-        seekTimelineTo(sec);
-      } else if (targetClipId) {
-        const target = project.videoClips.find((c) => c.id === targetClipId);
-        if (!target) return;
+        const ratio = Math.min(1, Math.max(0, (clientX - trackLeftPx) / trackWidthPx));
+        const targetSec = Math.min(
+          Math.max(totalTimelineDur, 0.5),
+          snapTimelineSec(ratio * dragCanvasDur, undefined, dragCanvasDur)
+        );
+        seekTimelineTo(targetSec);
+        return;
+      }
+
+      const deltaSec = ((clientX - startClientX) / trackWidthPx) * dragCanvasDur;
+      const dy = clientY - startClientY;
+
+      if (isMoveMode) {
+        const snappedStart = snapTimelineSec(
+          Math.max(0, initStartSec + deltaSec),
+          targetId,
+          dragCanvasDur,
+          freeTimelineMode
+        );
+        didMutate = true;
+
+        if (mode === 'move-video' && targetId) {
+          // Dragging UP (-dy >= 24px) promotes V1 -> V2 PiP; dragging DOWN (+dy >= 24px) brings V2 -> V1!
+          const nextTrack: 0 | 1 =
+            initRow === 0 ? (dy < -24 ? 1 : 0) : dy > 24 ? 0 : 1;
+          setActiveDragLaneHint(nextTrack === 1 ? 'v2' : 'v1');
+          setProject((prev) => ({
+            ...prev,
+            videoClips: moveVideoClip2D(
+              prev.videoClips,
+              targetId!,
+              snappedStart,
+              nextTrack,
+              prev.fps,
+              freeTimelineMode
+            ),
+          }));
+        } else if (mode === 'move-text' && targetId) {
+          // Dragging UP promotes T1 -> T2; dragging DOWN brings T2 -> T1
+          const nextRow: 0 | 1 =
+            initRow === 0 ? (dy < -22 ? 1 : 0) : dy > 22 ? 0 : 1;
+          setActiveDragLaneHint(nextRow === 1 ? 't2' : 't1');
+          setProject((prev) => ({
+            ...prev,
+            textClips: moveTextClipOnTimeline(
+              prev.textClips,
+              targetId!,
+              snappedStart,
+              prev.fps,
+              nextRow
+            ),
+          }));
+        } else if (mode === 'move-audio' && targetId) {
+          // Dragging DOWN promotes A1 -> A2; dragging UP brings A2 -> A1
+          const nextRow: 0 | 1 =
+            initRow === 0 ? (dy > 22 ? 1 : 0) : dy < -22 ? 0 : 1;
+          setActiveDragLaneHint(nextRow === 1 ? 'a2' : 'a1');
+          setProject((prev) => ({
+            ...prev,
+            audioClips: moveAudioClipOnTimeline(
+              prev.audioClips,
+              targetId!,
+              snappedStart,
+              prev.fps,
+              nextRow
+            ),
+          }));
+        } else if (mode === 'move-watermark') {
+          const clampedStart = Math.max(0, snappedStart);
+          const clampedEnd = Math.max(clampedStart + 0.4, clampedStart + initSpanSec);
+          setProject((prev) => ({
+            ...prev,
+            watermark: {
+              ...(prev.watermark ?? DEFAULT_WATERMARK),
+              fullDuration: false,
+              startSec: Number(clampedStart.toFixed(2)),
+              endSec: Number(clampedEnd.toFixed(2)),
+            },
+          }));
+        }
+        return;
+      }
+
+      // PURE DELTA-FROM-SNAPSHOT TRIMMING (Can ALWAYS shrink down to 0.15s AND smoothly expand back out!)
+      didMutate = true;
+
+      if ((mode === 'trim-left' || mode === 'trim-right') && targetId) {
         if (mode === 'trim-left') {
-          const deltaTimeline = sec - target.timelineStart;
-          const newSourceStart = target.sourceStart + deltaTimeline * target.speed;
+          const newSourceStart = initSourceStart + deltaSec * initSpeed;
           setProject((prev) => ({
             ...prev,
             videoClips: trimVideoClipHandle(
               prev.videoClips,
-              targetClipId,
+              targetId!,
               'left',
               newSourceStart,
-              duration || 3600,
+              maxSrcDur,
               prev.fps
             ),
           }));
-        } else if (mode === 'trim-right') {
-          const durTimeline = Math.max(0.1, sec - target.timelineStart);
-          const newSourceEnd = target.sourceStart + durTimeline * target.speed;
+        } else {
+          const newSourceEnd = initSourceEnd + deltaSec * initSpeed;
           setProject((prev) => ({
             ...prev,
             videoClips: trimVideoClipHandle(
               prev.videoClips,
-              targetClipId,
+              targetId!,
               'right',
               newSourceEnd,
-              duration || 3600,
+              maxSrcDur,
               prev.fps
             ),
+          }));
+        }
+      } else if ((mode === 'trim-text-left' || mode === 'trim-text-right') && targetId) {
+        const targetEdgeSec =
+          mode === 'trim-text-left'
+            ? Math.max(0, initStartSec + deltaSec)
+            : Math.max(initStartSec + 0.25, initStartSec + initSpanSec + deltaSec);
+        setProject((prev) => ({
+          ...prev,
+          textClips: trimTextClipHandle(
+            prev.textClips,
+            targetId!,
+            mode === 'trim-text-left' ? 'left' : 'right',
+            targetEdgeSec,
+            dragCanvasDur,
+            prev.fps
+          ),
+        }));
+      } else if ((mode === 'trim-audio-left' || mode === 'trim-audio-right') && targetId) {
+        const targetEdgeSec =
+          mode === 'trim-audio-left'
+            ? Math.max(0, initStartSec + deltaSec)
+            : Math.max(initStartSec + 0.25, initStartSec + initSpanSec + deltaSec);
+        setProject((prev) => ({
+          ...prev,
+          audioClips: trimAudioClipHandle(
+            prev.audioClips,
+            targetId!,
+            mode === 'trim-audio-left' ? 'left' : 'right',
+            targetEdgeSec,
+            prev.fps
+          ),
+        }));
+      } else if (mode === 'trim-watermark-left' || mode === 'trim-watermark-right') {
+        const initEnd = initStartSec + initSpanSec;
+        if (mode === 'trim-watermark-left') {
+          const nextStart = Math.max(0, Math.min(initEnd - 0.4, initStartSec + deltaSec));
+          setProject((prev) => ({
+            ...prev,
+            watermark: {
+              ...(prev.watermark ?? DEFAULT_WATERMARK),
+              fullDuration: false,
+              startSec: Number(nextStart.toFixed(2)),
+              endSec: Number(initEnd.toFixed(2)),
+            },
+          }));
+        } else {
+          const nextEnd = Math.max(initStartSec + 0.4, initEnd + deltaSec);
+          setProject((prev) => ({
+            ...prev,
+            watermark: {
+              ...(prev.watermark ?? DEFAULT_WATERMARK),
+              fullDuration: false,
+              startSec: Number(initStartSec.toFixed(2)),
+              endSec: Number(nextEnd.toFixed(2)),
+            },
           }));
         }
       }
     };
 
-    applyAt(e.clientX);
+    if (!isMoveMode) {
+      applyAt(e.clientX, e.clientY);
+    }
 
-    const onMove = (ev: PointerEvent) => applyAt(ev.clientX);
-    const onUp = () => {
+    const onMove = (ev: PointerEvent) => {
+      if (!dragActivated) {
+        const dx = ev.clientX - startClientX;
+        const dy = ev.clientY - startClientY;
+        const dist = Math.hypot(dx, dy);
+
+        // Unselected cards on mobile touch yield to vertical scroll unless Free Timeline Mode is ON
+        if (
+          !isSelectedCard &&
+          !freeTimelineMode &&
+          pointerType === 'touch' &&
+          Math.abs(dy) > 10 &&
+          Math.abs(dy) > Math.abs(dx)
+        ) {
+          cleanup();
+          return;
+        }
+        const threshold = isSelectedCard || freeTimelineMode ? 4 : 8;
+        if (dist < threshold) return;
+
+        dragActivated = true;
+        pausePlayback();
+
+        // Auto-detach original audio right as the user begins dragging it!
+        if (mode === 'move-audio' && targetId && targetId.startsWith('orig:')) {
+          const detached = detachOriginalAudioClip(targetId.slice(5), true);
+          if (!detached) {
+            cleanup();
+            return;
+          }
+          targetId = detached;
+        }
+
+        if (mode === 'move-video' && targetId) {
+          setSelectedClipId(targetId);
+          setSelectedLayerType('video');
+        } else if (mode === 'move-text' && targetId) {
+          setSelectedTextId(targetId);
+          setSelectedLayerType('text');
+        } else if (mode === 'move-audio' && targetId) {
+          setSelectedAudioId(targetId);
+          setSelectedLayerType('audio');
+        } else if (mode === 'move-watermark') {
+          setSelectedLayerType('watermark');
+        }
+      }
+      applyAt(ev.clientX, ev.clientY);
+    };
+
+    const cleanup = () => {
       setSnapGuideTime(null);
+      setActiveDragLaneHint(null);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
-      if (mode !== 'playhead') {
+      window.removeEventListener('pointercancel', onUp);
+    };
+
+    const onUp = () => {
+      cleanup();
+      if (didMutate && mode !== 'playhead') {
+        setHasUnsavedChanges(true);
         setProject((latest) => {
           setHistory((h) => [...h.slice(0, historyIdx + 1).slice(-35), latest]);
           setHistoryIdx((idx) => Math.min(35, idx + 1));
           return latest;
         });
       }
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  };
+
+  // Watermark updates & direct on-preview drag placement
+  const updateWatermark = useCallback(
+    (patch: Partial<WatermarkSettings>) => {
+      commitProject((prev) => ({
+        ...prev,
+        watermark: {
+          ...(prev.watermark ?? DEFAULT_WATERMARK),
+          ...patch,
+        },
+      }));
+    },
+    [commitProject]
+  );
+
+  const resetWatermark = useCallback(() => {
+    commitProject((prev) => ({
+      ...prev,
+      watermark: {...DEFAULT_WATERMARK},
+    }));
+    notifyStatus(tr('Filigran sıfırlandı.', 'Watermark reset.'));
+  }, [commitProject, notifyStatus, tr]);
+
+  const handleToggleFreeTimelineMode = useCallback(() => {
+    setFreeTimelineMode((prev) => {
+      const next = !prev;
+      notifyStatus(
+        next
+          ? tr(
+              'Serbest Yerleşim Açık: Klip ve sesleri zaman çizelgesinde istediğiniz yere sürükleyebilirsiniz.',
+              'Free Timeline Placement ON: Drag clips & audio freely anywhere.'
+            )
+          : tr(
+              'Serbest Yerleşim Kapalı: Sıralı ve mıknatıslı hizalama aktif.',
+              'Free Timeline Placement OFF: Ordered & magnetic snap active.'
+            )
+      );
+      return next;
+    });
+  }, [notifyStatus, tr]);
+
+  const handleToggleFreePositionMode = useCallback(() => {
+    setFreePositionMode((prev) => {
+      const next = !prev;
+      notifyStatus(
+        next
+          ? tr(
+              'Serbest Yerleşim açık: Video, metin ve filigranı sürükleyerek taşıyabilirsiniz.',
+              'Free Positioning ON: Drag video, text, or watermark freely on canvas.'
+            )
+          : tr('Serbest Yerleşim kapatıldı.', 'Free Positioning turned off.')
+      );
+      return next;
+    });
+  }, [notifyStatus, tr]);
+
+  const handleResetCanvasPosition = useCallback(() => {
+    commitProject((prev) => ({
+      ...prev,
+      canvasPosX: 0,
+      canvasPosY: 0,
+    }));
+    notifyStatus(tr('Video konumu merkeze sıfırlandı.', 'Video frame centered.'));
+  }, [commitProject, notifyStatus, tr]);
+
+  const startVideoCanvasDrag = (e: React.PointerEvent) => {
+    if (!freePositionMode) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const stage = previewStageRef.current;
+    if (!stage) return;
+    const rect = stage.getBoundingClientRect();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const initX = project.canvasPosX ?? 0;
+    const initY = project.canvasPosY ?? 0;
+
+    const onMove = (ev: PointerEvent) => {
+      const dxPct = ((ev.clientX - startX) / Math.max(1, rect.width)) * 100;
+      const dyPct = ((ev.clientY - startY) / Math.max(1, rect.height)) * 100;
+      let nextX = Math.max(-55, Math.min(55, initX + dxPct));
+      let nextY = Math.max(-55, Math.min(55, initY + dyPct));
+      const snapX = Math.abs(nextX) < 2.5;
+      const snapY = Math.abs(nextY) < 2.5;
+      if (snapX) nextX = 0;
+      if (snapY) nextY = 0;
+      setSnapCenterGuides({x: snapX, y: snapY});
+      setProject((prev) => ({
+        ...prev,
+        canvasPosX: Number(nextX.toFixed(1)),
+        canvasPosY: Number(nextY.toFixed(1)),
+      }));
+    };
+
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      setSnapCenterGuides({x: false, y: false});
+      setHasUnsavedChanges(true);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  const startTextDrag = (e: React.PointerEvent, textId: string) => {
+    if (!freePositionMode) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const stage = previewStageRef.current;
+    const target = project.textClips.find((t) => t.id === textId);
+    if (!stage || !target) return;
+    setSelectedTextId(textId);
+    setSelectedLayerType('text');
+    const rect = stage.getBoundingClientRect();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const initX =
+      typeof target.customPosX === 'number'
+        ? target.customPosX
+        : target.align === 'left'
+          ? 0.25
+          : target.align === 'right'
+            ? 0.75
+            : 0.5;
+    const initY =
+      typeof target.customPosY === 'number'
+        ? target.customPosY
+        : target.posY === 'top'
+          ? 0.14
+          : target.posY === 'center'
+            ? 0.5
+            : 0.85;
+
+    const onMove = (ev: PointerEvent) => {
+      const dx = (ev.clientX - startX) / Math.max(1, rect.width);
+      const dy = (ev.clientY - startY) / Math.max(1, rect.height);
+      let nextX = Math.max(0.06, Math.min(0.94, initX + dx));
+      let nextY = Math.max(0.06, Math.min(0.94, initY + dy));
+      const snapX = Math.abs(nextX - 0.5) < 0.025;
+      const snapY = Math.abs(nextY - 0.5) < 0.025;
+      if (snapX) nextX = 0.5;
+      if (snapY) nextY = 0.5;
+      setSnapCenterGuides({x: snapX, y: snapY});
+      setProject((prev) => ({
+        ...prev,
+        textClips: prev.textClips.map((tItem) =>
+          tItem.id === textId
+            ? {
+                ...tItem,
+                customPosX: Number(nextX.toFixed(4)),
+                customPosY: Number(nextY.toFixed(4)),
+              }
+            : tItem
+        ),
+      }));
+    };
+
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      setSnapCenterGuides({x: false, y: false});
+      setHasUnsavedChanges(true);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  const startWatermarkDrag = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const stage = previewStageRef.current;
+    if (!stage) return;
+    const rect = stage.getBoundingClientRect();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const curWm = project.watermark ?? DEFAULT_WATERMARK;
+    const initX = curWm.posX;
+    const initY = curWm.posY;
+
+    const onMove = (ev: PointerEvent) => {
+      const dx = (ev.clientX - startX) / Math.max(1, rect.width);
+      const dy = (ev.clientY - startY) / Math.max(1, rect.height);
+      let nextX = Math.max(0.05, Math.min(0.95, initX + dx));
+      let nextY = Math.max(0.05, Math.min(0.95, initY + dy));
+      const snapX = Math.abs(nextX - 0.5) < 0.025;
+      const snapY = Math.abs(nextY - 0.5) < 0.025;
+      if (snapX) nextX = 0.5;
+      if (snapY) nextY = 0.5;
+      setSnapCenterGuides({x: snapX, y: snapY});
+      setProject((prev) => ({
+        ...prev,
+        watermark: {
+          ...(prev.watermark ?? DEFAULT_WATERMARK),
+          positionPreset: 'custom',
+          posX: Number(nextX.toFixed(4)),
+          posY: Number(nextY.toFixed(4)),
+        },
+      }));
+    };
+
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      setSnapCenterGuides({x: false, y: false});
+      setHasUnsavedChanges(true);
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -2273,17 +3417,26 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     [activeTimelineClip, playhead]
   );
 
-  // Live CSS Preview Filter String (Grading + Motion Blur + Transition Blur)
+  // Live CSS Preview Filter String (Grading + Motion Blur + Visual FX + Transition Blur)
   const cssFilter = useMemo(() => {
     if (compareOriginal) return 'none';
+    const parts: string[] = [];
     const base = buildCssFilterFromGrading(project.colorGrading, project.vfx.motionBlur);
+    if (base && base !== 'none') parts.push(base);
+    const visualFxFilter = buildVisualFxCssFilter(
+      project.vfx.visualFx,
+      project.vfx.visualFxIntensity ?? 75
+    );
+    if (visualFxFilter) parts.push(visualFxFilter);
     if (evaluatedTransition.extraBlurPx > 0.15) {
-      return `${base} blur(${evaluatedTransition.extraBlurPx.toFixed(2)}px)`;
+      parts.push(`blur(${evaluatedTransition.extraBlurPx.toFixed(2)}px)`);
     }
-    return base;
+    return parts.length > 0 ? parts.join(' ') : 'none';
   }, [
     project.colorGrading,
     project.vfx.motionBlur,
+    project.vfx.visualFx,
+    project.vfx.visualFxIntensity,
     evaluatedTransition.extraBlurPx,
     compareOriginal,
   ]);
@@ -2293,11 +3446,15 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     const effZoom =
       (interpolatedKeyframe.hasKeyframes ? interpolatedKeyframe.zoom : project.zoom) *
       evaluatedTransition.extraScale;
-    const effRot = project.rotateDeg + (interpolatedKeyframe.hasKeyframes ? interpolatedKeyframe.rotation : 0);
+    const effRot =
+      project.rotateDeg + (interpolatedKeyframe.hasKeyframes ? interpolatedKeyframe.rotation : 0);
     const tx =
+      (project.canvasPosX ?? 0) +
       (interpolatedKeyframe.hasKeyframes ? interpolatedKeyframe.posX : 0) +
       evaluatedTransition.extraTranslateXPct;
-    const ty = interpolatedKeyframe.hasKeyframes ? interpolatedKeyframe.posY : 0;
+    const ty =
+      (project.canvasPosY ?? 0) +
+      (interpolatedKeyframe.hasKeyframes ? interpolatedKeyframe.posY : 0);
     const sx = (project.flipH ? -1 : 1) * effZoom;
     const sy = (project.flipV ? -1 : 1) * effZoom;
     return `translate(${tx.toFixed(2)}%, ${ty.toFixed(2)}%) rotate(${effRot.toFixed(1)}deg) scale(${sx.toFixed(3)}, ${sy.toFixed(3)})`;
@@ -2306,6 +3463,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     project.flipH,
     project.flipV,
     project.zoom,
+    project.canvasPosX,
+    project.canvasPosY,
     interpolatedKeyframe,
     evaluatedTransition,
     compareOriginal,
@@ -2382,22 +3541,35 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       if (m > maxW) maxW = m;
     }
 
-    const centerY =
-      tItem.posY === 'top'
+    const hasCustomPos =
+      typeof tItem.customPosX === 'number' && typeof tItem.customPosY === 'number';
+    if (hasCustomPos) {
+      ctx.textAlign = 'center';
+    }
+
+    const centerY = hasCustomPos
+      ? ch * (tItem.customPosY as number)
+      : tItem.posY === 'top'
         ? Math.max(blockH / 2 + fontPx, ch * 0.14)
         : tItem.posY === 'center'
           ? ch * 0.5
           : Math.min(ch - blockH / 2 - fontPx, ch * 0.85);
-    const anchorX =
-      tItem.align === 'left' ? cw * 0.1 : tItem.align === 'right' ? cw * 0.9 : cw * 0.5;
+    const anchorX = hasCustomPos
+      ? cw * (tItem.customPosX as number)
+      : tItem.align === 'left'
+        ? cw * 0.1
+        : tItem.align === 'right'
+          ? cw * 0.9
+          : cw * 0.5;
 
     if (tItem.bgEnabled) {
       const padX = Math.round(fontPx * 0.7);
       const padY = Math.round(fontPx * 0.42);
       const boxW = Math.min(cw - 24, maxW + padX * 2);
       const boxH = blockH + padY * 2;
-      const boxX =
-        tItem.align === 'left'
+      const boxX = hasCustomPos
+        ? anchorX - boxW / 2
+        : tItem.align === 'left'
           ? anchorX - padX
           : tItem.align === 'right'
             ? anchorX - boxW + padX
@@ -2432,8 +3604,108 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     }
   }, [project.textClips, selectedTextClip, targetDimensions]);
 
+  // Render High-Resolution Watermark Layer PNG (Text, Custom Logo, Morph Logo, or 3x3 Diagonal Tile)
+  const buildWatermarkPngDataUrl = useCallback(async (): Promise<string> => {
+    const wm = project.watermark ?? DEFAULT_WATERMARK;
+    if (!trackVisibility.w1 || wm.mode === 'none') return '';
+    if (wm.mode === 'text' && !wm.text.trim()) return '';
+    const resolvedImgSrc =
+      wm.mode === 'image'
+        ? wm.imagePreset === 'morph'
+          ? '/morph-mark.png'
+          : wm.imageDataUrl
+        : '';
+    if (wm.mode === 'image' && !resolvedImgSrc) return '';
+
+    const cw = Math.min(1920, Math.max(320, targetDimensions.w));
+    const ch = Math.min(1920, Math.max(320, targetDimensions.h));
+    const canvas = document.createElement('canvas');
+    canvas.width = cw;
+    canvas.height = ch;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return '';
+
+    let loadedImg: HTMLImageElement | null = null;
+    if (wm.mode === 'image' && resolvedImgSrc) {
+      loadedImg = await new Promise<HTMLImageElement | null>((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(null);
+        img.src = resolvedImgSrc;
+      });
+      if (!loadedImg) return '';
+    }
+
+    const shortEdge = Math.min(cw, ch);
+    const wmScale = Math.min(2.4, Math.max(0.35, wm.scale || 1));
+    const drawSingleStamp = (cx: number, cy: number, scaleMult: number) => {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(((wm.rotation || 0) * Math.PI) / 180);
+      ctx.globalAlpha = Math.min(1, Math.max(0.05, wm.opacity / 100));
+
+      if (wm.mode === 'image' && loadedImg) {
+        const targetW = Math.max(28, shortEdge * 0.22 * wmScale * scaleMult);
+        const aspect = loadedImg.naturalWidth / Math.max(1, loadedImg.naturalHeight);
+        const targetH = targetW / Math.max(0.15, aspect);
+        if (wm.shadowEnabled) {
+          ctx.shadowColor = 'rgba(0,0,0,0.65)';
+          ctx.shadowBlur = Math.max(4, Math.round(shortEdge * 0.015));
+          ctx.shadowOffsetY = 2;
+        }
+        ctx.drawImage(loadedImg, -targetW / 2, -targetH / 2, targetW, targetH);
+      } else {
+        const fontPx = Math.max(14, Math.round(shortEdge * 0.048 * wmScale * scaleMult));
+        ctx.font = `800 ${fontPx}px ${wm.fontFamily || 'Plus Jakarta Sans, system-ui, sans-serif'}`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const label = wm.text.trim();
+        const textW = ctx.measureText(label).width;
+
+        if (wm.bgEnabled) {
+          const padX = Math.round(fontPx * 0.65);
+          const padY = Math.round(fontPx * 0.36);
+          const boxW = Math.min(cw * 0.9, textW + padX * 2);
+          const boxH = fontPx * 1.2 + padY * 2;
+          ctx.fillStyle = wm.bgColor || 'rgba(10,12,18,0.68)';
+          ctx.beginPath();
+          ctx.roundRect(-boxW / 2, -boxH / 2, boxW, boxH, Math.round(fontPx * 0.35));
+          ctx.fill();
+        }
+        if (wm.shadowEnabled) {
+          ctx.shadowColor = 'rgba(0,0,0,0.8)';
+          ctx.shadowBlur = Math.max(3, Math.round(fontPx * 0.16));
+          ctx.shadowOffsetY = 2;
+        }
+        ctx.fillStyle = wm.textColor || '#FFFFFF';
+        ctx.fillText(label, 0, 0);
+      }
+      ctx.restore();
+    };
+
+    ctx.clearRect(0, 0, cw, ch);
+    if (wm.tiled) {
+      const positions = [0.2, 0.5, 0.8];
+      for (const py of positions) {
+        for (const px of positions) {
+          drawSingleStamp(cw * px, ch * py, 0.72);
+        }
+      }
+    } else {
+      drawSingleStamp(cw * wm.posX, ch * wm.posY, 1);
+    }
+
+    try {
+      return canvas.toDataURL('image/png');
+    } catch {
+      return '';
+    }
+  }, [project.watermark, trackVisibility.w1, targetDimensions]);
+
   const buildPayload = (
-    action: 'export' | 'snapshot' | 'extract_audio' | 'split'
+    action: 'export' | 'snapshot' | 'extract_audio' | 'split',
+    watermarkPngOverride?: string
   ): Record<string, string> => {
     const firstClip = project.videoClips[0];
     const lastClip = project.videoClips[project.videoClips.length - 1];
@@ -2441,6 +3713,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     const vfx = project.vfx;
     const exp = project.exportSettings;
     const dsp = project.audioDsp ?? DEFAULT_AUDIO_DSP;
+    const wm = project.watermark ?? DEFAULT_WATERMARK;
     const overlayPng = trackVisibility.t1 ? buildTextOverlayPngDataUrl() : '';
     const effectiveVideoClips = trackVisibility.v2
       ? project.videoClips
@@ -2512,7 +3785,28 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     if (overlayPng) {
       payload.overlayPng = overlayPng;
     }
+    if (watermarkPngOverride) {
+      payload.watermarkPng = watermarkPngOverride;
+      if (!wm.fullDuration) {
+        payload.watermarkStart = String(Math.max(0, wm.startSec).toFixed(3));
+        payload.watermarkEnd = String(Math.max(wm.startSec + 0.2, wm.endSec).toFixed(3));
+      }
+    }
     return payload;
+  };
+
+  const executeExport = async (action: 'export' | 'snapshot' | 'extract_audio' | 'split') => {
+    if (isPreparingExport) return;
+    setIsPreparingExport(true);
+    try {
+      const wmPng =
+        action === 'export' || action === 'snapshot' ? await buildWatermarkPngDataUrl() : '';
+      const payload = buildPayload(action, wmPng || undefined);
+      setShowExportConfirm(false);
+      onExport(payload);
+    } finally {
+      setIsPreparingExport(false);
+    }
   };
 
   const hasKeyframeAtPlayhead = useMemo(() => {
@@ -2573,24 +3867,15 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     );
   };
 
-  const handleToggleTrackVisibility = (track: 't1' | 'v1' | 'v2' | 'a1' | 'a2') => {
-    if (track === 'a1') {
-      const next = !trackVisibility.a1;
-      setTrackVisibility((t) => ({...t, a1: next}));
-      commitProject((prev) => ({...prev, masterMuted: !next}));
-      return;
-    }
-    setTrackVisibility((t) => ({...t, [track]: !t[track]}));
-  };
-
   const activeTabTitle: Record<VideoEditorTab, string> = {
-    trim: tr("Klip & Geçişler", "Clip & Transitions"),
-    audio: tr("Ses Stüdyosu", "Audio Studio"),
-    transform: tr("Kadraj & Dönüştür", "Crop & Transform"),
-    color: tr("Renk, RGB Scope & LUT", "Color, RGB Scope & LUT"),
-    text: tr("Metin & Altyazılar", "Text & Subtitles"),
-    fx: tr("Hız, Keyframe & VFX", "Speed, Keyframes & VFX"),
-    export: tr("Dışa Aktarma Ayarları", "Export Settings"),
+    trim: tr('Klip & Geçişler', 'Clip & Transitions'),
+    audio: tr('Ses Stüdyosu', 'Audio Studio'),
+    transform: tr('Kadraj & Dönüştür', 'Crop & Transform'),
+    color: tr('Renk, RGB Scope & LUT', 'Color, RGB Scope & LUT'),
+    text: tr('Metin & Altyazılar', 'Text & Subtitles'),
+    watermark: tr('Filigran & Marka', 'Watermark & Brand'),
+    fx: tr('Hız, Keyframe & VFX', 'Speed, Keyframes & VFX'),
+    export: tr('Dışa Aktarma Ayarları', 'Export Settings'),
   };
 
   // ============================================================================
@@ -2612,14 +3897,14 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
 
     return (
       <div
-        className={`flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0E1117] ${
+        className={`flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0D0D10] ${
           isPortraitMode
             ? 'border-t border-white/[0.08] shadow-[0_-10px_30px_rgba(0,0,0,0.65)]'
             : ''
         }`}
       >
         {/* Clean Contextual Drawer Header (Premiere iOS / ProCut pattern) */}
-        <div className="flex h-9 shrink-0 items-center justify-between border-b border-white/[0.07] bg-[#12151E] px-3">
+        <div className="flex h-9 shrink-0 items-center justify-between border-b border-white/[0.07] bg-[#121216] px-3">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold tracking-tight text-white">
               {activeTabTitle[activeTab]}
@@ -2634,7 +3919,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             <button
               type="button"
               onClick={() => setIsInspectorOpen(false)}
-              className="flex items-center gap-1 rounded-md bg-white/[0.08] px-2.5 py-1 text-[11px] font-bold text-[#F5B82E] transition-colors hover:bg-white/[0.14]"
+              className="flex items-center gap-1 rounded-md bg-white/[0.08] px-2.5 py-1 text-[11px] font-bold text-[#FB7185] transition-colors hover:bg-white/[0.14]"
             >
               <Check className="h-3 w-3" />
               <span>{tr('Tamam', 'Done')}</span>
@@ -3043,7 +4328,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                   <button
                     type="button"
                     onClick={handleSplitAtPlayhead}
-                    className="flex items-center gap-1.5 rounded-lg border border-[#F5B82E]/40 bg-[#F5B82E]/12 px-2.5 py-1.5 text-[11px] font-bold text-[#F5B82E] transition-colors hover:bg-[#F5B82E]/20"
+                    className="flex items-center gap-1.5 rounded-lg border border-[#F43F5E]/40 bg-[#F43F5E]/14 px-2.5 py-1.5 text-[11px] font-bold text-[#FB7185] transition-colors hover:bg-[#F43F5E]/22"
                   >
                     <Scissors className="h-3.5 w-3.5" />
                     <span>{tr('İmleçten Böl', 'Split at Playhead')}</span>
@@ -3333,7 +4618,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                       onClick={() => updateDsp({limiter: !dsp.limiter})}
                       className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-colors ${
                         dsp.limiter
-                          ? 'border-[#F5B82E] bg-[#F5B82E]/18 text-[#F5B82E]'
+                          ? 'border-[#FB923C] bg-[#FB923C]/18 text-[#FB923C]'
                           : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
                       }`}
                     >
@@ -3531,6 +4816,74 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                   }}
                 />
               </div>
+            </div>
+
+            {/* Toggleable Free Positioning Mode Card */}
+            <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`flex h-7 w-7 items-center justify-center rounded-lg border ${
+                      freePositionMode
+                        ? 'border-[#38BDF8]/50 bg-[#38BDF8]/15 text-[#38BDF8]'
+                        : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
+                    }`}
+                  >
+                    <Move className="h-3.5 w-3.5" />
+                  </span>
+                  <div>
+                    <p className="text-xs font-extrabold text-[var(--ink)]">
+                      {tr('Serbest Yerleşim Modu', 'Free Positioning Mode')}
+                    </p>
+                    <p className="text-[10px] text-[var(--muted)]">
+                      {freePositionMode
+                        ? tr(
+                            'Açık · Video, metin ve katmanları ekrandan sürükleyin.',
+                            'ON · Drag video frame, text, and overlays on canvas.'
+                          )
+                        : tr(
+                            'Kapalı · Konum seçerken açıp serbestçe sürükleyebilirsiniz.',
+                            'OFF · Toggle on to freely drag elements on canvas.'
+                          )}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleToggleFreePositionMode}
+                  className={`shrink-0 rounded-lg border px-3 py-1.5 text-[11px] font-extrabold transition-colors ${
+                    freePositionMode
+                      ? 'border-[#38BDF8] bg-[#38BDF8]/20 text-[#38BDF8]'
+                      : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:border-white/20 hover:text-[var(--ink)]'
+                  }`}
+                >
+                  {freePositionMode ? tr('Açık', 'ON') : tr('Kapalı', 'OFF')}
+                </button>
+              </div>
+
+              {(Math.abs(project.canvasPosX ?? 0) > 0.2 ||
+                Math.abs(project.canvasPosY ?? 0) > 0.2 ||
+                freePositionMode) && (
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-[var(--inset)] px-2.5 py-1.5">
+                  <span className="font-mono-num text-[10px] font-bold text-[var(--muted)]">
+                    X: {(project.canvasPosX ?? 0) > 0 ? '+' : ''}
+                    {(project.canvasPosX ?? 0).toFixed(1)}% · Y:{' '}
+                    {(project.canvasPosY ?? 0) > 0 ? '+' : ''}
+                    {(project.canvasPosY ?? 0).toFixed(1)}%
+                  </span>
+                  {(Math.abs(project.canvasPosX ?? 0) > 0.2 ||
+                    Math.abs(project.canvasPosY ?? 0) > 0.2) && (
+                    <button
+                      type="button"
+                      onClick={handleResetCanvasPosition}
+                      className="flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold text-[var(--ink)] hover:border-[#38BDF8]/50 hover:text-[#38BDF8]"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      <span>{tr('Merkeze Sıfırla', 'Center Frame')}</span>
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -3911,31 +5264,44 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                     </select>
 
                     <div className="grid grid-cols-3 gap-1">
-                      {(['top', 'center', 'bottom'] as const).map((pos) => (
-                        <button
-                          key={pos}
-                          type="button"
-                          onClick={() =>
-                            commitProject((prev) => ({
-                              ...prev,
-                              textClips: prev.textClips.map((tItem) =>
-                                tItem.id === selectedTextClip.id ? {...tItem, posY: pos} : tItem
-                              ),
-                            }))
-                          }
-                          className={`rounded-lg border py-1 text-[10px] font-bold uppercase ${
-                            selectedTextClip.posY === pos
-                              ? 'morph-accent-solid border-transparent'
-                              : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
-                          }`}
-                        >
-                          {pos === 'top'
-                            ? tr('Üst', 'Top')
-                            : pos === 'center'
-                              ? tr('Orta', 'Mid')
-                              : tr('Alt', 'Bot')}
-                        </button>
-                      ))}
+                      {(['top', 'center', 'bottom'] as const).map((pos) => {
+                        const isPresetActive =
+                          selectedTextClip.customPosX === undefined &&
+                          selectedTextClip.customPosY === undefined &&
+                          selectedTextClip.posY === pos;
+                        return (
+                          <button
+                            key={pos}
+                            type="button"
+                            onClick={() =>
+                              commitProject((prev) => ({
+                                ...prev,
+                                textClips: prev.textClips.map((tItem) =>
+                                  tItem.id === selectedTextClip.id
+                                    ? {
+                                        ...tItem,
+                                        posY: pos,
+                                        customPosX: undefined,
+                                        customPosY: undefined,
+                                      }
+                                    : tItem
+                                ),
+                              }))
+                            }
+                            className={`rounded-lg border py-1 text-[10px] font-bold uppercase ${
+                              isPresetActive
+                                ? 'morph-accent-solid border-transparent'
+                                : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
+                            }`}
+                          >
+                            {pos === 'top'
+                              ? tr('Üst', 'Top')
+                              : pos === 'center'
+                                ? tr('Orta', 'Mid')
+                                : tr('Alt', 'Bot')}
+                          </button>
+                        );
+                      })}
                     </div>
 
                     <div className="grid grid-cols-4 gap-1">
@@ -3982,6 +5348,59 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                       <option value="slide_up">Slide Up</option>
                       <option value="typewriter">Typewriter</option>
                     </select>
+                  </div>
+
+                  {/* Free Text Positioning Toggle & Coordinate Bar */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-[var(--inset)] px-2.5 py-1.5">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleToggleFreePositionMode}
+                        className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[10px] font-extrabold transition-colors ${
+                          freePositionMode
+                            ? 'border-[#38BDF8] bg-[#38BDF8]/20 text-[#38BDF8]'
+                            : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)]'
+                        }`}
+                      >
+                        <Move className="h-3 w-3" />
+                        <span>
+                          {freePositionMode
+                            ? tr('Serbest Konum: Açık', 'Free Position: ON')
+                            : tr('Serbest Konum: Kapalı', 'Free Position: OFF')}
+                        </span>
+                      </button>
+                      {typeof selectedTextClip.customPosX === 'number' &&
+                        typeof selectedTextClip.customPosY === 'number' && (
+                          <span className="font-mono-num text-[10px] font-bold text-[#38BDF8]">
+                            {Math.round(selectedTextClip.customPosX * 100)}% ·{' '}
+                            {Math.round(selectedTextClip.customPosY * 100)}%
+                          </span>
+                        )}
+                    </div>
+                    {typeof selectedTextClip.customPosX === 'number' && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          commitProject((prev) => ({
+                            ...prev,
+                            textClips: prev.textClips.map((tItem) =>
+                              tItem.id === selectedTextClip.id
+                                ? {
+                                    ...tItem,
+                                    customPosX: undefined,
+                                    customPosY: undefined,
+                                    posY: 'center',
+                                  }
+                                : tItem
+                            ),
+                          }))
+                        }
+                        className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-0.5 text-[10px] font-bold text-[var(--muted)] hover:text-[var(--ink)]"
+                      >
+                        <RotateCcw className="h-2.5 w-2.5" />
+                        <span>{tr('Ortala', 'Center')}</span>
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
@@ -4088,9 +5507,190 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
           </div>
         )}
 
-        {/* TAB 5: SPEED (0.25x - 4x) & VISUAL EFFECTS */}
+        {/* TAB 4B: DEDICATED WATERMARK & BRANDING STUDIO */}
+        {activeTab === 'watermark' && (
+          <WatermarkPanel
+            isTr={isTr}
+            watermark={project.watermark ?? DEFAULT_WATERMARK}
+            totalTimelineDur={totalTimelineDur}
+            freePositionMode={freePositionMode}
+            onToggleFreePositionMode={handleToggleFreePositionMode}
+            onChange={updateWatermark}
+            onReset={resetWatermark}
+          />
+        )}
+
+        {/* TAB 5: VISUAL FX GALLERY, SPEED (0.25x - 4x) & MOTION EFFECTS */}
         {activeTab === 'fx' && (
           <div className="space-y-3">
+            {/* Live Visual FX Studio Gallery (12 Presets + Intensity Slider) */}
+            <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-[#F43F5E]" />
+                  <span className="text-xs font-extrabold text-[var(--ink)]">
+                    {tr('Görsel Video Efektleri (FX)', 'Visual Video Effects (FX)')}
+                  </span>
+                </div>
+                {(project.vfx.visualFx ?? 'none') !== 'none' && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      commitProject((prev) => ({
+                        ...prev,
+                        vfx: {...prev.vfx, visualFx: 'none'},
+                      }))
+                    }
+                    className="flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold text-[var(--muted)] hover:border-rose-400/50 hover:text-rose-300"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    <span>{tr('Efekti Kaldır', 'Clear FX')}</span>
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+                {VISUAL_FX_PRESETS.map((fxItem) => {
+                  const active = (project.vfx.visualFx ?? 'none') === fxItem.id;
+                  return (
+                    <button
+                      key={fxItem.id}
+                      type="button"
+                      onClick={() =>
+                        commitProject((prev) => ({
+                          ...prev,
+                          vfx: {
+                            ...prev.vfx,
+                            visualFx: fxItem.id,
+                            visualFxIntensity: prev.vfx.visualFxIntensity ?? 75,
+                          },
+                        }))
+                      }
+                      className={`group flex flex-col overflow-hidden rounded-xl border transition-all ${
+                        active
+                          ? 'border-[#F43F5E] bg-[#F43F5E]/15 ring-1 ring-[#F43F5E]'
+                          : 'border-[var(--line)] bg-[var(--inset)] hover:border-white/20'
+                      }`}
+                    >
+                      <div className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden bg-black">
+                        <img
+                          src={previewThumbSrc}
+                          alt={isTr ? fxItem.labelTr : fxItem.labelEn}
+                          style={{filter: fxItem.previewFilter}}
+                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          draggable={false}
+                        />
+                        {fxItem.id === 'vhs' && (
+                          <div
+                            className="pointer-events-none absolute inset-0 opacity-65"
+                            style={{
+                              backgroundImage:
+                                'repeating-linear-gradient(0deg, rgba(0,0,0,0.35) 0px, rgba(0,0,0,0.35) 1px, transparent 1px, transparent 3px)',
+                            }}
+                          />
+                        )}
+                        {fxItem.id === 'glitch' && (
+                          <div
+                            className="pointer-events-none absolute inset-0"
+                            style={{
+                              background:
+                                'linear-gradient(90deg, rgba(244,63,94,0.32), transparent 30%, transparent 70%, rgba(56,189,248,0.32))',
+                              mixBlendMode: 'screen',
+                            }}
+                          />
+                        )}
+                        {fxItem.id === 'cinema_grain' && (
+                          <div className="pointer-events-none absolute inset-0 flex flex-col justify-between">
+                            <div className="h-[14%] bg-black" />
+                            <div className="h-[14%] bg-black" />
+                          </div>
+                        )}
+                        {fxItem.id === 'neon_glow' && (
+                          <div
+                            className="pointer-events-none absolute inset-0"
+                            style={{
+                              background:
+                                'radial-gradient(circle at 50% 45%, rgba(192,132,252,0.4), transparent 72%)',
+                              mixBlendMode: 'screen',
+                            }}
+                          />
+                        )}
+                        {fxItem.id === 'duotone' && (
+                          <div
+                            className="pointer-events-none absolute inset-0"
+                            style={{
+                              background:
+                                'linear-gradient(135deg, rgba(244,63,94,0.48), rgba(56,189,248,0.48))',
+                              mixBlendMode: 'color',
+                            }}
+                          />
+                        )}
+                        {fxItem.id === 'fisheye' && (
+                          <div
+                            className="pointer-events-none absolute inset-0"
+                            style={{
+                              background:
+                                'radial-gradient(circle at center, transparent 48%, rgba(0,0,0,0.85) 100%)',
+                            }}
+                          />
+                        )}
+                        {fxItem.id === 'crt' && (
+                          <div
+                            className="pointer-events-none absolute inset-0 opacity-70"
+                            style={{
+                              backgroundImage:
+                                'repeating-linear-gradient(0deg, rgba(0,0,0,0.5) 0px, rgba(0,0,0,0.5) 1px, transparent 1px, transparent 3px)',
+                            }}
+                          />
+                        )}
+                        {fxItem.id === 'mirror' && (
+                          <div className="pointer-events-none absolute inset-y-0 left-1/2 w-[1.5px] -translate-x-1/2 bg-white/75" />
+                        )}
+                        <span
+                          style={{color: fxItem.accent}}
+                          className="absolute bottom-1 left-1 rounded bg-black/75 px-1 py-0.5 text-[7.5px] font-black tracking-wider backdrop-blur-sm"
+                        >
+                          {fxItem.tag}
+                        </span>
+                        {active && (
+                          <span className="absolute right-1 top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#F43F5E] text-white shadow">
+                            <Check className="h-2.5 w-2.5" />
+                          </span>
+                        )}
+                      </div>
+                      <span
+                        className={`truncate px-1 py-1 text-center text-[10px] font-bold ${
+                          active ? 'text-[#FB7185]' : 'text-[var(--muted)]'
+                        }`}
+                      >
+                        {isTr ? fxItem.labelTr : fxItem.labelEn}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {(project.vfx.visualFx ?? 'none') !== 'none' && (
+                <div className="pt-1">
+                  <NleSlider
+                    label={tr('Efekt Yoğunluğu (FX Intensity)', 'FX Intensity')}
+                    value={project.vfx.visualFxIntensity ?? 75}
+                    min={10}
+                    max={100}
+                    step={5}
+                    defaultValue={75}
+                    valueText={`${project.vfx.visualFxIntensity ?? 75}%`}
+                    onChange={(val) =>
+                      commitProject((prev) => ({
+                        ...prev,
+                        vfx: {...prev.vfx, visualFxIntensity: val},
+                      }))
+                    }
+                  />
+                </div>
+              )}
+            </div>
+
             <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3">
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-xs font-extrabold text-[var(--ink)]">
@@ -4692,11 +6292,16 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => onExport(buildPayload('export'))}
-                  className="morph-accent-btn flex min-h-[46px] items-center justify-center gap-1.5 rounded-xl px-5 py-2.5 text-xs font-extrabold shadow-md transition-transform active:scale-[0.98]"
+                  disabled={isPreparingExport}
+                  onClick={() => void executeExport('export')}
+                  className="morph-accent-btn flex min-h-[46px] items-center justify-center gap-1.5 rounded-xl px-5 py-2.5 text-xs font-extrabold shadow-md transition-transform active:scale-[0.98] disabled:opacity-60"
                 >
                   <Check className="h-4 w-4" />
-                  <span>{tr('Videoyu Dışa Aktar', 'Render & Export Video')}</span>
+                  <span>
+                    {isPreparingExport
+                      ? tr('Hazırlanıyor…', 'Preparing…')
+                      : tr('Videoyu Dışa Aktar', 'Render & Export Video')}
+                  </span>
                 </button>
               </div>
             </div>
@@ -4706,6 +6311,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       </div>
     );
   };
+
+  const hasActiveWatermark = Boolean(project.watermark && project.watermark.mode !== 'none');
 
   const studioHeaderNode = (
     <StudioHeader
@@ -4735,7 +6342,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       onToggleSplitCompare={() => setSplitCompareEnabled((s) => !s)}
       onToggleGrid={() => setShowGrid((g) => !g)}
       onToggleOrientation={toggleOrientationLock}
-      onExport={() => onExport(buildPayload('export'))}
+      onExport={() => setShowExportConfirm(true)}
     />
   );
 
@@ -4756,6 +6363,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       isInGap={isInGap}
       isPortraitMode={isPortraitMode}
       isInspectorOpen={isInspectorOpen}
+      isExpandedWheelMode={isExpandedWheelMode}
       isFullscreenPreview={isFullscreenPreview}
       previewHeightVh={previewHeightVh}
       isResizingPreview={isResizingPreview}
@@ -4764,8 +6372,12 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       splitComparePct={splitComparePct}
       showGrid={showGrid}
       isCropTabActive={activeTab === 'transform' && (!isPortraitMode || isInspectorOpen)}
+      isWatermarkTabActive={activeTab === 'watermark' && (!isPortraitMode || isInspectorOpen)}
+      freePositionMode={freePositionMode}
+      snapCenterGuides={snapCenterGuides}
       trackVisibility={trackVisibility}
       selectedClip={selectedClip}
+      selectedTextId={selectedTextId}
       activeTimelineClip={activeTimelineClip ?? undefined}
       activeV2Clip={activeV2Clip ?? undefined}
       activeTextOverlays={activeTextOverlays}
@@ -4781,8 +6393,13 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       onLoadedMetadata={handleLoadedMetadata}
       onTimeUpdate={handleTimeUpdate}
       onSetPlaying={setIsPlaying}
+      onToggleFreePositionMode={handleToggleFreePositionMode}
+      onResetCanvasPosition={handleResetCanvasPosition}
+      onStartVideoCanvasDrag={startVideoCanvasDrag}
+      onStartTextDrag={startTextDrag}
       onStartCropDrag={startCropDrag}
       onStartPipDrag={startPipDrag}
+      onStartWatermarkDrag={startWatermarkDrag}
       onChangeSplitComparePct={setSplitComparePct}
       onStartPreviewResize={startPreviewResize}
       onCyclePreviewHeight={cyclePreviewHeight}
@@ -4793,7 +6410,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       onRedo={handleRedo}
       onQuickToggleKeyframe={handleQuickToggleKeyframe}
       onToggleMute={() => commitProject((prev) => ({...prev, masterMuted: !prev.masterMuted}))}
-      onCaptureSnapshot={() => onExport(buildPayload('snapshot'))}
+      onCaptureSnapshot={() => void executeExport('snapshot')}
     />
   );
 
@@ -4803,60 +6420,123 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       project={project}
       playhead={playhead}
       totalTimelineDur={totalTimelineDur}
+      canvasDuration={canvasDuration}
+      sourceDuration={duration || totalTimelineDur}
       timelineZoom={timelineZoom}
+      selectedLayerType={selectedLayerType}
+      activeDragLaneHint={activeDragLaneHint}
       selectedClip={selectedClip}
       selectedTextId={selectedTextId}
+      selectedAudioId={selectedAudioId}
       thumbnails={thumbnails}
       waveformBars={waveformBars}
       waveformStatus={waveformStatus}
       isPortraitMode={isPortraitMode}
       isInspectorOpen={isInspectorOpen}
-      isPlaying={isPlaying}
+      isExpandedWheelMode={isExpandedWheelMode}
+      freeTimelineMode={freeTimelineMode}
       snapGuideTime={snapGuideTime}
       trackVisibility={trackVisibility}
       timelineScrollRef={timelineScrollRef}
       timelineTrackRef={timelineTrackRef}
-      onToggleTrackVisibility={handleToggleTrackVisibility}
-      onSelectClip={(id) => setSelectedClipId(id)}
-      onSelectTextClip={(id) => {
+      onSelectClip={(id) => {
+        setSelectedClipId(id);
+        setSelectedLayerType('video');
+      }}
+      onSelectTextClip={(id, openInspector = false) => {
         setSelectedTextId(id);
-        setActiveTab('text');
-        if (isPortraitMode) setIsInspectorOpen(true);
+        setSelectedLayerType('text');
+        if (openInspector) {
+          setActiveTab('text');
+          if (isPortraitMode) setIsInspectorOpen(true);
+        }
+      }}
+      onSelectAudioClip={(id) => {
+        setSelectedAudioId(id);
+        setSelectedLayerType('audio');
+      }}
+      onSelectWatermark={() => {
+        setSelectedLayerType('watermark');
+      }}
+      onOpenItemPopup={(type, id) => {
+        if (type === 'video') {
+          setSelectedClipId(id);
+          setSelectedLayerType('video');
+          setItemPopup({type: 'video', id});
+        } else if (type === 'text') {
+          setSelectedTextId(id);
+          setSelectedLayerType('text');
+          setItemPopup({type: 'text', id});
+        } else {
+          let resolvedId = id;
+          if (id.startsWith('orig:')) {
+            const detached = detachOriginalAudioClip(id.slice(5), true);
+            if (!detached) return;
+            resolvedId = detached;
+          }
+          setSelectedAudioId(resolvedId);
+          setSelectedLayerType('audio');
+          setItemPopup({type: 'audio', id: resolvedId});
+        }
+      }}
+      onOpenSeamTransition={(type, id) => {
+        if (type === 'video') {
+          setSelectedClipId(id);
+          setSelectedLayerType('video');
+        } else if (type === 'audio') {
+          setSelectedAudioId(id);
+          setSelectedLayerType('audio');
+        } else {
+          setSelectedTextId(id);
+          setSelectedLayerType('text');
+        }
+        setSeamTransition({type, id});
       }}
       onQuickAddText={() => {
         handleAddTextClip();
+        setSelectedLayerType('text');
         setActiveTab('text');
         if (isPortraitMode) setIsInspectorOpen(true);
       }}
+      onQuickAddAudio={() => {
+        setSelectedLayerType('audio');
+        setActiveTab('audio');
+        if (isPortraitMode) setIsInspectorOpen(true);
+      }}
+      onOpenWatermarkTab={() => {
+        setSelectedLayerType('watermark');
+        setActiveTab('watermark');
+        if (isPortraitMode) setIsInspectorOpen(true);
+      }}
       onImportVideos={triggerImportVideos}
-      onToggleSelectedClipLayer={handleToggleSelectedClipLayer}
+      onToggleSelectedLayerRow={handleToggleSelectedClipLayer}
       onOpenFxOrColor={(tab) => {
         setActiveTab(tab);
         if (isPortraitMode) setIsInspectorOpen(true);
-      }}
-      onRemoveExternalAudio={(audioId) => {
-        removeAudioClipBlob(audioId);
-        commitProject((prev) => ({
-          ...prev,
-          audioClips: prev.audioClips.filter((x) => x.id !== audioId),
-        }));
       }}
       onStartTimelineDrag={startTimelineDrag}
       onTouchStart={handleTimelineTouchStart}
       onTouchMove={handleTimelineTouchMove}
       onTouchEnd={handleTimelineTouchEnd}
       onSplit={handleSplitAtPlayhead}
+      onCutSide={handleCutAtPlayhead}
       onDeleteKeepGap={handleNormalDelete}
       onRippleDelete={handleRippleDelete}
-      onMoveClipStep={handleMoveClipStep}
-      onDuplicateClip={handleDuplicateClip}
+      onDuplicate={handleDuplicateClip}
       onFreezeFrame={handleFreezeFrame}
-      onToggleSnap={() =>
-        commitProject((prev) => ({...prev, snapEnabled: !prev.snapEnabled}))
+      onToggleFreeTimelineMode={handleToggleFreeTimelineMode}
+      onToggleSnap={() => {
+        if (freeTimelineMode) setFreeTimelineMode(false);
+        commitProject((prev) => ({...prev, snapEnabled: !prev.snapEnabled}));
+      }}
+      onZoomIn={() =>
+        setTimelineZoom((z) => (z === 1 ? 2 : z === 2 ? 4 : 8))
       }
-      onCycleZoom={() =>
-        setTimelineZoom((z) => (z === 1 ? 2 : z === 2 ? 4 : z === 4 ? 8 : 1))
+      onZoomOut={() =>
+        setTimelineZoom((z) => (z === 8 ? 4 : z === 4 ? 2 : 1))
       }
+      onResetZoom={() => setTimelineZoom(1)}
+      onLocatePlayhead={() => locatePlayheadInTimeline(true)}
     />
   );
 
@@ -4866,20 +6546,160 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       activeTab={activeTab}
       isInspectorOpen={isInspectorOpen}
       isPortraitMode={isPortraitMode}
+      hasActiveWatermark={hasActiveWatermark}
       onSelectTab={handleSelectDockTab}
     />
   );
 
+  // Popup state resolution for Video, Audio, and Text items
+  const popupVideoClip =
+    itemPopup?.type === 'video'
+      ? project.videoClips.find((c) => c.id === itemPopup.id)
+      : undefined;
+  const popupVideoCanSplit = Boolean(
+    popupVideoClip &&
+      playhead > popupVideoClip.timelineStart + 0.14 &&
+      playhead < clipTimelineEnd(popupVideoClip) - 0.14
+  );
+  const popupVideoCanDelete = Boolean(
+    popupVideoClip &&
+      (getClipTrackIndex(popupVideoClip) >= 1 ||
+        project.videoClips.filter((c) => getClipTrackIndex(c) === 0).length > 1)
+  );
+
+  const popupAudioClip =
+    itemPopup?.type === 'audio'
+      ? project.audioClips.find((a) => a.id === itemPopup.id)
+      : undefined;
+  const popupTextClip =
+    itemPopup?.type === 'text'
+      ? project.textClips.find((t) => t.id === itemPopup.id)
+      : undefined;
+  const popupMediaCanSplit =
+    itemPopup?.type === 'audio' && popupAudioClip
+      ? playhead > popupAudioClip.timelineStart + 0.25 &&
+        playhead <
+          popupAudioClip.timelineStart +
+            Math.max(0.25, popupAudioClip.sourceEnd - popupAudioClip.sourceStart) -
+            0.25
+      : itemPopup?.type === 'text' && popupTextClip
+        ? playhead > popupTextClip.timelineStart + 0.25 &&
+          playhead < popupTextClip.timelineStart + popupTextClip.durationSec - 0.25
+        : false;
+
+  // Seam Transition Picker resolution for Video, Audio, and Text
+  const seamTarget = useMemo(() => {
+    if (!seamTransition) return null;
+    if (seamTransition.type === 'video') {
+      const vc = project.videoClips.find((c) => c.id === seamTransition.id);
+      if (!vc) return null;
+      return {
+        type: 'video' as const,
+        id: vc.id,
+        label: vc.label,
+        startSec: vc.timelineStart,
+        transition: vc.transitionIn,
+        durationSec: vc.transitionDurationSec || 0.5,
+      };
+    }
+    if (seamTransition.type === 'audio') {
+      const ac = project.audioClips.find((a) => a.id === seamTransition.id);
+      if (!ac) return null;
+      return {
+        type: 'audio' as const,
+        id: ac.id,
+        label: ac.label,
+        startSec: ac.timelineStart,
+        transition: ac.transitionIn || (ac.fadeInSec > 0.05 ? 'dissolve' : 'none'),
+        durationSec: ac.transitionDurationSec || Math.max(0.3, ac.fadeInSec || 0.5),
+      };
+    }
+    const tc = project.textClips.find((t) => t.id === seamTransition.id);
+    if (!tc) return null;
+    return {
+      type: 'text' as const,
+      id: tc.id,
+      label: tc.text,
+      startSec: tc.timelineStart,
+      transition: tc.transitionIn || (tc.animation === 'none' ? 'none' : 'fade'),
+      durationSec: tc.transitionDurationSec || 0.4,
+    };
+  }, [seamTransition, project.videoClips, project.audioClips, project.textClips]);
+
+  const handlePreviewTransitionSeam = () => {
+    if (!seamTarget) return;
+    const previewStart = Math.max(0, seamTarget.startSec - 0.55);
+    setSeamTransition(null);
+    seekTimelineTo(previewStart);
+    const v = videoRef.current;
+    if (v) {
+      const mapped = timelineToSourceTime(project.videoClips, previewStart, 0);
+      if (mapped.clip && !mapped.isInGap) {
+        v.currentTime = mapped.sourceTime;
+      }
+      void v.play().catch(() => {});
+    }
+    setIsPlaying(true);
+  };
+
+  const hideEditorWheelFab =
+    wheelMenuOpen ||
+    isInspectorOpen ||
+    showProjectsModal ||
+    showExportConfirm ||
+    showUnsavedExitDialog ||
+    Boolean(itemPopup) ||
+    Boolean(seamTransition);
+
   return (
-    <div className="fixed inset-0 z-50 flex h-[100dvh] flex-col overflow-hidden bg-[#07080B] text-[var(--ink)] select-none">
+    <div className="fixed inset-0 z-50 flex h-[100dvh] flex-col overflow-hidden bg-[#08080A] text-[var(--ink)] select-none">
       {studioHeaderNode}
 
       {isPortraitMode ? (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
           {previewMonitorNode}
           {multiTrackTimelineNode}
-          {isInspectorOpen && renderInspectorPanel()}
-          {studioDockNode}
+
+          {/* Normal Mode: docked inspector */}
+          {!isExpandedWheelMode && isInspectorOpen && renderInspectorPanel()}
+
+          {/* Expanded Near-Fullscreen Mode: Inspector pops up as a floating bottom sheet */}
+          {isExpandedWheelMode && isInspectorOpen && (
+            <>
+              <div
+                onClick={() => setIsInspectorOpen(false)}
+                className="fixed inset-0 z-[56] bg-black/45 backdrop-blur-[1px]"
+              />
+              <div className="pb-safe fixed inset-x-0 bottom-0 z-[58] flex max-h-[60dvh] flex-col overflow-hidden rounded-t-2xl border-t border-white/[0.14] bg-[#0D0D10] shadow-[0_-16px_48px_rgba(0,0,0,0.85)]">
+                {renderInspectorPanel()}
+              </div>
+            </>
+          )}
+
+          {/* Continuous Armadillo Roll-Up Morph Dock -> Video Editor Cinema Radial Wheel */}
+          <ArmadilloReelDock
+            isTr={isTr}
+            lang={lang}
+            activeTab={activeTab}
+            isInspectorOpen={isInspectorOpen}
+            previewHeightVh={previewHeightVh}
+            isResizingPreview={isResizingPreview}
+            hasActiveWatermark={hasActiveWatermark}
+            timecodeText={formatSmpteTimecode(playhead, project.fps)}
+            wheelOpen={wheelMenuOpen}
+            wheelSide={editorWheelSide}
+            hideFab={hideEditorWheelFab}
+            onSetWheelOpen={setWheelMenuOpen}
+            onChangeWheelSide={setEditorWheelSide}
+            onSelectTab={(tab) => {
+              if (isExpandedWheelMode) {
+                setActiveTab(tab);
+                setIsInspectorOpen(true);
+              } else {
+                handleSelectDockTab(tab);
+              }
+            }}
+          />
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -4893,7 +6713,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             </div>
           </div>
 
-          <div className="flex h-[205px] shrink-0 flex-col">
+          <div className="flex h-[212px] shrink-0 flex-col">
             {multiTrackTimelineNode}
           </div>
         </div>
@@ -4939,10 +6759,109 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         onDeleteProject={(id) => void deleteNleProjectIdb(id).then(setSavedProjects)}
       />
 
+      {/* FLOATING VIDEO CLIP QUICK-ACTION POPUP */}
+      <ClipQuickActionPopup
+        open={Boolean(popupVideoClip)}
+        isTr={isTr}
+        clip={popupVideoClip}
+        canDelete={popupVideoCanDelete}
+        canSplit={popupVideoCanSplit}
+        onClose={() => setItemPopup(null)}
+        onSplit={handleSplitAtPlayhead}
+        onDuplicate={handleDuplicateClip}
+        onToggleMute={() => {
+          if (!popupVideoClip) return;
+          commitProject((prev) => ({
+            ...prev,
+            videoClips: prev.videoClips.map((c) =>
+              c.id === popupVideoClip.id ? {...c, muted: !c.muted} : c
+            ),
+          }));
+        }}
+        onToggleLayer={handleToggleSelectedClipLayer}
+        onOpenFx={() => {
+          setActiveTab('fx');
+          if (isPortraitMode) setIsInspectorOpen(true);
+        }}
+        onOpenTransition={() => {
+          if (popupVideoClip) setSeamTransition({type: 'video', id: popupVideoClip.id});
+        }}
+        onDeleteKeepGap={handleNormalDelete}
+        onRippleDelete={handleRippleDelete}
+      />
+
+      {/* FLOATING AUDIO & TEXT QUICK-ACTION POPUP */}
+      <MediaLayerQuickPopup
+        open={Boolean(popupAudioClip || popupTextClip)}
+        isTr={isTr}
+        layerType={itemPopup?.type === 'audio' ? 'audio' : 'text'}
+        audioClip={popupAudioClip}
+        textClip={popupTextClip}
+        canSplit={popupMediaCanSplit}
+        onClose={() => setItemPopup(null)}
+        onSplit={handleSplitAtPlayhead}
+        onDuplicate={handleDuplicateClip}
+        onSwitchRow={handleToggleSelectedClipLayer}
+        onToggleMute={
+          popupAudioClip
+            ? () => {
+                commitProject((prev) => ({
+                  ...prev,
+                  audioClips: prev.audioClips.map((a) =>
+                    a.id === popupAudioClip.id ? {...a, muted: !a.muted} : a
+                  ),
+                }));
+              }
+            : undefined
+        }
+        onOpenInspector={() => {
+          setActiveTab(itemPopup?.type === 'audio' ? 'audio' : 'text');
+          if (isPortraitMode) setIsInspectorOpen(true);
+        }}
+        onOpenTransition={() => {
+          if (itemPopup && (itemPopup.type === 'audio' || itemPopup.type === 'text')) {
+            setSeamTransition({type: itemPopup.type, id: itemPopup.id});
+          }
+        }}
+        onDelete={handleNormalDelete}
+      />
+
+      {/* INTERACTIVE CUT-SEAM TRANSITION PICKER POPUP (Video, Audio, & Text) */}
+      <TransitionPickerPopup
+        open={Boolean(seamTarget)}
+        isTr={isTr}
+        targetType={seamTarget?.type ?? 'video'}
+        targetId={seamTarget?.id ?? ''}
+        targetLabel={seamTarget?.label ?? ''}
+        currentTransition={seamTarget?.transition ?? 'none'}
+        currentDurationSec={seamTarget?.durationSec ?? 0.5}
+        onClose={() => setSeamTransition(null)}
+        onUpdateTransition={handleUpdateSeamTransition}
+        onPreviewTransition={handlePreviewTransitionSeam}
+      />
+
+      {/* EXPORT CONFIRMATION & SUMMARY POPUP */}
+      <ExportConfirmPopup
+        open={showExportConfirm}
+        isTr={isTr}
+        project={project}
+        targetWidth={targetDimensions.w}
+        targetHeight={targetDimensions.h}
+        totalTimelineDur={totalTimelineDur}
+        estimatedBytes={estimatedBytes}
+        isPreparingExport={isPreparingExport}
+        onClose={() => setShowExportConfirm(false)}
+        onOpenSettings={() => {
+          setActiveTab('export');
+          if (isPortraitMode) setIsInspectorOpen(true);
+        }}
+        onConfirmExport={() => void executeExport('export')}
+      />
+
       {/* Safe Unsaved-Changes Exit Confirmation Dialog */}
       {showUnsavedExitDialog && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-2xl border border-white/[0.12] bg-[#141720] p-4 shadow-2xl">
+          <div className="w-full max-w-sm rounded-2xl border border-white/[0.12] bg-[#141418] p-4 shadow-2xl">
             <h3 className="text-sm font-extrabold text-white">
               {tr('Kaydedilmemiş Değişiklikler Var', 'Unsaved Changes')}
             </h3>
@@ -4979,7 +6898,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                     onBack();
                   });
                 }}
-                className="rounded-lg bg-[#F5B82E] px-3.5 py-1.5 text-xs font-extrabold text-[#0B0D12] hover:bg-[#F7C64E]"
+                className="rounded-lg bg-[#F43F5E] px-3.5 py-1.5 text-xs font-extrabold text-white hover:bg-[#FB7185]"
               >
                 {tr('Kaydet & Çık', 'Save & Exit')}
               </button>
