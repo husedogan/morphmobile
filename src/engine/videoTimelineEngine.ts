@@ -91,9 +91,10 @@ export interface TimelineAudioClip {
   id: string;
   label: string;
   kind: 'original' | 'music' | 'voiceover';
-  trackRow?: 0 | 1; // 0 = A1 Primary Audio Row, 1 = A2 Secondary Audio Row
+  trackRow?: number; // 0 = A1, 1 = A2, 2 = A3, ...
   sourceStart: number;
   sourceEnd: number;
+  sourceDurationSec?: number; // Real source audio file length (prevents infinite right-trim)
   timelineStart: number;
   volume: number;
   muted: boolean;
@@ -109,7 +110,7 @@ export interface TimelineAudioClip {
 export interface TimelineTextClip {
   id: string;
   text: string;
-  trackRow?: 0 | 1; // 0 = T1 Primary Text Row, 1 = T2 Upper Text Row
+  trackRow?: number; // 0 = T1, 1 = T2, 2 = T3, ...
   timelineStart: number;
   durationSec: number;
   fontFamily: string;
@@ -364,7 +365,9 @@ export function computeTotalTimelineDuration(
 }
 
 export function getClipTrackIndex(clip: TimelineVideoClip): number {
-  return typeof clip.trackIndex === 'number' && clip.trackIndex >= 1 ? 1 : 0;
+  return typeof clip.trackIndex === 'number' && clip.trackIndex >= 1
+    ? Math.min(4, Math.floor(clip.trackIndex))
+    : 0;
 }
 
 export function getClipMediaId(clip: TimelineVideoClip): string {
@@ -393,7 +396,20 @@ export function findOverlayVideoClipAtTime(
   videoClips: TimelineVideoClip[],
   timelineSec: number
 ): TimelineVideoClip | null {
-  return findVideoClipAtTime(videoClips, timelineSec, 1);
+  const overlays = videoClips
+    .filter((c) => getClipTrackIndex(c) >= 1)
+    .sort(
+      (a, b) =>
+        getClipTrackIndex(b) - getClipTrackIndex(a) || a.timelineStart - b.timelineStart
+    );
+  for (const c of overlays) {
+    const start = c.timelineStart;
+    const end = clipTimelineEnd(c);
+    if (timelineSec >= start - 0.002 && timelineSec <= end + 0.002) {
+      return c;
+    }
+  }
+  return null;
 }
 
 export function timelineToSourceTime(
@@ -997,45 +1013,217 @@ export function insertFreezeFrameAtPlayhead(
   return {clips: relabelTrackClips([...packedV1, ...v2Clips]), freezeClipId: freezeId, didInsert: true};
 }
 
+export interface TrackTimeInterval {
+  id?: string;
+  start: number;
+  end: number;
+}
+
+const OVERLAP_EPS = 0.015;
+
+export function intervalsOverlap(
+  aStart: number,
+  aEnd: number,
+  bStart: number,
+  bEnd: number
+): boolean {
+  return aStart < bEnd - OVERLAP_EPS && aEnd > bStart + OVERLAP_EPS;
+}
+
+export function getAttachedV1AudioIntervals(
+  videoClips: TimelineVideoClip[]
+): TrackTimeInterval[] {
+  return videoClips
+    .filter((c) => getClipTrackIndex(c) === 0 && !c.audioDetached && !c.isFreezeFrame)
+    .map((c) => ({
+      id: `orig:${c.id}`,
+      start: c.timelineStart,
+      end: clipTimelineEnd(c),
+    }));
+}
+
+/**
+ * Resolves a desired start timestamp on a single row so the clip NEVER overlaps any
+ * existing neighbor on the same row. Slides smoothly when space is open, stops flush
+ * against neighbor edges, and cleanly hops past a neighbor when dragged across it.
+ */
+export function resolveNonOverlappingStart(
+  desiredStart: number,
+  duration: number,
+  blockers: TrackTimeInterval[],
+  fps: ProjectFps
+): number {
+  const safeDesired = Math.max(0, snapToFrame(desiredStart, fps));
+  const safeDur = Math.max(0.1, duration);
+  if (blockers.length === 0) return safeDesired;
+
+  const sorted = [...blockers]
+    .filter((b) => b.end > b.start + OVERLAP_EPS)
+    .sort((a, b) => a.start - b.start);
+
+  const hitsAny = (s: number) =>
+    sorted.some((b) => intervalsOverlap(s, s + safeDur, b.start, b.end));
+
+  if (!hitsAny(safeDesired)) return safeDesired;
+
+  const candidates: number[] = [];
+  if (!hitsAny(0)) candidates.push(0);
+
+  for (const b of sorted) {
+    const before = snapToFrame(Math.max(0, b.start - safeDur), fps);
+    if (before >= 0 && !hitsAny(before)) candidates.push(before);
+
+    const after = snapToFrame(b.end, fps);
+    if (!hitsAny(after)) candidates.push(after);
+  }
+
+  if (candidates.length === 0) {
+    const lastEnd = sorted[sorted.length - 1]?.end ?? safeDesired;
+    return snapToFrame(lastEnd, fps);
+  }
+
+  let best = candidates[0];
+  let bestDist = Math.abs(best - safeDesired);
+  for (let i = 1; i < candidates.length; i++) {
+    const d = Math.abs(candidates[i] - safeDesired);
+    if (d < bestDist) {
+      best = candidates[i];
+      bestDist = d;
+    }
+  }
+  return Math.max(0, best);
+}
+
+/**
+ * Finds the first track row index (between minRow..maxRow) where [startSec, endSec]
+ * does not collide with any existing interval on that row.
+ */
+export function findAvailableTrackRow(
+  startSec: number,
+  endSec: number,
+  intervalsForRow: (row: number) => TrackTimeInterval[],
+  preferredRow: number,
+  minRow = 0,
+  maxRow = 5
+): number {
+  const isRowFree = (row: number) =>
+    !intervalsForRow(row).some((iv) => intervalsOverlap(startSec, endSec, iv.start, iv.end));
+
+  const clampedPref = Math.max(minRow, Math.min(maxRow, Math.floor(preferredRow)));
+  if (isRowFree(clampedPref)) return clampedPref;
+
+  for (let r = clampedPref + 1; r <= maxRow; r++) {
+    if (isRowFree(r)) return r;
+  }
+  for (let r = minRow; r < clampedPref; r++) {
+    if (isRowFree(r)) return r;
+  }
+  return maxRow;
+}
+
+export function findAvailableAudioRow(
+  audioClips: TimelineAudioClip[],
+  videoClips: TimelineVideoClip[],
+  startSec: number,
+  endSec: number,
+  preferredRow = 1,
+  excludeAudioId?: string,
+  maxRow = 5
+): number {
+  const attachedOrig = getAttachedV1AudioIntervals(videoClips);
+  return findAvailableTrackRow(
+    startSec,
+    endSec,
+    (row) => {
+      const ind = audioClips
+        .filter((a) => a.kind !== 'original' && a.id !== excludeAudioId && (a.trackRow ?? 0) === row)
+        .map((a) => ({
+          id: a.id,
+          start: a.timelineStart,
+          end: a.timelineStart + Math.max(0.25, a.sourceEnd - a.sourceStart),
+        }));
+      return row === 0 ? [...attachedOrig, ...ind] : ind;
+    },
+    preferredRow,
+    0,
+    maxRow
+  );
+}
+
+export function findAvailableTextRow(
+  textClips: TimelineTextClip[],
+  startSec: number,
+  endSec: number,
+  preferredRow = 0,
+  excludeTextId?: string,
+  maxRow = 5
+): number {
+  return findAvailableTrackRow(
+    startSec,
+    endSec,
+    (row) =>
+      textClips
+        .filter((t) => t.id !== excludeTextId && (t.trackRow ?? 0) === row)
+        .map((t) => ({id: t.id, start: t.timelineStart, end: t.timelineStart + t.durationSec})),
+    preferredRow,
+    0,
+    maxRow
+  );
+}
+
 /**
  * Appends a clip from any imported ProjectMediaAssetMeta onto V1 (end of timeline)
- * or V2 Overlay/PiP (at current playhead).
+ * or V2+ Overlay/PiP (at current playhead, auto-picking a non-overlapping PiP row).
  */
 export function createAppendedVideoClip(
   existingClips: TimelineVideoClip[],
   asset: ProjectMediaAssetMeta,
-  targetTrackIndex: 0 | 1,
+  targetTrackIndex: number,
   playheadSec: number,
   fps: ProjectFps
 ): {clips: TimelineVideoClip[]; newClipId: string} {
   const v1Clips = existingClips.filter((c) => getClipTrackIndex(c) === 0);
   const v1End = v1Clips.reduce((acc, c) => Math.max(acc, clipTimelineEnd(c)), 0);
-  const clipId = `clip-${targetTrackIndex === 1 ? 'pip' : 'src'}-${Date.now().toString(36).slice(-5)}`;
+  const isPip = targetTrackIndex >= 1;
+  const clipId = `clip-${isPip ? 'pip' : 'src'}-${Date.now().toString(36).slice(-5)}`;
   const safeDur = Math.max(0.4, Number(asset.durationSec.toFixed(3)));
-  const startSec =
-    targetTrackIndex === 1
-      ? snapToFrame(Math.max(0, playheadSec), fps)
-      : snapToFrame(v1End, fps);
+  const startSec = isPip
+    ? snapToFrame(Math.max(0, playheadSec), fps)
+    : snapToFrame(v1End, fps);
+
+  const resolvedTrackIndex = isPip
+    ? findAvailableTrackRow(
+        startSec,
+        startSec + safeDur,
+        (row) =>
+          existingClips
+            .filter((c) => getClipTrackIndex(c) === row)
+            .map((c) => ({id: c.id, start: c.timelineStart, end: clipTimelineEnd(c)})),
+        Math.max(1, targetTrackIndex),
+        1,
+        4
+      )
+    : 0;
 
   const newClip: TimelineVideoClip = {
     id: clipId,
-    label: targetTrackIndex === 1 ? 'PiP' : 'Klip',
+    label: isPip ? 'PiP' : 'Klip',
     mediaId: asset.id,
-    trackIndex: targetTrackIndex,
-    pipRect: targetTrackIndex === 1 ? {...DEFAULT_PIP_RECT} : undefined,
+    trackIndex: resolvedTrackIndex,
+    pipRect: isPip ? {...DEFAULT_PIP_RECT} : undefined,
     sourceStart: 0,
     sourceEnd: safeDur,
     timelineStart: startSec,
     speed: 1,
     reversed: false,
     isFreezeFrame: false,
-    volume: targetTrackIndex === 1 ? 60 : 100,
-    muted: targetTrackIndex === 1,
+    volume: isPip ? 60 : 100,
+    muted: isPip,
     audioDetached: false,
     fadeInSec: 0,
     fadeOutSec: 0,
     opacity: 100,
-    transitionIn: targetTrackIndex === 0 && v1Clips.length > 0 ? 'dissolve' : 'none',
+    transitionIn: !isPip && v1Clips.length > 0 ? 'dissolve' : 'none',
     transitionDurationSec: 0.4,
     keyframes: [],
   };
@@ -1122,10 +1310,27 @@ export function moveVideoClipOnTimeline(
   const target = videoClips.find((c) => c.id === clipId);
   if (!target) return videoClips;
   const clampedStart = Math.max(0, snapToFrame(targetTimelineStart, fps));
+  const targetTrack = getClipTrackIndex(target);
+  const targetDur = clipTimelineDuration(target);
 
-  if (freeMode || getClipTrackIndex(target) >= 1) {
+  if (targetTrack >= 1) {
+    // Prevent two PiP overlay clips on the exact same V2/V3/V4 row from stacking on top of each other
+    const sameRowBlockers: TrackTimeInterval[] = videoClips
+      .filter((c) => c.id !== clipId && getClipTrackIndex(c) === targetTrack)
+      .map((c) => ({id: c.id, start: c.timelineStart, end: clipTimelineEnd(c)}));
+    const safeStart = resolveNonOverlappingStart(clampedStart, targetDur, sameRowBlockers, fps);
     return relabelTrackClips(
-      videoClips.map((c) => (c.id === clipId ? {...c, timelineStart: clampedStart} : c))
+      videoClips.map((c) => (c.id === clipId ? {...c, timelineStart: safeStart} : c))
+    );
+  }
+
+  if (freeMode) {
+    const v1Blockers: TrackTimeInterval[] = videoClips
+      .filter((c) => c.id !== clipId && getClipTrackIndex(c) === 0)
+      .map((c) => ({id: c.id, start: c.timelineStart, end: clipTimelineEnd(c)}));
+    const safeStart = resolveNonOverlappingStart(clampedStart, targetDur, v1Blockers, fps);
+    return relabelTrackClips(
+      videoClips.map((c) => (c.id === clipId ? {...c, timelineStart: safeStart} : c))
     );
   }
 
@@ -1141,7 +1346,6 @@ export function moveVideoClipOnTimeline(
     ]);
   }
 
-  const targetDur = clipTimelineDuration(target);
   const targetCenter = clampedStart + targetDur / 2;
   const others = v1Sorted.filter((c) => c.id !== clipId);
 
@@ -1185,18 +1389,19 @@ export function moveVideoClip2D(
   videoClips: TimelineVideoClip[],
   clipId: string,
   targetTimelineStart: number,
-  targetTrackIndex: 0 | 1,
+  targetTrackIndex: number,
   fps: ProjectFps,
   freeMode = false
 ): TimelineVideoClip[] {
   const target = videoClips.find((c) => c.id === clipId);
   if (!target) return videoClips;
   const curTrack = getClipTrackIndex(target);
+  const clampedTrack = Math.max(0, Math.min(4, Math.floor(targetTrackIndex)));
   const clampedStart = Math.max(0, snapToFrame(targetTimelineStart, fps));
 
-  if (targetTrackIndex !== curTrack) {
+  if (clampedTrack !== curTrack) {
     const v1Count = videoClips.filter((c) => getClipTrackIndex(c) === 0).length;
-    if (targetTrackIndex === 1 && curTrack === 0 && v1Count <= 1) {
+    if (clampedTrack >= 1 && curTrack === 0 && v1Count <= 1) {
       // Keep at least one clip on V1 main track — still allow free horizontal slide!
       return moveVideoClipOnTimeline(videoClips, clipId, clampedStart, fps, freeMode);
     }
@@ -1204,9 +1409,9 @@ export function moveVideoClip2D(
       c.id === clipId
         ? {
             ...c,
-            trackIndex: targetTrackIndex,
+            trackIndex: clampedTrack,
             timelineStart: clampedStart,
-            pipRect: targetTrackIndex === 1 ? c.pipRect ?? {...DEFAULT_PIP_RECT} : c.pipRect,
+            pipRect: clampedTrack >= 1 ? c.pipRect ?? {...DEFAULT_PIP_RECT} : c.pipRect,
           }
         : c
     );
@@ -1221,15 +1426,29 @@ export function moveTextClipOnTimeline(
   textId: string,
   targetStartSec: number,
   fps: ProjectFps,
-  targetRow?: 0 | 1
+  targetRow?: number
 ): TimelineTextClip[] {
-  const safeStart = Math.max(0, snapToFrame(targetStartSec, fps));
+  const target = textClips.find((t) => t.id === textId);
+  if (!target) return textClips;
+  const row = Math.max(
+    0,
+    Math.min(5, Math.floor(targetRow !== undefined ? targetRow : target.trackRow ?? 0))
+  );
+  const sameRowBlockers: TrackTimeInterval[] = textClips
+    .filter((t) => t.id !== textId && (t.trackRow ?? 0) === row)
+    .map((t) => ({id: t.id, start: t.timelineStart, end: t.timelineStart + t.durationSec}));
+  const safeStart = resolveNonOverlappingStart(
+    targetStartSec,
+    target.durationSec,
+    sameRowBlockers,
+    fps
+  );
   return textClips.map((t) =>
     t.id === textId
       ? {
           ...t,
           timelineStart: safeStart,
-          ...(targetRow !== undefined ? {trackRow: targetRow} : {}),
+          trackRow: row,
         }
       : t
   );
@@ -1243,10 +1462,23 @@ export function duplicateTextClip(
   const orig = textClips.find((t) => t.id === textId);
   if (!orig) return {textClips, newId: null};
   const newId = `txt-${Date.now().toString(36).slice(-5)}`;
+  const desiredStart = snapToFrame(orig.timelineStart + orig.durationSec + 0.1, fps);
+  const prefRow = orig.trackRow ?? 0;
+  const row = findAvailableTextRow(
+    textClips,
+    desiredStart,
+    desiredStart + orig.durationSec,
+    prefRow
+  );
+  const sameRowBlockers = textClips
+    .filter((t) => (t.trackRow ?? 0) === row)
+    .map((t) => ({id: t.id, start: t.timelineStart, end: t.timelineStart + t.durationSec}));
+  const safeStart = resolveNonOverlappingStart(desiredStart, orig.durationSec, sameRowBlockers, fps);
   const copy: TimelineTextClip = {
     ...orig,
     id: newId,
-    timelineStart: snapToFrame(orig.timelineStart + orig.durationSec + 0.1, fps),
+    trackRow: row,
+    timelineStart: safeStart,
   };
   return {textClips: [...textClips, copy], newId};
 }
@@ -1260,16 +1492,36 @@ export function trimTextClipHandle(
   fps: ProjectFps
 ): TimelineTextClip[] {
   const minDur = Math.max(0.25, framesToSec(6, fps));
+  const target = textClips.find((t) => t.id === textId);
+  if (!target) return textClips;
+  const row = target.trackRow ?? 0;
+  const sameRowOthers = textClips
+    .filter((t) => t.id !== textId && (t.trackRow ?? 0) === row)
+    .sort((a, b) => a.timelineStart - b.timelineStart);
+  const prevNeighbor = [...sameRowOthers]
+    .reverse()
+    .find((t) => t.timelineStart + t.durationSec <= target.timelineStart + 0.05);
+  const nextNeighbor = sameRowOthers.find(
+    (t) => t.timelineStart >= target.timelineStart + target.durationSec - 0.05
+  );
+
   return textClips.map((t) => {
     if (t.id !== textId) return t;
     const endSec = t.timelineStart + t.durationSec;
     if (side === 'left') {
-      const nextStart = Math.max(0, Math.min(endSec - minDur, snapToFrame(targetSec, fps)));
+      const minAllowedStart = prevNeighbor ? prevNeighbor.timelineStart + prevNeighbor.durationSec : 0;
+      const nextStart = Math.max(
+        minAllowedStart,
+        Math.min(endSec - minDur, snapToFrame(targetSec, fps))
+      );
       const nextDur = Math.max(minDur, snapToFrame(endSec - nextStart, fps));
       return {...t, timelineStart: nextStart, durationSec: nextDur};
     }
+    const maxAllowedEnd = nextNeighbor
+      ? nextNeighbor.timelineStart
+      : Math.max(maxTimelineDur, endSec + 5);
     const clampedEnd = Math.min(
-      Math.max(maxTimelineDur, endSec + 5),
+      maxAllowedEnd,
       Math.max(t.timelineStart + minDur, snapToFrame(targetSec, fps))
     );
     return {...t, durationSec: Math.max(minDur, snapToFrame(clampedEnd - t.timelineStart, fps))};
@@ -1317,15 +1569,33 @@ export function moveAudioClipOnTimeline(
   audioId: string,
   targetStartSec: number,
   fps: ProjectFps,
-  targetRow?: 0 | 1
+  targetRow?: number,
+  attachedV1Intervals: TrackTimeInterval[] = []
 ): TimelineAudioClip[] {
-  const safeStart = Math.max(0, snapToFrame(targetStartSec, fps));
+  const target = audioClips.find((a) => a.id === audioId);
+  if (!target) return audioClips;
+  const dur = Math.max(0.25, target.sourceEnd - target.sourceStart);
+  const row = Math.max(
+    0,
+    Math.min(5, Math.floor(targetRow !== undefined ? targetRow : target.trackRow ?? 0))
+  );
+  const sameRowBlockers: TrackTimeInterval[] = [
+    ...(row === 0 ? attachedV1Intervals : []),
+    ...audioClips
+      .filter((a) => a.kind !== 'original' && a.id !== audioId && (a.trackRow ?? 0) === row)
+      .map((a) => ({
+        id: a.id,
+        start: a.timelineStart,
+        end: a.timelineStart + Math.max(0.25, a.sourceEnd - a.sourceStart),
+      })),
+  ];
+  const safeStart = resolveNonOverlappingStart(targetStartSec, dur, sameRowBlockers, fps);
   return audioClips.map((a) =>
     a.id === audioId
       ? {
           ...a,
           timelineStart: safeStart,
-          ...(targetRow !== undefined ? {trackRow: targetRow} : {}),
+          trackRow: row,
         }
       : a
   );
@@ -1334,16 +1604,38 @@ export function moveAudioClipOnTimeline(
 export function duplicateAudioClip(
   audioClips: TimelineAudioClip[],
   audioId: string,
-  fps: ProjectFps
+  fps: ProjectFps,
+  videoClips: TimelineVideoClip[] = []
 ): {audioClips: TimelineAudioClip[]; newId: string | null} {
   const orig = audioClips.find((a) => a.id === audioId);
   if (!orig) return {audioClips, newId: null};
   const dur = Math.max(0.25, orig.sourceEnd - orig.sourceStart);
   const newId = `aud-${Date.now().toString(36).slice(-5)}`;
+  const desiredStart = snapToFrame(orig.timelineStart + dur + 0.1, fps);
+  const prefRow = orig.trackRow ?? 0;
+  const row = findAvailableAudioRow(
+    audioClips,
+    videoClips,
+    desiredStart,
+    desiredStart + dur,
+    prefRow
+  );
+  const blockers: TrackTimeInterval[] = [
+    ...(row === 0 ? getAttachedV1AudioIntervals(videoClips) : []),
+    ...audioClips
+      .filter((a) => a.kind !== 'original' && (a.trackRow ?? 0) === row)
+      .map((a) => ({
+        id: a.id,
+        start: a.timelineStart,
+        end: a.timelineStart + Math.max(0.25, a.sourceEnd - a.sourceStart),
+      })),
+  ];
+  const safeStart = resolveNonOverlappingStart(desiredStart, dur, blockers, fps);
   const copy: TimelineAudioClip = {
     ...orig,
     id: newId,
-    timelineStart: snapToFrame(orig.timelineStart + dur + 0.1, fps),
+    trackRow: row,
+    timelineStart: safeStart,
   };
   return {audioClips: [...audioClips, copy], newId};
 }
@@ -1353,25 +1645,62 @@ export function trimAudioClipHandle(
   audioId: string,
   side: 'left' | 'right',
   targetTimelineSec: number,
-  fps: ProjectFps
+  fps: ProjectFps,
+  attachedV1Intervals: TrackTimeInterval[] = []
 ): TimelineAudioClip[] {
   const minDur = 0.25;
+  const target = audioClips.find((a) => a.id === audioId);
+  if (!target) return audioClips;
+  const row = target.trackRow ?? 0;
+  const targetCurDur = Math.max(minDur, target.sourceEnd - target.sourceStart);
+  const targetCurEnd = target.timelineStart + targetCurDur;
+  const sameRowBlockers: TrackTimeInterval[] = [
+    ...(row === 0 ? attachedV1Intervals : []),
+    ...audioClips
+      .filter((a) => a.kind !== 'original' && a.id !== audioId && (a.trackRow ?? 0) === row)
+      .map((a) => ({
+        id: a.id,
+        start: a.timelineStart,
+        end: a.timelineStart + Math.max(0.25, a.sourceEnd - a.sourceStart),
+      })),
+  ].sort((a, b) => a.start - b.start);
+
+  const prevBlocker = [...sameRowBlockers]
+    .reverse()
+    .find((b) => b.end <= target.timelineStart + 0.05);
+  const nextBlocker = sameRowBlockers.find((b) => b.start >= targetCurEnd - 0.05);
+
   return audioClips.map((a) => {
     if (a.id !== audioId) return a;
     const curDur = Math.max(minDur, a.sourceEnd - a.sourceStart);
     const curEnd = a.timelineStart + curDur;
     if (side === 'left') {
-      const clampedStart = Math.max(0, Math.min(curEnd - minDur, snapToFrame(targetTimelineSec, fps)));
+      const minAllowedStart = prevBlocker ? prevBlocker.end : 0;
+      const clampedStart = Math.max(
+        minAllowedStart,
+        Math.min(curEnd - minDur, snapToFrame(targetTimelineSec, fps))
+      );
       const delta = clampedStart - a.timelineStart;
       const nextSourceStart = Math.max(0, snapToFrame(a.sourceStart + delta, fps));
       const actualDelta = nextSourceStart - a.sourceStart;
       return {
         ...a,
         sourceStart: nextSourceStart,
-        timelineStart: Math.max(0, snapToFrame(a.timelineStart + actualDelta, fps)),
+        timelineStart: Math.max(minAllowedStart, snapToFrame(a.timelineStart + actualDelta, fps)),
       };
     }
-    const nextDur = Math.max(minDur, snapToFrame(targetTimelineSec - a.timelineStart, fps));
+    const maxNeighborEnd = nextBlocker ? nextBlocker.start : Number.MAX_SAFE_INTEGER;
+    const maxSourceEnd =
+      typeof a.sourceDurationSec === 'number' && a.sourceDurationSec > minDur
+        ? a.sourceDurationSec
+        : Number.MAX_SAFE_INTEGER;
+    const maxDurBySource = Math.max(minDur, maxSourceEnd - a.sourceStart);
+    const maxDurByNeighbor = Math.max(minDur, maxNeighborEnd - a.timelineStart);
+    const nextDur = Math.min(
+      maxDurBySource,
+      maxDurByNeighbor,
+      Math.max(minDur, snapToFrame(targetTimelineSec - a.timelineStart, fps))
+    );
     return {
       ...a,
       sourceEnd: snapToFrame(a.sourceStart + nextDur, fps),

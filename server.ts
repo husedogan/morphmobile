@@ -1,3 +1,5 @@
+import 'dotenv/config';
+import {GoogleGenAI, Type} from '@google/genai';
 import dns from 'dns/promises';
 import express from 'express';
 import fs from 'fs';
@@ -226,8 +228,8 @@ async function startServer() {
           res.status(400).json({detail: 'Çözümlenen medya adresi geçersiz.'});
           return;
         }
-        const mediaRes = await fetch(resolved.toString(), {
-          redirect: 'follow',
+        const mediaRes = await safeFetch(resolved.toString(), {
+          signal: streamAbort.signal,
           headers: {
             'User-Agent': BROWSER_USER_AGENT,
             Accept: '*/*',
@@ -442,6 +444,351 @@ async function startServer() {
         const message = error instanceof Error ? error.message : 'Server unreachable.';
         res.status(502).json({detail: message});
       }
+    }
+  });
+
+  // ============================================================================
+  // SERVER-SIDE GEMINI AUTO-CAPTIONS & TRANSLATION (Free-Tier Compatible Models)
+  // ============================================================================
+  const getGeminiClient = () => {
+    const apiKey = process.env.GEMINI_API_KEY?.trim();
+    if (!apiKey) {
+      throw new Error(
+        'GEMINI_API_KEY yapılandırılmamış. Lütfen Ayarlar > Secrets bölümünden API anahtarınızı kontrol edin.'
+      );
+    }
+    return new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
+  };
+
+  const LANGUAGE_NAMES: Record<string, string> = {
+    auto: 'the exact spoken language in the audio',
+    tr: 'Turkish (Türkçe)',
+    en: 'English',
+    de: 'German (Deutsch)',
+    es: 'Spanish (Español)',
+    fr: 'French (Français)',
+    ru: 'Russian (Русский)',
+    ar: 'Arabic (العربية)',
+  };
+
+  interface RawCaptionSegment {
+    startSec: number;
+    endSec: number;
+    text: string;
+  }
+
+  const parseTimestampToSec = (raw: string): number | null => {
+    const clean = raw.trim().replace(',', '.');
+    const hms = clean.match(/^(\d{1,2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/);
+    if (hms) {
+      const h = Number(hms[1]) || 0;
+      const m = Number(hms[2]) || 0;
+      const s = Number(hms[3]) || 0;
+      const ms = hms[4] ? Number(hms[4].padEnd(3, '0')) : 0;
+      return Number((h * 3600 + m * 60 + s + ms / 1000).toFixed(3));
+    }
+    const msOnly = clean.match(/^(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?$/);
+    if (msOnly) {
+      const m = Number(msOnly[1]) || 0;
+      const s = Number(msOnly[2]) || 0;
+      const ms = msOnly[3] ? Number(msOnly[3].padEnd(3, '0')) : 0;
+      return Number((m * 60 + s + ms / 1000).toFixed(3));
+    }
+    return null;
+  };
+
+  const parseTimestampedCaptionOutput = (
+    rawText: string,
+    maxDurationSec: number
+  ): RawCaptionSegment[] => {
+    const cleaned = rawText
+      .replace(/```[a-z]*\n?/gi, '')
+      .replace(/```/g, '')
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .trim();
+
+    if (!cleaned) return [];
+
+    const segments: RawCaptionSegment[] = [];
+
+    // Pattern 1: Single-line "[00:01.20 --> 00:03.50] Text" or "00:01.2 - 00:03.5: Text"
+    const lineRegex =
+      /^\s*\[?(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?)\s*(?:-->|->|–|—|-)\s*(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?)\]?\s*[:|-]?\s*(.+)$/;
+
+    const lines = cleaned.split('\n');
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i].trim();
+      if (!line) {
+        i += 1;
+        continue;
+      }
+
+      // Check SRT block style ("00:00:01,000 --> 00:00:03,000" followed by text lines)
+      const srtTimeMatch = line.match(
+        /^(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?)\s*-->\s*(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?)\s*$/
+      );
+      if (srtTimeMatch) {
+        const s = parseTimestampToSec(srtTimeMatch[1]);
+        const e = parseTimestampToSec(srtTimeMatch[2]);
+        const textLines: string[] = [];
+        i += 1;
+        while (i < lines.length && lines[i].trim() !== '') {
+          // Stop if next line is an SRT index followed by a timestamp
+          if (
+            /^\d+$/.test(lines[i].trim()) &&
+            i + 1 < lines.length &&
+            lines[i + 1].includes('-->')
+          ) {
+            break;
+          }
+          textLines.push(lines[i].trim());
+          i += 1;
+        }
+        const body = textLines.join(' ').replace(/\s+/g, ' ').trim();
+        if (s !== null && e !== null && body) {
+          const clampedStart = Math.max(0, Math.min(maxDurationSec - 0.3, s));
+          const clampedEnd = Math.max(clampedStart + 0.4, Math.min(maxDurationSec, e));
+          segments.push({startSec: clampedStart, endSec: clampedEnd, text: body});
+        }
+        continue;
+      }
+
+      const inlineMatch = line.match(lineRegex);
+      if (inlineMatch) {
+        const s = parseTimestampToSec(inlineMatch[1]);
+        const e = parseTimestampToSec(inlineMatch[2]);
+        const body = inlineMatch[3].replace(/\s+/g, ' ').trim();
+        if (s !== null && e !== null && body) {
+          const clampedStart = Math.max(0, Math.min(maxDurationSec - 0.3, s));
+          const clampedEnd = Math.max(clampedStart + 0.4, Math.min(maxDurationSec, e));
+          segments.push({startSec: clampedStart, endSec: clampedEnd, text: body});
+        }
+      }
+      i += 1;
+    }
+
+    return segments;
+  };
+
+  const alignPlainTranscriptToTimeline = (
+    rawText: string,
+    durationSec: number,
+    maxWordsPerLine: number,
+    speechWindows: Array<{startSec: number; endSec: number}>
+  ): RawCaptionSegment[] => {
+    const clean = rawText
+      .replace(/```[\s\S]*?```/g, '')
+      .replace(/\[[^\]]*\]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!clean) return [];
+
+    // Split by sentence punctuation first, then wrap into compact subtitle phrases
+    const sentences = clean
+      .split(/(?<=[.!?…])\s+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const chunks: string[] = [];
+    for (const sentence of sentences) {
+      const words = sentence.split(/\s+/).filter(Boolean);
+      if (words.length <= maxWordsPerLine) {
+        chunks.push(sentence);
+      } else {
+        for (let idx = 0; idx < words.length; idx += maxWordsPerLine) {
+          chunks.push(words.slice(idx, idx + maxWordsPerLine).join(' '));
+        }
+      }
+    }
+    if (chunks.length === 0) return [];
+
+    const validWindows = speechWindows
+      .filter(
+        (w) =>
+          typeof w?.startSec === 'number' &&
+          typeof w?.endSec === 'number' &&
+          w.endSec > w.startSec + 0.15
+      )
+      .sort((a, b) => a.startSec - b.startSec);
+
+    const activeSpanWindows =
+      validWindows.length > 0 ? validWindows : [{startSec: 0, endSec: Math.max(1, durationSec)}];
+
+    const totalSpeechSec = activeSpanWindows.reduce(
+      (sum, w) => sum + Math.max(0.2, w.endSec - w.startSec),
+      0
+    );
+    const totalChars = chunks.reduce((sum, c) => sum + Math.max(4, c.length), 0);
+
+    // Map cumulative speech offset into real wall-clock time across speech windows
+    const speechOffsetToRealSec = (offsetSec: number): number => {
+      let acc = 0;
+      for (const w of activeSpanWindows) {
+        const wDur = Math.max(0.2, w.endSec - w.startSec);
+        if (offsetSec <= acc + wDur) {
+          return w.startSec + (offsetSec - acc);
+        }
+        acc += wDur;
+      }
+      const last = activeSpanWindows[activeSpanWindows.length - 1];
+      return Math.min(durationSec, last.endSec);
+    };
+
+    const segments: RawCaptionSegment[] = [];
+    let cursorSpeechSec = 0;
+    for (const chunk of chunks) {
+      const share = (Math.max(4, chunk.length) / totalChars) * totalSpeechSec;
+      const startSec = Number(speechOffsetToRealSec(cursorSpeechSec).toFixed(3));
+      cursorSpeechSec += share;
+      const endSec = Number(
+        Math.max(startSec + 0.45, Math.min(durationSec, speechOffsetToRealSec(cursorSpeechSec))).toFixed(3)
+      );
+      segments.push({startSec, endSec, text: chunk});
+    }
+    return segments;
+  };
+
+  const formatGeminiRouteError = (err: unknown): {status: number; detail: string} => {
+    const rawMsg = err instanceof Error ? err.message : String(err || 'Bilinmeyen sunucu hatası');
+    const lower = rawMsg.toLowerCase();
+    if (lower.includes('api_key_invalid') || lower.includes('permission_denied') || lower.includes('403')) {
+      return {
+        status: 403,
+        detail:
+          'API anahtarı geçersiz veya yetkisiz. Lütfen Ayarlar > Secrets panelinden Gemini API anahtarınızı kontrol edin.',
+      };
+    }
+    if (lower.includes('resource_exhausted') || lower.includes('429') || lower.includes('quota')) {
+      return {
+        status: 429,
+        detail:
+          'Ücretsiz API kullanım kotası geçici olarak doldu. Biraz bekleyip tekrar deneyebilir veya Ayarlar > Secrets panelinden faturalandırmalı bir anahtar seçebilirsiniz.',
+      };
+    }
+    return {status: 502, detail: rawMsg};
+  };
+
+  app.post('/api/captions/transcribe', express.json({limit: '25mb'}), async (req, res) => {
+    try {
+      const audioBase64 = typeof req.body?.audioBase64 === 'string' ? req.body.audioBase64.trim() : '';
+      const mimeType = typeof req.body?.mimeType === 'string' ? req.body.mimeType.trim() : 'audio/wav';
+      const durationSec = Math.max(0.5, Number(req.body?.durationSec) || 10);
+      const language = typeof req.body?.language === 'string' ? req.body.language.trim() : 'auto';
+      const density = req.body?.density === 'short' ? 'short' : 'standard';
+      const speechWindows = Array.isArray(req.body?.speechWindows) ? req.body.speechWindows : [];
+
+      if (!audioBase64) {
+        res.status(400).json({detail: 'Ses verisi boş gönderildi.'});
+        return;
+      }
+
+      const maxWords = density === 'short' ? 4 : 9;
+      const langDesc = LANGUAGE_NAMES[language] || LANGUAGE_NAMES.auto;
+      const ai = getGeminiClient();
+
+      const prompt = [
+        `Transcribe the spoken speech in this audio (${durationSec.toFixed(1)} seconds long) accurately in ${langDesc}.`,
+        `Output ONLY valid SRT subtitle blocks with accurate timestamps matching when each phrase is actually spoken.`,
+        `Keep each subtitle short and readable (maximum ${maxWords} words per block).`,
+        `Do not add commentary, speaker labels unless clearly needed, or markdown code fences.`,
+        `If there is no speech at all, output: NO_SPEECH`,
+      ].join('\n');
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.5-transcribe',
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                mimeType,
+                data: audioBase64,
+              },
+            },
+            {text: prompt},
+          ],
+        },
+      });
+
+      const rawText = (response.text ?? '').trim();
+      if (!rawText || /^no_speech$/i.test(rawText)) {
+        res.status(200).json({segments: [], rawText: ''});
+        return;
+      }
+
+      let segments = parseTimestampedCaptionOutput(rawText, durationSec);
+
+      // If transcription returned clean prose without SRT timestamps, align accurately to detected speech windows
+      if (segments.length === 0) {
+        segments = alignPlainTranscriptToTimeline(rawText, durationSec, maxWords, speechWindows);
+      }
+
+      res.status(200).json({segments, rawText});
+    } catch (err) {
+      const {status, detail} = formatGeminiRouteError(err);
+      res.status(status).json({detail});
+    }
+  });
+
+  app.post('/api/captions/translate', express.json({limit: '2mb'}), async (req, res) => {
+    try {
+      const rawSegments = Array.isArray(req.body?.segments) ? req.body.segments : [];
+      const targetLanguage =
+        typeof req.body?.targetLanguage === 'string' ? req.body.targetLanguage.trim() : 'en';
+
+      const cleanSegments = rawSegments
+        .filter(
+          (item: unknown): item is {id: string; text: string} =>
+            Boolean(item) &&
+            typeof (item as {id?: unknown}).id === 'string' &&
+            typeof (item as {text?: unknown}).text === 'string' &&
+            (item as {text: string}).text.trim().length > 0
+        )
+        .slice(0, 250);
+
+      if (cleanSegments.length === 0) {
+        res.status(400).json({detail: 'Çevrilecek altyazı bulunamadı.'});
+        return;
+      }
+
+      const targetLangDesc = LANGUAGE_NAMES[targetLanguage] || targetLanguage;
+      const ai = getGeminiClient();
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-4-hydrogen',
+        contents: `Translate the following video subtitle items naturally into ${targetLangDesc}. Keep each translated line concise so it fits cleanly on screen as a subtitle, and preserve every item's exact "id".\n\n${JSON.stringify(cleanSegments)}`,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                id: {type: Type.STRING},
+                text: {type: Type.STRING},
+              },
+              required: ['id', 'text'],
+            },
+          },
+        },
+      });
+
+      const parsed = JSON.parse((response.text ?? '[]').trim()) as Array<{
+        id: string;
+        text: string;
+      }>;
+      res.status(200).json({translations: Array.isArray(parsed) ? parsed : []});
+    } catch (err) {
+      const {status, detail} = formatGeminiRouteError(err);
+      res.status(status).json({detail});
     }
   });
 

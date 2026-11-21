@@ -49,6 +49,7 @@ interface PreviewMonitorProps {
   isPortraitMode: boolean;
   isInspectorOpen?: boolean;
   isExpandedWheelMode?: boolean;
+  expArmadilloReel?: boolean;
   isFullscreenPreview: boolean;
   previewHeightVh: number;
   isResizingPreview: boolean;
@@ -119,6 +120,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
   isPortraitMode,
   isInspectorOpen = false,
   isExpandedWheelMode = false,
+  expArmadilloReel = false,
   isFullscreenPreview,
   previewHeightVh,
   isResizingPreview,
@@ -284,7 +286,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
             muted
             playsInline
             poster={TRANSPARENT_POSTER}
-            className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-35 blur-xl"
+            className="morph-nle-video pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-35 blur-xl"
           />
         )}
 
@@ -349,7 +351,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
                         ? 'inset(10% 10% 10% 10% round 16px)'
                         : undefined),
                 }}
-                className={`h-full w-full bg-black object-contain transition-transform duration-100 ${
+                className={`morph-nle-video h-full w-full bg-black object-contain transition-transform duration-100 ${
                   freePositionMode ? 'pointer-events-none' : 'cursor-pointer'
                 }`}
               />
@@ -372,7 +374,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
                       filter: cssFilter,
                       transform: `${previewTransform} scaleX(-1)`,
                     }}
-                    className="h-full w-full bg-black object-contain"
+                    className="morph-nle-video h-full w-full bg-black object-contain"
                   />
                 </div>
               )}
@@ -395,7 +397,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
                   transform: previewTransform,
                   clipPath: `inset(0 ${(100 - splitComparePct).toFixed(1)}% 0 0)`,
                 }}
-                className="pointer-events-none absolute inset-0 h-full w-full bg-black object-contain"
+                className="morph-nle-video pointer-events-none absolute inset-0 h-full w-full bg-black object-contain"
               />
               <div
                 onPointerDown={startSplitHandleDrag}
@@ -440,7 +442,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
                 playsInline
                 preload="auto"
                 poster={TRANSPARENT_POSTER}
-                className="pointer-events-none h-full w-full object-cover"
+                className="morph-nle-video pointer-events-none h-full w-full object-cover"
               />
             </div>
           )}
@@ -781,13 +783,13 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
               }
               align="left"
               onClick={onToggleFreePositionMode}
-              className={`flex h-7 items-center justify-center rounded-lg backdrop-blur-sm transition-colors ${
+              className={`flex h-9 items-center justify-center rounded-xl backdrop-blur-sm transition-colors ${
                 freePositionMode
-                  ? 'gap-1 border border-[#38BDF8]/55 bg-[#0F172A]/85 px-2 text-[10px] font-bold text-[#38BDF8] shadow-[0_2px_10px_rgba(56,189,248,0.28)]'
-                  : 'w-7 bg-black/55 text-white/75 hover:bg-black/80 hover:text-white'
+                  ? 'gap-1.5 border border-[#38BDF8]/55 bg-[#0F172A]/85 px-2.5 text-[11px] font-bold text-[#38BDF8] shadow-[0_2px_10px_rgba(56,189,248,0.28)]'
+                  : 'w-9 bg-black/55 text-white/80 hover:bg-black/80 hover:text-white'
               }`}
             >
-              <Move className="h-3.5 w-3.5 shrink-0" />
+              <Move className="h-4 w-4 shrink-0" />
               {freePositionMode && <span>{tr('Serbest', 'Free')}</span>}
             </StudioTooltipBtn>
           </div>
@@ -803,12 +805,12 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
             }
             align="right"
             onClick={onToggleFullscreen}
-            className="flex h-7 w-7 items-center justify-center rounded-lg bg-black/55 text-white/75 backdrop-blur-sm transition-colors hover:bg-black/80 hover:text-white"
+            className="flex h-9 w-9 items-center justify-center rounded-xl bg-black/55 text-white/80 backdrop-blur-sm transition-colors hover:bg-black/80 hover:text-white"
           >
             {isFullscreenPreview ? (
-              <Minimize2 className="h-3.5 w-3.5" />
+              <Minimize2 className="h-4 w-4" />
             ) : (
-              <Maximize2 className="h-3.5 w-3.5" />
+              <Maximize2 className="h-4 w-4" />
             )}
           </StudioTooltipBtn>
         </div>
@@ -907,14 +909,14 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
         />
       </div>
 
-      {/* Minimalist Transport Bar */}
-      <div className="relative z-30 flex h-11 shrink-0 items-center justify-between gap-2 border-y border-white/[0.07] bg-[#0D0D10] px-2.5 sm:px-3.5">
-        <div className="flex items-center gap-0.5">
+      {/* Minimalist Transport Bar — Customizable Safe Touch Targets */}
+      <div className="relative z-30 flex min-h-12 shrink-0 items-center justify-between gap-1.5 border-y border-white/[0.07] bg-[#0D0D10] px-2 py-1 sm:px-3.5">
+        <div className="flex items-center gap-1">
           <StudioTooltipBtn
-            tooltip={isPlaying ? tr('Duraklat (Boşluk)', 'Pause (Space)') : tr('Oynat (Boşluk)', 'Play (Space)')}
+            tooltip={isPlaying ? tr('Duraklat', 'Pause') : tr('Oynat', 'Play')}
             align="left"
             onClick={onTogglePlay}
-            className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.08] text-white transition-transform hover:bg-white/[0.14] active:scale-95"
+            className="flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl bg-white/[0.09] text-white transition-transform hover:bg-white/[0.15] active:scale-95"
           >
             {isPlaying ? (
               <Pause className="h-4 w-4 fill-current" />
@@ -926,7 +928,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
           <StudioTooltipBtn
             tooltip={tr('1 Kare Geri', 'Step Back 1 Frame')}
             onClick={() => onStepFrame(-1)}
-            className="flex h-8 w-7 items-center justify-center rounded-lg text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white"
+            className="flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white"
           >
             <ChevronLeft className="h-4 w-4" />
           </StudioTooltipBtn>
@@ -934,7 +936,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
           <StudioTooltipBtn
             tooltip={tr('1 Kare İleri', 'Step Forward 1 Frame')}
             onClick={() => onStepFrame(1)}
-            className="flex h-8 w-7 items-center justify-center rounded-lg text-white/55 transition-colors hover:bg-white/[0.06] hover:text-white"
+            className="flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white"
           >
             <ChevronRight className="h-4 w-4" />
           </StudioTooltipBtn>
@@ -950,23 +952,23 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
         </div>
 
         {/* Right: Undo/Redo + Keyframe Diamond + Mute + Snapshot */}
-        <div className="flex shrink-0 items-center gap-0.5">
+        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
           <StudioTooltipBtn
-            tooltip={tr('Geri Al (Undo)', 'Undo')}
+            tooltip={tr('Geri Al', 'Undo')}
             onClick={onUndo}
             disabled={!canUndo}
-            className="flex h-8 w-7 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-25"
+            className="flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-25"
           >
-            <Undo2 className="h-3.5 w-3.5" />
+            <Undo2 className="h-4 w-4" />
           </StudioTooltipBtn>
 
           <StudioTooltipBtn
-            tooltip={tr('İleri Al (Redo)', 'Redo')}
+            tooltip={tr('İleri Al', 'Redo')}
             onClick={onRedo}
             disabled={!canRedo}
-            className="flex h-8 w-7 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-25"
+            className="flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-25"
           >
-            <Redo2 className="h-3.5 w-3.5" />
+            <Redo2 className="h-4 w-4" />
           </StudioTooltipBtn>
 
           <StudioTooltipBtn
@@ -976,28 +978,28 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
                 : tr('Bu Kareye Keyframe Ekle (◆)', 'Add Keyframe at Playhead (◆)')
             }
             onClick={onQuickToggleKeyframe}
-            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+            className={`flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl transition-colors ${
               hasKeyframeAtPlayhead
                 ? 'bg-[#F43F5E]/20 text-[#FB7185]'
                 : 'text-white/65 hover:bg-white/[0.06] hover:text-[#FB7185]'
             }`}
           >
-            <Diamond className={`h-3.5 w-3.5 ${hasKeyframeAtPlayhead ? 'fill-current' : ''}`} />
+            <Diamond className={`h-4 w-4 ${hasKeyframeAtPlayhead ? 'fill-current' : ''}`} />
           </StudioTooltipBtn>
 
           <StudioTooltipBtn
             tooltip={project.masterMuted ? tr('Sesi Aç', 'Unmute') : tr('Sesi Kapat', 'Mute')}
             onClick={onToggleMute}
-            className={`hidden h-8 w-7 items-center justify-center rounded-lg transition-colors sm:flex ${
+            className={`hidden h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl transition-colors sm:flex ${
               project.masterMuted
                 ? 'text-rose-400'
-                : 'text-white/60 hover:bg-white/[0.06] hover:text-white'
+                : 'text-white/65 hover:bg-white/[0.06] hover:text-white'
             }`}
           >
             {project.masterMuted ? (
-              <VolumeX className="h-3.5 w-3.5" />
+              <VolumeX className="h-4 w-4" />
             ) : (
-              <Volume2 className="h-3.5 w-3.5" />
+              <Volume2 className="h-4 w-4" />
             )}
           </StudioTooltipBtn>
 
@@ -1005,37 +1007,41 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
             tooltip={tr('Kare Yakala (Fotoğraf)', 'Capture Frame Snapshot')}
             align="right"
             onClick={onCaptureSnapshot}
-            className="flex h-8 w-7 items-center justify-center rounded-lg text-white/60 transition-colors hover:bg-white/[0.06] hover:text-white"
+            className="flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white"
           >
-            <Camera className="h-3.5 w-3.5" />
+            <Camera className="h-4 w-4" />
           </StudioTooltipBtn>
         </div>
       </div>
 
-      {/* Tactile Draggable Monitor Height Handle in Portrait Mode (Drag down -> Armadillo Roll-Up into Cinema Reel Wheel!) */}
+      {/* Tactile Draggable Monitor Height Handle in Portrait Mode */}
       {isPortraitMode && !isFullscreenPreview && (
         <div
           onPointerDown={onStartPreviewResize}
           onDoubleClick={onCyclePreviewHeight}
-          title={tr(
-            'Aşağı sürükleyerek alt çubuğu çarka katlayın, yukarı çekerek geri açın',
-            'Drag down to roll bottom dock into Cinema Wheel, drag up to unfold'
-          )}
+          title={
+            expArmadilloReel
+              ? tr(
+                  'Aşağı sürükleyerek alt çubuğu çarka katlayın, yukarı çekerek geri açın',
+                  'Drag down to roll bottom dock into Cinema Wheel, drag up to unfold'
+                )
+              : tr('Önizleme yüksekliğini ayarlamak için sürükleyin', 'Drag to resize preview height')
+          }
           className={`group flex h-5 shrink-0 cursor-ns-resize touch-none items-center justify-center gap-2 border-b border-white/[0.05] transition-colors ${
-            previewHeightVh >= 50
+            expArmadilloReel && previewHeightVh >= 50
               ? 'bg-[#F43F5E]/12 hover:bg-[#F43F5E]/18'
               : 'bg-[#0B0B0E] hover:bg-white/[0.05]'
           }`}
         >
           <span
             className={`h-[3px] w-11 rounded-full transition-colors ${
-              previewHeightVh >= 50 || isResizingPreview
+              (expArmadilloReel && previewHeightVh >= 50) || isResizingPreview
                 ? 'bg-[#F43F5E]'
                 : 'bg-white/25 group-hover:bg-[#FB7185]'
             }`}
           />
-          {previewHeightVh >= 50 && (
-            <span className="text-[9px] font-bold tracking-wide text-[#FB7185]">
+          {expArmadilloReel && previewHeightVh >= 50 && (
+            <span className="text-[10px] font-bold tracking-wide text-[#FB7185]">
               {isExpandedWheelMode
                 ? tr('Sinema Çarkı · Yukarı çek', 'Cinema Wheel · Drag up')
                 : tr('Çarka katlanıyor…', 'Rolling into wheel…')}

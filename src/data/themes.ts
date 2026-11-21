@@ -1,5 +1,10 @@
 import {Capacitor, SystemBars, SystemBarsStyle} from '@capacitor/core';
-import type {CornerStylePref, UiScalePref} from './models';
+import {
+  clampVideoEditorSizing,
+  type CornerStylePref,
+  type UiScalePref,
+  type VideoEditorSizingPrefs,
+} from './models';
 
 export interface Palette {
   paper: string;
@@ -26,6 +31,8 @@ export interface AppearanceRuntimePrefs {
   cornerStyle?: CornerStylePref;
   reducedMotion?: boolean;
   hapticsEnabled?: boolean;
+  expTouchTooltips?: boolean;
+  videoEditorSizing?: Partial<VideoEditorSizingPrefs>;
 }
 
 /**
@@ -630,10 +637,11 @@ export function applyThemeTokens(
   }
 
   const root = document.documentElement;
+  const isStudioActive = root.classList.contains('morph-studio-active');
   root.classList.toggle('dark', isDark);
   root.setAttribute('data-theme', isDark ? 'dark' : 'light');
-  root.style.colorScheme = isDark ? 'dark' : 'light';
-  root.style.backgroundColor = palette.paper;
+  root.style.colorScheme = isStudioActive ? 'dark' : isDark ? 'dark' : 'light';
+  root.style.backgroundColor = isStudioActive ? '#08080A' : palette.paper;
   root.style.setProperty('--paper', palette.paper);
   root.style.setProperty('--sidebar', palette.sidebar);
   root.style.setProperty('--surface', palette.surface);
@@ -654,18 +662,29 @@ export function applyThemeTokens(
     root.dataset.uiScale = appearance.uiScale ?? 'default';
     root.dataset.corners = appearance.cornerStyle ?? 'balanced';
     root.dataset.haptics = appearance.hapticsEnabled === false ? 'off' : 'on';
+    root.dataset.touchTooltips = appearance.expTouchTooltips ? 'on' : 'off';
     root.classList.toggle('reduce-motion', Boolean(appearance.reducedMotion));
+
+    const veSizing = clampVideoEditorSizing(appearance.videoEditorSizing);
+    const dockIconPx = Math.round(veSizing.dockTabHeight * 0.36);
+    const dockFontPx = (9.5 + ((veSizing.dockTabHeight - 36) / 20) * 1.8).toFixed(1);
+    root.style.setProperty('--ve-dock-h', `${veSizing.dockTabHeight}px`);
+    root.style.setProperty('--ve-dock-icon', `${dockIconPx}px`);
+    root.style.setProperty('--ve-dock-font', `${dockFontPx}px`);
+    root.style.setProperty('--ve-btn-size', `${veSizing.controlBtnSize}px`);
+    root.style.setProperty('--ve-swatch-size', `${veSizing.colorSwatchSize}px`);
+    root.style.setProperty('--ve-grid-cell-h', `${veSizing.watermarkGridHeight}px`);
   }
 
   const metaTheme = document.querySelector('meta[name="theme-color"]');
   if (metaTheme) {
-    metaTheme.setAttribute('content', palette.paper);
+    metaTheme.setAttribute('content', isStudioActive ? '#08080A' : palette.paper);
   }
 
   try {
     if (Capacitor.isNativePlatform()) {
       SystemBars.setStyle({
-        style: isDark ? SystemBarsStyle.Dark : SystemBarsStyle.Light,
+        style: isStudioActive || isDark ? SystemBarsStyle.Dark : SystemBarsStyle.Light,
       }).catch(() => {});
     }
   } catch {

@@ -120,21 +120,22 @@ export const MainWheelCustomizeModal: React.FC<MainWheelCustomizeModalProps> = (
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3.5 pt-[calc(var(--morph-safe-top)+0.75rem)] pb-[calc(var(--morph-safe-bottom)+0.75rem)] backdrop-blur-sm sm:p-5"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/65 backdrop-blur-sm sm:items-center sm:p-5"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label={t('MainWheelCustomizeTitle', lang)}
     >
       <div
-        className="flex max-h-[88vh] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] shadow-2xl"
+        className="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-t-3xl border-t border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] shadow-2xl sm:max-h-[88vh] sm:rounded-3xl sm:border"
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="mx-auto mt-2.5 h-1.5 w-11 shrink-0 rounded-full bg-[var(--line)] sm:hidden" />
         {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-[var(--line)] px-5 py-4">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[var(--accent)]/45 bg-[var(--accent)]/14 text-[var(--accent)]">
-              <Settings className="morph-gear-spin h-5 w-5" />
+              <Settings className="h-5 w-5" />
             </div>
             <div className="min-w-0">
               <h2 className="truncate text-base font-extrabold tracking-tight text-[var(--ink)] sm:text-lg">
@@ -150,7 +151,7 @@ export const MainWheelCustomizeModal: React.FC<MainWheelCustomizeModalProps> = (
             type="button"
             onClick={onClose}
             aria-label={t('Close', lang)}
-            className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] transition-colors hover:text-[var(--ink)]"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] transition-colors hover:text-[var(--ink)]"
           >
             <X className="h-4 w-4" />
           </button>
@@ -216,14 +217,14 @@ export const MainWheelCustomizeModal: React.FC<MainWheelCustomizeModalProps> = (
                     key={id}
                     type="button"
                     onClick={() => toggleItem(id)}
-                    className="inline-flex min-h-[34px] items-center gap-1.5 rounded-xl border border-[var(--accent)]/40 bg-[var(--accent)]/12 px-2.5 py-1 text-[11px] font-bold text-[var(--ink)] transition-colors hover:border-rose-500/60 hover:bg-rose-500/12"
+                    className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-[var(--accent)]/40 bg-[var(--accent)]/12 px-3 py-1.5 text-xs font-bold text-[var(--ink)] transition-colors hover:border-rose-500/60 hover:bg-rose-500/12"
                     title={lang === 'tr' ? 'Çarktan çıkar' : 'Remove from wheel'}
                   >
-                    <span className="font-mono-num text-[10px] font-extrabold text-[var(--accent)]">
+                    <span className="font-mono-num text-[11px] font-extrabold text-[var(--accent)]">
                       #{idx + 1}
                     </span>
                     <span>{t(def.labelKey, lang)}</span>
-                    <X className="h-3 w-3 text-[var(--muted)]" />
+                    <X className="h-3.5 w-3.5 text-[var(--muted)]" />
                   </button>
                 );
               })}
@@ -247,7 +248,7 @@ export const MainWheelCustomizeModal: React.FC<MainWheelCustomizeModalProps> = (
                     key={cid}
                     type="button"
                     onClick={() => setCategory(cid)}
-                    className={`min-h-[34px] rounded-full border px-3 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                    className={`min-h-[40px] rounded-xl border px-3.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                       active
                         ? 'border-[var(--accent)] bg-[var(--accent)]/18 text-[var(--ink)]'
                         : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
@@ -309,12 +310,12 @@ export const MainWheelCustomizeModal: React.FC<MainWheelCustomizeModalProps> = (
                           onClick={(e) => moveEarlier(item.id, e)}
                           title={t('MoveLeftShort', lang)}
                           aria-label={t('MoveLeftShort', lang)}
-                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--accent)] transition-colors hover:border-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--accent-single-ink)]"
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--accent)] transition-colors hover:border-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--accent-single-ink)]"
                         >
-                          <ArrowUp className="h-3.5 w-3.5" />
+                          <ArrowUp className="h-4 w-4" />
                         </button>
                       ) : (
-                        <span className="h-7 w-7 shrink-0" aria-hidden="true" />
+                        <span className="h-9 w-9 shrink-0" aria-hidden="true" />
                       )}
 
                       <div className="flex w-7 shrink-0 items-center justify-end">
@@ -339,14 +340,14 @@ export const MainWheelCustomizeModal: React.FC<MainWheelCustomizeModalProps> = (
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between gap-2.5 border-t border-[var(--line)] px-5 py-3.5">
+        <div className="flex items-center justify-between gap-2.5 border-t border-[var(--line)] px-5 pt-3.5 pb-[calc(var(--morph-safe-bottom)+0.95rem)] sm:pb-3.5">
           <button
             type="button"
             onClick={() => {
               setNotice(null);
               onResetDefaults();
             }}
-            className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--inset)] px-4 text-xs font-semibold text-[var(--muted)] transition-colors hover:text-[var(--ink)] whitespace-nowrap shrink-0"
+            className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-4 text-xs font-semibold text-[var(--muted)] transition-colors hover:text-[var(--ink)] whitespace-nowrap shrink-0"
           >
             <RotateCcw className="h-3.5 w-3.5 shrink-0" />
             <span>{t('ResetWheelDefaults', lang)}</span>
@@ -355,7 +356,7 @@ export const MainWheelCustomizeModal: React.FC<MainWheelCustomizeModalProps> = (
           <button
             type="button"
             onClick={onClose}
-            className="morph-accent-btn flex min-h-[44px] min-w-[116px] items-center justify-center rounded-full px-6 text-xs font-semibold whitespace-nowrap shrink-0"
+            className="morph-accent-btn flex min-h-[44px] min-w-[120px] items-center justify-center rounded-2xl px-6 text-xs font-bold whitespace-nowrap shrink-0"
           >
             {t('Done', lang)}
           </button>

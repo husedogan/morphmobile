@@ -14,6 +14,7 @@ interface CropRect {
 interface CropEditorProps {
   file: PickedFile;
   lang: Lang;
+  showToolLabels?: boolean;
   onBack: () => void;
   onApply: (rect: CropRect) => void;
 }
@@ -36,7 +37,13 @@ function rectForAspect(aspect: number | null, imgW: number, imgH: number): CropR
   return {left, top, right: left + w, bottom: top + h};
 }
 
-export const CropEditor: React.FC<CropEditorProps> = ({file, lang, onBack, onApply}) => {
+export const CropEditor: React.FC<CropEditorProps> = ({
+  file,
+  lang,
+  showToolLabels = false,
+  onBack,
+  onApply,
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [imgSize, setImgSize] = useState<{w: number; h: number} | null>(null);
   const [previewSrc, setPreviewSrc] = useState<string>('');
@@ -272,14 +279,13 @@ export const CropEditor: React.FC<CropEditorProps> = ({file, lang, onBack, onApp
             />
             {/* Darkened outer overlay via box-shadow */}
             <div
-              className="pointer-events-none absolute border-2"
+              className="pointer-events-none absolute border border-white/85"
               style={{
                 left: lPx,
                 top: tPx,
                 width: wPx,
                 height: hPx,
-                borderColor: 'var(--accent)',
-                boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.56)',
+                boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.62)',
               }}
             >
               {/* Rule of thirds */}
@@ -288,19 +294,24 @@ export const CropEditor: React.FC<CropEditorProps> = ({file, lang, onBack, onApp
               <div className="absolute inset-x-0 top-1/3 h-px bg-white/30" />
               <div className="absolute inset-x-0 top-2/3 h-px bg-white/30" />
 
-              {/* Corner handles */}
-              {[
-                '-left-2 -top-2',
-                '-right-2 -top-2',
-                '-right-2 -bottom-2',
-                '-left-2 -bottom-2',
-              ].map((pos, idx) => (
-                <span
-                  key={idx}
-                  className={`absolute ${pos} h-4 w-4 rounded-full border-2 bg-white shadow`}
-                  style={{borderColor: 'var(--accent)'}}
-                />
-              ))}
+              {/* Live floating output dimensions pill */}
+              {outPixels && (
+                <div className="font-mono-num absolute left-1/2 top-2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-black/75 px-2 py-0.5 text-[11px] font-bold text-white shadow backdrop-blur-sm">
+                  {outPixels.w} × {outPixels.h} px
+                </div>
+              )}
+
+              {/* Professional thick L-shaped Corner Brackets */}
+              <span className="absolute -left-[3px] -top-[3px] h-6 w-6 rounded-tl-sm border-l-[4px] border-t-[4px] border-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.75)]" />
+              <span className="absolute -right-[3px] -top-[3px] h-6 w-6 rounded-tr-sm border-r-[4px] border-t-[4px] border-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.75)]" />
+              <span className="absolute -bottom-[3px] -right-[3px] h-6 w-6 rounded-br-sm border-b-[4px] border-r-[4px] border-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.75)]" />
+              <span className="absolute -bottom-[3px] -left-[3px] h-6 w-6 rounded-bl-sm border-b-[4px] border-l-[4px] border-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.75)]" />
+
+              {/* Edge mid-bar visual cues */}
+              <span className="absolute -top-[2px] left-1/2 h-[3px] w-7 -translate-x-1/2 rounded-full bg-white/90 shadow" />
+              <span className="absolute -bottom-[2px] left-1/2 h-[3px] w-7 -translate-x-1/2 rounded-full bg-white/90 shadow" />
+              <span className="absolute -left-[2px] top-1/2 h-7 w-[3px] -translate-y-1/2 rounded-full bg-white/90 shadow" />
+              <span className="absolute -right-[2px] top-1/2 h-7 w-[3px] -translate-y-1/2 rounded-full bg-white/90 shadow" />
             </div>
           </>
         ) : (
@@ -313,7 +324,7 @@ export const CropEditor: React.FC<CropEditorProps> = ({file, lang, onBack, onApp
       {/* Bottom Controls */}
       <div className="shrink-0 border-t border-[var(--line)] bg-[var(--paper)] px-4 pb-safe pt-3">
         <div className="mx-auto max-w-xl">
-          <div className="flex flex-wrap gap-2">
+          <div className="no-scrollbar flex flex-nowrap gap-2 overflow-x-auto pb-1 sm:flex-wrap">
             {aspectOptions.map((opt) => {
               const active = aspect === opt.value;
               return (
@@ -326,10 +337,10 @@ export const CropEditor: React.FC<CropEditorProps> = ({file, lang, onBack, onApp
                       setRect(rectForAspect(opt.value, imgSize.w, imgSize.h));
                     }
                   }}
-                  className={`min-h-[38px] rounded-full border px-3.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                  className={`min-h-[42px] rounded-xl border px-3.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                     active
-                      ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
-                      : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
+                      ? 'border-[var(--accent)] bg-[var(--accent)]/18 text-[var(--ink)]'
+                      : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
                   }`}
                 >
                   {opt.label}
@@ -345,16 +356,20 @@ export const CropEditor: React.FC<CropEditorProps> = ({file, lang, onBack, onApp
                 setAspect(null);
                 setRect(DEFAULT_RECT);
               }}
-              className="flex min-h-[46px] flex-1 items-center justify-center gap-2 rounded-full border border-[var(--line)] bg-[var(--inset)] text-sm font-semibold text-[var(--ink)]"
+              aria-label={t('Reset', lang)}
+              title={t('Reset', lang)}
+              className={`flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] ${
+                showToolLabels ? 'flex-1' : 'w-12 shrink-0'
+              }`}
             >
-              <RotateCcw className="h-4 w-4" />
-              <span>{t('Reset', lang)}</span>
+              <RotateCcw className="h-4.5 w-4.5" />
+              {showToolLabels && <span>{t('Reset', lang)}</span>}
             </button>
             <button
               type="button"
               disabled={!imgSize}
               onClick={() => onApply(rect)}
-              className="morph-accent-btn flex min-h-[46px] flex-1 items-center justify-center gap-2 rounded-full text-sm font-semibold disabled:opacity-40"
+              className="morph-accent-btn flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-bold shadow-md transition-transform active:scale-[0.98] disabled:opacity-40"
             >
               <Check className="h-4 w-4" />
               <span>{t('Apply', lang)}</span>

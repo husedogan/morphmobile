@@ -259,7 +259,7 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
                       onClick={() => onChange({textColor: hex})}
                       style={{backgroundColor: hex}}
                       aria-label={hex}
-                      className={`h-6 w-6 rounded-full border-2 transition-transform ${
+                      className={`h-[var(--ve-swatch-size,32px)] w-[var(--ve-swatch-size,32px)] rounded-full border-2 transition-transform ${
                         watermark.textColor === hex
                           ? 'scale-110 border-[#FB923C]'
                           : 'border-white/25'
@@ -358,7 +358,7 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
                   </span>
                 )}
               </div>
-              <div className="grid grid-cols-3 gap-1 rounded-lg border border-white/[0.07] bg-[#0A0A0D] p-1.5">
+              <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] p-1.5">
                 {GRID_POSITIONS.map((pos) => {
                   const active = !watermark.tiled && watermark.positionPreset === pos.id;
                   return (
@@ -366,6 +366,7 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
                       key={pos.id}
                       type="button"
                       title={isTr ? pos.labelTr : pos.labelEn}
+                      aria-label={isTr ? pos.labelTr : pos.labelEn}
                       onClick={() => {
                         const pt = WATERMARK_PRESET_COORDS[pos.id];
                         onChange({
@@ -375,15 +376,15 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
                           posY: pt.y,
                         });
                       }}
-                      className={`flex h-7 items-center justify-center rounded-md border text-[9px] font-bold transition-colors ${
+                      className={`flex h-[var(--ve-grid-cell-h,40px)] items-center justify-center rounded-lg border text-[10px] font-bold transition-colors ${
                         active
                           ? 'border-[#FB923C] bg-[#FB923C]/25 text-[#FB923C]'
-                          : 'border-white/[0.06] bg-white/[0.03] text-white/45 hover:bg-white/[0.08] hover:text-white'
+                          : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)]'
                       }`}
                     >
                       <span
-                        className={`h-2 w-2 rounded-full ${
-                          active ? 'bg-[#FB923C]' : 'bg-current opacity-60'
+                        className={`h-2.5 w-2.5 rounded-full ${
+                          active ? 'bg-[#FB923C]' : 'bg-current opacity-65'
                         }`}
                       />
                     </button>
@@ -512,7 +513,7 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
             {!watermark.fullDuration && (
               <div className="grid grid-cols-2 gap-3 pt-1">
                 <div className="space-y-1">
-                  <div className="flex justify-between text-[10px] font-semibold text-white/65">
+                  <div className="flex justify-between text-[10px] font-semibold text-[var(--muted)]">
                     <span>{tr('Başlangıç', 'Start')}</span>
                     <span className="font-mono-num text-[#FB923C]">
                       {formatSecondsShort(watermark.startSec)}
@@ -531,11 +532,11 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
                         endSec: Math.max(nextStart + 0.3, watermark.endSec),
                       });
                     }}
-                    className="h-1.5 w-full cursor-pointer accent-[#FB923C]"
+                    className="h-2 w-full cursor-pointer accent-[#FB923C]"
                   />
                 </div>
                 <div className="space-y-1">
-                  <div className="flex justify-between text-[10px] font-semibold text-white/65">
+                  <div className="flex justify-between text-[10px] font-semibold text-[var(--muted)]">
                     <span>{tr('Bitiş', 'End')}</span>
                     <span className="font-mono-num text-[#FB923C]">
                       {formatSecondsShort(watermark.endSec)}

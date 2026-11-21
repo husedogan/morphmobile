@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {
   ArrowUpDown,
   AudioLines,
@@ -32,10 +32,21 @@ import {
   Type,
   Upload,
   Wand2,
+  X,
 } from 'lucide-react';
+import {Capacitor, SystemBars, SystemBarsStyle} from '@capacitor/core';
 import nleSampleImg from '../assets/images/nle_filter_reference_1795084645929.jpg';
 import {Lang} from '../data/i18n';
-import {PickedFile, WheelSidePref, formatBytes} from '../data/models';
+import {
+  DEFAULT_VE_SIZING,
+  PickedFile,
+  VE_SIZING_BOUNDS,
+  VideoEditorSizingPrefs,
+  WheelSidePref,
+  clampVideoEditorSizing,
+  formatBytes,
+} from '../data/models';
+import {isNativeApp} from '../engine/nativeBridge';
 import {
   AspectRatioPreset,
   ClipTransitionType,
@@ -70,10 +81,13 @@ import {
   duplicateTextClip,
   duplicateVideoClip,
   estimateOutputFileSizeBytes,
+  findAvailableAudioRow,
+  findAvailableTextRow,
   findOverlayVideoClipAtTime,
   findVideoClipAtTime,
   formatSecondsShort,
   formatSmpteTimecode,
+  getAttachedV1AudioIntervals,
   getClipMediaId,
   getClipTrackIndex,
   insertFreezeFrameAtPlayhead,
@@ -138,6 +152,17 @@ import {RgbScopeCanvas} from './VideoEditor/RgbScopeCanvas';
 import {ProjectsModal, SocialProjectTemplate} from './VideoEditor/ProjectsModal';
 import {StudioHeader} from './VideoEditor/StudioHeader';
 import {PreviewMonitor} from './VideoEditor/PreviewMonitor';
+import {AutoCaptionPanel} from './VideoEditor/AutoCaptionPanel';
+import {
+  CaptionDensityMode,
+  CaptionStylePresetId,
+  buildSubtitleTextClips,
+  downloadSrtFile,
+  extractMonoWavForTranscription,
+  getCaptionStylePatch,
+  requestAutoCaptions,
+  requestTranslateCaptions,
+} from '../engine/autoCaptionEngine';
 import {
   ActiveDragLaneHint,
   MultiTrackTimeline,
@@ -212,6 +237,9 @@ interface VideoEditorProps {
   lang: Lang;
   initialTab?: VideoEditorTab;
   initialPreset?: Partial<VideoEditorState>;
+  expArmadilloReel?: boolean;
+  videoEditorSizing?: Partial<VideoEditorSizingPrefs>;
+  onChangeVideoEditorSizing?: (patch: Partial<VideoEditorSizingPrefs>) => void;
   onBack: () => void;
   onExport: (options: Record<string, string>) => void;
 }
@@ -487,11 +515,54 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   lang,
   initialTab = 'trim',
   initialPreset,
+  expArmadilloReel = true,
+  videoEditorSizing,
+  onChangeVideoEditorSizing,
   onBack,
   onExport,
 }) => {
   const isTr = lang === 'tr';
   const tr = useCallback((trText: string, enText: string) => (isTr ? trText : enText), [isTr]);
+  const veSizing = useMemo(() => clampVideoEditorSizing(videoEditorSizing), [videoEditorSizing]);
+
+  // Lock html/body/#root/theme-color/status-bar to cinema dark synchronously before paint so Light Mode never bleeds white edges or rounded corners
+  useLayoutEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    const prevWasLight = !root.classList.contains('dark');
+    const prevInlineBg = root.style.backgroundColor;
+    const prevColorScheme = root.style.colorScheme;
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+    const prevThemeColor = metaTheme?.getAttribute('content') ?? null;
+
+    root.classList.add('morph-studio-active');
+    root.style.backgroundColor = '#08080A';
+    root.style.colorScheme = 'dark';
+    if (metaTheme) metaTheme.setAttribute('content', '#08080A');
+    try {
+      if (Capacitor.isNativePlatform()) {
+        SystemBars.setStyle({style: SystemBarsStyle.Dark}).catch(() => {});
+      }
+    } catch {
+      // Ignore on web
+    }
+
+    return () => {
+      root.classList.remove('morph-studio-active');
+      root.style.backgroundColor = prevInlineBg;
+      root.style.colorScheme = prevColorScheme;
+      if (metaTheme && prevThemeColor !== null) {
+        metaTheme.setAttribute('content', prevThemeColor);
+      }
+      try {
+        if (Capacitor.isNativePlatform() && prevWasLight) {
+          SystemBars.setStyle({style: SystemBarsStyle.Light}).catch(() => {});
+        }
+      } catch {
+        // Ignore on web
+      }
+    };
+  }, []);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const v2VideoRef = useRef<HTMLVideoElement | null>(null);
@@ -505,7 +576,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const cubeLutInputRef = useRef<HTMLInputElement | null>(null);
   const relinkVideoInputRef = useRef<HTMLInputElement | null>(null);
   const mediaImportInputRef = useRef<HTMLInputElement | null>(null);
-  const importTargetTrackRef = useRef<0 | 1>(0);
+  const importTargetTrackRef = useRef<number>(0);
+  const preferredAudioRowRef = useRef<number | null>(null);
   const hasInitializedMetadataRef = useRef<boolean>(false);
   const pendingSourceSeekRef = useRef<{time: number; autoplay: boolean} | null>(null);
   const pinchStartDistRef = useRef<number | null>(null);
@@ -556,11 +628,25 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   );
   const [activeCustomPresetId, setActiveCustomPresetId] = useState<string | null>(null);
   const [isCuttingSilence, setIsCuttingSilence] = useState(false);
+  const [captionLang, setCaptionLang] = useState<string>('auto');
+  const [captionStyle, setCaptionStyle] = useState<CaptionStylePresetId>('classic');
+  const [captionDensity, setCaptionDensity] = useState<CaptionDensityMode>('standard');
+  const [captionReplaceExisting, setCaptionReplaceExisting] = useState<boolean>(true);
+  const [captionTranslateLang, setCaptionTranslateLang] = useState<string>(isTr ? 'en' : 'tr');
+  const [isGeneratingCaptions, setIsGeneratingCaptions] = useState<boolean>(false);
+  const [captionProgressLabel, setCaptionProgressLabel] = useState<string>('');
+  const [isTranslatingCaptions, setIsTranslatingCaptions] = useState<boolean>(false);
+  const [captionError, setCaptionError] = useState<string | null>(null);
   const [isImportingMedia, setIsImportingMedia] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showUnsavedExitDialog, setShowUnsavedExitDialog] = useState(false);
   const [selectedLayerType, setSelectedLayerType] = useState<SelectedLayerType>('video');
   const [activeDragLaneHint, setActiveDragLaneHint] = useState<ActiveDragLaneHint>(null);
+  const [extraTrackRows, setExtraTrackRows] = useState<{audio: number; text: number; pip: number}>({
+    audio: 0,
+    text: 0,
+    pip: 0,
+  });
   const [itemPopup, setItemPopup] = useState<{
     type: 'video' | 'audio' | 'text';
     id: string;
@@ -589,8 +675,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const [isBusyPackage, setIsBusyPackage] = useState(false);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
 
-  // Near-fullscreen expanded preview finishes the Armadillo roll-up into Morph's Cinema Reel Wheel
-  const isExpandedWheelMode = isPortraitMode && !isFullscreenPreview && previewHeightVh >= 65;
+  // Near-fullscreen expanded preview finishes the Armadillo roll-up ONLY when Experimental Armadillo Reel is enabled
+  const isExpandedWheelMode =
+    expArmadilloReel && isPortraitMode && !isFullscreenPreview && previewHeightVh >= 65;
   const prevExpandedWheelRef = useRef<boolean>(false);
 
   useEffect(() => {
@@ -631,6 +718,33 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   );
   const [history, setHistory] = useState<NleProjectState[]>([]);
   const [historyIdx, setHistoryIdx] = useState(-1);
+  const projectRef = useRef<NleProjectState>(project);
+  const historyIdxRef = useRef<number>(historyIdx);
+  const audioObjectUrlsRef = useRef<Set<string>>(new Set());
+  const desktopKeyActionsRef = useRef<{
+    togglePlay: () => void;
+    stepFrame: (d: number) => void;
+    undo: () => void;
+    redo: () => void;
+  }>({
+    togglePlay: () => {},
+    stepFrame: () => {},
+    undo: () => {},
+    redo: () => {},
+  });
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+
+  // Strict desktop-web detection: NEVER true on Android native app or touch phones/tablets
+  const isDesktopWeb = useMemo(
+    () =>
+      !isNativeApp() &&
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(hover: hover) and (pointer: fine)').matches,
+    []
+  );
+  projectRef.current = project;
+  historyIdxRef.current = historyIdx;
 
   const [selectedClipId, setSelectedClipId] = useState<string>('clip-main-1');
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
@@ -651,17 +765,35 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       setProject((prev) => {
         const next = typeof updater === 'function' ? updater(prev) : updater;
         const updated = {...next, updatedAt: Date.now()};
+        projectRef.current = updated;
+        const curIdx = historyIdxRef.current;
         setHistory((h) => {
-          const sliced = h.slice(0, historyIdx + 1);
-          return [...sliced.slice(-35), updated];
+          const sliced = h.slice(0, curIdx + 1);
+          const nextHist = [...sliced.slice(-35), updated];
+          historyIdxRef.current = nextHist.length - 1;
+          setHistoryIdx(nextHist.length - 1);
+          return nextHist;
         });
-        setHistoryIdx((idx) => Math.min(35, idx + 1));
         return updated;
       });
       setHasUnsavedChanges(true);
     },
-    [historyIdx]
+    []
   );
+
+  const commitDragSnapshot = useCallback(() => {
+    const snap = {...projectRef.current, updatedAt: Date.now()};
+    projectRef.current = snap;
+    const curIdx = historyIdxRef.current;
+    setHistory((h) => {
+      const sliced = h.slice(0, curIdx + 1);
+      const nextHist = [...sliced.slice(-35), snap];
+      historyIdxRef.current = nextHist.length - 1;
+      setHistoryIdx(nextHist.length - 1);
+      return nextHist;
+    });
+    setHasUnsavedChanges(true);
+  }, []);
 
   // Sync device orientation
   useEffect(() => {
@@ -707,6 +839,14 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       if (relinkedVideoUrl) URL.revokeObjectURL(relinkedVideoUrl);
     };
   }, [relinkedVideoUrl]);
+
+  // Revoke all imported external audio & voiceover Blob URLs on editor unmount
+  useEffect(() => {
+    return () => {
+      audioObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      audioObjectUrlsRef.current.clear();
+    };
+  }, []);
 
   const proxyRecommendation = useMemo(
     () => evaluateProxyRecommendation(videoMeta.w, videoMeta.h, file.size),
@@ -794,36 +934,94 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     };
   }, [file]);
 
-  // Close editor sub-dialogs on Escape key (U-9)
+  // Desktop-web-only keyboard shortcuts (Escape, ?, Ctrl/Cmd+Z, Ctrl/Cmd+Y, Space)
+  // Never active on native mobile or touch devices
   useEffect(() => {
+    if (!isDesktopWeb) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (wheelMenuOpen) {
+      const target = e.target as HTMLElement | null;
+      const isTyping =
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable);
+
+      if (e.key === 'Escape') {
+        if (showShortcutsModal) {
+          e.preventDefault();
+          setShowShortcutsModal(false);
+        } else if (wheelMenuOpen) {
+          e.preventDefault();
+          setWheelMenuOpen(false);
+        } else if (showExportConfirm) {
+          e.preventDefault();
+          setShowExportConfirm(false);
+        } else if (seamTransition) {
+          e.preventDefault();
+          setSeamTransition(null);
+        } else if (itemPopup) {
+          e.preventDefault();
+          setItemPopup(null);
+        } else if (showUnsavedExitDialog) {
+          e.preventDefault();
+          setShowUnsavedExitDialog(false);
+        } else if (showProjectsModal) {
+          e.preventDefault();
+          setShowProjectsModal(false);
+        } else if (isFullscreenPreview) {
+          e.preventDefault();
+          setIsFullscreenPreview(false);
+        }
+        return;
+      }
+
+      if (isTyping) return;
+
+      if (e.key === '?' && !isPortraitMode) {
         e.preventDefault();
-        setWheelMenuOpen(false);
-      } else if (showExportConfirm) {
+        setShowShortcutsModal((v) => !v);
+        return;
+      }
+
+      if (e.code === 'Space' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
-        setShowExportConfirm(false);
-      } else if (seamTransition) {
+        desktopKeyActionsRef.current.togglePlay();
+        return;
+      }
+
+      if (e.key === 'ArrowLeft' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
-        setSeamTransition(null);
-      } else if (itemPopup) {
+        desktopKeyActionsRef.current.stepFrame(-1);
+        return;
+      }
+
+      if (e.key === 'ArrowRight' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
-        setItemPopup(null);
-      } else if (showUnsavedExitDialog) {
-        e.preventDefault();
-        setShowUnsavedExitDialog(false);
-      } else if (showProjectsModal) {
-        e.preventDefault();
-        setShowProjectsModal(false);
-      } else if (isFullscreenPreview) {
-        e.preventDefault();
-        setIsFullscreenPreview(false);
+        desktopKeyActionsRef.current.stepFrame(1);
+        return;
+      }
+
+      if (e.ctrlKey || e.metaKey) {
+        const lower = e.key.toLowerCase();
+        if (lower === 'z' && !e.shiftKey) {
+          e.preventDefault();
+          desktopKeyActionsRef.current.undo();
+          return;
+        }
+        if (lower === 'y' || (lower === 'z' && e.shiftKey)) {
+          e.preventDefault();
+          desktopKeyActionsRef.current.redo();
+          return;
+        }
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
+    isDesktopWeb,
+    isPortraitMode,
+    showShortcutsModal,
     wheelMenuOpen,
     showExportConfirm,
     seamTransition,
@@ -1231,8 +1429,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         1,
         Math.max(0, (project.masterVolume / 100) * (aClip.volume / 100) * duckMult)
       );
+      const isRowVisible = (aClip.trackRow ?? 0) === 0 ? trackVisibility.a1 : trackVisibility.a2;
       el.muted =
-        project.masterMuted || !trackVisibility.a2 || aClip.muted || vol <= 0.005;
+        project.masterMuted || !isRowVisible || aClip.muted || vol <= 0.005;
       el.volume = vol;
 
       if (isPlaying && inRange && !el.muted) {
@@ -1329,7 +1528,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     const snap = history[nextIdx];
     setHistoryIdx(nextIdx);
     setProject(snap);
-    notifyStatus(tr('İşlem geri alındı (Undo)', 'Action undone (Undo)'));
+    notifyStatus(tr('İşlem geri alındı.', 'Action undone.'));
   };
 
   const handleRedo = () => {
@@ -1338,7 +1537,14 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     const snap = history[nextIdx];
     setHistoryIdx(nextIdx);
     setProject(snap);
-    notifyStatus(tr('İşlem ileri alındı (Redo)', 'Action redone (Redo)'));
+    notifyStatus(tr('İşlem ileri alındı.', 'Action redone.'));
+  };
+
+  desktopKeyActionsRef.current = {
+    togglePlay,
+    stepFrame,
+    undo: handleUndo,
+    redo: handleRedo,
   };
 
   // ============================================================================
@@ -1355,6 +1561,10 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
           ? videoUrl
           : getMediaAssetUrl(mediaId) || videoUrl;
       registerAudioClipBlob(newId, file.file, file.name);
+      const assetDur =
+        (project.mediaAssets || []).find((m) => m.id === mediaId)?.durationSec ||
+        duration ||
+        vc.sourceEnd;
       const detachedClip: TimelineAudioClip = {
         id: newId,
         label: `${tr('Video Sesi', 'Video Audio')} · ${vc.label}`,
@@ -1362,6 +1572,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         trackRow: 0,
         sourceStart: vc.sourceStart,
         sourceEnd: vc.sourceEnd,
+        sourceDurationSec: Math.max(assetDur, vc.sourceEnd),
         timelineStart: vc.timelineStart,
         volume: vc.volume,
         muted: vc.muted,
@@ -1373,13 +1584,23 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         ducking: false,
         blobUrl: srcUrl,
       };
-      commitProject((prev) => ({
-        ...prev,
-        videoClips: prev.videoClips.map((c) =>
+      commitProject((prev) => {
+        const nextVideoClips = prev.videoClips.map((c) =>
           c.id === v1ClipId ? {...c, audioDetached: true, muted: true} : c
-        ),
-        audioClips: [...prev.audioClips, detachedClip],
-      }));
+        );
+        const safeRow = findAvailableAudioRow(
+          prev.audioClips,
+          nextVideoClips,
+          detachedClip.timelineStart,
+          detachedClip.timelineStart + Math.max(0.25, detachedClip.sourceEnd - detachedClip.sourceStart),
+          0
+        );
+        return {
+          ...prev,
+          videoClips: nextVideoClips,
+          audioClips: [...prev.audioClips, {...detachedClip, trackRow: safeRow}],
+        };
+      });
       setSelectedAudioId(newId);
       setSelectedLayerType('audio');
       if (!silent) {
@@ -1612,7 +1833,14 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         return;
       }
 
-      const trimmedAuds = trimAudioClipHandle(workingAudioClips, targetAud.id, side, playhead, project.fps);
+      const trimmedAuds = trimAudioClipHandle(
+        workingAudioClips,
+        targetAud.id,
+        side,
+        playhead,
+        project.fps,
+        getAttachedV1AudioIntervals(nextVideoClips)
+      );
       commitProject((prev) => ({
         ...prev,
         videoClips: nextVideoClips,
@@ -1721,6 +1949,17 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         notifyStatus(tr('Video klibinin orijinal sesi kaldırıldı.', 'Video clip original audio removed.'));
         return;
       }
+      const victim = projectRef.current.audioClips.find((a) => a.id === selectedAudioId);
+      const isSharedBlobUrl = Boolean(
+        victim?.blobUrl &&
+          projectRef.current.audioClips.some(
+            (a) => a.id !== selectedAudioId && a.blobUrl === victim.blobUrl
+          )
+      );
+      if (victim?.blobUrl && !isSharedBlobUrl && audioObjectUrlsRef.current.has(victim.blobUrl)) {
+        URL.revokeObjectURL(victim.blobUrl);
+        audioObjectUrlsRef.current.delete(victim.blobUrl);
+      }
       removeAudioClipBlob(selectedAudioId);
       commitProject((prev) => ({
         ...prev,
@@ -1806,7 +2045,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         targetId = detached;
       }
       setProject((prev) => {
-        const res = duplicateAudioClip(prev.audioClips, targetId, prev.fps);
+        const res = duplicateAudioClip(prev.audioClips, targetId, prev.fps, prev.videoClips);
         if (res.newId) {
           cloneAudioClipBlob(targetId, res.newId);
           setSelectedAudioId(res.newId);
@@ -1874,6 +2113,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     e.target.value = '';
     if (!f) return;
     const url = URL.createObjectURL(f);
+    audioObjectUrlsRef.current.add(url);
     const aud = document.createElement('audio');
     aud.src = url;
     aud.addEventListener(
@@ -1882,28 +2122,47 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         const dur = Number.isFinite(aud.duration) && aud.duration > 0 ? aud.duration : 15;
         const clipId = `aud-music-${Date.now()}`;
         registerAudioClipBlob(clipId, f, f.name);
-        const newTrack: TimelineAudioClip = {
-          id: clipId,
-          label: f.name.replace(/\.[^.]+$/, ''),
-          kind: 'music',
-          sourceStart: 0,
-          sourceEnd: Math.min(dur, totalTimelineDur),
-          timelineStart: playhead,
-          volume: 90,
-          muted: false,
-          fadeInSec: 0.5,
-          fadeOutSec: 0.5,
-          noiseReduction: false,
-          ducking: project.audioDucking,
-          blobUrl: url,
-        };
-        commitProject((prev) => ({
-          ...prev,
-          audioClips: [...prev.audioClips, newTrack],
-        }));
-        setSelectedAudioId(newTrack.id);
+        const clipEnd = Math.min(dur, Math.max(totalTimelineDur, 1));
+        const prefRow = preferredAudioRowRef.current ?? 1;
+        preferredAudioRowRef.current = null;
+        let assignedRow = prefRow;
+        commitProject((prev) => {
+          assignedRow = findAvailableAudioRow(
+            prev.audioClips,
+            prev.videoClips,
+            playhead,
+            playhead + Math.max(0.25, clipEnd),
+            prefRow
+          );
+          const newTrack: TimelineAudioClip = {
+            id: clipId,
+            label: f.name.replace(/\.[^.]+$/, ''),
+            kind: 'music',
+            trackRow: assignedRow,
+            sourceStart: 0,
+            sourceEnd: clipEnd,
+            sourceDurationSec: dur,
+            timelineStart: playhead,
+            volume: 90,
+            muted: false,
+            fadeInSec: 0.5,
+            fadeOutSec: 0.5,
+            noiseReduction: false,
+            ducking: prev.audioDucking,
+            blobUrl: url,
+          };
+          return {
+            ...prev,
+            audioClips: [...prev.audioClips, newTrack],
+          };
+        });
+        setSelectedAudioId(clipId);
+        setSelectedLayerType('audio');
         notifyStatus(
-          tr(`"${f.name}" ses katmanına eklendi.`, `"${f.name}" added to audio timeline.`)
+          tr(
+            `"${f.name}" A${assignedRow + 1} ses satırına eklendi.`,
+            `"${f.name}" added to audio row A${assignedRow + 1}.`
+          )
         );
       },
       {once: true}
@@ -1929,33 +2188,47 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(voiceChunksRef.current, {type: 'audio/webm'});
         const url = URL.createObjectURL(blob);
+        audioObjectUrlsRef.current.add(url);
         const recDur = Math.max(1, Number(((Date.now() - startedAt) / 1000).toFixed(2)));
         const voId = `aud-vo-${Date.now()}`;
         registerAudioClipBlob(voId, blob, `${voId}.webm`);
-        const voClip: TimelineAudioClip = {
-          id: voId,
-          label: `Seslendirme #${project.audioClips.length}`,
-          kind: 'voiceover',
-          sourceStart: 0,
-          sourceEnd: recDur,
-          timelineStart: recordStartPlayhead,
-          volume: 110,
-          muted: false,
-          fadeInSec: 0.2,
-          fadeOutSec: 0.2,
-          noiseReduction: true,
-          ducking: false,
-          blobUrl: url,
-        };
-        commitProject((prev) => ({
-          ...prev,
-          audioClips: [...prev.audioClips, voClip],
-        }));
-        setSelectedAudioId(voClip.id);
+        let assignedRow = 1;
+        commitProject((prev) => {
+          assignedRow = findAvailableAudioRow(
+            prev.audioClips,
+            prev.videoClips,
+            recordStartPlayhead,
+            recordStartPlayhead + recDur,
+            1
+          );
+          const voClip: TimelineAudioClip = {
+            id: voId,
+            label: `Seslendirme #${prev.audioClips.length}`,
+            kind: 'voiceover',
+            trackRow: assignedRow,
+            sourceStart: 0,
+            sourceEnd: recDur,
+            sourceDurationSec: recDur,
+            timelineStart: recordStartPlayhead,
+            volume: 110,
+            muted: false,
+            fadeInSec: 0.2,
+            fadeOutSec: 0.2,
+            noiseReduction: true,
+            ducking: false,
+            blobUrl: url,
+          };
+          return {
+            ...prev,
+            audioClips: [...prev.audioClips, voClip],
+          };
+        });
+        setSelectedAudioId(voId);
+        setSelectedLayerType('audio');
         notifyStatus(
           tr(
-            `Seslendirme (${recDur.toFixed(1)}sn) ses katmanına eklendi.`,
-            `Voiceover (${recDur.toFixed(1)}s) added to audio track.`
+            `Seslendirme (${recDur.toFixed(1)}sn) A${assignedRow + 1} satırına eklendi.`,
+            `Voiceover (${recDur.toFixed(1)}s) added to row A${assignedRow + 1}.`
           )
         );
       };
@@ -1978,33 +2251,51 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   // ============================================================================
   // TEXT & .SRT SUBTITLE IMPORT
   // ============================================================================
-  const handleAddTextClip = () => {
+  const handleAddTextClip = (preferredRow?: number | React.MouseEvent) => {
+    const safePrefRow = typeof preferredRow === 'number' ? preferredRow : 0;
     const start = snapToFrame(playhead, project.fps);
     const dur = Math.min(4, Math.max(1.5, totalTimelineDur - start));
-    const newText: TimelineTextClip = {
-      id: `txt-${Date.now()}`,
-      text: tr('Yeni Başlık / Altyazı', 'New Title / Subtitle'),
-      timelineStart: start,
-      durationSec: dur,
-      fontFamily: 'Inter, system-ui, sans-serif',
-      fontSize: 'md',
-      textColor: '#FFFFFF',
-      bgEnabled: true,
-      bgColor: 'rgba(16,17,20,0.75)',
-      strokeColor: '#000000',
-      strokeWidth: 1,
-      shadowEnabled: true,
-      align: 'center',
-      posY: 'bottom',
-      animation: 'fade',
-    };
-    commitProject((prev) => ({
-      ...prev,
-      textClips: [...prev.textClips, newText],
-    }));
-    setSelectedTextId(newText.id);
+    const newId = `txt-${Date.now()}`;
+    let assignedRow = safePrefRow;
+    commitProject((prev) => {
+      assignedRow = findAvailableTextRow(
+        prev.textClips,
+        start,
+        start + dur,
+        safePrefRow
+      );
+      const newText: TimelineTextClip = {
+        id: newId,
+        text: tr('Yeni Başlık / Altyazı', 'New Title / Subtitle'),
+        trackRow: assignedRow,
+        timelineStart: start,
+        durationSec: dur,
+        fontFamily: 'Inter, system-ui, sans-serif',
+        fontSize: 'md',
+        textColor: '#FFFFFF',
+        bgEnabled: true,
+        bgColor: 'rgba(16,17,20,0.75)',
+        strokeColor: '#000000',
+        strokeWidth: 1,
+        shadowEnabled: true,
+        align: 'center',
+        posY: 'bottom',
+        animation: 'fade',
+      };
+      return {
+        ...prev,
+        textClips: [...prev.textClips, newText],
+      };
+    });
+    setSelectedTextId(newId);
+    setSelectedLayerType('text');
     setActiveTab('text');
-    notifyStatus(tr('Yeni metin katmanı (T1) eklendi.', 'New text layer (T1) added.'));
+    notifyStatus(
+      tr(
+        `Yeni metin katmanı (T${assignedRow + 1}) eklendi.`,
+        `New text layer (T${assignedRow + 1}) added.`
+      )
+    );
   };
 
   const handleImportSrtFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2037,12 +2328,212 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     }
   };
 
+  const handleGenerateAutoCaptions = async () => {
+    if (isGeneratingCaptions || isTranslatingCaptions) return;
+    setIsGeneratingCaptions(true);
+    setCaptionError(null);
+    setCaptionProgressLabel(tr('Ses ayrıştırılıyor...', 'Extracting audio...'));
+
+    try {
+      const extracted = await extractMonoWavForTranscription(file.file);
+      setCaptionProgressLabel(tr('Konuşma çözülüyor...', 'Transcribing speech...'));
+
+      const result = await requestAutoCaptions({
+        audioBase64: extracted.audioBase64,
+        mimeType: extracted.mimeType,
+        durationSec: extracted.durationSec,
+        language: captionLang,
+        density: captionDensity,
+        speechWindows: extracted.speechWindows,
+      });
+
+      if (!result.segments || result.segments.length === 0) {
+        const msg = tr(
+          'Videoda çözümlenecek belirgin bir konuşma algılanamadı.',
+          'No clear spoken speech was detected in this video.'
+        );
+        setCaptionError(msg);
+        notifyStatus(msg);
+        return;
+      }
+
+      setCaptionProgressLabel(tr('Zaman çizelgesine ekleniyor...', 'Adding to timeline...'));
+      const generatedClips = buildSubtitleTextClips(
+        result.segments,
+        captionStyle,
+        project.fps,
+        project.videoClips,
+        PRIMARY_MEDIA_ID
+      );
+
+      if (generatedClips.length === 0) {
+        const msg = tr('Altyazı blokları oluşturulamadı.', 'Could not create subtitle blocks.');
+        setCaptionError(msg);
+        notifyStatus(msg);
+        return;
+      }
+
+      commitProject((prev) => ({
+        ...prev,
+        textClips: captionReplaceExisting
+          ? generatedClips
+          : [...prev.textClips, ...generatedClips],
+      }));
+      setSelectedTextId(generatedClips[0].id);
+      setSelectedLayerType('text');
+      setActiveTab('text');
+      notifyStatus(
+        tr(
+          `${generatedClips.length} adet otomatik altyazı T1 katmanına eklendi.`,
+          `Added ${generatedClips.length} auto-captions to track T1.`
+        )
+      );
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : tr('Otomatik altyazı oluşturulurken hata oluştu.', 'Failed to generate auto captions.');
+      setCaptionError(msg);
+      notifyStatus(msg);
+    } finally {
+      setIsGeneratingCaptions(false);
+      setCaptionProgressLabel('');
+    }
+  };
+
+  const handleTranslateCaptions = async () => {
+    if (isTranslatingCaptions || isGeneratingCaptions) return;
+    const targets = project.textClips
+      .filter((t) => t.text.trim().length > 0)
+      .map((t) => ({id: t.id, text: t.text.trim()}));
+    if (targets.length === 0) return;
+
+    setIsTranslatingCaptions(true);
+    setCaptionError(null);
+    try {
+      const translated = await requestTranslateCaptions({
+        segments: targets,
+        targetLanguage: captionTranslateLang,
+      });
+      if (translated.length === 0) {
+        throw new Error(tr('Çeviri sonucu boş döndü.', 'Translation returned empty result.'));
+      }
+      const map = new Map<string, string>();
+      for (const item of translated) {
+        if (item.id && item.text?.trim()) {
+          map.set(item.id, item.text.trim());
+        }
+      }
+      commitProject((prev) => ({
+        ...prev,
+        textClips: prev.textClips.map((clip) =>
+          map.has(clip.id) ? {...clip, text: map.get(clip.id)!} : clip
+        ),
+      }));
+      notifyStatus(
+        tr(
+          `${map.size} altyazı satırı başarıyla çevrildi.`,
+          `Translated ${map.size} subtitle lines.`
+        )
+      );
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : tr('Altyazı çevirisi başarısız oldu.', 'Subtitle translation failed.');
+      setCaptionError(msg);
+      notifyStatus(msg);
+    } finally {
+      setIsTranslatingCaptions(false);
+    }
+  };
+
+  const handleApplyCaptionStyleToAll = () => {
+    if (project.textClips.length === 0) return;
+    const patch = getCaptionStylePatch(captionStyle);
+    commitProject((prev) => ({
+      ...prev,
+      textClips: prev.textClips.map((clip) => ({
+        ...clip,
+        ...patch,
+      })),
+    }));
+    notifyStatus(
+      tr(
+        'Seçili altyazı stili tüm satırlara uygulandı.',
+        'Applied selected caption style to all lines.'
+      )
+    );
+  };
+
+  const handleExportSrtFile = () => {
+    const ok = downloadSrtFile(project.textClips, file.file.name || 'morph-video');
+    if (ok) {
+      notifyStatus(tr('Altyazılar .SRT olarak indirildi.', 'Exported subtitles as .SRT.'));
+    } else {
+      notifyStatus(tr('Dışa aktarılacak altyazı bulunamadı.', 'No subtitles to export.'));
+    }
+  };
+
+  const handleClearAllTextClips = () => {
+    if (project.textClips.length === 0) return;
+    commitProject((prev) => ({
+      ...prev,
+      textClips: [],
+    }));
+    setSelectedTextId(null);
+    notifyStatus(tr('Tüm altyazı ve metin katmanları temizlendi.', 'Cleared all subtitle/text layers.'));
+  };
+
   // ============================================================================
-  // MULTI-SOURCE VIDEO IMPORT (V1 APPEND / V2 PIP OVERLAY) & LAYER SWITCHING
+  // MULTI-SOURCE VIDEO IMPORT (V1 APPEND / V2+ PIP OVERLAY) & LAYER SWITCHING
   // ============================================================================
-  const triggerImportVideos = (targetTrack: 0 | 1) => {
+  const triggerImportVideos = (targetTrack: number) => {
     importTargetTrackRef.current = targetTrack;
     mediaImportInputRef.current?.click();
+  };
+
+  const handleAddTrackRow = (kind: 'audio' | 'text' | 'pip') => {
+    if (kind === 'audio') {
+      const maxUsed = project.audioClips
+        .filter((a) => a.kind !== 'original')
+        .reduce((m, a) => Math.max(m, a.trackRow ?? 0), 0);
+      const curCount = Math.min(6, Math.max(1, maxUsed + 1, 1 + extraTrackRows.audio));
+      if (curCount >= 6) return;
+      const nextCount = curCount + 1;
+      setExtraTrackRows((prev) => ({...prev, audio: Math.max(prev.audio + 1, nextCount - 1)}));
+      notifyStatus(tr(`Yeni ses satırı (A${nextCount}) eklendi.`, `Added audio row (A${nextCount}).`));
+      return;
+    }
+    if (kind === 'text') {
+      const maxUsed =
+        project.textClips.length > 0
+          ? project.textClips.reduce((m, t) => Math.max(m, t.trackRow ?? 0), 0)
+          : -1;
+      const curCount = Math.min(6, Math.max(maxUsed + 1, extraTrackRows.text));
+      if (curCount >= 6) return;
+      const nextCount = curCount + 1;
+      setExtraTrackRows((prev) => ({...prev, text: Math.max(prev.text + 1, nextCount)}));
+      notifyStatus(tr(`Yeni metin satırı (T${nextCount}) eklendi.`, `Added text row (T${nextCount}).`));
+      return;
+    }
+    const maxUsedPip = project.videoClips
+      .filter((c) => getClipTrackIndex(c) >= 1)
+      .reduce((m, c) => Math.max(m, getClipTrackIndex(c)), 0);
+    const curPipCount = Math.min(4, Math.max(maxUsedPip, extraTrackRows.pip));
+    if (curPipCount >= 4) return;
+    const nextPipCount = curPipCount + 1;
+    setExtraTrackRows((prev) => ({...prev, pip: Math.max(prev.pip + 1, nextPipCount)}));
+    notifyStatus(
+      tr(`Yeni PiP satırı (V${nextPipCount + 1}) eklendi.`, `Added PiP row (V${nextPipCount + 1}).`)
+    );
+  };
+
+  const handleRemoveEmptyTrackRow = (kind: 'audio' | 'text' | 'pip') => {
+    setExtraTrackRows((prev) => ({
+      ...prev,
+      [kind]: Math.max(0, prev[kind] - 1),
+    }));
   };
 
   const handleImportMultiVideos = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2075,7 +2566,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
           );
           nextClips = appended.clips;
           lastNewClipId = appended.newClipId;
-          if (targetTrack === 1) {
+          if (targetTrack >= 1) {
             cursorPlayhead += Math.min(2, asset.durationSec);
           }
         }
@@ -2087,10 +2578,10 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       });
       if (lastNewClipId) setSelectedClipId(lastNewClipId);
       notifyStatus(
-        targetTrack === 1
+        targetTrack >= 1
           ? tr(
-              `${probedAssets.length} video V2 PiP üst katmanına eklendi.`,
-              `Added ${probedAssets.length} video(s) to V2 PiP overlay track.`
+              `${probedAssets.length} video V${targetTrack + 1} PiP üst katmanına eklendi.`,
+              `Added ${probedAssets.length} video(s) to V${targetTrack + 1} PiP overlay track.`
             )
           : tr(
               `${probedAssets.length} video ana zaman çizelgesine (V1) eklendi.`,
@@ -2108,7 +2599,16 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     if (selectedLayerType === 'text' && selectedTextId) {
       const target = project.textClips.find((t) => t.id === selectedTextId);
       if (!target) return;
-      const nextRow: 0 | 1 = (target.trackRow ?? 0) === 0 ? 1 : 0;
+      const maxRow = Math.min(
+        5,
+        Math.max(
+          1,
+          extraTrackRows.text - 1,
+          project.textClips.reduce((m, t) => Math.max(m, t.trackRow ?? 0), 0)
+        )
+      );
+      const curRow = target.trackRow ?? 0;
+      const nextRow = curRow >= maxRow ? 0 : curRow + 1;
       commitProject((prev) => ({
         ...prev,
         textClips: moveTextClipOnTimeline(
@@ -2120,9 +2620,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         ),
       }));
       notifyStatus(
-        nextRow === 1
-          ? tr('Metin üst satıra (T2) taşındı.', 'Moved text to upper row (T2).')
-          : tr('Metin ana satıra (T1) taşındı.', 'Moved text to main row (T1).')
+        tr(`Metin T${nextRow + 1} satırına taşındı.`, `Moved text to row T${nextRow + 1}.`)
       );
       return;
     }
@@ -2134,10 +2632,22 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         if (!detached) return;
         targetId = detached;
       }
+      let movedRow = 1;
       commitProject((prev) => {
         const item = prev.audioClips.find((a) => a.id === targetId);
         if (!item) return prev;
-        const nextRow: 0 | 1 = (item.trackRow ?? 0) === 0 ? 1 : 0;
+        const maxRow = Math.min(
+          5,
+          Math.max(
+            1,
+            extraTrackRows.audio,
+            prev.audioClips
+              .filter((a) => a.kind !== 'original')
+              .reduce((m, a) => Math.max(m, a.trackRow ?? 0), 0)
+          )
+        );
+        const curRow = item.trackRow ?? 0;
+        movedRow = curRow >= maxRow ? 0 : curRow + 1;
         return {
           ...prev,
           audioClips: moveAudioClipOnTimeline(
@@ -2145,11 +2655,14 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             targetId,
             item.timelineStart,
             prev.fps,
-            nextRow
+            movedRow,
+            getAttachedV1AudioIntervals(prev.videoClips)
           ),
         };
       });
-      notifyStatus(tr('Ses katman satırı değiştirildi (A1 ↔ A2).', 'Switched audio track row (A1 ↔ A2).'));
+      notifyStatus(
+        tr(`Ses A${movedRow + 1} satırına taşındı.`, `Moved audio to row A${movedRow + 1}.`)
+      );
       return;
     }
 
@@ -2257,7 +2770,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     const startY = e.clientY;
     const initPip = {...(target.pipRect ?? DEFAULT_PIP_RECT)};
 
+    let didMove = false;
     const onMove = (ev: PointerEvent) => {
+      didMove = true;
       const dx = (ev.clientX - startX) / Math.max(1, rect.width);
       const dy = (ev.clientY - startY) / Math.max(1, rect.height);
       let nx = Math.max(0, Math.min(1 - initPip.w, initPip.x + dx));
@@ -2267,27 +2782,31 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       if (snapX) nx = Math.max(0, Math.min(1 - initPip.w, 0.5 - initPip.w / 2));
       if (snapY) ny = Math.max(0, Math.min(1 - initPip.h, 0.5 - initPip.h / 2));
       setSnapCenterGuides({x: snapX, y: snapY});
-      setProject((prev) => ({
-        ...prev,
-        videoClips: prev.videoClips.map((c) =>
-          c.id === clipId
-            ? {
-                ...c,
-                pipRect: {
-                  ...initPip,
-                  x: Number(nx.toFixed(4)),
-                  y: Number(ny.toFixed(4)),
-                },
-              }
-            : c
-        ),
-      }));
+      setProject((prev) => {
+        const updated = {
+          ...prev,
+          videoClips: prev.videoClips.map((c) =>
+            c.id === clipId
+              ? {
+                  ...c,
+                  pipRect: {
+                    ...initPip,
+                    x: Number(nx.toFixed(4)),
+                    y: Number(ny.toFixed(4)),
+                  },
+                }
+              : c
+          ),
+        };
+        projectRef.current = updated;
+        return updated;
+      });
     };
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       setSnapCenterGuides({x: false, y: false});
-      setHasUnsavedChanges(true);
+      if (didMove) commitDragSnapshot();
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -2688,15 +3207,20 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       rawSec: number,
       excludeClipId?: string,
       refSpan = canvasDuration,
-      bypassSnap = false
+      bypassSnap = false,
+      clipSpanSec = 0
     ): number => {
       const clamped = Math.max(0, rawSec);
       if (!project.snapEnabled || bypassSnap) {
         setSnapGuideTime(null);
         return snapToFrame(clamped, project.fps);
       }
-      const snapThresholdSec = Math.max(0.08, refSpan * 0.015);
-      const targets: number[] = [0, playhead];
+      // Forgiving responsive threshold (~2.6% of visible timeline span, min 0.14s) so snapping feels crisp on touch & desktop
+      const snapThresholdSec = Math.max(0.14, refSpan * 0.026);
+      const targets: number[] = [0];
+      if (excludeClipId !== '__playhead__') {
+        targets.push(playhead);
+      }
       for (const c of project.videoClips) {
         if (c.id === excludeClipId) continue;
         targets.push(c.timelineStart, clipTimelineEnd(c));
@@ -2709,11 +3233,37 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         if (a.kind === 'original' || a.id === excludeClipId) continue;
         targets.push(a.timelineStart, a.timelineStart + Math.max(0.25, a.sourceEnd - a.sourceStart));
       }
-      for (const t of targets) {
-        if (Math.abs(clamped - t) <= snapThresholdSec) {
-          setSnapGuideTime(t);
-          return snapToFrame(t, project.fps);
+      if (project.watermark && !project.watermark.fullDuration && excludeClipId !== '__watermark__') {
+        targets.push(project.watermark.startSec, project.watermark.endSec);
+      }
+
+      let bestStart = clamped;
+      let bestDist = snapThresholdSec + 0.0001;
+      let bestGuide: number | null = null;
+
+      for (const target of targets) {
+        // 1) Snap item START edge (or single trim/playhead edge) to closest target
+        const startDist = Math.abs(clamped - target);
+        if (startDist < bestDist) {
+          bestDist = startDist;
+          bestStart = target;
+          bestGuide = target;
         }
+        // 2) Snap item END edge to closest target when moving a clip with duration
+        if (clipSpanSec > 0.05) {
+          const endSec = clamped + clipSpanSec;
+          const endDist = Math.abs(endSec - target);
+          if (endDist < bestDist && target - clipSpanSec >= 0) {
+            bestDist = endDist;
+            bestStart = target - clipSpanSec;
+            bestGuide = target;
+          }
+        }
+      }
+
+      if (bestGuide !== null) {
+        setSnapGuideTime(bestGuide);
+        return snapToFrame(Math.max(0, bestStart), project.fps);
       }
       setSnapGuideTime(null);
       return snapToFrame(clamped, project.fps);
@@ -2724,6 +3274,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       project.videoClips,
       project.textClips,
       project.audioClips,
+      project.watermark,
       canvasDuration,
       playhead,
     ]
@@ -2803,7 +3354,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     let initSourceStart = 0;
     let initSourceEnd = duration || 10;
     let initSpeed = 1;
-    let initRow: 0 | 1 = 0;
+    let initRow = 0;
     let maxSrcDur = Math.max(duration || 10, 1);
 
     if ((mode === 'move-video' || mode === 'trim-left' || mode === 'trim-right') && targetId) {
@@ -2814,7 +3365,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       initSourceStart = vc.sourceStart;
       initSourceEnd = vc.sourceEnd;
       initSpeed = Math.max(0.25, vc.speed || 1);
-      initRow = getClipTrackIndex(vc) >= 1 ? 1 : 0;
+      initRow = getClipTrackIndex(vc);
       const mediaId = getClipMediaId(vc);
       const assetMeta = (project.mediaAssets || []).find((m) => m.id === mediaId);
       maxSrcDur = Math.max(assetMeta?.durationSec || duration || 10, vc.sourceEnd);
@@ -2826,7 +3377,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       if (!tc) return;
       initStartSec = tc.timelineStart;
       initSpanSec = tc.durationSec;
-      initRow = (tc.trackRow ?? 0) === 1 ? 1 : 0;
+      initRow = Math.max(0, Math.floor(tc.trackRow ?? 0));
     } else if (
       (mode === 'move-audio' || mode === 'trim-audio-left' || mode === 'trim-audio-right') &&
       targetId
@@ -2857,7 +3408,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
           initSpanSec = Math.max(0.25, ac.sourceEnd - ac.sourceStart);
           initSourceStart = ac.sourceStart;
           initSourceEnd = ac.sourceEnd;
-          initRow = (ac.trackRow ?? 0) === 1 ? 1 : 0;
+          initRow = Math.max(0, Math.floor(ac.trackRow ?? 0));
         }
       }
     } else if (
@@ -2871,6 +3422,35 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       initSpanSec = Math.max(0.4, wmEnd - initStartSec);
     }
 
+    const maxAudioRowIndex = Math.min(
+      5,
+      Math.max(
+        1,
+        extraTrackRows.audio,
+        project.audioClips
+          .filter((a) => a.kind !== 'original')
+          .reduce((m, a) => Math.max(m, a.trackRow ?? 0), 0) + 1
+      )
+    );
+    const maxTextRowIndex = Math.min(
+      5,
+      Math.max(
+        1,
+        extraTrackRows.text,
+        project.textClips.reduce((m, t) => Math.max(m, t.trackRow ?? 0), 0) + 1
+      )
+    );
+    const maxPipRowIndex = Math.min(
+      4,
+      Math.max(
+        1,
+        extraTrackRows.pip,
+        project.videoClips
+          .filter((c) => getClipTrackIndex(c) >= 1)
+          .reduce((m, c) => Math.max(m, getClipTrackIndex(c)), 0) + 1
+      )
+    );
+
     let dragActivated = !isMoveMode;
     let didMutate = false;
 
@@ -2879,7 +3459,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         const ratio = Math.min(1, Math.max(0, (clientX - trackLeftPx) / trackWidthPx));
         const targetSec = Math.min(
           Math.max(totalTimelineDur, 0.5),
-          snapTimelineSec(ratio * dragCanvasDur, undefined, dragCanvasDur)
+          snapTimelineSec(ratio * dragCanvasDur, '__playhead__', dragCanvasDur, freeTimelineMode)
         );
         seekTimelineTo(targetSec);
         return;
@@ -2889,19 +3469,21 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       const dy = clientY - startClientY;
 
       if (isMoveMode) {
+        const snapExcludeId = mode === 'move-watermark' ? '__watermark__' : targetId;
         const snappedStart = snapTimelineSec(
           Math.max(0, initStartSec + deltaSec),
-          targetId,
+          snapExcludeId,
           dragCanvasDur,
-          freeTimelineMode
+          freeTimelineMode,
+          initSpanSec
         );
         didMutate = true;
 
         if (mode === 'move-video' && targetId) {
-          // Dragging UP (-dy >= 24px) promotes V1 -> V2 PiP; dragging DOWN (+dy >= 24px) brings V2 -> V1!
-          const nextTrack: 0 | 1 =
-            initRow === 0 ? (dy < -24 ? 1 : 0) : dy > 24 ? 0 : 1;
-          setActiveDragLaneHint(nextTrack === 1 ? 'v2' : 'v1');
+          // Dragging UP (-dy) moves V1 -> V2 -> V3...; dragging DOWN (+dy) moves back toward V1!
+          const rowDelta = Math.abs(dy) < 22 ? 0 : Math.round(-dy / 40);
+          const nextTrack = Math.max(0, Math.min(maxPipRowIndex, initRow + rowDelta));
+          setActiveDragLaneHint({kind: 'video', row: nextTrack});
           setProject((prev) => ({
             ...prev,
             videoClips: moveVideoClip2D(
@@ -2914,10 +3496,10 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             ),
           }));
         } else if (mode === 'move-text' && targetId) {
-          // Dragging UP promotes T1 -> T2; dragging DOWN brings T2 -> T1
-          const nextRow: 0 | 1 =
-            initRow === 0 ? (dy < -22 ? 1 : 0) : dy > 22 ? 0 : 1;
-          setActiveDragLaneHint(nextRow === 1 ? 't2' : 't1');
+          // Dragging DOWN moves T1 -> T2 -> T3...; dragging UP moves back toward T1
+          const rowDelta = Math.abs(dy) < 20 ? 0 : Math.round(dy / 34);
+          const nextRow = Math.max(0, Math.min(maxTextRowIndex, initRow + rowDelta));
+          setActiveDragLaneHint({kind: 'text', row: nextRow});
           setProject((prev) => ({
             ...prev,
             textClips: moveTextClipOnTimeline(
@@ -2929,10 +3511,10 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             ),
           }));
         } else if (mode === 'move-audio' && targetId) {
-          // Dragging DOWN promotes A1 -> A2; dragging UP brings A2 -> A1
-          const nextRow: 0 | 1 =
-            initRow === 0 ? (dy > 22 ? 1 : 0) : dy < -22 ? 0 : 1;
-          setActiveDragLaneHint(nextRow === 1 ? 'a2' : 'a1');
+          // Dragging DOWN moves A1 -> A2 -> A3...; dragging UP moves back toward A1 (never overlaps on same row!)
+          const rowDelta = Math.abs(dy) < 20 ? 0 : Math.round(dy / 36);
+          const nextRow = Math.max(0, Math.min(maxAudioRowIndex, initRow + rowDelta));
+          setActiveDragLaneHint({kind: 'audio', row: nextRow});
           setProject((prev) => ({
             ...prev,
             audioClips: moveAudioClipOnTimeline(
@@ -2940,7 +3522,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
               targetId!,
               snappedStart,
               prev.fps,
-              nextRow
+              nextRow,
+              getAttachedV1AudioIntervals(prev.videoClips)
             ),
           }));
         } else if (mode === 'move-watermark') {
@@ -2964,7 +3547,14 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
 
       if ((mode === 'trim-left' || mode === 'trim-right') && targetId) {
         if (mode === 'trim-left') {
-          const newSourceStart = initSourceStart + deltaSec * initSpeed;
+          const snappedLeftEdge = snapTimelineSec(
+            Math.max(0, initStartSec + deltaSec),
+            targetId,
+            dragCanvasDur,
+            freeTimelineMode
+          );
+          const effectiveDelta = snappedLeftEdge - initStartSec;
+          const newSourceStart = initSourceStart + effectiveDelta * initSpeed;
           setProject((prev) => ({
             ...prev,
             videoClips: trimVideoClipHandle(
@@ -2977,7 +3567,14 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             ),
           }));
         } else {
-          const newSourceEnd = initSourceEnd + deltaSec * initSpeed;
+          const snappedRightEdge = snapTimelineSec(
+            Math.max(initStartSec + 0.15, initStartSec + initSpanSec + deltaSec),
+            targetId,
+            dragCanvasDur,
+            freeTimelineMode
+          );
+          const effectiveDelta = snappedRightEdge - (initStartSec + initSpanSec);
+          const newSourceEnd = initSourceEnd + effectiveDelta * initSpeed;
           setProject((prev) => ({
             ...prev,
             videoClips: trimVideoClipHandle(
@@ -2991,10 +3588,11 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
           }));
         }
       } else if ((mode === 'trim-text-left' || mode === 'trim-text-right') && targetId) {
-        const targetEdgeSec =
+        const rawEdgeSec =
           mode === 'trim-text-left'
             ? Math.max(0, initStartSec + deltaSec)
             : Math.max(initStartSec + 0.25, initStartSec + initSpanSec + deltaSec);
+        const targetEdgeSec = snapTimelineSec(rawEdgeSec, targetId, dragCanvasDur, freeTimelineMode);
         setProject((prev) => ({
           ...prev,
           textClips: trimTextClipHandle(
@@ -3007,10 +3605,11 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
           ),
         }));
       } else if ((mode === 'trim-audio-left' || mode === 'trim-audio-right') && targetId) {
-        const targetEdgeSec =
+        const rawEdgeSec =
           mode === 'trim-audio-left'
             ? Math.max(0, initStartSec + deltaSec)
             : Math.max(initStartSec + 0.25, initStartSec + initSpanSec + deltaSec);
+        const targetEdgeSec = snapTimelineSec(rawEdgeSec, targetId, dragCanvasDur, freeTimelineMode);
         setProject((prev) => ({
           ...prev,
           audioClips: trimAudioClipHandle(
@@ -3018,13 +3617,20 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             targetId!,
             mode === 'trim-audio-left' ? 'left' : 'right',
             targetEdgeSec,
-            prev.fps
+            prev.fps,
+            getAttachedV1AudioIntervals(prev.videoClips)
           ),
         }));
       } else if (mode === 'trim-watermark-left' || mode === 'trim-watermark-right') {
         const initEnd = initStartSec + initSpanSec;
         if (mode === 'trim-watermark-left') {
-          const nextStart = Math.max(0, Math.min(initEnd - 0.4, initStartSec + deltaSec));
+          const snappedStart = snapTimelineSec(
+            Math.max(0, Math.min(initEnd - 0.4, initStartSec + deltaSec)),
+            '__watermark__',
+            dragCanvasDur,
+            freeTimelineMode
+          );
+          const nextStart = Math.max(0, Math.min(initEnd - 0.4, snappedStart));
           setProject((prev) => ({
             ...prev,
             watermark: {
@@ -3035,7 +3641,13 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             },
           }));
         } else {
-          const nextEnd = Math.max(initStartSec + 0.4, initEnd + deltaSec);
+          const snappedEnd = snapTimelineSec(
+            Math.max(initStartSec + 0.4, initEnd + deltaSec),
+            '__watermark__',
+            dragCanvasDur,
+            freeTimelineMode
+          );
+          const nextEnd = Math.max(initStartSec + 0.4, snappedEnd);
           setProject((prev) => ({
             ...prev,
             watermark: {
@@ -3203,7 +3815,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     const initX = project.canvasPosX ?? 0;
     const initY = project.canvasPosY ?? 0;
 
+    let didMove = false;
     const onMove = (ev: PointerEvent) => {
+      didMove = true;
       const dxPct = ((ev.clientX - startX) / Math.max(1, rect.width)) * 100;
       const dyPct = ((ev.clientY - startY) / Math.max(1, rect.height)) * 100;
       let nextX = Math.max(-55, Math.min(55, initX + dxPct));
@@ -3213,18 +3827,22 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       if (snapX) nextX = 0;
       if (snapY) nextY = 0;
       setSnapCenterGuides({x: snapX, y: snapY});
-      setProject((prev) => ({
-        ...prev,
-        canvasPosX: Number(nextX.toFixed(1)),
-        canvasPosY: Number(nextY.toFixed(1)),
-      }));
+      setProject((prev) => {
+        const updated = {
+          ...prev,
+          canvasPosX: Number(nextX.toFixed(1)),
+          canvasPosY: Number(nextY.toFixed(1)),
+        };
+        projectRef.current = updated;
+        return updated;
+      });
     };
 
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       setSnapCenterGuides({x: false, y: false});
-      setHasUnsavedChanges(true);
+      if (didMove) commitDragSnapshot();
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -3259,7 +3877,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             ? 0.5
             : 0.85;
 
+    let didMove = false;
     const onMove = (ev: PointerEvent) => {
+      didMove = true;
       const dx = (ev.clientX - startX) / Math.max(1, rect.width);
       const dy = (ev.clientY - startY) / Math.max(1, rect.height);
       let nextX = Math.max(0.06, Math.min(0.94, initX + dx));
@@ -3269,25 +3889,29 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       if (snapX) nextX = 0.5;
       if (snapY) nextY = 0.5;
       setSnapCenterGuides({x: snapX, y: snapY});
-      setProject((prev) => ({
-        ...prev,
-        textClips: prev.textClips.map((tItem) =>
-          tItem.id === textId
-            ? {
-                ...tItem,
-                customPosX: Number(nextX.toFixed(4)),
-                customPosY: Number(nextY.toFixed(4)),
-              }
-            : tItem
-        ),
-      }));
+      setProject((prev) => {
+        const updated = {
+          ...prev,
+          textClips: prev.textClips.map((tItem) =>
+            tItem.id === textId
+              ? {
+                  ...tItem,
+                  customPosX: Number(nextX.toFixed(4)),
+                  customPosY: Number(nextY.toFixed(4)),
+                }
+              : tItem
+          ),
+        };
+        projectRef.current = updated;
+        return updated;
+      });
     };
 
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       setSnapCenterGuides({x: false, y: false});
-      setHasUnsavedChanges(true);
+      if (didMove) commitDragSnapshot();
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -3305,7 +3929,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     const initX = curWm.posX;
     const initY = curWm.posY;
 
+    let didMove = false;
     const onMove = (ev: PointerEvent) => {
+      didMove = true;
       const dx = (ev.clientX - startX) / Math.max(1, rect.width);
       const dy = (ev.clientY - startY) / Math.max(1, rect.height);
       let nextX = Math.max(0.05, Math.min(0.95, initX + dx));
@@ -3315,22 +3941,26 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       if (snapX) nextX = 0.5;
       if (snapY) nextY = 0.5;
       setSnapCenterGuides({x: snapX, y: snapY});
-      setProject((prev) => ({
-        ...prev,
-        watermark: {
-          ...(prev.watermark ?? DEFAULT_WATERMARK),
-          positionPreset: 'custom',
-          posX: Number(nextX.toFixed(4)),
-          posY: Number(nextY.toFixed(4)),
-        },
-      }));
+      setProject((prev) => {
+        const updated = {
+          ...prev,
+          watermark: {
+            ...(prev.watermark ?? DEFAULT_WATERMARK),
+            positionPreset: 'custom' as const,
+            posX: Number(nextX.toFixed(4)),
+            posY: Number(nextY.toFixed(4)),
+          },
+        };
+        projectRef.current = updated;
+        return updated;
+      });
     };
 
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       setSnapCenterGuides({x: false, y: false});
-      setHasUnsavedChanges(true);
+      if (didMove) commitDragSnapshot();
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -3350,7 +3980,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     const startY = e.clientY;
     const initBox = {...project.cropBox};
 
+    let didMove = false;
     const onMove = (ev: PointerEvent) => {
+      didMove = true;
       const dx = (ev.clientX - startX) / Math.max(1, rect.width);
       const dy = (ev.clientY - startY) / Math.max(1, rect.height);
       const minSize = 0.18;
@@ -3380,20 +4012,25 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         }
       }
 
-      setProject((prev) => ({
-        ...prev,
-        cropBox: {
-          x: Number(x.toFixed(4)),
-          y: Number(y.toFixed(4)),
-          w: Number(w.toFixed(4)),
-          h: Number(h.toFixed(4)),
-        },
-      }));
+      setProject((prev) => {
+        const updated = {
+          ...prev,
+          cropBox: {
+            x: Number(x.toFixed(4)),
+            y: Number(y.toFixed(4)),
+            w: Number(w.toFixed(4)),
+            h: Number(h.toFixed(4)),
+          },
+        };
+        projectRef.current = updated;
+        return updated;
+      });
     };
 
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      if (didMove) commitDragSnapshot();
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -3504,11 +4141,153 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     [totalTimelineDur, project.exportSettings, targetDimensions]
   );
 
-  // Render Text Overlay Canvas PNG for FFmpeg burn-in
-  const buildTextOverlayPngDataUrl = useCallback((): string => {
-    const activeTexts = project.textClips.filter((tItem) => tItem.text.trim().length > 0);
-    if (activeTexts.length === 0) return '';
-    const tItem = selectedTextClip && selectedTextClip.text.trim() ? selectedTextClip : activeTexts[0];
+  // Render a single timed Text/Caption Overlay Canvas PNG for FFmpeg burn-in
+  const renderSingleTextClipPng = useCallback(
+    (tItem: NleProjectState['textClips'][number], cw: number, ch: number): string => {
+      const canvas = document.createElement('canvas');
+      canvas.width = cw;
+      canvas.height = ch;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return '';
+
+      ctx.clearRect(0, 0, cw, ch);
+      const shortEdge = Math.min(cw, ch);
+      const sizeFactor =
+        tItem.fontSize === 'sm'
+          ? 0.038
+          : tItem.fontSize === 'lg'
+            ? 0.072
+            : tItem.fontSize === 'xl'
+              ? 0.092
+              : 0.054;
+      const fontPx = Math.max(18, Math.round(shortEdge * sizeFactor));
+      ctx.font = `800 ${fontPx}px ${tItem.fontFamily}`;
+      ctx.textAlign = tItem.align;
+      ctx.textBaseline = 'middle';
+
+      // Auto-wrap long lines so captions never clip off the left/right edges
+      const maxLinePx = Math.max(160, cw * 0.86);
+      const rawLines = tItem.text.trim().split('\n');
+      const lines: string[] = [];
+      for (const rl of rawLines) {
+        const words = rl.trim().split(/\s+/).filter(Boolean);
+        if (words.length === 0) continue;
+        let cur = '';
+        for (const w of words) {
+          const test = cur ? `${cur} ${w}` : w;
+          if (ctx.measureText(test).width <= maxLinePx || !cur) {
+            cur = test;
+          } else {
+            lines.push(cur);
+            cur = w;
+          }
+        }
+        if (cur) lines.push(cur);
+        if (lines.length >= 4) break;
+      }
+      const clampedLines = lines.slice(0, 4);
+      if (clampedLines.length === 0) return '';
+
+      const lineHeight = Math.round(fontPx * 1.26);
+      const blockH = clampedLines.length * lineHeight;
+      let maxW = 0;
+      for (const l of clampedLines) {
+        const m = ctx.measureText(l).width;
+        if (m > maxW) maxW = m;
+      }
+
+      const hasCustomPos =
+        typeof tItem.customPosX === 'number' && typeof tItem.customPosY === 'number';
+      if (hasCustomPos) {
+        ctx.textAlign = 'center';
+      }
+
+      const centerY = hasCustomPos
+        ? ch * (tItem.customPosY as number)
+        : tItem.posY === 'top'
+          ? Math.max(blockH / 2 + fontPx, ch * 0.14)
+          : tItem.posY === 'center'
+            ? ch * 0.5
+            : Math.min(ch - blockH / 2 - fontPx, ch * 0.85);
+      const anchorX = hasCustomPos
+        ? cw * (tItem.customPosX as number)
+        : tItem.align === 'left'
+          ? cw * 0.1
+          : tItem.align === 'right'
+            ? cw * 0.9
+            : cw * 0.5;
+
+      if (tItem.bgEnabled) {
+        const padX = Math.round(fontPx * 0.7);
+        const padY = Math.round(fontPx * 0.42);
+        const boxW = Math.min(cw - 24, maxW + padX * 2);
+        const boxH = blockH + padY * 2;
+        const boxX = hasCustomPos
+          ? anchorX - boxW / 2
+          : tItem.align === 'left'
+            ? anchorX - padX
+            : tItem.align === 'right'
+              ? anchorX - boxW + padX
+              : (cw - boxW) / 2;
+        const boxY = centerY - boxH / 2;
+        ctx.fillStyle = tItem.bgColor || 'rgba(16, 17, 20, 0.78)';
+        ctx.beginPath();
+        ctx.roundRect(boxX, boxY, boxW, boxH, Math.round(fontPx * 0.4));
+        ctx.fill();
+      }
+
+      clampedLines.forEach((line, idx) => {
+        const ly = centerY - ((clampedLines.length - 1) * lineHeight) / 2 + idx * lineHeight;
+        if (tItem.shadowEnabled) {
+          ctx.shadowColor = 'rgba(0,0,0,0.85)';
+          ctx.shadowBlur = Math.max(4, Math.round(fontPx * 0.18));
+          ctx.shadowOffsetY = 2;
+        }
+        if (tItem.strokeWidth > 0) {
+          ctx.lineWidth = Math.max(2, tItem.strokeWidth * 2);
+          ctx.strokeStyle = tItem.strokeColor || '#000000';
+          ctx.strokeText(line, anchorX, ly);
+        }
+        ctx.fillStyle = tItem.textColor || '#FFFFFF';
+        ctx.fillText(line, anchorX, ly);
+      });
+
+      try {
+        return canvas.toDataURL('image/png');
+      } catch {
+        return '';
+      }
+    },
+    []
+  );
+
+  // Render ALL timed text/caption clips with exact timeline windows for FFmpeg export
+  const buildTimedTextOverlays = useCallback((): Array<{
+    pngDataUrl: string;
+    startSec: number;
+    endSec: number;
+  }> => {
+    const activeTexts = project.textClips
+      .filter((tItem) => tItem.text.trim().length > 0 && tItem.durationSec > 0.05)
+      .sort((a, b) => a.timelineStart - b.timelineStart);
+    if (activeTexts.length === 0) return [];
+    const cw = Math.min(1920, Math.max(320, targetDimensions.w));
+    const ch = Math.min(1920, Math.max(320, targetDimensions.h));
+    const list: Array<{pngDataUrl: string; startSec: number; endSec: number}> = [];
+    for (const tItem of activeTexts) {
+      const pngDataUrl = renderSingleTextClipPng(tItem, cw, ch);
+      if (!pngDataUrl) continue;
+      const startSec = Math.max(0, Number(tItem.timelineStart.toFixed(3)));
+      const endSec = Number((startSec + Math.max(0.1, tItem.durationSec)).toFixed(3));
+      list.push({pngDataUrl, startSec, endSec});
+    }
+    return list;
+  }, [project.textClips, renderSingleTextClipPng, targetDimensions]);
+
+  // Render pixel-accurate transparent-hole Mask Overlay PNG (circle / framed rect) for instant FFmpeg compositing
+  const buildMaskOverlayPngDataUrl = useCallback((): string => {
+    const shape = project.vfx.maskShape;
+    if (shape !== 'circle' && shape !== 'rect') return '';
     const cw = Math.min(1920, Math.max(320, targetDimensions.w));
     const ch = Math.min(1920, Math.max(320, targetDimensions.h));
     const canvas = document.createElement('canvas');
@@ -3517,92 +4296,25 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return '';
 
-    ctx.clearRect(0, 0, cw, ch);
-    const shortEdge = Math.min(cw, ch);
-    const sizeFactor =
-      tItem.fontSize === 'sm'
-        ? 0.038
-        : tItem.fontSize === 'lg'
-          ? 0.072
-          : tItem.fontSize === 'xl'
-            ? 0.092
-            : 0.054;
-    const fontPx = Math.max(18, Math.round(shortEdge * sizeFactor));
-    ctx.font = `800 ${fontPx}px ${tItem.fontFamily}`;
-    ctx.textAlign = tItem.align;
-    ctx.textBaseline = 'middle';
-
-    const lines = tItem.text.trim().split('\n').slice(0, 4);
-    const lineHeight = Math.round(fontPx * 1.26);
-    const blockH = lines.length * lineHeight;
-    let maxW = 0;
-    for (const l of lines) {
-      const m = ctx.measureText(l).width;
-      if (m > maxW) maxW = m;
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, cw, ch);
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath();
+    if (shape === 'circle') {
+      const r = Math.min(cw, ch) * 0.42;
+      ctx.arc(cw / 2, ch / 2, r, 0, Math.PI * 2);
+    } else {
+      const mx = cw * 0.12;
+      const my = ch * 0.12;
+      ctx.roundRect(mx, my, cw - mx * 2, ch - my * 2, Math.max(12, Math.round(Math.min(cw, ch) * 0.028)));
     }
-
-    const hasCustomPos =
-      typeof tItem.customPosX === 'number' && typeof tItem.customPosY === 'number';
-    if (hasCustomPos) {
-      ctx.textAlign = 'center';
-    }
-
-    const centerY = hasCustomPos
-      ? ch * (tItem.customPosY as number)
-      : tItem.posY === 'top'
-        ? Math.max(blockH / 2 + fontPx, ch * 0.14)
-        : tItem.posY === 'center'
-          ? ch * 0.5
-          : Math.min(ch - blockH / 2 - fontPx, ch * 0.85);
-    const anchorX = hasCustomPos
-      ? cw * (tItem.customPosX as number)
-      : tItem.align === 'left'
-        ? cw * 0.1
-        : tItem.align === 'right'
-          ? cw * 0.9
-          : cw * 0.5;
-
-    if (tItem.bgEnabled) {
-      const padX = Math.round(fontPx * 0.7);
-      const padY = Math.round(fontPx * 0.42);
-      const boxW = Math.min(cw - 24, maxW + padX * 2);
-      const boxH = blockH + padY * 2;
-      const boxX = hasCustomPos
-        ? anchorX - boxW / 2
-        : tItem.align === 'left'
-          ? anchorX - padX
-          : tItem.align === 'right'
-            ? anchorX - boxW + padX
-            : (cw - boxW) / 2;
-      const boxY = centerY - boxH / 2;
-      ctx.fillStyle = tItem.bgColor || 'rgba(16, 17, 20, 0.78)';
-      ctx.beginPath();
-      ctx.roundRect(boxX, boxY, boxW, boxH, Math.round(fontPx * 0.4));
-      ctx.fill();
-    }
-
-    lines.forEach((line, idx) => {
-      const ly = centerY - ((lines.length - 1) * lineHeight) / 2 + idx * lineHeight;
-      if (tItem.shadowEnabled) {
-        ctx.shadowColor = 'rgba(0,0,0,0.85)';
-        ctx.shadowBlur = Math.max(4, Math.round(fontPx * 0.18));
-        ctx.shadowOffsetY = 2;
-      }
-      if (tItem.strokeWidth > 0) {
-        ctx.lineWidth = Math.max(2, tItem.strokeWidth * 2);
-        ctx.strokeStyle = tItem.strokeColor || '#000000';
-        ctx.strokeText(line, anchorX, ly);
-      }
-      ctx.fillStyle = tItem.textColor || '#FFFFFF';
-      ctx.fillText(line, anchorX, ly);
-    });
-
+    ctx.fill();
     try {
       return canvas.toDataURL('image/png');
     } catch {
       return '';
     }
-  }, [project.textClips, selectedTextClip, targetDimensions]);
+  }, [project.vfx.maskShape, targetDimensions]);
 
   // Render High-Resolution Watermark Layer PNG (Text, Custom Logo, Morph Logo, or 3x3 Diagonal Tile)
   const buildWatermarkPngDataUrl = useCallback(async (): Promise<string> => {
@@ -3714,7 +4426,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     const exp = project.exportSettings;
     const dsp = project.audioDsp ?? DEFAULT_AUDIO_DSP;
     const wm = project.watermark ?? DEFAULT_WATERMARK;
-    const overlayPng = trackVisibility.t1 ? buildTextOverlayPngDataUrl() : '';
+    const timedTextOverlays = trackVisibility.t1 ? buildTimedTextOverlays() : [];
+    const maskPng = buildMaskOverlayPngDataUrl();
     const effectiveVideoClips = trackVisibility.v2
       ? project.videoClips
       : project.videoClips.filter((c) => getClipTrackIndex(c) === 0);
@@ -3741,6 +4454,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       cropH: String(project.cropBox.h),
       fitMode: project.fitMode,
       zoom: String(project.zoom),
+      canvasPosX: String(project.canvasPosX ?? 0),
+      canvasPosY: String(project.canvasPosY ?? 0),
       rotateMode: String(project.rotateDeg),
       flipH: project.flipH ? '1' : '0',
       flipV: project.flipV ? '1' : '0',
@@ -3749,6 +4464,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       contrast: String(g.contrast),
       saturation: String(g.saturation),
       exposure: String(g.exposure),
+      highlights: String(g.highlights ?? 0),
+      shadows: String(g.shadows ?? 0),
       temperature: String(g.temperature),
       tint: String(g.tint),
       sharpness: String(g.sharpness),
@@ -3756,6 +4473,10 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       lift: String(g.lift ?? 0),
       gamma: String(g.gamma ?? 0),
       gain: String(g.gain ?? 0),
+      visualFx: vfx.visualFx ?? 'none',
+      visualFxIntensity: String(vfx.visualFxIntensity ?? 75),
+      maskShape: vfx.maskShape ?? 'none',
+      stabilization: vfx.stabilization ? '1' : '0',
       chromaKeyEnabled: vfx.chromaKeyEnabled ? '1' : '0',
       chromaKeyColor: vfx.chromaKeyColor,
       chromaKeySimilarity: String(vfx.chromaKeySimilarity),
@@ -3782,8 +4503,17 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       clipsJson: JSON.stringify(effectiveVideoClips),
       audioClipsJson: JSON.stringify(effectiveAudioClips),
     };
-    if (overlayPng) {
-      payload.overlayPng = overlayPng;
+    if (timedTextOverlays.length > 0) {
+      payload.textOverlaysJson = JSON.stringify(timedTextOverlays);
+      if (action === 'snapshot') {
+        const atPlayhead = timedTextOverlays.find(
+          (ov) => playhead >= ov.startSec && playhead <= ov.endSec
+        );
+        if (atPlayhead) payload.overlayPng = atPlayhead.pngDataUrl;
+      }
+    }
+    if (maskPng) {
+      payload.maskPng = maskPng;
     }
     if (watermarkPngOverride) {
       payload.watermarkPng = watermarkPngOverride;
@@ -3940,7 +4670,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                     {tr('Medya Havuzu (Çoklu Video)', 'Media Bin (Multi-Source)')}
                   </span>
                   <span className="font-mono-num rounded bg-white/[0.06] px-1.5 py-0.5 text-[9px] font-bold text-white/60">
-                    {1 + (project.mediaAssets?.length ?? 0)}
+                    {1 + (project.mediaAssets ?? []).filter((a) => !a.isPrimary && a.id !== PRIMARY_MEDIA_ID).length}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -4043,7 +4773,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                 </div>
 
                 {/* Imported Secondary Media Cards */}
-                {(project.mediaAssets ?? []).map((asset) => (
+                {(project.mediaAssets ?? [])
+                  .filter((asset) => !asset.isPrimary && asset.id !== PRIMARY_MEDIA_ID)
+                  .map((asset) => (
                   <div
                     key={asset.id}
                     className="flex w-[148px] shrink-0 items-center gap-2 rounded-lg border border-[#34D399]/30 bg-[var(--inset)] p-1.5"
@@ -4279,13 +5011,16 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                   />
                 </div>
 
-                {/* V2 PiP Overlay Controls (when selected clip is on V2) */}
-                {getClipTrackIndex(selectedClip) === 1 && (
+                {/* V2+ PiP Overlay Controls (when selected clip is on V2..V5) */}
+                {getClipTrackIndex(selectedClip) >= 1 && (
                   <div className="rounded-lg border border-[#A855F7]/35 bg-[#A855F7]/10 p-2.5 space-y-2">
                     <div className="flex items-center justify-between text-[11px] font-bold text-[#D8B4FE]">
                       <span className="flex items-center gap-1.5">
                         <PictureInPicture2 className="h-3.5 w-3.5" />
-                        {tr('V2 PiP Üst Katman Boyutu', 'V2 PiP Overlay Size')}
+                        {tr(
+                          `V${getClipTrackIndex(selectedClip) + 1} PiP Üst Katman Boyutu`,
+                          `V${getClipTrackIndex(selectedClip) + 1} PiP Overlay Size`
+                        )}
                       </span>
                       <span className="text-[10px] font-medium text-white/60">
                         {tr('Konumu ekrandan sürükle', 'Drag on preview to move')}
@@ -4341,7 +5076,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                   >
                     <ArrowUpDown className="h-3.5 w-3.5" />
                     <span>
-                      {getClipTrackIndex(selectedClip) === 1
+                      {getClipTrackIndex(selectedClip) >= 1
                         ? tr('Ana Katmana (V1) Al', 'Move to V1')
                         : tr('Üst PiP Katmanına (V2) Al', 'Move to V2 PiP')}
                     </span>
@@ -5174,9 +5909,33 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
           </div>
         )}
 
-        {/* TAB 4: TEXT & .SRT SUBTITLE STUDIO */}
+        {/* TAB 4: TEXT & AUTO-CAPTIONS / .SRT SUBTITLE STUDIO */}
         {activeTab === 'text' && (
           <div className="space-y-3">
+            <AutoCaptionPanel
+              isTr={isTr}
+              captionCount={project.textClips.length}
+              language={captionLang}
+              onChangeLanguage={setCaptionLang}
+              stylePreset={captionStyle}
+              onChangeStylePreset={setCaptionStyle}
+              density={captionDensity}
+              onChangeDensity={setCaptionDensity}
+              replaceExisting={captionReplaceExisting}
+              onToggleReplaceExisting={() => setCaptionReplaceExisting((prev) => !prev)}
+              translateLang={captionTranslateLang}
+              onChangeTranslateLang={setCaptionTranslateLang}
+              isGenerating={isGeneratingCaptions}
+              progressLabel={captionProgressLabel}
+              isTranslating={isTranslatingCaptions}
+              errorText={captionError}
+              onGenerate={() => void handleGenerateAutoCaptions()}
+              onTranslate={() => void handleTranslateCaptions()}
+              onApplyStyleAll={handleApplyCaptionStyleToAll}
+              onExportSrt={handleExportSrtFile}
+              onClearAll={handleClearAllTextClips}
+            />
+
             <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 space-y-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-xs font-extrabold text-[var(--ink)]">
@@ -5420,7 +6179,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                             }))
                           }
                           style={{backgroundColor: hex}}
-                          className={`h-6 w-6 rounded-full border-2 ${
+                          className={`h-[var(--ve-swatch-size,32px)] w-[var(--ve-swatch-size,32px)] rounded-full border-2 transition-transform ${
                             selectedTextClip.textColor === hex
                               ? 'scale-110 border-[var(--accent)]'
                               : 'border-white/30'
@@ -6030,9 +6789,111 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
           </div>
         )}
 
-        {/* TAB 6: EXPORT SETTINGS (NUMERIC SLIDERS + 1-BY-1 FPS, CODEC & FORMAT PILLS) */}
+        {/* TAB 6: EXPORT SETTINGS (1-TAP PLATFORM PRESETS + NUMERIC SLIDERS + CODEC & FORMAT) */}
         {activeTab === 'export' && (
           <div className="space-y-3">
+            {/* 1-Tap Platform Export Presets */}
+            <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 space-y-2">
+              <div className="text-[10.5px] font-bold uppercase tracking-wider text-[var(--muted)]">
+                {tr('Hazır Platform Profilleri', 'One-Tap Platform Presets')}
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                {(
+                  [
+                    {
+                      id: 'reels',
+                      labelTr: 'Reels / TikTok',
+                      labelEn: 'Reels / TikTok',
+                      sub: '9:16 · 1080p · 30',
+                      aspect: '9:16' as AspectRatioPreset,
+                      res: '1080' as ExportResolution,
+                      fps: 30,
+                      crf: '23' as ExportQualityCrf,
+                      bitrate: '192k' as const,
+                    },
+                    {
+                      id: 'youtube',
+                      labelTr: 'YouTube HD',
+                      labelEn: 'YouTube HD',
+                      sub: '16:9 · 1080p · 30',
+                      aspect: '16:9' as AspectRatioPreset,
+                      res: '1080' as ExportResolution,
+                      fps: 30,
+                      crf: '18' as ExportQualityCrf,
+                      bitrate: '256k' as const,
+                    },
+                    {
+                      id: 'whatsapp',
+                      labelTr: 'WhatsApp',
+                      labelEn: 'WhatsApp',
+                      sub: '720p · 24 · <16 MB',
+                      aspect: null,
+                      res: '720' as ExportResolution,
+                      fps: 24,
+                      crf: '28' as ExportQualityCrf,
+                      bitrate: '128k' as const,
+                    },
+                    {
+                      id: '4k',
+                      labelTr: '4K Sinema',
+                      labelEn: '4K Cinema',
+                      sub: '2160p · 30 · HQ',
+                      aspect: null,
+                      res: '2160' as ExportResolution,
+                      fps: 30,
+                      crf: '18' as ExportQualityCrf,
+                      bitrate: '320k' as const,
+                    },
+                  ] as const
+                ).map((preset) => {
+                  const isActive =
+                    project.exportSettings.resolution === preset.res &&
+                    project.exportSettings.fps === preset.fps &&
+                    project.exportSettings.qualityCrf === preset.crf &&
+                    (!preset.aspect || project.aspectRatio === preset.aspect);
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => {
+                        commitProject((prev) => ({
+                          ...prev,
+                          aspectRatio: preset.aspect ?? prev.aspectRatio,
+                          fps: preset.fps,
+                          exportSettings: {
+                            ...prev.exportSettings,
+                            resolution: preset.res,
+                            fps: preset.fps,
+                            qualityCrf: preset.crf,
+                            audioBitrate: preset.bitrate,
+                            format: 'mp4',
+                          },
+                        }));
+                        notifyStatus(
+                          tr(
+                            `${preset.labelTr} dışa aktarma profili uygulandı.`,
+                            `Applied ${preset.labelEn} export preset.`
+                          )
+                        );
+                      }}
+                      className={`flex flex-col items-start rounded-lg border px-2.5 py-2 text-left transition-colors ${
+                        isActive
+                          ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--ink)]'
+                          : 'border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] hover:border-[var(--accent)]/50'
+                      }`}
+                    >
+                      <span className="text-[11px] font-extrabold leading-tight">
+                        {isTr ? preset.labelTr : preset.labelEn}
+                      </span>
+                      <span className="font-mono-num mt-0.5 text-[9.5px] font-semibold text-[var(--muted)]">
+                        {preset.sub}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 space-y-4">
               {/* Numeric Export Sliders */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -6091,9 +6952,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                         })
                       }
                       aria-label="-1 FPS"
-                      className="mb-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]"
+                      className="mb-0.5 flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]"
                     >
-                      <Minus className="h-3 w-3" />
+                      <Minus className="h-3.5 w-3.5" />
                     </button>
                     <div className="min-w-0 flex-1">
                       <NleSlider
@@ -6127,9 +6988,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                         })
                       }
                       aria-label="+1 FPS"
-                      className="mb-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]"
+                      className="mb-0.5 flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]"
                     >
-                      <Plus className="h-3 w-3" />
+                      <Plus className="h-3.5 w-3.5" />
                     </button>
                   </div>
                   <div className="font-mono-num flex justify-between px-7 text-[9px] font-semibold text-[var(--muted)]">
@@ -6305,6 +7166,111 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* Live Safe-Bounded Studio Control Sizing Card */}
+            {onChangeVideoEditorSizing && (
+              <div className="space-y-2.5 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-extrabold text-[var(--ink)]">
+                      {tr('Stüdyo Kontrol Boyutları', 'Studio Control Sizes')}
+                    </p>
+                    <p className="text-[10px] text-[var(--muted)]">
+                      {tr(
+                        'Görsel düzeni bozmayan güvenli sınırlar içinde küçült veya büyüt.',
+                        'Resize controls cleanly within layout-safe bounds.'
+                      )}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {(
+                      [
+                        {
+                          label: tr('Kompakt', 'Compact'),
+                          vals: {dockTabHeight: 38, controlBtnSize: 30, colorSwatchSize: 26, watermarkGridHeight: 32},
+                        },
+                        {label: tr('Varsayılan', 'Default'), vals: DEFAULT_VE_SIZING},
+                        {
+                          label: tr('Büyük', 'Large'),
+                          vals: {dockTabHeight: 52, controlBtnSize: 42, colorSwatchSize: 38, watermarkGridHeight: 46},
+                        },
+                      ] as const
+                    ).map((p) => (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => onChangeVideoEditorSizing(p.vals)}
+                        className="rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2 py-1 text-[10px] font-bold text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--ink)]"
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  {(
+                    [
+                      {key: 'dockTabHeight', label: tr('Alt Stüdyo Simgeleri', 'Bottom Dock Icons')},
+                      {key: 'controlBtnSize', label: tr('Butonlar (FPS / Kapat / Araç)', 'Buttons (FPS / Close / Bar)')},
+                      {key: 'colorSwatchSize', label: tr('Renk Seçim Noktaları', 'Color Swatch Dots')},
+                      {key: 'watermarkGridHeight', label: tr('Filigran 9-Nokta Izgarası', 'Watermark 9-Point Grid')},
+                    ] as const
+                  ).map(({key, label}) => {
+                    const b = VE_SIZING_BOUNDS[key];
+                    const cur = veSizing[key];
+                    return (
+                      <div
+                        key={key}
+                        className="space-y-1 rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2.5 py-2"
+                      >
+                        <div className="flex items-center justify-between gap-2 text-[10.5px]">
+                          <span className="truncate font-bold text-[var(--ink)]">{label}</span>
+                          <span className="font-mono-num shrink-0 font-bold text-[var(--accent)]">
+                            {cur}px
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            disabled={cur <= b.min}
+                            aria-label={`${label} -`}
+                            onClick={() =>
+                              onChangeVideoEditorSizing({[key]: Math.max(b.min, cur - b.step)})
+                            }
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] disabled:opacity-35"
+                          >
+                            <Minus className="h-3 w-3" />
+                          </button>
+                          <input
+                            type="range"
+                            min={b.min}
+                            max={b.max}
+                            step={b.step}
+                            value={cur}
+                            onChange={(e) =>
+                              onChangeVideoEditorSizing({[key]: Number(e.target.value)})
+                            }
+                            className="morph-nle-range flex-1"
+                          />
+                          <button
+                            type="button"
+                            disabled={cur >= b.max}
+                            aria-label={`${label} +`}
+                            onClick={() =>
+                              onChangeVideoEditorSizing({[key]: Math.min(b.max, cur + b.step)})
+                            }
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] disabled:opacity-35"
+                          >
+                            <Plus className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
         </div>
@@ -6342,6 +7308,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       onToggleSplitCompare={() => setSplitCompareEnabled((s) => !s)}
       onToggleGrid={() => setShowGrid((g) => !g)}
       onToggleOrientation={toggleOrientationLock}
+      onOpenShortcuts={isDesktopWeb ? () => setShowShortcutsModal(true) : undefined}
       onExport={() => setShowExportConfirm(true)}
     />
   );
@@ -6364,6 +7331,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       isPortraitMode={isPortraitMode}
       isInspectorOpen={isInspectorOpen}
       isExpandedWheelMode={isExpandedWheelMode}
+      expArmadilloReel={expArmadilloReel}
       isFullscreenPreview={isFullscreenPreview}
       previewHeightVh={previewHeightVh}
       isResizingPreview={isResizingPreview}
@@ -6492,13 +7460,14 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         }
         setSeamTransition({type, id});
       }}
-      onQuickAddText={() => {
-        handleAddTextClip();
+      onQuickAddText={(targetRow) => {
+        handleAddTextClip(targetRow);
         setSelectedLayerType('text');
         setActiveTab('text');
         if (isPortraitMode) setIsInspectorOpen(true);
       }}
-      onQuickAddAudio={() => {
+      onQuickAddAudio={(targetRow) => {
+        preferredAudioRowRef.current = targetRow ?? null;
         setSelectedLayerType('audio');
         setActiveTab('audio');
         if (isPortraitMode) setIsInspectorOpen(true);
@@ -6509,6 +7478,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         if (isPortraitMode) setIsInspectorOpen(true);
       }}
       onImportVideos={triggerImportVideos}
+      extraTrackRows={extraTrackRows}
+      onAddTrackRow={handleAddTrackRow}
+      onRemoveEmptyTrackRow={handleRemoveEmptyTrackRow}
       onToggleSelectedLayerRow={handleToggleSelectedClipLayer}
       onOpenFxOrColor={(tab) => {
         setActiveTab(tab);
@@ -6526,8 +7498,27 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       onFreezeFrame={handleFreezeFrame}
       onToggleFreeTimelineMode={handleToggleFreeTimelineMode}
       onToggleSnap={() => {
-        if (freeTimelineMode) setFreeTimelineMode(false);
-        commitProject((prev) => ({...prev, snapEnabled: !prev.snapEnabled}));
+        if (freeTimelineMode) {
+          setFreeTimelineMode(false);
+          commitProject((prev) => ({...prev, snapEnabled: true}));
+          notifyStatus(
+            tr(
+              'Mıknatıs hizalama açıldı (Serbest yerleşim kapatıldı).',
+              'Magnetic snap ON (Free placement turned off).'
+            )
+          );
+          return;
+        }
+        const nextSnap = !project.snapEnabled;
+        commitProject((prev) => ({...prev, snapEnabled: nextSnap}));
+        notifyStatus(
+          nextSnap
+            ? tr(
+                'Mıknatıs hizalama açık: Klip ve sesler imleç ile kenarlara otomatik yapışır.',
+                'Magnetic snap ON: Clips & audio snap to playhead and edges.'
+              )
+            : tr('Mıknatıs hizalama kapatıldı.', 'Magnetic snap OFF.')
+        );
       }}
       onZoomIn={() =>
         setTimelineZoom((z) => (z === 1 ? 2 : z === 2 ? 4 : 8))
@@ -6652,7 +7643,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     Boolean(seamTransition);
 
   return (
-    <div className="fixed inset-0 z-50 flex h-[100dvh] flex-col overflow-hidden bg-[#08080A] text-[var(--ink)] select-none">
+    <div className="morph-studio-dark fixed inset-0 z-50 flex h-full w-full flex-col overflow-hidden bg-[#08080A] pl-[var(--morph-safe-left)] pr-[var(--morph-safe-right)] text-[var(--ink)] select-none">
       {studioHeaderNode}
 
       {isPortraitMode ? (
@@ -6663,7 +7654,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
           {/* Normal Mode: docked inspector */}
           {!isExpandedWheelMode && isInspectorOpen && renderInspectorPanel()}
 
-          {/* Expanded Near-Fullscreen Mode: Inspector pops up as a floating bottom sheet */}
+          {/* Expanded Near-Fullscreen Mode (Experimental Armadillo Reel): Inspector pops up as a floating bottom sheet */}
           {isExpandedWheelMode && isInspectorOpen && (
             <>
               <div
@@ -6676,30 +7667,34 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             </>
           )}
 
-          {/* Continuous Armadillo Roll-Up Morph Dock -> Video Editor Cinema Radial Wheel */}
-          <ArmadilloReelDock
-            isTr={isTr}
-            lang={lang}
-            activeTab={activeTab}
-            isInspectorOpen={isInspectorOpen}
-            previewHeightVh={previewHeightVh}
-            isResizingPreview={isResizingPreview}
-            hasActiveWatermark={hasActiveWatermark}
-            timecodeText={formatSmpteTimecode(playhead, project.fps)}
-            wheelOpen={wheelMenuOpen}
-            wheelSide={editorWheelSide}
-            hideFab={hideEditorWheelFab}
-            onSetWheelOpen={setWheelMenuOpen}
-            onChangeWheelSide={setEditorWheelSide}
-            onSelectTab={(tab) => {
-              if (isExpandedWheelMode) {
-                setActiveTab(tab);
-                setIsInspectorOpen(true);
-              } else {
-                handleSelectDockTab(tab);
-              }
-            }}
-          />
+          {/* Default ergonomic StudioDock; Experimental ArmadilloReelDock only when enabled in Settings -> Experimental */}
+          {expArmadilloReel ? (
+            <ArmadilloReelDock
+              isTr={isTr}
+              lang={lang}
+              activeTab={activeTab}
+              isInspectorOpen={isInspectorOpen}
+              previewHeightVh={previewHeightVh}
+              isResizingPreview={isResizingPreview}
+              hasActiveWatermark={hasActiveWatermark}
+              timecodeText={formatSmpteTimecode(playhead, project.fps)}
+              wheelOpen={wheelMenuOpen}
+              wheelSide={editorWheelSide}
+              hideFab={hideEditorWheelFab}
+              onSetWheelOpen={setWheelMenuOpen}
+              onChangeWheelSide={setEditorWheelSide}
+              onSelectTab={(tab) => {
+                if (isExpandedWheelMode) {
+                  setActiveTab(tab);
+                  setIsInspectorOpen(true);
+                } else {
+                  handleSelectDockTab(tab);
+                }
+              }}
+            />
+          ) : (
+            studioDockNode
+          )}
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -6867,8 +7862,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             </h3>
             <p className="mt-1.5 text-xs leading-relaxed text-white/65">
               {tr(
-                'Editörden çıkmadan önce projenizi IndexedDB üzerine kaydetmek ister misiniz? Tüm klipler, V2 PiP katmanları ve ses miksajınız korunur.',
-                'Save your project to IndexedDB before leaving the editor? All video clips, V2 PiP overlays, and audio mixes will be preserved.'
+                'Editörden çıkmadan önce projenizi cihazınıza kaydetmek ister misiniz? Tüm klipler, V2 PiP katmanları ve ses miksajınız korunur.',
+                'Save your project on this device before leaving the editor? All video clips, V2 PiP overlays, and audio mixes will be preserved.'
               )}
             </p>
             <div className="mt-4 flex flex-wrap justify-end gap-2">
@@ -6902,6 +7897,60 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
               >
                 {tr('Kaydet & Çık', 'Save & Exit')}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Desktop-Web-Only Keyboard Shortcuts Reference Modal (NEVER shown on mobile/touch or native APK) */}
+      {isDesktopWeb && !isPortraitMode && showShortcutsModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={tr('Klavye Kısayolları', 'Keyboard Shortcuts')}
+          onClick={() => setShowShortcutsModal(false)}
+          className="fixed inset-0 z-[72] hidden items-center justify-center bg-black/75 p-4 backdrop-blur-sm lg:flex"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-2xl border border-white/[0.12] bg-[#141418] p-5 shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
+              <div>
+                <h3 className="text-sm font-extrabold text-white">
+                  {tr('Masaüstü Klavye Kısayolları', 'Desktop Keyboard Shortcuts')}
+                </h3>
+                <p className="mt-0.5 text-[11px] text-white/55">
+                  {tr('Sadece masaüstü web tarayıcıda etkindir.', 'Available on desktop web browsers.')}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowShortcutsModal(false)}
+                aria-label={tr('Kapat', 'Close')}
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.06] text-white/75 hover:bg-white/[0.12] hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="mt-3 space-y-2 text-xs">
+              {[
+                {keys: 'Space', label: tr('Oynat / Duraklat', 'Play / Pause')},
+                {keys: '← / →', label: tr('1 Kare Geri / İleri', 'Step Back / Forward 1 Frame')},
+                {keys: 'Ctrl + Z', label: tr('Geri Al', 'Undo')},
+                {keys: 'Ctrl + Y', label: tr('İleri Al', 'Redo')},
+                {keys: 'Esc', label: tr('Açık Pencereyi / Tam Ekranı Kapat', 'Close Modal / Exit Fullscreen')},
+                {keys: '?', label: tr('Bu Kısayol Rehberini Aç / Kapat', 'Toggle Shortcuts Guide')},
+              ].map((row) => (
+                <div
+                  key={row.keys}
+                  className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2"
+                >
+                  <span className="text-white/80">{row.label}</span>
+                  <kbd className="font-mono-num rounded-md border border-white/15 bg-black/50 px-2 py-0.5 text-[11px] font-bold text-white">
+                    {row.keys}
+                  </kbd>
+                </div>
+              ))}
             </div>
           </div>
         </div>

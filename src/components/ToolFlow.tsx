@@ -1,10 +1,13 @@
-import React, {Suspense, lazy, useEffect, useMemo, useRef, useState} from 'react';
+import React, {Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ArrowLeft,
   ArrowLeftRight,
   ArrowUp,
+  AudioLines,
   Bolt,
+  Camera,
   Check,
+  Clapperboard,
   ClipboardPaste,
   Contact,
   Contrast,
@@ -20,25 +23,37 @@ import {
   Film,
   FlipHorizontal,
   FlipVertical,
+  Gauge,
+  Globe,
   Grid,
   Hash,
+  Headphones,
   Info,
   Layers,
   LayoutGrid,
+  Link2,
   Maximize2,
   Minimize2,
+  Minus,
   Music,
   Package,
+  Pause,
   PenLine,
+  Play,
+  Plus,
+  Repeat,
   RotateCw,
   ScanLine,
   Scissors,
   Search,
   SlidersHorizontal,
   Sparkles,
+  Table2,
   Tag,
   Trash2,
+  Type,
   Undo2,
+  VolumeX,
   X,
 } from 'lucide-react';
 import {Lang, t} from '../data/i18n';
@@ -78,10 +93,13 @@ import {
   renderSocialFitToCanvas,
   renderWatermarkToCanvas,
 } from '../engine/imaging';
+import {extractRealAudioWaveform} from '../engine/audioEngine';
 import {EngineCardInfo, getAllEnginesStatus} from '../engine/morphEnginesBridge';
 import {ToolOptions} from '../engine/processor';
 import {CropEditor} from './CropEditor';
 import {FileThumb} from './FileThumb';
+import {MediaJoinTimeline} from './MediaJoinTimeline';
+import {MediaRangeMode, MediaRangeTrimmer} from './MediaRangeTrimmer';
 import type {VideoEditorState, VideoEditorTab} from './VideoEditor';
 
 const VideoEditor = lazy(() =>
@@ -128,11 +146,28 @@ function videoEditorPresetForTool(
   }
 }
 
+const COMPACT_FALLBACK_WAVE = Array.from({length: 44}, (_, i) =>
+  Math.min(0.92, Math.max(0.18, Number((0.35 + 0.34 * Math.abs(Math.sin(i * 0.52 + 0.4)) + 0.18 * Math.abs(Math.cos(i * 0.9))).toFixed(3))))
+);
+
+function formatMiniTime(sec: number): string {
+  const s = Number.isFinite(sec) && sec > 0 ? sec : 0;
+  const m = Math.floor(s / 60);
+  const r = Math.floor(s - m * 60);
+  return `${m}:${String(r).padStart(2, '0')}`;
+}
+
 const InlineMediaPreview: React.FC<{files: PickedFile[]; lang: Lang}> = ({files, lang}) => {
   const [activeIdx, setActiveIdx] = useState(0);
   const safeIdx = Math.min(activeIdx, Math.max(0, files.length - 1));
   const activeFile = files[safeIdx];
   const [mediaUrl, setMediaUrl] = useState('');
+  const [audioDur, setAudioDur] = useState(0);
+  const [audioPos, setAudioPos] = useState(0);
+  const [audioPlaying, setAudioPlaying] = useState(false);
+  const [waveBars, setWaveBars] = useState<number[]>(COMPACT_FALLBACK_WAVE);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const waveTrackRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setActiveIdx(0);
@@ -145,16 +180,75 @@ const InlineMediaPreview: React.FC<{files: PickedFile[]; lang: Lang}> = ({files,
     }
     const url = URL.createObjectURL(activeFile.file);
     setMediaUrl(url);
+    setAudioDur(0);
+    setAudioPos(0);
+    setAudioPlaying(false);
     return () => URL.revokeObjectURL(url);
   }, [activeFile]);
+
+  useEffect(() => {
+    if (!activeFile || activeFile.kind !== 'audio') return;
+    let cancelled = false;
+    extractRealAudioWaveform(activeFile.file, 44)
+      .then((bars) => {
+        if (!cancelled && bars && bars.length > 0) setWaveBars(bars);
+        else if (!cancelled) setWaveBars(COMPACT_FALLBACK_WAVE);
+      })
+      .catch(() => {
+        if (!cancelled) setWaveBars(COMPACT_FALLBACK_WAVE);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeFile]);
+
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el || !audioPlaying) return;
+    let raf = 0;
+    const step = () => {
+      setAudioPos(el.currentTime || 0);
+      if (!el.paused && !el.ended) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [audioPlaying]);
 
   if (!activeFile || (activeFile.kind !== 'video' && activeFile.kind !== 'audio')) {
     return null;
   }
 
+  const toggleAudio = () => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (!el.paused) {
+      el.pause();
+      setAudioPlaying(false);
+    } else {
+      if (audioDur > 0 && el.currentTime >= audioDur - 0.08) {
+        el.currentTime = 0;
+        setAudioPos(0);
+      }
+      void el.play().then(() => setAudioPlaying(true)).catch(() => setAudioPlaying(false));
+    }
+  };
+
+  const scrubAudio = (clientX: number) => {
+    const track = waveTrackRef.current;
+    const el = audioRef.current;
+    if (!track || !el || audioDur <= 0) return;
+    const rect = track.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / Math.max(1, rect.width)));
+    const next = ratio * audioDur;
+    el.currentTime = next;
+    setAudioPos(next);
+  };
+
+  const progressPct = audioDur > 0 ? Math.min(100, (audioPos / audioDur) * 100) : 0;
+
   return (
     <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)]">
-      <div className="flex items-center justify-between border-b border-[var(--line)] px-3.5 py-2">
+      <div className="flex items-center justify-between gap-2 border-b border-[var(--line)] px-3.5 py-2">
         <div className="flex min-w-0 items-center gap-2">
           {activeFile.kind === 'video' ? (
             <Film className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
@@ -169,7 +263,7 @@ const InlineMediaPreview: React.FC<{files: PickedFile[]; lang: Lang}> = ({files,
       </div>
 
       {files.length > 1 && (
-        <div className="flex gap-1.5 overflow-x-auto border-b border-[var(--line)] bg-[var(--inset)]/60 px-3 py-1.5">
+        <div className="no-scrollbar flex gap-1.5 overflow-x-auto border-b border-[var(--line)] bg-[var(--inset)]/60 px-3 py-1.5">
           {files.map((f, idx) => (
             <button
               key={f.id}
@@ -199,11 +293,62 @@ const InlineMediaPreview: React.FC<{files: PickedFile[]; lang: Lang}> = ({files,
           />
         </div>
       ) : activeFile.kind === 'audio' && mediaUrl ? (
-        <div className="bg-[var(--inset)] p-3.5">
-          <p className="mb-2 text-[11px] font-semibold text-[var(--muted)]">
-            {t('VeAudioPreview', lang)}
-          </p>
-          <audio key={mediaUrl} src={mediaUrl} controls preload="metadata" className="w-full" />
+        <div className="flex items-center gap-3 bg-[var(--inset)]/70 px-3.5 py-3">
+          <audio
+            ref={audioRef}
+            key={mediaUrl}
+            src={mediaUrl}
+            preload="metadata"
+            onLoadedMetadata={(e) => {
+              const d = e.currentTarget.duration;
+              if (Number.isFinite(d) && d > 0) setAudioDur(d);
+            }}
+            onDurationChange={(e) => {
+              const d = e.currentTarget.duration;
+              if (Number.isFinite(d) && d > 0) setAudioDur(d);
+            }}
+            onEnded={() => setAudioPlaying(false)}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={toggleAudio}
+            aria-label={audioPlaying ? (lang === 'tr' ? 'Duraklat' : 'Pause') : (lang === 'tr' ? 'Oynat' : 'Play')}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-sm transition-transform active:scale-95"
+          >
+            {audioPlaying ? (
+              <Pause className="h-4 w-4 fill-current" />
+            ) : (
+              <Play className="ml-0.5 h-4 w-4 fill-current" />
+            )}
+          </button>
+          <div
+            ref={waveTrackRef}
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId);
+              scrubAudio(e.clientX);
+            }}
+            onPointerMove={(e) => {
+              if (e.buttons === 1) scrubAudio(e.clientX);
+            }}
+            className="flex h-10 flex-1 cursor-pointer items-center gap-[2px] touch-none"
+          >
+            {waveBars.map((amp, i) => {
+              const barPct = ((i + 0.5) / waveBars.length) * 100;
+              return (
+                <div
+                  key={i}
+                  style={{height: `${Math.max(18, Math.round(amp * 92))}%`}}
+                  className={`flex-1 rounded-full transition-colors duration-75 ${
+                    barPct <= progressPct ? 'bg-[var(--accent)]' : 'bg-[var(--muted)]/35'
+                  }`}
+                />
+              );
+            })}
+          </div>
+          <span className="font-mono-num shrink-0 whitespace-nowrap text-[11px] font-bold text-[var(--muted)]">
+            {formatMiniTime(audioPos)} / {audioDur > 0 ? formatMiniTime(audioDur) : '--:--'}
+          </span>
         </div>
       ) : null}
     </div>
@@ -322,6 +467,63 @@ function categoryForServerTool(id: string): ToolCategory {
   return 'pdfdoc';
 }
 
+function iconForServerTool(id: string) {
+  switch (id) {
+    case 'audio_trim':
+    case 'video_trim':
+    case 'video_split':
+      return Scissors;
+    case 'audio_join':
+    case 'video_join':
+      return Link2;
+    case 'audio_bleep':
+    case 'video_mute':
+      return VolumeX;
+    case 'audio_speed':
+    case 'video_speed':
+      return Gauge;
+    case 'audio_fade':
+      return AudioLines;
+    case 'audio_normalize':
+      return SlidersHorizontal;
+    case 'audio_reverse':
+    case 'video_reverse':
+      return Undo2;
+    case 'audio_channels':
+      return Headphones;
+    case 'audio_convert':
+    case 'video_convert':
+      return ArrowLeftRight;
+    case 'audio_to_video':
+    case 'video_studio':
+      return Clapperboard;
+    case 'video_compress':
+      return Minimize2;
+    case 'video_rotate':
+      return RotateCw;
+    case 'video_crop':
+      return Crop;
+    case 'video_boomerang':
+    case 'video_loop':
+      return Repeat;
+    case 'video_to_audio':
+      return Music;
+    case 'video_gif':
+      return Sparkles;
+    case 'video_snapshots':
+      return Camera;
+    case 'table_convert':
+      return Table2;
+    case 'doc_to_html':
+      return Globe;
+    case 'office_to_pdf':
+    case 'doc_to_docx':
+      return FileOutput;
+    default:
+      return id.startsWith('video') ? Film : id.startsWith('audio') ? Music : FileText;
+  }
+}
+
 export const ToolFlow: React.FC<ToolFlowProps> = ({
   mode,
   files,
@@ -345,6 +547,15 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
   const [studioFormatHint, setStudioFormatHint] = useState<VideoEditorState['format'] | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<ToolCategory>('all');
+  const [localShowLabels, setLocalShowLabels] = useState(Boolean(prefs?.showToolLabels));
+  const showToolLabels = onChangePrefs ? Boolean(prefs?.showToolLabels) : localShowLabels;
+  const toggleToolLabels = useCallback(() => {
+    if (onChangePrefs) {
+      onChangePrefs((p) => ({...p, showToolLabels: !p.showToolLabels}));
+    } else {
+      setLocalShowLabels((v) => !v);
+    }
+  }, [onChangePrefs]);
 
   useEffect(() => {
     setSelectedTool(initialTool);
@@ -526,6 +737,17 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
           lang={lang}
           initialTab={initVeTab}
           initialPreset={initVePreset}
+          expArmadilloReel={prefs?.expArmadilloReel !== false}
+          videoEditorSizing={prefs?.videoEditorSizing}
+          onChangeVideoEditorSizing={
+            onChangePrefs
+              ? (patch) =>
+                  onChangePrefs((prev) => ({
+                    ...prev,
+                    videoEditorSizing: {...prev.videoEditorSizing, ...patch},
+                  }))
+              : undefined
+          }
           onBack={() => (directEntry ? onBack() : setSelectedServerTool(null))}
           onExport={(opts) => onRunServer(studioDef, opts)}
         />
@@ -539,6 +761,8 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
         tool={selectedServerTool}
         files={files}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={toggleToolLabels}
         onBack={() => (directEntry ? onBack() : setSelectedServerTool(null))}
         onOpenVideoEditor={
           files.length === 1 && files[0]?.kind === 'video'
@@ -555,6 +779,7 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
       <CropEditor
         file={files[0]}
         lang={lang}
+        showToolLabels={showToolLabels}
         onBack={() => (directEntry ? onBack() : setSelectedTool(null))}
         onApply={(rect) =>
           onRunLocal('CROP', t('ToolCrop', lang), {
@@ -575,6 +800,8 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
         toolId={selectedTool}
         files={files}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={toggleToolLabels}
         onBack={() => (directEntry ? onBack() : setSelectedTool(null))}
         onExport={(opts) => {
           const def = ALL_TOOLS[selectedTool];
@@ -608,6 +835,40 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
         subtitle={`${files.length} ${t('FilesCount', lang)}`}
         lang={lang}
         onBack={onBack}
+        rightAction={
+          mode === 'tools' ? (
+            <button
+              type="button"
+              onClick={toggleToolLabels}
+              aria-pressed={showToolLabels}
+              aria-label={
+                lang === 'tr'
+                  ? showToolLabels
+                    ? 'Simge odaklı görünüme geç'
+                    : 'Açıklama ve etiketleri göster'
+                  : showToolLabels
+                    ? 'Switch to icon-first view'
+                    : 'Show labels and descriptions'
+              }
+              title={
+                lang === 'tr'
+                  ? showToolLabels
+                    ? 'Yazılar açık (Sade simgeye geç)'
+                    : 'Simge modu (Yazıları aç)'
+                  : showToolLabels
+                    ? 'Labels on (Switch to icons)'
+                    : 'Icon mode (Show labels)'
+              }
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                showToolLabels
+                  ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent)]'
+                  : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]'
+              }`}
+            >
+              <Type className="h-4.5 w-4.5" />
+            </button>
+          ) : undefined
+        }
       />
 
       {/* Preview Strip or Live Video/Audio Player */}
@@ -721,63 +982,117 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
 
           {filteredLocalTools.length > 0 && (
             <div>
-              <p className="mb-2.5 text-xs font-semibold text-[var(--muted)]">{t('ToolsForSelection', lang)}</p>
-              <div className="divide-y divide-[var(--line)] rounded-3xl border border-[var(--line)] bg-[var(--surface)]">
-                {filteredLocalTools.map((tool: ToolDef) => {
-                  const Icon = iconForTool(tool.id);
-                  return (
-                    <button
-                      key={tool.id}
-                      type="button"
-                      onClick={() => setSelectedTool(tool.id)}
-                      className="flex min-h-[66px] w-full items-center gap-3.5 px-4 py-3 text-left transition-colors hover:bg-[var(--inset)]/60 first:rounded-t-3xl last:rounded-b-3xl"
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
-                        <Icon className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold text-[var(--ink)]">{t(tool.titleKey, lang)}</p>
-                        <p className="truncate text-xs text-[var(--muted)]">{t(tool.descKey, lang)}</p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+              {showToolLabels && (
+                <p className="mb-2.5 text-xs font-semibold text-[var(--muted)]">
+                  {t('ToolsForSelection', lang)}
+                </p>
+              )}
+              {showToolLabels ? (
+                <div className="divide-y divide-[var(--line)] rounded-3xl border border-[var(--line)] bg-[var(--surface)]">
+                  {filteredLocalTools.map((tool: ToolDef) => {
+                    const Icon = iconForTool(tool.id);
+                    return (
+                      <button
+                        key={tool.id}
+                        type="button"
+                        onClick={() => setSelectedTool(tool.id)}
+                        className="flex min-h-[66px] w-full items-center gap-3.5 px-4 py-3 text-left transition-colors hover:bg-[var(--inset)]/60 first:rounded-t-3xl last:rounded-b-3xl"
+                      >
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-bold text-[var(--ink)]">{t(tool.titleKey, lang)}</p>
+                          <p className="truncate text-xs text-[var(--muted)]">{t(tool.descKey, lang)}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
+                  {filteredLocalTools.map((tool: ToolDef) => {
+                    const Icon = iconForTool(tool.id);
+                    return (
+                      <button
+                        key={tool.id}
+                        type="button"
+                        onClick={() => setSelectedTool(tool.id)}
+                        title={`${t(tool.titleKey, lang)} — ${t(tool.descKey, lang)}`}
+                        className="flex min-h-[86px] flex-col items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-2 py-3 text-center transition-all hover:border-[var(--accent)]/60 hover:bg-[var(--inset)]/50 active:scale-[0.97]"
+                      >
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent)]/12 text-[var(--accent)]">
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <span className="line-clamp-2 text-[11px] font-bold leading-tight text-[var(--ink)]">
+                          {t(tool.titleKey, lang)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
           {filteredServerTools.length > 0 && (
             <div>
-              <p className="mb-2.5 text-xs font-semibold text-[var(--muted)]">{t('ServerTools', lang)}</p>
-              <div className="divide-y divide-[var(--line)] rounded-3xl border border-[var(--line)] bg-[var(--surface)]">
-                {filteredServerTools.map((tool) => {
-                  const ToolIcon = tool.id.startsWith('video')
-                    ? Film
-                    : tool.id.startsWith('audio')
-                      ? Music
-                      : FileText;
-                  return (
-                    <button
-                      key={tool.id}
-                      type="button"
-                      onClick={() => setSelectedServerTool(tool)}
-                      className="flex min-h-[66px] w-full items-center gap-3.5 px-4 py-3 text-left transition-colors hover:bg-[var(--inset)]/60 first:rounded-t-3xl last:rounded-b-3xl"
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
-                        <ToolIcon className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold text-[var(--ink)]">
-                          {lang === 'tr' ? tool.titleTr : tool.titleEn}
-                        </p>
-                        <p className="truncate text-xs text-[var(--muted)]">
-                          {lang === 'tr' ? tool.descTr : tool.descEn}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+              {showToolLabels && (
+                <p className="mb-2.5 text-xs font-semibold text-[var(--muted)]">
+                  {t('ServerTools', lang)}
+                </p>
+              )}
+              {showToolLabels ? (
+                <div className="divide-y divide-[var(--line)] rounded-3xl border border-[var(--line)] bg-[var(--surface)]">
+                  {filteredServerTools.map((tool) => {
+                    const ToolIcon = iconForServerTool(tool.id);
+                    return (
+                      <button
+                        key={tool.id}
+                        type="button"
+                        onClick={() => setSelectedServerTool(tool)}
+                        className="flex min-h-[66px] w-full items-center gap-3.5 px-4 py-3 text-left transition-colors hover:bg-[var(--inset)]/60 first:rounded-t-3xl last:rounded-b-3xl"
+                      >
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
+                          <ToolIcon className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-bold text-[var(--ink)]">
+                            {lang === 'tr' ? tool.titleTr : tool.titleEn}
+                          </p>
+                          <p className="truncate text-xs text-[var(--muted)]">
+                            {lang === 'tr' ? tool.descTr : tool.descEn}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
+                  {filteredServerTools.map((tool) => {
+                    const ToolIcon = iconForServerTool(tool.id);
+                    const fullTitle = lang === 'tr' ? tool.titleTr : tool.titleEn;
+                    const compactTitle = fullTitle.replace(/\s*\([^)]*\)/g, '').trim();
+                    return (
+                      <button
+                        key={tool.id}
+                        type="button"
+                        onClick={() => setSelectedServerTool(tool)}
+                        title={`${fullTitle} — ${lang === 'tr' ? tool.descTr : tool.descEn}`}
+                        className="flex min-h-[86px] flex-col items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-2 py-3 text-center transition-all hover:border-[var(--accent)]/60 hover:bg-[var(--inset)]/50 active:scale-[0.97]"
+                      >
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent)]/12 text-[var(--accent)]">
+                          <ToolIcon className="h-5 w-5" />
+                        </div>
+                        <span className="line-clamp-2 text-[11px] font-bold leading-tight text-[var(--ink)]">
+                          {compactTitle}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -788,18 +1103,19 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
 
 /* ---------- Sub-configurators with Live Canvas Previews ---------- */
 
-const TopSubBar: React.FC<{title: string; subtitle: string; lang: Lang; onBack: () => void}> = ({
-  title,
-  subtitle,
-  lang,
-  onBack,
-}) => (
+const TopSubBar: React.FC<{
+  title: string;
+  subtitle: string;
+  lang: Lang;
+  onBack: () => void;
+  rightAction?: React.ReactNode;
+}> = ({title, subtitle, lang, onBack, rightAction}) => (
   <div className="flex items-center gap-2">
     <button
       type="button"
       onClick={onBack}
       aria-label={t('Back', lang)}
-      className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] hover:border-[var(--accent)]"
+      className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] hover:border-[var(--accent)]"
     >
       <ArrowLeft className="h-5 w-5" />
     </button>
@@ -807,6 +1123,7 @@ const TopSubBar: React.FC<{title: string; subtitle: string; lang: Lang; onBack: 
       <h2 className="truncate text-xl font-extrabold text-[var(--ink)]">{title}</h2>
       <p className="truncate text-xs text-[var(--muted)]">{subtitle}</p>
     </div>
+    {rightAction}
   </div>
 );
 
@@ -815,19 +1132,70 @@ const ConfigShell: React.FC<{
   subtitle: string;
   lang: Lang;
   exportLabel?: string;
+  showToolLabels?: boolean;
+  onToggleToolLabels?: () => void;
   onBack: () => void;
   onExport: () => void;
   children: React.ReactNode;
-}> = ({title, subtitle, lang, exportLabel, onBack, onExport, children}) => (
+}> = ({
+  title,
+  subtitle,
+  lang,
+  exportLabel,
+  showToolLabels,
+  onToggleToolLabels,
+  onBack,
+  onExport,
+  children,
+}) => (
   <div className="mx-auto w-full max-w-2xl px-4 pb-28 pt-4 sm:px-6">
-    <TopSubBar title={title} subtitle={subtitle} lang={lang} onBack={onBack} />
+    <TopSubBar
+      title={title}
+      subtitle={subtitle}
+      lang={lang}
+      onBack={onBack}
+      rightAction={
+        onToggleToolLabels ? (
+          <button
+            type="button"
+            onClick={onToggleToolLabels}
+            aria-pressed={Boolean(showToolLabels)}
+            aria-label={
+              lang === 'tr'
+                ? showToolLabels
+                  ? 'Simge odaklı görünüme geç'
+                  : 'Yazı ve açıklamaları göster'
+                : showToolLabels
+                  ? 'Switch to icon-first view'
+                  : 'Show labels and descriptions'
+            }
+            title={
+              lang === 'tr'
+                ? showToolLabels
+                  ? 'Yazılar açık (Sade simgeye geç)'
+                  : 'Simge modu (Yazıları aç)'
+                : showToolLabels
+                  ? 'Labels on (Switch to icons)'
+                  : 'Icon mode (Show labels)'
+            }
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition-colors ${
+              showToolLabels
+                ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent)]'
+                : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]'
+            }`}
+          >
+            <Type className="h-4.5 w-4.5" />
+          </button>
+        ) : undefined
+      }
+    />
     <div className="mt-5 space-y-5">{children}</div>
     <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-[var(--line)] bg-[var(--paper)]/95 px-4 py-3 pb-safe backdrop-blur-md lg:static lg:mt-6 lg:border-0 lg:bg-transparent lg:p-0">
       <div className="mx-auto max-w-2xl">
         <button
           type="button"
           onClick={onExport}
-          className="morph-accent-btn flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full text-sm font-semibold shadow-lg transition-transform active:scale-[0.98]"
+          className="morph-accent-btn flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl text-sm font-semibold shadow-lg transition-transform active:scale-[0.98]"
         >
           <Check className="h-4 w-4" />
           <span>{exportLabel ?? t('Export', lang)}</span>
@@ -838,7 +1206,7 @@ const ConfigShell: React.FC<{
 );
 
 const OptionPills: React.FC<{
-  options: Array<{value: string; label: string}>;
+  options: Array<{value: string; label: string; icon?: React.ReactNode}>;
   selected: string;
   onSelect: (v: string) => void;
 }> = ({options, selected, onSelect}) => (
@@ -850,13 +1218,14 @@ const OptionPills: React.FC<{
           key={opt.value}
           type="button"
           onClick={() => onSelect(opt.value)}
-          className={`min-h-[40px] max-w-full rounded-xl border px-3.5 py-1.5 text-center text-xs font-semibold leading-tight transition-colors ${
+          className={`inline-flex min-h-[42px] max-w-full items-center justify-center gap-1.5 rounded-xl border px-3.5 py-1.5 text-center text-xs font-semibold leading-tight transition-colors ${
             active
               ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
               : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
           }`}
         >
-          {opt.label}
+          {opt.icon}
+          <span>{opt.label}</span>
         </button>
       );
     })}
@@ -1004,9 +1373,11 @@ const LocalToolConfig: React.FC<{
   toolId: ToolId;
   files: PickedFile[];
   lang: Lang;
+  showToolLabels?: boolean;
+  onToggleToolLabels?: () => void;
   onBack: () => void;
   onExport: (opts: ToolOptions) => void;
-}> = ({toolId, files, lang, onBack, onExport}) => {
+}> = ({toolId, files, lang, showToolLabels = false, onToggleToolLabels, onBack, onExport}) => {
   // Compress
   const [quality, setQuality] = useState(82);
   const [maxDim, setMaxDim] = useState('0');
@@ -1333,6 +1704,8 @@ const LocalToolConfig: React.FC<{
         title={t('ToolCompress', lang)}
         subtitle={firstIsPdf ? 'PDF' : `${files.length} ${t('FilesCount', lang)}`}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -1389,12 +1762,16 @@ const LocalToolConfig: React.FC<{
         title={t('ToolMetadata', lang)}
         subtitle={firstIsPdf ? 'PDF' : `${files.length} ${t('FilesCount', lang)}`}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() => onExport({kind: 'strip', format: firstIsPdf ? 'pdf' : format, quality})}
       >
-        <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-4 text-xs text-[var(--muted)]">
-          {t('ToolMetadataDesc', lang)}
-        </div>
+        {showToolLabels && (
+          <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-4 text-xs text-[var(--muted)]">
+            {t('ToolMetadataDesc', lang)}
+          </div>
+        )}
         {!firstIsPdf && (
           <>
             <div>
@@ -1422,6 +1799,8 @@ const LocalToolConfig: React.FC<{
         title={t('ToolEdit', lang)}
         subtitle={files[0]?.name ?? ''}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -1435,7 +1814,9 @@ const LocalToolConfig: React.FC<{
         }
       >
         <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3">
-          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
+          {showToolLabels && (
+            <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
+          )}
           <canvas ref={previewCanvasRef} className="mx-auto max-h-60 max-w-full rounded-lg object-contain" />
         </div>
         <div>
@@ -1455,26 +1836,30 @@ const LocalToolConfig: React.FC<{
           <button
             type="button"
             onClick={() => setFlipH((v) => !v)}
+            aria-label={t('FlipHorizontal', lang)}
+            title={t('FlipHorizontal', lang)}
             className={`flex min-h-[44px] items-center justify-center gap-2 rounded-2xl border px-3 text-xs font-semibold ${
               flipH
                 ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
                 : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
             }`}
           >
-            <FlipHorizontal className="h-4 w-4" />
-            <span>{t('FlipHorizontal', lang)}</span>
+            <FlipHorizontal className="h-4.5 w-4.5" />
+            {showToolLabels && <span>{t('FlipHorizontal', lang)}</span>}
           </button>
           <button
             type="button"
             onClick={() => setFlipV((v) => !v)}
+            aria-label={t('FlipVertical', lang)}
+            title={t('FlipVertical', lang)}
             className={`flex min-h-[44px] items-center justify-center gap-2 rounded-2xl border px-3 text-xs font-semibold ${
               flipV
                 ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
                 : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
             }`}
           >
-            <FlipVertical className="h-4 w-4" />
-            <span>{t('FlipVertical', lang)}</span>
+            <FlipVertical className="h-4.5 w-4.5" />
+            {showToolLabels && <span>{t('FlipVertical', lang)}</span>}
           </button>
         </div>
         <div>
@@ -1501,6 +1886,8 @@ const LocalToolConfig: React.FC<{
         title={t('ToolScanDoc', lang)}
         subtitle={`${files.length} ${t('FilesCount', lang)}`}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -1513,7 +1900,9 @@ const LocalToolConfig: React.FC<{
         }
       >
         <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3">
-          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
+          {showToolLabels && (
+            <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
+          )}
           <canvas ref={previewCanvasRef} className="mx-auto max-h-64 max-w-full rounded-lg object-contain" />
         </div>
         <div>
@@ -1557,6 +1946,8 @@ const LocalToolConfig: React.FC<{
         title={t('ToolSocialFit', lang)}
         subtitle={`${files.length} ${t('FilesCount', lang)}`}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -1570,7 +1961,9 @@ const LocalToolConfig: React.FC<{
         }
       >
         <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3">
-          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
+          {showToolLabels && (
+            <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
+          )}
           <canvas ref={previewCanvasRef} className="mx-auto max-h-64 max-w-full rounded-lg object-contain" />
         </div>
         <div>
@@ -1579,10 +1972,10 @@ const LocalToolConfig: React.FC<{
             selected={socialAspect}
             onSelect={(v) => setSocialAspect(v as SocialAspect)}
             options={[
-              {value: '1:1', label: '1:1 Kare'},
-              {value: '4:5', label: '4:5 Portre'},
-              {value: '9:16', label: '9:16 Hikaye'},
-              {value: '16:9', label: '16:9 Yatay'},
+              {value: '1:1', label: lang === 'tr' ? '1:1 Kare' : '1:1 Square'},
+              {value: '4:5', label: lang === 'tr' ? '4:5 Portre' : '4:5 Portrait'},
+              {value: '9:16', label: lang === 'tr' ? '9:16 Hikaye' : '9:16 Story'},
+              {value: '16:9', label: lang === 'tr' ? '16:9 Yatay' : '16:9 Landscape'},
             ]}
           />
         </div>
@@ -1651,6 +2044,8 @@ const LocalToolConfig: React.FC<{
         title={t('ToolRedact', lang)}
         subtitle={files[0]?.name ?? ''}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -1664,17 +2059,27 @@ const LocalToolConfig: React.FC<{
         }
       >
         <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            {showToolLabels ? (
+              <p className="text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
+            ) : (
+              <span className="font-mono-num text-[11px] font-bold text-[var(--muted)]">
+                {redactBoxes.length}
+              </span>
+            )}
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 disabled={redactBoxes.length === 0}
                 onClick={() => setRedactBoxes((prev) => prev.slice(0, -1))}
-                className="inline-flex min-h-[32px] items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-2.5 text-[11px] font-semibold text-[var(--ink)] disabled:opacity-40"
+                aria-label={t('UndoLastBox', lang)}
+                title={t('UndoLastBox', lang)}
+                className={`inline-flex h-8 items-center justify-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[11px] font-semibold text-[var(--ink)] disabled:opacity-40 ${
+                  showToolLabels ? 'px-2.5' : 'w-8 px-0'
+                }`}
               >
                 <Undo2 className="h-3.5 w-3.5 text-[var(--accent)]" />
-                <span>{t('UndoLastBox', lang)}</span>
+                {showToolLabels && <span>{t('UndoLastBox', lang)}</span>}
               </button>
               <button
                 type="button"
@@ -1683,10 +2088,14 @@ const LocalToolConfig: React.FC<{
                   setRedactBoxes([]);
                   setHasCustomDrawn(true);
                 }}
-                className="inline-flex min-h-[32px] items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-2.5 text-[11px] font-semibold text-[var(--ink)] disabled:opacity-40"
+                aria-label={t('ClearBoxes', lang)}
+                title={t('ClearBoxes', lang)}
+                className={`inline-flex h-8 items-center justify-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[11px] font-semibold text-[var(--ink)] disabled:opacity-40 ${
+                  showToolLabels ? 'px-2.5' : 'w-8 px-0'
+                }`}
               >
                 <Trash2 className="h-3.5 w-3.5 text-[var(--accent)]" />
-                <span>{t('ClearBoxes', lang)}</span>
+                {showToolLabels && <span>{t('ClearBoxes', lang)}</span>}
               </button>
             </div>
           </div>
@@ -1715,7 +2124,9 @@ const LocalToolConfig: React.FC<{
             onPointerCancel={() => setDraftBox(null)}
             className="mx-auto max-h-72 max-w-full cursor-crosshair touch-none rounded-lg object-contain select-none"
           />
-          <p className="mt-2 text-center text-[11px] text-[var(--muted)]">{t('RedactHint', lang)}</p>
+          {showToolLabels && (
+            <p className="mt-2 text-center text-[11px] text-[var(--muted)]">{t('RedactHint', lang)}</p>
+          )}
         </div>
 
         <div>
@@ -1764,6 +2175,8 @@ const LocalToolConfig: React.FC<{
         title={t('ToolGridSplit', lang)}
         subtitle={files[0]?.name ?? ''}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -1776,7 +2189,9 @@ const LocalToolConfig: React.FC<{
         }
       >
         <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3">
-          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
+          {showToolLabels && (
+            <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
+          )}
           <canvas ref={previewCanvasRef} className="mx-auto max-h-64 max-w-full rounded-lg object-contain" />
         </div>
         <div>
@@ -1815,6 +2230,8 @@ const LocalToolConfig: React.FC<{
         title={t('ToolGifMake', lang)}
         subtitle={`${files.length} ${t('FilesCount', lang)}`}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -1869,6 +2286,8 @@ const LocalToolConfig: React.FC<{
         title={t('ToolPassportGrid', lang)}
         subtitle={files[0]?.name ?? ''}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -1881,7 +2300,9 @@ const LocalToolConfig: React.FC<{
         }
       >
         <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3">
-          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
+          {showToolLabels && (
+            <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
+          )}
           <canvas ref={previewCanvasRef} className="mx-auto max-h-64 max-w-full rounded-lg object-contain" />
         </div>
         <div>
@@ -1890,8 +2311,8 @@ const LocalToolConfig: React.FC<{
             selected={passportPaper}
             onSelect={(v) => setPassportPaper(v as '10x15' | 'a4')}
             options={[
-              {value: '10x15', label: '10×15 cm Fotoğraf'},
-              {value: 'a4', label: 'A4 Sayfa'},
+              {value: '10x15', label: lang === 'tr' ? '10×15 cm Fotoğraf' : '10×15 cm Photo'},
+              {value: 'a4', label: lang === 'tr' ? 'A4 Sayfa' : 'A4 Page'},
             ]}
           />
         </div>
@@ -1901,9 +2322,9 @@ const LocalToolConfig: React.FC<{
             selected={passportCount}
             onSelect={(v) => setPassportCount(v as '4' | '8' | '9')}
             options={[
-              {value: '4', label: '4 Adet (2×2)'},
-              {value: '8', label: '8 Adet (4×2)'},
-              {value: '9', label: '9 Adet (3×3)'},
+              {value: '4', label: lang === 'tr' ? '4 Adet (2×2)' : '4 Photos (2×2)'},
+              {value: '8', label: lang === 'tr' ? '8 Adet (4×2)' : '8 Photos (4×2)'},
+              {value: '9', label: lang === 'tr' ? '9 Adet (3×3)' : '9 Photos (3×3)'},
             ]}
           />
         </div>
@@ -1929,6 +2350,8 @@ const LocalToolConfig: React.FC<{
         title={t('ToolFrame', lang)}
         subtitle={files[0]?.name ?? ''}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -1943,7 +2366,9 @@ const LocalToolConfig: React.FC<{
         }
       >
         <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3">
-          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
+          {showToolLabels && (
+            <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
+          )}
           <canvas ref={previewCanvasRef} className="mx-auto max-h-64 max-w-full rounded-lg object-contain" />
         </div>
         <div>
@@ -2003,6 +2428,8 @@ const LocalToolConfig: React.FC<{
         title={t('ToolCollage', lang)}
         subtitle={`${files.length} ${t('FilesCount', lang)}`}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -2016,7 +2443,9 @@ const LocalToolConfig: React.FC<{
         }
       >
         <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3">
-          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
+          {showToolLabels && (
+            <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
+          )}
           <canvas ref={previewCanvasRef} className="mx-auto max-h-64 max-w-full rounded-lg object-contain" />
         </div>
         <div>
@@ -2078,6 +2507,8 @@ const LocalToolConfig: React.FC<{
         title={t('ToolPdfSplit', lang)}
         subtitle={files[0]?.name ?? ''}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -2100,17 +2531,19 @@ const LocalToolConfig: React.FC<{
             <button
               type="button"
               onClick={() => setEveryN((n) => Math.max(1, n - 1))}
-              className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--inset)] text-lg font-bold"
+              aria-label="-1"
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
             >
-              -
+              <Minus className="h-4.5 w-4.5" />
             </button>
             <span className="font-mono-num min-w-[3rem] text-center text-2xl font-bold">{everyN}</span>
             <button
               type="button"
               onClick={() => setEveryN((n) => Math.min(100, n + 1))}
-              className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--inset)] text-lg font-bold"
+              aria-label="+1"
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
             >
-              +
+              <Plus className="h-4.5 w-4.5" />
             </button>
           </div>
         ) : (
@@ -2132,6 +2565,8 @@ const LocalToolConfig: React.FC<{
         title={t('ToolPdfRemovePages', lang)}
         subtitle={files[0]?.name ?? ''}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -2140,9 +2575,11 @@ const LocalToolConfig: React.FC<{
           })
         }
       >
-        <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-4 text-xs text-[var(--muted)]">
-          {t('ToolPdfRemovePagesDesc', lang)}
-        </div>
+        {showToolLabels && (
+          <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-4 text-xs text-[var(--muted)]">
+            {t('ToolPdfRemovePagesDesc', lang)}
+          </div>
+        )}
         <div>
           <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('PagesToDeleteLabel', lang)}</p>
           <input
@@ -2163,6 +2600,8 @@ const LocalToolConfig: React.FC<{
         title={t('ToolPdfExtractPages', lang)}
         subtitle={files[0]?.name ?? ''}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -2205,6 +2644,8 @@ const LocalToolConfig: React.FC<{
         title={t('ToolPdfRotate', lang)}
         subtitle={files[0]?.name ?? ''}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() => onExport({kind: 'pdfRotate', degrees: Number(pdfDeg) || 90})}
       >
@@ -2231,6 +2672,8 @@ const LocalToolConfig: React.FC<{
         title={t('ToolPdfWatermark', lang)}
         subtitle={files[0]?.name ?? ''}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -2297,6 +2740,8 @@ const LocalToolConfig: React.FC<{
         title={t('ToolPdfNup', lang)}
         subtitle={files[0]?.name ?? ''}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -2305,9 +2750,11 @@ const LocalToolConfig: React.FC<{
           })
         }
       >
-        <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-4 text-xs text-[var(--muted)]">
-          {t('ToolPdfNupDesc', lang)}
-        </div>
+        {showToolLabels && (
+          <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-4 text-xs text-[var(--muted)]">
+            {t('ToolPdfNupDesc', lang)}
+          </div>
+        )}
         <div>
           <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('PagesPerSheetLabel', lang)}</p>
           <OptionPills
@@ -2329,6 +2776,8 @@ const LocalToolConfig: React.FC<{
         title={t('ToolPdfToImages', lang)}
         subtitle={files[0]?.name ?? ''}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -2375,6 +2824,8 @@ const LocalToolConfig: React.FC<{
         title={t('ToolFilters', lang)}
         subtitle={`${files.length} ${t('FilesCount', lang)}`}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -2390,7 +2841,9 @@ const LocalToolConfig: React.FC<{
         }
       >
         <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3">
-          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
+          {showToolLabels && (
+            <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
+          )}
           <canvas ref={previewCanvasRef} className="mx-auto max-h-60 max-w-full rounded-lg object-contain" />
         </div>
         <div>
@@ -2435,6 +2888,8 @@ const LocalToolConfig: React.FC<{
         title={t('ToolWatermark', lang)}
         subtitle={`${files.length} ${t('FilesCount', lang)}`}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -2450,7 +2905,9 @@ const LocalToolConfig: React.FC<{
         }
       >
         <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3">
-          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
+          {showToolLabels && (
+            <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
+          )}
           <canvas ref={previewCanvasRef} className="mx-auto max-h-60 max-w-full rounded-lg object-contain" />
         </div>
         <div>
@@ -2530,6 +2987,8 @@ const LocalToolConfig: React.FC<{
         title={t('ToolPdfStamp', lang)}
         subtitle={files[0]?.name ?? ''}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -2593,6 +3052,8 @@ const LocalToolConfig: React.FC<{
         title={t('ToolBatchRename', lang)}
         subtitle={`${files.length} ${t('FilesCount', lang)}`}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() => onExport({kind: 'batchRename', rules})}
       >
@@ -2602,7 +3063,7 @@ const LocalToolConfig: React.FC<{
             type="text"
             value={renameBase}
             onChange={(e) => setRenameBase(e.target.value)}
-            placeholder="tatil-2026"
+            placeholder={lang === 'tr' ? 'tatil-2026' : 'vacation-2026'}
             className="min-h-[46px] w-full rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-4 text-sm text-[var(--ink)] outline-none focus:border-[var(--accent)]"
           />
         </div>
@@ -2647,7 +3108,7 @@ const LocalToolConfig: React.FC<{
               type="text"
               value={renameReplace}
               onChange={(e) => setRenameReplace(e.target.value)}
-              placeholder="foto-"
+              placeholder={lang === 'tr' ? 'foto-' : 'photo-'}
               className="min-h-[44px] w-full rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3.5 text-sm text-[var(--ink)] outline-none focus:border-[var(--accent)]"
             />
           </div>
@@ -2701,20 +3162,24 @@ const LocalToolConfig: React.FC<{
         title={t('ToolFileHashInfo', lang)}
         subtitle={`${files.length} ${t('FilesCount', lang)}`}
         lang={lang}
+        showToolLabels={showToolLabels}
+        onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
         onExport={() => onExport({kind: 'fileHashInfo', format: hashReportFmt})}
       >
-        <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-4 text-xs text-[var(--muted)]">
-          {t('ToolFileHashInfoDesc', lang)}
-        </div>
+        {showToolLabels && (
+          <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-4 text-xs text-[var(--muted)]">
+            {t('ToolFileHashInfoDesc', lang)}
+          </div>
+        )}
         <div>
           <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('ReportFormatLabel', lang)}</p>
           <OptionPills
             selected={hashReportFmt}
             onSelect={(v) => setHashReportFmt(v as 'txt' | 'json')}
             options={[
-              {value: 'txt', label: 'TXT Rapor'},
-              {value: 'json', label: 'JSON Veri'},
+              {value: 'txt', label: lang === 'tr' ? 'TXT Rapor' : 'TXT Report'},
+              {value: 'json', label: lang === 'tr' ? 'JSON Veri' : 'JSON Data'},
             ]}
           />
         </div>
@@ -2739,10 +3204,12 @@ const LocalToolConfig: React.FC<{
       title={def ? t(def.titleKey, lang) : toolId}
       subtitle={`${files.length} ${t('FilesCount', lang)}`}
       lang={lang}
+      showToolLabels={showToolLabels}
+      onToggleToolLabels={onToggleToolLabels}
       onBack={onBack}
       onExport={() => onExport({kind: 'none'})}
     >
-      {def && (
+      {def && showToolLabels && (
         <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-4 text-xs text-[var(--muted)]">
           {t(def.descKey, lang)}
         </div>
@@ -2765,10 +3232,12 @@ const ServerToolConfig: React.FC<{
   tool: ServerToolDef;
   files: PickedFile[];
   lang: Lang;
+  showToolLabels?: boolean;
+  onToggleToolLabels?: () => void;
   onBack: () => void;
   onOpenVideoEditor?: () => void;
   onRun: (options: Record<string, string>) => void;
-}> = ({tool, files, lang, onBack, onOpenVideoEditor, onRun}) => {
+}> = ({tool, files, lang, showToolLabels = false, onToggleToolLabels, onBack, onOpenVideoEditor, onRun}) => {
   const [format, setFormat] = useState(tool.formats[0] ?? '');
   const [quality, setQuality] = useState('26');
   const [start, setStart] = useState('0');
@@ -2781,13 +3250,33 @@ const ServerToolConfig: React.FC<{
   const [loopCount, setLoopCount] = useState('2');
   const [fadeSec, setFadeSec] = useState('2');
   const [audioSpeedMode, setAudioSpeedMode] = useState('1.25');
+  const [joinOrder, setJoinOrder] = useState<number[]>(() => files.map((_, idx) => idx));
   const firstKind = files[0]?.kind;
+  const usesVisualTrimmer =
+    tool.fields.includes('time') && (firstKind === 'audio' || firstKind === 'video');
+  const usesVisualJoiner =
+    (tool.id === 'audio_join' || tool.id === 'video_join') &&
+    files.length >= 2 &&
+    (firstKind === 'audio' || firstKind === 'video');
+  const trimMode: MediaRangeMode =
+    tool.id === 'video_split' ? 'split' : tool.id === 'audio_bleep' ? 'bleep' : 'trim';
+
+  useEffect(() => {
+    setJoinOrder(files.map((_, idx) => idx));
+  }, [files]);
+
+  const handleRangeChange = useCallback((nextStart: string, nextEnd: string) => {
+    setStart(nextStart);
+    setEnd(nextEnd);
+  }, []);
 
   return (
     <ConfigShell
       title={lang === 'tr' ? tool.titleTr : tool.titleEn}
       subtitle={`${files.length} ${t('FilesCount', lang)}`}
       lang={lang}
+      showToolLabels={showToolLabels}
+      onToggleToolLabels={onToggleToolLabels}
       onBack={onBack}
       onExport={() => {
         const opts: Record<string, string> = {};
@@ -2796,6 +3285,9 @@ const ServerToolConfig: React.FC<{
         if (tool.fields.includes('time')) {
           opts.start = start;
           opts.end = end;
+        }
+        if (usesVisualJoiner) {
+          opts.order = joinOrder.join(',');
         }
         if (tool.fields.includes('speed')) opts.speed = speed;
         if (tool.fields.includes('channels')) opts.channels = channels;
@@ -2808,11 +3300,31 @@ const ServerToolConfig: React.FC<{
         onRun(opts);
       }}
     >
-      <p className="text-xs text-[var(--muted)]">{lang === 'tr' ? tool.descTr : tool.descEn}</p>
-
-      {(firstKind === 'video' || firstKind === 'audio') && (
-        <InlineMediaPreview files={files} lang={lang} />
+      {showToolLabels && (
+        <p className="text-xs text-[var(--muted)]">{lang === 'tr' ? tool.descTr : tool.descEn}</p>
       )}
+
+      {usesVisualTrimmer ? (
+        <MediaRangeTrimmer
+          files={files}
+          lang={lang}
+          mode={trimMode}
+          startValue={start}
+          endValue={end}
+          showToolLabels={showToolLabels}
+          onChangeRange={handleRangeChange}
+        />
+      ) : usesVisualJoiner ? (
+        <MediaJoinTimeline
+          files={files}
+          lang={lang}
+          order={joinOrder}
+          showToolLabels={showToolLabels}
+          onChangeOrder={setJoinOrder}
+        />
+      ) : (firstKind === 'video' || firstKind === 'audio') ? (
+        <InlineMediaPreview files={files} lang={lang} />
+      ) : null}
 
       {firstKind === 'video' && onOpenVideoEditor && (
         <button
@@ -2827,7 +3339,9 @@ const ServerToolConfig: React.FC<{
 
       {tool.fields.includes('format') && tool.formats.length > 0 && (
         <div>
-          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('Format', lang)}</p>
+          {showToolLabels && (
+            <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('Format', lang)}</p>
+          )}
           <OptionPills
             selected={format}
             onSelect={setFormat}
@@ -2837,7 +3351,9 @@ const ServerToolConfig: React.FC<{
       )}
       {tool.fields.includes('quality') && (
         <div>
-          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('Quality', lang)}</p>
+          {showToolLabels && (
+            <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('Quality', lang)}</p>
+          )}
           <OptionPills
             selected={quality}
             onSelect={setQuality}
@@ -2850,6 +3366,7 @@ const ServerToolConfig: React.FC<{
         </div>
       )}
       {tool.fields.includes('time') &&
+        !usesVisualTrimmer &&
         (tool.id === 'video_split' ? (
           <input
             type="text"
@@ -2890,43 +3407,57 @@ const ServerToolConfig: React.FC<{
       )}
       {tool.fields.includes('rotateMode') && (
         <div>
-          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('RotateVideoLabel', lang)}</p>
+          {showToolLabels && (
+            <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('RotateVideoLabel', lang)}</p>
+          )}
           <OptionPills
             selected={rotateMode}
             onSelect={setRotateMode}
             options={[
-              {value: '90', label: '90°'},
-              {value: '180', label: '180°'},
-              {value: '270', label: '270°'},
-              {value: 'hflip', label: t('FlipHorizontal', lang)},
-              {value: 'vflip', label: t('FlipVertical', lang)},
+              {value: '90', label: '90°', icon: <RotateCw className="h-3.5 w-3.5" />},
+              {value: '180', label: '180°', icon: <RotateCw className="h-3.5 w-3.5" />},
+              {value: '270', label: '270°', icon: <RotateCw className="h-3.5 w-3.5" />},
+              {
+                value: 'hflip',
+                label: showToolLabels ? t('FlipHorizontal', lang) : '↔',
+                icon: <FlipHorizontal className="h-3.5 w-3.5" />,
+              },
+              {
+                value: 'vflip',
+                label: showToolLabels ? t('FlipVertical', lang) : '↕',
+                icon: <FlipVertical className="h-3.5 w-3.5" />,
+              },
             ]}
           />
         </div>
       )}
       {tool.fields.includes('loopCount') && (
         <div>
-          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LoopCountLabel', lang)}</p>
+          {showToolLabels && (
+            <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LoopCountLabel', lang)}</p>
+          )}
           <OptionPills
             selected={loopCount}
             onSelect={setLoopCount}
             options={[
-              {value: '2', label: '2×'},
-              {value: '3', label: '3×'},
-              {value: '4', label: '4×'},
+              {value: '2', label: '2×', icon: <Repeat className="h-3.5 w-3.5" />},
+              {value: '3', label: '3×', icon: <Repeat className="h-3.5 w-3.5" />},
+              {value: '4', label: '4×', icon: <Repeat className="h-3.5 w-3.5" />},
             ]}
           />
         </div>
       )}
       {tool.fields.includes('audioSpeedMode') && (
         <div>
-          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('Speed', lang)}</p>
+          {showToolLabels && (
+            <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('Speed', lang)}</p>
+          )}
           <OptionPills
             selected={audioSpeedMode}
             onSelect={setAudioSpeedMode}
             options={[
               {value: '0.75', label: '0.75×'},
-              {value: 'slowed', label: 'Slowed (0.86×)'},
+              {value: 'slowed', label: 'Slowed'},
               {value: '1.25', label: '1.25×'},
               {value: '1.5', label: '1.5×'},
               {value: '2', label: '2×'},
@@ -2937,7 +3468,9 @@ const ServerToolConfig: React.FC<{
       )}
       {tool.fields.includes('fadeSec') && (
         <div>
-          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('FadeDurationLabel', lang)}</p>
+          {showToolLabels && (
+            <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('FadeDurationLabel', lang)}</p>
+          )}
           <OptionPills
             selected={fadeSec}
             onSelect={setFadeSec}
@@ -2955,8 +3488,8 @@ const ServerToolConfig: React.FC<{
           selected={channels}
           onSelect={setChannels}
           options={[
-            {value: 'mono', label: 'Mono'},
-            {value: 'stereo', label: 'Stereo'},
+            {value: 'mono', label: 'Mono', icon: <Headphones className="h-3.5 w-3.5" />},
+            {value: 'stereo', label: 'Stereo', icon: <Headphones className="h-3.5 w-3.5" />},
           ]}
         />
       )}
@@ -2982,7 +3515,7 @@ const ServerToolConfig: React.FC<{
           className="min-h-[46px] w-full rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-4 text-sm text-[var(--ink)] outline-none focus:border-[var(--accent)]"
         />
       )}
-      {files.length > 1 && (
+      {files.length > 1 && !usesVisualJoiner && (
         <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-4">
           <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('SourceOrder', lang)}</p>
           <div className="space-y-1">

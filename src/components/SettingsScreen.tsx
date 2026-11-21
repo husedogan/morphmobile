@@ -13,14 +13,19 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  FlaskConical,
   FolderCheck,
   GitBranch,
+  HardDrive,
   Image as ImageIcon,
   Info,
+  Minus,
   Moon,
   Palette,
   Play,
+  Plus,
   RefreshCw,
+  RotateCcw,
   Share2,
   ShieldCheck,
   SlidersHorizontal,
@@ -32,12 +37,16 @@ import {
 import {Lang, t} from '../data/i18n';
 import {
   CornerStylePref,
+  DEFAULT_VE_SIZING,
   DownloadEngineId,
   Prefs,
   UiScalePref,
+  VE_SIZING_BOUNDS,
+  VideoEditorSizingPrefs,
   VideoQualityPref,
   WheelIconStylePref,
   WheelSidePref,
+  clampVideoEditorSizing,
   formatBytes,
 } from '../data/models';
 import {THEME_PRESETS} from '../data/themes';
@@ -75,9 +84,10 @@ import {
   isNativeApp,
   requestAllAppPermissions,
 } from '../engine/nativeBridge';
+import {deleteNleProjectIdb, listNleProjectsIdb} from '../engine/projectStorage';
 import {PWAInstallButton} from './PWAInstallButton';
 
-export type SettingsCategory = 'appearance' | 'downloads' | 'permissions' | 'about';
+export type SettingsCategory = 'appearance' | 'downloads' | 'permissions' | 'experimental' | 'about';
 
 interface SettingsScreenProps {
   prefs: Prefs;
@@ -91,6 +101,9 @@ interface SettingsScreenProps {
   onTestServer: () => void;
   onCheckUpdate: () => void;
   onApplyUpdate: () => void;
+  libraryCount?: number;
+  libraryBytes?: number;
+  onClearLibrary?: () => void;
   onOpenWheelCustomize?: () => void;
   onOpenMainWheelCustomize?: () => void;
   onShowToast?: (msg: string) => void;
@@ -108,16 +121,64 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onTestServer,
   onCheckUpdate,
   onApplyUpdate,
+  libraryCount = 0,
+  libraryBytes = 0,
+  onClearLibrary,
   onOpenWheelCustomize,
   onOpenMainWheelCustomize,
   onShowToast,
 }) => {
   const lang: Lang = prefs.lang;
   const [category, setCategory] = useState<SettingsCategory>(initialCategory);
+  const [showAllThemes, setShowAllThemes] = useState<boolean>(false);
+  const [savedProjectCount, setSavedProjectCount] = useState<number>(0);
+  const [clearingProjects, setClearingProjects] = useState(false);
+  const [storageEstimate, setStorageEstimate] = useState<{usage: number; quota: number} | null>(null);
 
   useEffect(() => {
     setCategory(initialCategory);
   }, [initialCategory]);
+
+  useEffect(() => {
+    if (category !== 'about') return;
+    let alive = true;
+    listNleProjectsIdb()
+      .then((list) => {
+        if (alive) setSavedProjectCount(list.length);
+      })
+      .catch(() => {});
+    if (typeof navigator !== 'undefined' && navigator.storage?.estimate) {
+      navigator.storage
+        .estimate()
+        .then((est) => {
+          if (alive && typeof est.usage === 'number' && typeof est.quota === 'number') {
+            setStorageEstimate({usage: est.usage, quota: est.quota});
+          }
+        })
+        .catch(() => {});
+    }
+    return () => {
+      alive = false;
+    };
+  }, [category]);
+
+  const handleClearSavedProjects = async () => {
+    setClearingProjects(true);
+    try {
+      const list = await listNleProjectsIdb();
+      for (const proj of list) {
+        await deleteNleProjectIdb(proj.projectId);
+      }
+      setSavedProjectCount(0);
+      onShowToast?.(
+        lang === 'tr' ? 'Kayıtlı video projeleri temizlendi.' : 'Saved video projects cleared.'
+      );
+    } catch {
+      onShowToast?.(t('ProcessFailed', lang));
+    } finally {
+      setClearingProjects(false);
+    }
+  };
 
   const [perms, setPerms] = useState<AppPermissionsSummary>({
     storage: 'ready',
@@ -310,6 +371,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const wheelSide: WheelSidePref = prefs.wheelSide ?? 'right';
   const wheelIconStyle: WheelIconStylePref = prefs.wheelIconStyle ?? 'wheel';
   const showIntegratedEngines = Boolean(prefs.showIntegratedEngines);
+  const showToolLabels = Boolean(prefs.showToolLabels);
   const reducedMotion = Boolean(prefs.reducedMotion);
   const hapticsEnabled = prefs.hapticsEnabled !== false;
 
@@ -356,6 +418,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     {id: 'appearance', label: t('SetCatAppearance', lang), Icon: Palette},
     {id: 'downloads', label: t('SetCatDownloads', lang), Icon: Download},
     {id: 'permissions', label: t('SetCatPermissions', lang), Icon: ShieldCheck},
+    {id: 'experimental', label: lang === 'tr' ? 'Deneysel' : 'Experimental', Icon: FlaskConical},
     {id: 'about', label: t('SetCatAbout', lang), Icon: Smartphone},
   ];
 
@@ -406,11 +469,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </h1>
       </div>
 
-      {/* 4-Category Segmented Navigation Bar */}
+      {/* 5-Category Expanding Icon Tab Bar — inactive tabs collapse to icons, active tab smoothly expands */}
       <div
         role="tablist"
         aria-label={t('Settings', lang)}
-        className="mt-4 grid grid-cols-4 gap-1 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-1.5"
+        className="mt-4 flex w-full items-center gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-1.5 sm:inline-flex sm:w-auto"
       >
         {categories.map(({id, label, Icon}) => {
           const active = category === id;
@@ -420,15 +483,23 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               type="button"
               role="tab"
               aria-selected={active}
+              aria-label={label}
+              title={label}
               onClick={() => setCategory(id)}
-              className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+              className={`flex min-h-[44px] items-center justify-center overflow-hidden rounded-xl text-xs font-semibold whitespace-nowrap transition-[flex-grow,width,padding,background-color,color] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
                 active
-                  ? 'morph-accent-solid shadow-sm'
-                  : 'text-[var(--muted)] hover:text-[var(--ink)]'
+                  ? 'morph-accent-solid flex-1 gap-2 px-4 shadow-sm sm:flex-none sm:px-4'
+                  : 'w-11 shrink-0 px-0 text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)]'
               }`}
             >
-              <Icon className="hidden h-3.5 w-3.5 shrink-0 sm:inline-block" />
-              <span>{label}</span>
+              <Icon className="h-4 w-4 shrink-0" />
+              <span
+                className={`inline-block overflow-hidden transition-[max-width,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                  active ? 'max-w-[140px] opacity-100' : 'max-w-0 opacity-0'
+                }`}
+              >
+                {label}
+              </span>
             </button>
           );
         })}
@@ -517,11 +588,30 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               </div>
             </div>
 
-            <p className="mt-5 text-xs font-semibold text-[var(--muted)]">{t('Themes', lang)}</p>
+            <div className="mt-5 flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-[var(--muted)]">{t('Themes', lang)}</p>
+              <button
+                type="button"
+                onClick={() => setShowAllThemes((v) => !v)}
+                className="min-h-[32px] rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2.5 text-[11px] font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] whitespace-nowrap"
+              >
+                {showAllThemes
+                  ? lang === 'tr'
+                    ? 'Şeride Daralt'
+                    : 'Compact Strip'
+                  : lang === 'tr'
+                    ? `Tümünü Gör (${THEME_PRESETS.length})`
+                    : `View All (${THEME_PRESETS.length})`}
+              </button>
+            </div>
             <div
               role="radiogroup"
               aria-label={t('Themes', lang)}
-              className="mt-3 grid grid-cols-3 gap-2.5 sm:grid-cols-4 sm:gap-3 md:grid-cols-6"
+              className={
+                showAllThemes
+                  ? 'mt-3 grid grid-cols-3 gap-2.5 sm:grid-cols-4 sm:gap-3 md:grid-cols-6'
+                  : 'no-scrollbar mt-3 flex snap-x gap-2.5 overflow-x-auto pb-1.5'
+              }
             >
               {THEME_PRESETS.map((preset) => {
                 const pal = isDark ? preset.dark : preset.light;
@@ -535,7 +625,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     aria-checked={selected}
                     title={presetLabel}
                     onClick={() => onChangePrefs((p) => ({...p, preset: preset.id}))}
-                    className="group flex min-h-[44px] flex-col items-stretch text-left"
+                    className={`group flex min-h-[44px] flex-col items-stretch text-left ${
+                      showAllThemes ? '' : 'w-[106px] shrink-0 snap-start'
+                    }`}
                   >
                     <div
                       className={`relative flex aspect-[4/3] w-full flex-col overflow-hidden rounded-xl border-2 transition-transform duration-150 group-active:scale-[0.97] ${
@@ -628,7 +720,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </div>
 
             <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {/* Text & UI Scale Slider */}
+              {/* Text & UI Scale Control */}
               {(() => {
                 const scaleSteps: readonly UiScalePref[] = ['compact', 'default', 'large'];
                 const scaleLabels = [
@@ -644,29 +736,31 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       <span className="text-xs font-semibold text-[var(--ink)]">
                         {t('UiScaleLabel', lang)}
                       </span>
-                      <span className="font-mono-num text-[11px] font-bold text-[var(--accent)]">
+                      <span className="font-mono-num text-[11px] font-bold text-[var(--accent-text)]">
                         {scaleLabels[idx]}
                       </span>
                     </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={scaleSteps.length - 1}
-                      step={1}
-                      value={idx}
-                      aria-label={t('UiScaleLabel', lang)}
-                      onChange={(e) =>
-                        onChangePrefs((p) => ({
-                          ...p,
-                          uiScale: scaleSteps[Number(e.target.value)] ?? 'default',
-                        }))
-                      }
-                      style={{
-                        background: `linear-gradient(90deg, var(--accent) 0%, var(--accent-end) ${pct}%, var(--surface) ${pct}%)`,
-                      }}
-                      className="morph-slider"
-                    />
-                    <div className="mt-2 grid grid-cols-3 gap-1" role="radiogroup" aria-label={t('UiScaleLabel', lang)}>
+                    {prefs.expLegacySliders && (
+                      <input
+                        type="range"
+                        min={0}
+                        max={scaleSteps.length - 1}
+                        step={1}
+                        value={idx}
+                        aria-label={t('UiScaleLabel', lang)}
+                        onChange={(e) =>
+                          onChangePrefs((p) => ({
+                            ...p,
+                            uiScale: scaleSteps[Number(e.target.value)] ?? 'default',
+                          }))
+                        }
+                        style={{
+                          background: `linear-gradient(90deg, var(--accent) 0%, var(--accent-end) ${pct}%, var(--surface) ${pct}%)`,
+                        }}
+                        className="morph-slider mb-2.5"
+                      />
+                    )}
+                    <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label={t('UiScaleLabel', lang)}>
                       {scaleLabels.map((lbl, i) => (
                         <button
                           key={lbl}
@@ -679,9 +773,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                               uiScale: scaleSteps[i] ?? 'default',
                             }))
                           }
-                          className={`min-h-[36px] rounded-lg px-1.5 text-[11px] font-semibold transition-colors ${
+                          className={`min-h-[42px] rounded-xl px-1.5 text-xs font-semibold transition-colors ${
                             i === idx
-                              ? 'bg-[var(--surface)] text-[var(--ink)] ring-1 ring-[var(--accent)]/60'
+                              ? 'bg-[var(--surface)] text-[var(--ink)] ring-1 ring-[var(--accent)]/60 shadow-sm'
                               : 'text-[var(--muted)] hover:bg-[var(--surface)]/60 hover:text-[var(--ink)]'
                           }`}
                         >
@@ -693,7 +787,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 );
               })()}
 
-              {/* Corner Softness Slider */}
+              {/* Corner Softness Control */}
               {(() => {
                 const cornerSteps: readonly CornerStylePref[] = ['sharp', 'balanced', 'soft'];
                 const cornerLabels = [
@@ -713,25 +807,27 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                         {cornerLabels[idx]}
                       </span>
                     </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={cornerSteps.length - 1}
-                      step={1}
-                      value={idx}
-                      aria-label={t('CornerStyleLabel', lang)}
-                      onChange={(e) =>
-                        onChangePrefs((p) => ({
-                          ...p,
-                          cornerStyle: cornerSteps[Number(e.target.value)] ?? 'balanced',
-                        }))
-                      }
-                      style={{
-                        background: `linear-gradient(90deg, var(--accent) 0%, var(--accent-end) ${pct}%, var(--surface) ${pct}%)`,
-                      }}
-                      className="morph-slider"
-                    />
-                    <div className="mt-2 grid grid-cols-3 gap-1" role="radiogroup" aria-label={t('CornerStyleLabel', lang)}>
+                    {prefs.expLegacySliders && (
+                      <input
+                        type="range"
+                        min={0}
+                        max={cornerSteps.length - 1}
+                        step={1}
+                        value={idx}
+                        aria-label={t('CornerStyleLabel', lang)}
+                        onChange={(e) =>
+                          onChangePrefs((p) => ({
+                            ...p,
+                            cornerStyle: cornerSteps[Number(e.target.value)] ?? 'balanced',
+                          }))
+                        }
+                        style={{
+                          background: `linear-gradient(90deg, var(--accent) 0%, var(--accent-end) ${pct}%, var(--surface) ${pct}%)`,
+                        }}
+                        className="morph-slider mb-2.5"
+                      />
+                    )}
+                    <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label={t('CornerStyleLabel', lang)}>
                       {cornerLabels.map((lbl, i) => (
                         <button
                           key={lbl}
@@ -744,9 +840,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                               cornerStyle: cornerSteps[i] ?? 'balanced',
                             }))
                           }
-                          className={`min-h-[36px] rounded-lg px-1.5 text-[11px] font-semibold transition-colors ${
+                          className={`min-h-[42px] rounded-xl px-1.5 text-xs font-semibold transition-colors ${
                             i === idx
-                              ? 'bg-[var(--surface)] text-[var(--ink)] ring-1 ring-[var(--accent)]/60'
+                              ? 'bg-[var(--surface)] text-[var(--ink)] ring-1 ring-[var(--accent)]/60 shadow-sm'
                               : 'text-[var(--muted)] hover:bg-[var(--surface)]/60 hover:text-[var(--ink)]'
                           }`}
                         >
@@ -818,6 +914,190 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 <span className="morph-switch-thumb" />
               </span>
             </button>
+
+            {/* Tool Labels & Descriptions Toggle (Icon-First vs Text Mode) */}
+            <button
+              type="button"
+              onClick={() =>
+                onChangePrefs((p) => ({...p, showToolLabels: !p.showToolLabels}))
+              }
+              className="mt-3 flex min-h-[64px] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
+            >
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-[var(--ink)]">
+                  {lang === 'tr'
+                    ? 'Araçlarda Yazı & Açıklamaları Göster'
+                    : 'Show Tool Labels & Descriptions'}
+                </p>
+                <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
+                  {lang === 'tr'
+                    ? 'Kapalıyken araçlar sade simge odaklı görünür; açıldığında uzun açıklamalar ve buton yazıları eklenir.'
+                    : 'Off uses a clean icon-first tool UI; turn on to show full descriptions and button labels.'}
+                </p>
+              </div>
+              <span className="morph-switch" data-checked={showToolLabels ? 'true' : 'false'}>
+                <span className="morph-switch-thumb" />
+              </span>
+            </button>
+
+            {/* Video Editor Control Sizing (Safe-Bounded Customization) */}
+            {(() => {
+              const veSizing = clampVideoEditorSizing(prefs.videoEditorSizing);
+              const isCustomSizing =
+                veSizing.dockTabHeight !== DEFAULT_VE_SIZING.dockTabHeight ||
+                veSizing.controlBtnSize !== DEFAULT_VE_SIZING.controlBtnSize ||
+                veSizing.colorSwatchSize !== DEFAULT_VE_SIZING.colorSwatchSize ||
+                veSizing.watermarkGridHeight !== DEFAULT_VE_SIZING.watermarkGridHeight;
+              const patchSizing = (patch: Partial<VideoEditorSizingPrefs>) =>
+                onChangePrefs((p) => ({
+                  ...p,
+                  videoEditorSizing: {...p.videoEditorSizing, ...patch},
+                }));
+              return (
+                <div className="mt-4 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-bold text-[var(--ink)]">
+                        {lang === 'tr' ? 'Video Editör Kontrol Boyutları' : 'Video Editor Control Sizes'}
+                      </p>
+                      <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
+                        {lang === 'tr'
+                          ? 'Alt stüdyo simgeleri, FPS/kapatma butonları, renk noktaları ve filigran ızgarasını düzeni bozmadan büyüt veya küçült.'
+                          : 'Resize bottom dock icons, buttons, color swatches, and watermark grid safely without breaking layout.'}
+                      </p>
+                    </div>
+                    {isCustomSizing && (
+                      <button
+                        type="button"
+                        onClick={() => patchSizing(DEFAULT_VE_SIZING)}
+                        className="flex min-h-[34px] items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-2.5 text-[11px] font-semibold text-[var(--ink)] hover:border-[var(--accent)]"
+                      >
+                        <RotateCcw className="h-3 w-3 text-[var(--accent-text)]" />
+                        <span>{lang === 'tr' ? 'Sıfırla' : 'Reset'}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Quick Size Presets */}
+                  <div className="mt-3 grid grid-cols-3 gap-1.5">
+                    {(
+                      [
+                        {
+                          id: 'compact',
+                          label: lang === 'tr' ? 'Kompakt' : 'Compact',
+                          vals: {dockTabHeight: 38, controlBtnSize: 30, colorSwatchSize: 26, watermarkGridHeight: 32},
+                        },
+                        {
+                          id: 'default',
+                          label: lang === 'tr' ? 'Varsayılan' : 'Default',
+                          vals: DEFAULT_VE_SIZING,
+                        },
+                        {
+                          id: 'large',
+                          label: lang === 'tr' ? 'Büyük' : 'Large',
+                          vals: {dockTabHeight: 52, controlBtnSize: 42, colorSwatchSize: 38, watermarkGridHeight: 46},
+                        },
+                      ] as const
+                    ).map((preset) => {
+                      const active =
+                        veSizing.dockTabHeight === preset.vals.dockTabHeight &&
+                        veSizing.controlBtnSize === preset.vals.controlBtnSize &&
+                        veSizing.colorSwatchSize === preset.vals.colorSwatchSize &&
+                        veSizing.watermarkGridHeight === preset.vals.watermarkGridHeight;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => patchSizing(preset.vals)}
+                          className={`min-h-[38px] rounded-xl border text-xs font-semibold transition-colors ${
+                            active
+                              ? 'border-[var(--accent)] bg-[var(--surface)] text-[var(--ink)] shadow-sm'
+                              : 'border-[var(--line)] bg-[var(--surface)]/60 text-[var(--muted)] hover:text-[var(--ink)]'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Per-element Safe Clamped Size Sliders */}
+                  <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                    {(
+                      [
+                        {
+                          key: 'dockTabHeight',
+                          labelTr: 'Alt Stüdyo Simgeleri',
+                          labelEn: 'Bottom Dock Icons',
+                        },
+                        {
+                          key: 'controlBtnSize',
+                          labelTr: 'Editör & Pencere Butonları',
+                          labelEn: 'Editor & Popup Buttons',
+                        },
+                        {
+                          key: 'colorSwatchSize',
+                          labelTr: 'Renk Seçim Noktaları',
+                          labelEn: 'Color Swatch Dots',
+                        },
+                        {
+                          key: 'watermarkGridHeight',
+                          labelTr: 'Filigran 9-Nokta Izgarası',
+                          labelEn: 'Watermark 9-Point Grid',
+                        },
+                      ] as const
+                    ).map(({key, labelTr, labelEn}) => {
+                      const b = VE_SIZING_BOUNDS[key];
+                      const cur = veSizing[key];
+                      return (
+                        <div
+                          key={key}
+                          className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-2.5"
+                        >
+                          <div className="flex items-center justify-between gap-2 text-[11px]">
+                            <span className="truncate font-semibold text-[var(--ink)]">
+                              {lang === 'tr' ? labelTr : labelEn}
+                            </span>
+                            <span className="font-mono-num shrink-0 font-bold text-[var(--accent-text)]">
+                              {cur}px
+                            </span>
+                          </div>
+                          <div className="mt-2 flex items-center gap-2">
+                            <button
+                              type="button"
+                              disabled={cur <= b.min}
+                              aria-label={`${labelTr} -`}
+                              onClick={() => patchSizing({[key]: Math.max(b.min, cur - b.step)})}
+                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] disabled:opacity-35"
+                            >
+                              <Minus className="h-3.5 w-3.5" />
+                            </button>
+                            <input
+                              type="range"
+                              min={b.min}
+                              max={b.max}
+                              step={b.step}
+                              value={cur}
+                              onChange={(e) => patchSizing({[key]: Number(e.target.value)})}
+                              className="morph-slider flex-1"
+                            />
+                            <button
+                              type="button"
+                              disabled={cur >= b.max}
+                              aria-label={`${labelTr} +`}
+                              onClick={() => patchSizing({[key]: Math.min(b.max, cur + b.step)})}
+                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] disabled:opacity-35"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
           </section>
 
           {/* Dedicated Quick Wheel Visibility, Customization, Position & Icon Design Card */}
@@ -887,7 +1167,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </button>
 
             <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {/* 3-Step Position Slider: Sol Alt | Orta Alt | Sağ Alt */}
+              {/* 3-Step Position Control: Sol Alt | Orta Alt | Sağ Alt */}
               {(() => {
                 const sideSteps: readonly WheelSidePref[] = ['left', 'center', 'right'];
                 const sideLabels = [
@@ -903,29 +1183,31 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       <span className="text-xs font-semibold text-[var(--ink)]">
                         {t('WheelSideLabel', lang)}
                       </span>
-                      <span className="font-mono-num text-[11px] font-bold text-[var(--accent)]">
+                      <span className="font-mono-num text-[11px] font-bold text-[var(--accent-text)]">
                         {sideLabels[idx]}
                       </span>
                     </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={sideSteps.length - 1}
-                      step={1}
-                      value={idx}
-                      aria-label={t('WheelSideLabel', lang)}
-                      onChange={(e) =>
-                        onChangePrefs((p) => ({
-                          ...p,
-                          wheelSide: sideSteps[Number(e.target.value)] ?? 'right',
-                        }))
-                      }
-                      style={{
-                        background: `linear-gradient(90deg, var(--accent) 0%, var(--accent-end) ${pct}%, var(--surface) ${pct}%)`,
-                      }}
-                      className="morph-slider"
-                    />
-                    <div className="mt-2 grid grid-cols-3 gap-1" role="radiogroup" aria-label={t('WheelSideLabel', lang)}>
+                    {prefs.expLegacySliders && (
+                      <input
+                        type="range"
+                        min={0}
+                        max={sideSteps.length - 1}
+                        step={1}
+                        value={idx}
+                        aria-label={t('WheelSideLabel', lang)}
+                        onChange={(e) =>
+                          onChangePrefs((p) => ({
+                            ...p,
+                            wheelSide: sideSteps[Number(e.target.value)] ?? 'right',
+                          }))
+                        }
+                        style={{
+                          background: `linear-gradient(90deg, var(--accent) 0%, var(--accent-end) ${pct}%, var(--surface) ${pct}%)`,
+                        }}
+                        className="morph-slider mb-2.5"
+                      />
+                    )}
+                    <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label={t('WheelSideLabel', lang)}>
                       {sideLabels.map((lbl, i) => (
                         <button
                           key={lbl}
@@ -938,9 +1220,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                               wheelSide: sideSteps[i] ?? 'right',
                             }))
                           }
-                          className={`min-h-[36px] rounded-lg px-1.5 text-[11px] font-semibold transition-colors ${
+                          className={`min-h-[42px] rounded-xl px-1.5 text-xs font-semibold transition-colors ${
                             i === idx
-                              ? 'bg-[var(--surface)] text-[var(--ink)] ring-1 ring-[var(--accent)]/60'
+                              ? 'bg-[var(--surface)] text-[var(--ink)] ring-1 ring-[var(--accent)]/60 shadow-sm'
                               : 'text-[var(--muted)] hover:bg-[var(--surface)]/60 hover:text-[var(--ink)]'
                           }`}
                         >
@@ -1812,7 +2094,183 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </div>
       )}
 
-      {/* CATEGORY 4: UPDATES (Equal-Height h-12 Boxes, Single Clean Version Row, Developer Telegram) */}
+      {/* CATEGORY 4: EXPERIMENTAL & CLASSIC REVERSIBLE FEATURES */}
+      {category === 'experimental' && (
+        <div className="mt-5 space-y-4">
+          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
+                  <FlaskConical className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold leading-tight text-[var(--ink)]">
+                    {lang === 'tr' ? 'Deneysel & Klasik Özellikler' : 'Experimental & Classic Features'}
+                  </h2>
+                  <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
+                    {lang === 'tr'
+                      ? 'Varsayılan olarak sadeleştirilmiş görsel efektleri ve eski arayüz davranışlarını istediğin zaman buradan geri açabilirsin.'
+                      : 'Re-enable retired visual effects and classic UI behaviors anytime. All toggles default to OFF.'}
+                  </p>
+                </div>
+              </div>
+
+              {(prefs.expSpinningGear ||
+                prefs.expWheelBurnEffect ||
+                prefs.expArmadilloReel === false ||
+                prefs.expDualRingWheel ||
+                prefs.expWheelCenterHoldCustomize ||
+                prefs.expTouchTooltips ||
+                prefs.expLegacySliders ||
+                prefs.expDevCloudEasterEgg) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChangePrefs((p) => ({
+                      ...p,
+                      expSpinningGear: false,
+                      expWheelBurnEffect: false,
+                      expArmadilloReel: true,
+                      expDualRingWheel: false,
+                      expWheelCenterHoldCustomize: false,
+                      expTouchTooltips: false,
+                      expLegacySliders: false,
+                      expDevCloudEasterEgg: false,
+                    }));
+                    onShowToast?.(
+                      lang === 'tr'
+                        ? 'Deneysel ayarlar varsayılana döndürüldü.'
+                        : 'Experimental settings restored to defaults.'
+                    );
+                  }}
+                  className="flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3.5 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
+                >
+                  <RotateCcw className="h-3.5 w-3.5 text-[var(--accent-text)]" />
+                  <span>{lang === 'tr' ? 'Varsayılana Dön' : 'Reset Defaults'}</span>
+                </button>
+              )}
+            </div>
+
+            <div className="mt-4 space-y-2.5">
+              {(
+                [
+                  {
+                    key: 'expArmadilloReel' as const,
+                    defaultOn: true,
+                    titleTr: 'Video Editörü Katlanan Armadillo Çarkı',
+                    titleEn: 'Video Editor Armadillo Fold Reel',
+                    descTr:
+                      'Varsayılan olarak açıktır. Kapatırsan Video Stüdyosu dikey görünümünde standart sabit alt araç çubuğu kullanılır.',
+                    descEn:
+                      'Enabled by default. Turn off to use the flat bottom dock in portrait Video Studio instead of the 3D folding reel.',
+                  },
+                  {
+                    key: 'expTouchTooltips' as const,
+                    defaultOn: false,
+                    titleTr: 'Dokunmatikte Editör İpucu Baloncukları',
+                    titleEn: 'Touch-Device Editor Tooltips',
+                    descTr:
+                      'Açıkken Video Editör butonlarının açıklama baloncukları telefon ve dokunmatik ekranlarda da görünür.',
+                    descEn:
+                      'Shows floating tooltip bubbles on Video Editor buttons on touch screens in addition to desktop mouse hover.',
+                  },
+                  {
+                    key: 'expSpinningGear' as const,
+                    defaultOn: false,
+                    titleTr: 'Sürekli Dönen Ayarlar Dişlisi',
+                    titleEn: 'Continuously Spinning Settings Gear',
+                    descTr: 'Üst çubuktaki Ayarlar ikonunu sürekli döndürür.',
+                    descEn: 'Keeps the top-bar Settings gear continuously rotating.',
+                  },
+                  {
+                    key: 'expWheelBurnEffect' as const,
+                    defaultOn: false,
+                    titleTr: 'Hızlı Çark 30 sn Alev & Kül Efekti',
+                    titleEn: 'Quick Wheel 30s Flame & Ash Effect',
+                    descTr:
+                      'Hızlı Çark düğmesine uzun basıldığında veya fareyle üzerinde beklendiğinde ısınıp alev almasını ve 30 saniyede küle dönüşmesini sağlar.',
+                    descEn:
+                      'Overheats the Quick Wheel button on hover/hold into flames and turns it into ash after 30 seconds.',
+                  },
+                  {
+                    key: 'expDualRingWheel' as const,
+                    defaultOn: false,
+                    titleTr: 'Hızlı Çark Çift Halka Modu (8+ Araç)',
+                    titleEn: 'Quick Wheel Dual-Ring Mode (8+ Tools)',
+                    descTr:
+                      '8’den fazla araç olduğunda sayfalama yerine iç ve dış çift halkalı klasik radyal çarkı gösterir.',
+                    descEn:
+                      'Uses concentric inner + outer rings instead of paginated 8-slice rings when more than 8 actions are present.',
+                  },
+                  {
+                    key: 'expWheelCenterHoldCustomize' as const,
+                    defaultOn: false,
+                    titleTr: 'Çark Ortasına 3 sn Basarak Özelleştir',
+                    titleEn: '3s Center-Hold Wheel Customize',
+                    descTr:
+                      'Açıkken çark üstündeki "Özelleştir" butonunu gizler; özelleştirme ekranını çarkın ortasındaki m logosuna 3 saniye basılı tutarak açarsın.',
+                    descEn:
+                      'Hides the top Customize button and opens customization by holding the center Morph hub for 3 seconds.',
+                  },
+                  {
+                    key: 'expLegacySliders' as const,
+                    defaultOn: false,
+                    titleTr: '3 Seçenekli Ayarlarda Ek Kaydırıcılar',
+                    titleEn: 'Extra Sliders on 3-Option Controls',
+                    descTr:
+                      'Arayüz boyutu, köşe stili ve çark konumu seçeneklerinin üstünde ek kaydırma çubuklarını gösterir.',
+                    descEn:
+                      'Restores duplicate range sliders above the segmented buttons for UI Scale, Corner Radius, and Wheel Position.',
+                  },
+                  {
+                    key: 'expDevCloudEasterEgg' as const,
+                    defaultOn: false,
+                    titleTr: 'Geliştirici Kartı 8 sn Bulut Efekti',
+                    titleEn: 'Developer Card 8s Cloud Easter Egg',
+                    descTr:
+                      'Hakkında sekmesindeki geliştirici kartına 8 saniye basılı tutulduğunda bulut animasyonunu tetikler.',
+                    descEn:
+                      'Triggers the border spinner and rising cloud burst when holding the developer card in About for 8 seconds.',
+                  },
+                ] as const
+              ).map((item) => {
+                const checked = item.defaultOn
+                  ? prefs[item.key] !== false
+                  : Boolean(prefs[item.key]);
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    role="switch"
+                    aria-checked={checked}
+                    onClick={() =>
+                      onChangePrefs((p) => ({
+                        ...p,
+                        [item.key]: item.defaultOn ? p[item.key] === false : !p[item.key],
+                      }))
+                    }
+                    className="flex min-h-[68px] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-[var(--ink)]">
+                        {lang === 'tr' ? item.titleTr : item.titleEn}
+                      </p>
+                      <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
+                        {lang === 'tr' ? item.descTr : item.descEn}
+                      </p>
+                    </div>
+                    <span className="morph-switch shrink-0" data-checked={checked ? 'true' : 'false'}>
+                      <span className="morph-switch-thumb" />
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {/* CATEGORY 5: UPDATES (Equal-Height h-12 Boxes, Single Clean Version Row, Developer Telegram) */}
       {category === 'about' && (
         <div className="mt-5 space-y-4">
           <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
@@ -2020,9 +2478,89 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </div>
           </section>
 
-          {/* Equal-Width Developer Card with 15s Perimeter Spinner & Rising Cloud Easter Egg */}
+          {/* Storage & Cache Management Card */}
+          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5 space-y-3.5">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
+                <HardDrive className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-sm font-extrabold text-[var(--ink)]">
+                  {lang === 'tr' ? 'Depolama & Önbellek' : 'Storage & Cache'}
+                </h2>
+                <p className="text-xs text-[var(--muted)]">
+                  {lang === 'tr'
+                    ? 'Kütüphane çıktıları ve kayıtlı video projelerini yönetin.'
+                    : 'Manage exported library files and saved video projects.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="flex items-center justify-between gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3.5 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-[var(--ink)]">{t('Library', lang)}</p>
+                  <p className="font-mono-num mt-0.5 text-[11px] text-[var(--muted)]">
+                    {libraryCount} {t('FilesCount', lang)} · {formatBytes(libraryBytes)}
+                  </p>
+                </div>
+                {onClearLibrary && libraryCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClearLibrary();
+                      onShowToast?.(
+                        lang === 'tr' ? 'Kütüphane temizlendi.' : 'Library cleared.'
+                      );
+                    }}
+                    className="flex min-h-[34px] shrink-0 items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 text-[11px] font-semibold text-[var(--danger)] hover:border-[var(--danger)]"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    <span>{t('Clear', lang)}</span>
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3.5 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-[var(--ink)]">
+                    {lang === 'tr' ? 'Video Projeleri' : 'Video Projects'}
+                  </p>
+                  <p className="font-mono-num mt-0.5 text-[11px] text-[var(--muted)]">
+                    {savedProjectCount}{' '}
+                    {lang === 'tr' ? 'kayıtlı proje' : 'saved projects'}
+                  </p>
+                </div>
+                {savedProjectCount > 0 && (
+                  <button
+                    type="button"
+                    disabled={clearingProjects}
+                    onClick={() => void handleClearSavedProjects()}
+                    className="flex min-h-[34px] shrink-0 items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 text-[11px] font-semibold text-[var(--danger)] hover:border-[var(--danger)] disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    <span>{t('Clear', lang)}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {storageEstimate && storageEstimate.quota > 0 && (
+              <div className="flex items-center justify-between rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3.5 py-2 text-[11px] text-[var(--muted)]">
+                <span>
+                  {lang === 'tr' ? 'Uygulama Alan Kullanımı' : 'App Storage Usage'}
+                </span>
+                <span className="font-mono-num font-semibold text-[var(--ink)]">
+                  {formatBytes(storageEstimate.usage)} / {formatBytes(storageEstimate.quota)}
+                </span>
+              </div>
+            )}
+          </section>
+
+          {/* Equal-Width Developer Card with optional Experimental 8s Cloud Easter Egg */}
           <div
             onPointerDown={() => {
+              if (!prefs.expDevCloudEasterEgg) return;
               clearDevHoldTimer();
               suppressDevLinkRef.current = false;
               devHoldStartRef.current = Date.now();

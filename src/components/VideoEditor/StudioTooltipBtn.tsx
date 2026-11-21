@@ -77,6 +77,16 @@ export const StudioTooltipBtn: React.FC<StudioTooltipBtnProps> = ({
 
   const showTooltip = useCallback(() => {
     if (disabled) return;
+    const allowTouchTooltips =
+      typeof document !== 'undefined' &&
+      document.documentElement.dataset.touchTooltips === 'on';
+    if (
+      !allowTouchTooltips &&
+      typeof window !== 'undefined' &&
+      !window.matchMedia?.('(hover: hover) and (pointer: fine)').matches
+    ) {
+      return;
+    }
     computeCoords();
     setOpen(true);
   }, [computeCoords, disabled]);
@@ -117,7 +127,7 @@ export const StudioTooltipBtn: React.FC<StudioTooltipBtnProps> = ({
         onFocus={showTooltip}
         onBlur={hideTooltip}
         aria-label={tooltip}
-        className={className}
+        className={`focus:outline-none focus-visible:ring-1 focus-visible:ring-white/35 ${className}`}
       >
         {children}
       </button>

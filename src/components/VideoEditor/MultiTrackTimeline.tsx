@@ -30,6 +30,7 @@ import {
   Trash2,
   Type,
   VolumeX,
+  X,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
@@ -88,7 +89,10 @@ const CutRightIcon: React.FC<{className?: string}> = ({className = 'h-3.5 w-3.5'
 );
 
 export type SelectedLayerType = 'video' | 'audio' | 'text' | 'watermark';
-export type ActiveDragLaneHint = 'v1' | 'v2' | 't1' | 't2' | 'a1' | 'a2' | null;
+export type ActiveDragLaneHint = {
+  kind: 'video' | 'text' | 'audio';
+  row: number;
+} | null;
 
 export type TimelineDragMode =
   | 'playhead'
@@ -138,6 +142,7 @@ const DEFAULT_PINNED_TOOLBAR_TOOLS: TimelineToolbarToolId[] = [
 ];
 
 const TOOLBAR_PINNED_STORAGE_KEY = 'morph_nle_toolbar_pinned_v1';
+const QUICK_ADD_BAR_STORAGE_KEY = 'morph_nle_show_quick_add_v2';
 
 function loadPinnedToolbarTools(): TimelineToolbarToolId[] {
   if (typeof window === 'undefined') return DEFAULT_PINNED_TOOLBAR_TOOLS;
@@ -152,6 +157,17 @@ function loadPinnedToolbarTools(): TimelineToolbarToolId[] {
     return valid.length > 0 ? Array.from(new Set(valid)) : DEFAULT_PINNED_TOOLBAR_TOOLS;
   } catch {
     return DEFAULT_PINNED_TOOLBAR_TOOLS;
+  }
+}
+
+function loadShowQuickAddBar(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const raw = window.localStorage.getItem(QUICK_ADD_BAR_STORAGE_KEY);
+    if (raw === null) return false;
+    return raw === 'true';
+  } catch {
+    return false;
   }
 }
 
@@ -185,10 +201,13 @@ interface MultiTrackTimelineProps {
   onSelectWatermark: () => void;
   onOpenItemPopup: (type: 'video' | 'audio' | 'text', id: string) => void;
   onOpenSeamTransition: (type: 'video' | 'audio' | 'text', id: string) => void;
-  onQuickAddText: () => void;
-  onQuickAddAudio: () => void;
+  onQuickAddText: (targetRow?: number) => void;
+  onQuickAddAudio: (targetRow?: number) => void;
   onOpenWatermarkTab: () => void;
-  onImportVideos: (targetTrack: 0 | 1) => void;
+  onImportVideos: (targetTrack: number) => void;
+  extraTrackRows?: {audio: number; text: number; pip: number};
+  onAddTrackRow?: (kind: 'audio' | 'text' | 'pip') => void;
+  onRemoveEmptyTrackRow?: (kind: 'audio' | 'text' | 'pip') => void;
   onToggleSelectedLayerRow: () => void;
   onOpenFxOrColor: (tab: 'color' | 'fx') => void;
   onStartTimelineDrag: (
@@ -255,6 +274,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
   onQuickAddAudio,
   onOpenWatermarkTab,
   onImportVideos,
+  extraTrackRows = {audio: 0, text: 0, pip: 0},
+  onAddTrackRow,
+  onRemoveEmptyTrackRow,
   onToggleSelectedLayerRow,
   onOpenFxOrColor,
   onStartTimelineDrag,
@@ -278,8 +300,14 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
   const [cutMenuAnchor, setCutMenuAnchor] = useState<{top: number; left: number} | null>(null);
   const cutMenuRef = useRef<HTMLDivElement | null>(null);
 
+  // Floating Corner Quick-Add & Add-Row Popup state
+  const [fabAnchor, setFabAnchor] = useState<{bottom: number; right: number} | null>(null);
+  const fabMenuRef = useRef<HTMLDivElement | null>(null);
+  const fabTriggerRef = useRef<HTMLButtonElement | null>(null);
+
   // Windows 11-style Show Hidden Icons (^) overflow tray + live Customize/Edit mode
   const [pinnedTools, setPinnedTools] = useState<TimelineToolbarToolId[]>(loadPinnedToolbarTools);
+  const [showQuickAddBar, setShowQuickAddBar] = useState<boolean>(loadShowQuickAddBar);
   const [trayAnchor, setTrayAnchor] = useState<{bottom: number; left: number} | null>(null);
   const [trayEditMode, setTrayEditMode] = useState(false);
   const trayRef = useRef<HTMLDivElement | null>(null);
@@ -292,6 +320,14 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
       // ignore storage quota / private mode
     }
   }, [pinnedTools]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(QUICK_ADD_BAR_STORAGE_KEY, showQuickAddBar ? 'true' : 'false');
+    } catch {
+      // ignore storage quota / private mode
+    }
+  }, [showQuickAddBar]);
 
   useEffect(() => {
     if (!trayAnchor) return;
@@ -393,6 +429,44 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
     setCutMenuAnchor({top, left});
   };
 
+  useEffect(() => {
+    if (!fabAnchor) return;
+    const onPointerDown = (ev: PointerEvent) => {
+      const target = ev.target as Node;
+      if (fabMenuRef.current?.contains(target) || fabTriggerRef.current?.contains(target)) return;
+      setFabAnchor(null);
+    };
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') setFabAnchor(null);
+    };
+    const onResize = () => setFabAnchor(null);
+    window.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [fabAnchor]);
+
+  const toggleFloatingAddPopup = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    setCutMenuAnchor(null);
+    setTrayAnchor(null);
+    setTrayEditMode(false);
+    if (fabAnchor) {
+      setFabAnchor(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 390;
+    const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+    const right = Math.max(8, Math.min(vw - 264, vw - rect.right));
+    const bottom = Math.max(12, vh - rect.top + 8);
+    setFabAnchor({bottom, right});
+  };
+
   const safeCanvasDur = Math.max(4, canvasDuration, totalTimelineDur);
   const safeSourceDur = Math.max(0.2, sourceDuration || totalTimelineDur || 10);
   const playheadPct = Math.min(100, Math.max(0, (playhead / safeCanvasDur) * 100));
@@ -400,24 +474,44 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
   const v1Clips = project.videoClips
     .filter((c) => getClipTrackIndex(c) === 0)
     .sort((a, b) => a.timelineStart - b.timelineStart);
-  const v2Clips = project.videoClips
-    .filter((c) => getClipTrackIndex(c) >= 1)
-    .sort((a, b) => a.timelineStart - b.timelineStart);
-
-  const t1Clips = project.textClips
-    .filter((t) => (t.trackRow ?? 0) === 0)
-    .sort((a, b) => a.timelineStart - b.timelineStart);
-  const t2Clips = project.textClips
-    .filter((t) => (t.trackRow ?? 0) === 1)
-    .sort((a, b) => a.timelineStart - b.timelineStart);
+  const allPipClips = project.videoClips.filter((c) => getClipTrackIndex(c) >= 1);
 
   const independentAudios = project.audioClips.filter((a) => a.kind !== 'original');
-  const a1Audios = independentAudios
-    .filter((a) => (a.trackRow ?? 0) === 0)
-    .sort((a, b) => a.timelineStart - b.timelineStart);
-  const a2Audios = independentAudios
-    .filter((a) => (a.trackRow ?? 0) === 1)
-    .sort((a, b) => a.timelineStart - b.timelineStart);
+
+  // Dynamic Row Counts (V2..V5, T1..T6, A1..A6)
+  const maxUsedPipRow = allPipClips.reduce((m, c) => Math.max(m, getClipTrackIndex(c)), 0);
+  const pipRowCount = Math.min(
+    4,
+    Math.max(
+      maxUsedPipRow,
+      extraTrackRows.pip,
+      activeDragLaneHint?.kind === 'video' ? activeDragLaneHint.row : 0
+    )
+  );
+
+  const maxUsedTextRow =
+    project.textClips.length > 0
+      ? project.textClips.reduce((m, t) => Math.max(m, t.trackRow ?? 0), 0)
+      : -1;
+  const textRowCount = Math.min(
+    6,
+    Math.max(
+      maxUsedTextRow + 1,
+      extraTrackRows.text,
+      activeDragLaneHint?.kind === 'text' ? activeDragLaneHint.row + 1 : 0
+    )
+  );
+
+  const maxUsedAudioRow = independentAudios.reduce((m, a) => Math.max(m, a.trackRow ?? 0), 0);
+  const audioRowCount = Math.min(
+    6,
+    Math.max(
+      1,
+      maxUsedAudioRow + 1,
+      1 + extraTrackRows.audio,
+      activeDragLaneHint?.kind === 'audio' ? activeDragLaneHint.row + 1 : 1
+    )
+  );
 
   // Attached original audio segments from V1 clips that haven't been detached yet
   const attachedOrigV1Clips = v1Clips.filter((c) => !c.audioDetached && !c.isFreezeFrame);
@@ -537,24 +631,53 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
     }
   };
 
-  // Helper to render a Text row (T1 or T2) with 2D drag, trim handles, inner-left icon & cut-seam transitions
-  const renderTextRow = (clips: TimelineTextClip[], rowIdx: 0 | 1) => {
+  // Helper to render any Text row (T1, T2, T3...) with 2D drag, trim handles, inner-left icon & cut-seam transitions
+  const renderTextRow = (clips: TimelineTextClip[], rowIdx: number, isRemovableEmpty: boolean) => {
     const isDropTarget =
-      (rowIdx === 1 && activeDragLaneHint === 't2') ||
-      (rowIdx === 0 && activeDragLaneHint === 't1');
+      activeDragLaneHint?.kind === 'text' && activeDragLaneHint.row === rowIdx;
+    const rowTag = `T${rowIdx + 1}`;
     return (
       <div
+        key={`text-row-${rowIdx}`}
         className={`relative h-8 rounded-lg transition-all ${
           isDropTarget
             ? 'bg-[#38BDF8]/18 ring-1 ring-[#38BDF8]'
-            : 'bg-white/[0.025]'
+            : rowIdx % 2 === 1
+              ? 'bg-[#0D1A26]/75'
+              : 'bg-white/[0.025]'
         } ${trackVisibility.t1 ? 'opacity-100' : 'opacity-30'}`}
       >
-        {isDropTarget && clips.length === 0 && (
-          <div className="pointer-events-none flex h-full items-center justify-center text-[10px] font-bold text-[#7DD3FC]">
-            {rowIdx === 1
-              ? tr('Üst Metin Satırına Bırak (T2)', 'Drop onto Upper Text Row (T2)')
-              : tr('Ana Metin Satırına Bırak (T1)', 'Drop onto Main Text Row (T1)')}
+        <span className="pointer-events-none absolute left-1.5 top-1/2 z-10 -translate-y-1/2 rounded bg-black/45 px-1 py-0.5 text-[8px] font-black tracking-wider text-[#7DD3FC]/70">
+          {rowTag}
+        </span>
+        {clips.length === 0 && (
+          <div className="flex h-full items-center justify-center gap-2 px-7 text-[10px] font-semibold text-[#7DD3FC]/75">
+            {isDropTarget ? (
+              <span>
+                {tr(`${rowTag} Metin Satırına Bırak`, `Drop onto Text Row (${rowTag})`)}
+              </span>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onQuickAddText(rowIdx)}
+                  className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[#7DD3FC]/80 transition-colors hover:bg-[#38BDF8]/15 hover:text-[#BAE6FD]"
+                >
+                  <Plus className="h-3 w-3" />
+                  <span>{tr(`${rowTag} Metin Ekle`, `Add to ${rowTag}`)}</span>
+                </button>
+                {isRemovableEmpty && onRemoveEmptyTrackRow && (
+                  <button
+                    type="button"
+                    onClick={() => onRemoveEmptyTrackRow('text')}
+                    title={tr('Boş satırı kaldır', 'Remove empty row')}
+                    className="absolute right-1.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-white/40 hover:bg-white/10 hover:text-white/85"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </>
+            )}
           </div>
         )}
         {clips.map((tItem, idx) => {
@@ -975,10 +1098,12 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
     );
   }
 
-  const showV2Lane = v2Clips.length > 0 || activeDragLaneHint === 'v2';
-  const showT2Lane = t2Clips.length > 0 || activeDragLaneHint === 't2';
-  const showA2Lane = a2Audios.length > 0 || activeDragLaneHint === 'a2';
-  const hasAnyText = project.textClips.length > 0;
+  const pipRowIndices = Array.from({length: pipRowCount}, (_, i) => pipRowCount - i); // e.g. [2, 1] -> V3 above V2
+  const textRowIndices = Array.from({length: textRowCount}, (_, i) => i); // 0..textRowCount-1 -> T1..Tn
+  const extraAudioRowIndices = Array.from({length: Math.max(0, audioRowCount - 1)}, (_, i) => i + 1); // 1..audioRowCount-1 -> A2..An
+  const a1Audios = independentAudios
+    .filter((a) => (a.trackRow ?? 0) === 0)
+    .sort((a, b) => a.timelineStart - b.timelineStart);
 
   const isQuickMenuDisabled =
     selectedLayerType === 'watermark' || (!selectedClip && !selectedAudioId && !selectedTextId);
@@ -1131,7 +1256,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
       return (
         <div
           key="split_cut"
-          className="flex shrink-0 items-center gap-0.5 rounded-lg border border-white/[0.08] bg-white/[0.035] p-[2px]"
+          className="flex h-7 shrink-0 items-center gap-[2px] rounded-lg border border-white/[0.09] bg-white/[0.03] p-[2px]"
         >
           <StudioTooltipBtn
             tooltip={tr(
@@ -1140,14 +1265,16 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             )}
             align="left"
             onClick={onSplit}
-            className={`flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-md transition-colors sm:h-7 sm:w-7 ${
+            className={`flex h-[22px] w-[26px] shrink-0 items-center justify-center rounded-[5px] transition-colors ${
               canSplitActiveLayer
-                ? 'bg-[#F43F5E]/22 text-[#FB7185] ring-1 ring-[#F43F5E]/45 hover:bg-[#F43F5E]/32'
-                : 'text-[#FB7185]/60 hover:bg-white/[0.08] hover:text-[#FB7185]'
+                ? 'bg-[#F43F5E]/20 text-[#FB7185] hover:bg-[#F43F5E]/30'
+                : 'text-white/55 hover:bg-white/[0.08] hover:text-[#FB7185]'
             }`}
           >
             <SquareSplitHorizontal className="h-3.5 w-3.5" />
           </StudioTooltipBtn>
+
+          <span className="h-3 w-px bg-white/[0.08]" aria-hidden="true" />
 
           <StudioTooltipBtn
             tooltip={tr(
@@ -1156,12 +1283,12 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             )}
             align="left"
             onClick={openCutMenuFromButton}
-            className={`flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-md transition-colors sm:h-7 sm:w-7 ${
+            className={`flex h-[22px] w-[26px] shrink-0 items-center justify-center rounded-[5px] transition-colors ${
               cutMenuAnchor
-                ? 'bg-[#FB923C]/28 text-[#FDBA74] ring-1 ring-[#FB923C]/55'
+                ? 'bg-[#FB923C]/24 text-[#FDBA74]'
                 : canSplitActiveLayer
-                  ? 'bg-[#FB923C]/16 text-[#FB923C] ring-1 ring-[#FB923C]/35 hover:bg-[#FB923C]/26'
-                  : 'text-[#FB923C]/65 hover:bg-white/[0.08] hover:text-[#FB923C]'
+                  ? 'bg-[#FB923C]/14 text-[#FB923C] hover:bg-[#FB923C]/24'
+                  : 'text-white/55 hover:bg-white/[0.08] hover:text-[#FB923C]'
             }`}
           >
             <Scissors className="h-3.5 w-3.5" />
@@ -1172,14 +1299,15 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
 
     const meta = toolMetaMap[id];
     const Icon = meta.icon;
-    const isActiveStyle =
+    // Uniform disciplined monochrome when idle; crisp semantic highlight ONLY when active
+    const toolVisualClass =
       id === 'free_timeline' && meta.active
-        ? 'bg-[#38BDF8]/22 text-[#38BDF8] ring-1 ring-[#38BDF8]/50'
+        ? 'border-[#38BDF8]/45 bg-[#38BDF8]/18 text-[#38BDF8]'
         : id === 'snap' && meta.active
-          ? 'bg-[#F43F5E]/20 text-[#FB7185]'
+          ? 'border-[#F43F5E]/45 bg-[#F43F5E]/18 text-[#FB7185]'
           : id === 'delete'
-            ? 'text-rose-400/90 hover:bg-rose-500/15'
-            : `${meta.accentClass} opacity-80 hover:bg-white/[0.08] hover:opacity-100`;
+            ? 'border-white/[0.08] bg-white/[0.03] text-white/55 hover:border-rose-500/35 hover:bg-rose-500/12 hover:text-rose-400'
+            : 'border-white/[0.08] bg-white/[0.03] text-white/55 hover:border-white/[0.16] hover:bg-white/[0.07] hover:text-white';
 
     return (
       <StudioTooltipBtn
@@ -1187,7 +1315,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
         tooltip={tr(meta.labelTr, meta.labelEn)}
         onClick={meta.onRun}
         disabled={meta.disabled}
-        className={`flex h-6.5 w-6.5 shrink-0 items-center justify-center rounded-md transition-colors disabled:opacity-25 sm:h-7 sm:w-7 ${isActiveStyle}`}
+        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-colors disabled:opacity-30 ${toolVisualClass}`}
       >
         <Icon className="h-3.5 w-3.5" />
       </StudioTooltipBtn>
@@ -1385,6 +1513,189 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                 )}
               </div>
             )}
+
+            {/* Quick-Add Strip Visibility Toggle (+ Video / + PiP / + Ses / + Metin / Filigran) */}
+            <div className="mt-2.5 border-t border-white/[0.08] pt-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowQuickAddBar((prev) => !prev);
+                }}
+                className="flex w-full items-center justify-between gap-2 rounded-xl border border-white/[0.07] bg-white/[0.03] px-2.5 py-1.5 text-left transition-colors hover:border-white/[0.15] hover:bg-white/[0.06]"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 text-[10.5px] font-bold text-white/90">
+                    <Plus className="h-3 w-3 shrink-0 text-[#38BDF8]" />
+                    <span className="truncate">{tr('Alt Ekleme Çubuğu', 'Bottom Quick-Add Bar')}</span>
+                  </div>
+                  <p className="truncate text-[9px] font-medium text-white/45">
+                    {tr('+ Video, + PiP, + Ses, + Metin', '+ Video, + PiP, + Audio, + Text')}
+                  </p>
+                </div>
+                <span
+                  aria-hidden="true"
+                  className={`relative inline-flex h-4.5 w-8 shrink-0 items-center rounded-full border transition-colors ${
+                    showQuickAddBar
+                      ? 'border-[#38BDF8]/60 bg-[#38BDF8]/30'
+                      : 'border-white/[0.12] bg-white/[0.08]'
+                  }`}
+                >
+                  <span
+                    className={`h-3 w-3 rounded-full transition-transform ${
+                      showQuickAddBar
+                        ? 'translate-x-[15px] bg-[#38BDF8] shadow-[0_0_6px_#38BDF8]'
+                        : 'translate-x-[2px] bg-white/55'
+                    }`}
+                  />
+                </span>
+              </button>
+            </div>
+          </div>,
+          document.body
+        )
+      : null;
+
+  // Floating Corner Quick-Add & Track-Row Pop-up (Portal)
+  const floatingAddPortal =
+    fabAnchor && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            ref={fabMenuRef}
+            onPointerDown={(e) => e.stopPropagation()}
+            style={{
+              position: 'fixed',
+              bottom: `${fabAnchor.bottom}px`,
+              right: `${fabAnchor.right}px`,
+              width: '264px',
+              zIndex: 9998,
+            }}
+            className="rounded-2xl border border-white/[0.14] bg-[#14141A]/96 p-2.5 text-white shadow-[0_16px_46px_rgba(0,0,0,0.84)] backdrop-blur-xl"
+          >
+            {/* Section 1: Quick Add Media & Overlays (from bottom strip icons) */}
+            <div className="mb-1.5 flex items-center justify-between px-0.5">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-white/55">
+                {tr('Hızlı Ekle', 'Quick Add')}
+              </span>
+              <button
+                type="button"
+                onClick={() => setFabAnchor(null)}
+                className="flex h-5 w-5 items-center justify-center rounded-md text-white/45 hover:bg-white/10 hover:text-white"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-5 gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setFabAnchor(null);
+                  onImportVideos(0);
+                }}
+                className="flex flex-col items-center justify-center gap-1 rounded-xl border border-white/[0.07] bg-white/[0.03] px-1 py-2 text-white/85 transition-all hover:border-[#F43F5E]/45 hover:bg-[#F43F5E]/12 hover:text-[#FB7185] active:scale-95"
+              >
+                <FilePlus2 className="h-4 w-4 text-[#FB7185]" />
+                <span className="text-[9px] font-bold leading-none">{tr('Video', 'Video')}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFabAnchor(null);
+                  onImportVideos(1);
+                }}
+                className="flex flex-col items-center justify-center gap-1 rounded-xl border border-white/[0.07] bg-white/[0.03] px-1 py-2 text-white/85 transition-all hover:border-[#C084FC]/45 hover:bg-[#C084FC]/12 hover:text-[#D8B4FE] active:scale-95"
+              >
+                <PictureInPicture2 className="h-4 w-4 text-[#C084FC]" />
+                <span className="text-[9px] font-bold leading-none">{tr('PiP', 'PiP')}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFabAnchor(null);
+                  onQuickAddAudio();
+                }}
+                className="flex flex-col items-center justify-center gap-1 rounded-xl border border-white/[0.07] bg-white/[0.03] px-1 py-2 text-white/85 transition-all hover:border-[#34D399]/45 hover:bg-[#34D399]/12 hover:text-[#6EE7B7] active:scale-95"
+              >
+                <Music className="h-4 w-4 text-[#34D399]" />
+                <span className="text-[9px] font-bold leading-none">{tr('Ses', 'Audio')}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFabAnchor(null);
+                  onQuickAddText();
+                }}
+                className="flex flex-col items-center justify-center gap-1 rounded-xl border border-white/[0.07] bg-white/[0.03] px-1 py-2 text-white/85 transition-all hover:border-[#38BDF8]/45 hover:bg-[#38BDF8]/12 hover:text-[#7DD3FC] active:scale-95"
+              >
+                <Type className="h-4 w-4 text-[#38BDF8]" />
+                <span className="text-[9px] font-bold leading-none">{tr('Metin', 'Text')}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFabAnchor(null);
+                  onOpenWatermarkTab();
+                }}
+                className="flex flex-col items-center justify-center gap-1 rounded-xl border border-white/[0.07] bg-white/[0.03] px-1 py-2 text-white/85 transition-all hover:border-[#FB923C]/45 hover:bg-[#FB923C]/12 hover:text-[#FDBA74] active:scale-95"
+              >
+                <Stamp className="h-4 w-4 text-[#FB923C]" />
+                <span className="text-[9px] font-bold leading-none">{tr('Filigran', 'Mark')}</span>
+              </button>
+            </div>
+
+            {/* Section 2: Add Empty Track Row (A2..A6, T1..T6, V2..V5) */}
+            {onAddTrackRow && (
+              <div className="mt-2.5 border-t border-white/[0.08] pt-2">
+                <span className="mb-1.5 block px-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white/55">
+                  {tr('Yeni Satır Ekle', 'Add Track Row')}
+                </span>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button
+                    type="button"
+                    disabled={audioRowCount >= 6}
+                    onClick={() => onAddTrackRow('audio')}
+                    className="flex items-center justify-center gap-1 rounded-xl border border-[#34D399]/28 bg-[#34D399]/10 px-2 py-1.5 text-[10px] font-bold text-[#6EE7B7] transition-all hover:border-[#34D399]/55 hover:bg-[#34D399]/18 active:scale-95 disabled:opacity-35"
+                  >
+                    <Plus className="h-3 w-3 shrink-0" />
+                    <span>{tr('Ses', 'Audio')}</span>
+                    <span className="font-mono-num rounded bg-black/35 px-1 text-[8.5px] opacity-85">
+                      A{Math.min(6, audioRowCount + 1)}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={textRowCount >= 6}
+                    onClick={() => onAddTrackRow('text')}
+                    className="flex items-center justify-center gap-1 rounded-xl border border-[#38BDF8]/28 bg-[#38BDF8]/10 px-2 py-1.5 text-[10px] font-bold text-[#7DD3FC] transition-all hover:border-[#38BDF8]/55 hover:bg-[#38BDF8]/18 active:scale-95 disabled:opacity-35"
+                  >
+                    <Plus className="h-3 w-3 shrink-0" />
+                    <span>{tr('Metin', 'Text')}</span>
+                    <span className="font-mono-num rounded bg-black/35 px-1 text-[8.5px] opacity-85">
+                      T{Math.min(6, textRowCount + 1)}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={pipRowCount >= 4}
+                    onClick={() => onAddTrackRow('pip')}
+                    className="flex items-center justify-center gap-1 rounded-xl border border-[#C084FC]/28 bg-[#C084FC]/10 px-2 py-1.5 text-[10px] font-bold text-[#D8B4FE] transition-all hover:border-[#C084FC]/55 hover:bg-[#C084FC]/18 active:scale-95 disabled:opacity-35"
+                  >
+                    <Plus className="h-3 w-3 shrink-0" />
+                    <span>PiP</span>
+                    <span className="font-mono-num rounded bg-black/35 px-1 text-[8.5px] opacity-85">
+                      V{Math.min(5, pipRowCount + 2)}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>,
           document.body
         )
@@ -1392,7 +1703,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
 
   return (
     <section
-      className={`flex flex-col bg-[#0B0B0E] ${
+      className={`relative flex flex-col bg-[#0B0B0E] ${
         isPortraitMode && isInspectorOpen
           ? 'h-[182px] min-h-[168px] shrink-0 border-t border-white/[0.06]'
           : 'min-h-[192px] flex-1'
@@ -1400,15 +1711,16 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
     >
       {cutMenuPortal}
       {hiddenTrayPortal}
-      {/* Context-Aware Action Bar (Pinned Customizable Tools + Show Hidden Tools ^ Trigger + Zoom) */}
+      {floatingAddPortal}
+      {/* Context-Aware Action Bar (Uniform h-7 Studio Geometry + Show Hidden Tools ^ Trigger + Zoom) */}
       <div className="relative z-20 flex h-10 shrink-0 items-center justify-between gap-1.5 border-b border-white/[0.06] bg-[#111115] px-2">
-        <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pr-1">
+        <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pr-1">
           {/* Active Layer Indicator Pill */}
           <span
             style={{color: activeLayerMeta.color, borderColor: `${activeLayerMeta.color}40`}}
-            className="flex h-6 shrink-0 items-center gap-1 rounded-md border bg-white/[0.03] px-1.5 text-[10px] font-extrabold"
+            className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg border bg-white/[0.03] px-2 text-[10px] font-extrabold"
           >
-            <ActiveLayerIcon className="h-3 w-3" />
+            <ActiveLayerIcon className="h-3.5 w-3.5" />
             <span className="hidden min-[440px]:inline">{activeLayerMeta.label}</span>
           </span>
 
@@ -1417,7 +1729,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
         </div>
 
         {/* Right: Show Hidden Tools (^) Trigger + Dedicated Timeline Zoom */}
-        <div className="flex shrink-0 items-center gap-1 border-l border-white/[0.08] pl-1.5">
+        <div className="flex shrink-0 items-center gap-1.5 border-l border-white/[0.08] pl-1.5">
           <button
             ref={trayTriggerRef}
             type="button"
@@ -1427,10 +1739,10 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                 ? tr('Gizli Öğeleri Kapat', 'Close Hidden Tools')
                 : tr('Gizli Öğeleri Göster & Düzenle', 'Show Hidden Tools & Customize')
             }
-            className={`relative flex h-7 w-7 items-center justify-center rounded-md border transition-colors ${
+            className={`relative flex h-7 w-7 items-center justify-center rounded-lg border transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-white/35 ${
               trayAnchor
                 ? 'border-[#38BDF8]/50 bg-[#38BDF8]/18 text-[#38BDF8]'
-                : 'border-white/[0.08] bg-white/[0.04] text-white/75 hover:border-white/[0.16] hover:bg-white/[0.08] hover:text-white'
+                : 'border-white/[0.09] bg-white/[0.03] text-white/65 hover:border-white/[0.16] hover:bg-white/[0.08] hover:text-white'
             }`}
           >
             <ChevronUp
@@ -1444,7 +1756,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
           </button>
 
           {/* Dedicated Timeline Magnifier Zoom Controls (Clearly Zoom, never confused with playback speed!) */}
-          <div className="flex items-center rounded-md border border-white/[0.09] bg-white/[0.04] p-[2px]">
+          <div className="flex h-7 items-center rounded-lg border border-white/[0.09] bg-white/[0.03] p-[2px]">
             <StudioTooltipBtn
               tooltip={tr(
                 `Zaman Çizelgesini Uzaklaştır (%${zoomPercent})`,
@@ -1453,7 +1765,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               align="right"
               disabled={timelineZoom <= 1}
               onClick={onZoomOut}
-              className="flex h-6 w-6 items-center justify-center rounded text-white/75 transition-colors hover:bg-white/[0.1] hover:text-white disabled:opacity-25"
+              className="flex h-[22px] w-[22px] items-center justify-center rounded-[5px] text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-25"
             >
               <ZoomOut className="h-3.5 w-3.5" />
             </StudioTooltipBtn>
@@ -1465,7 +1777,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               )}
               align="right"
               onClick={onResetZoom}
-              className="flex h-6 items-center justify-center gap-[2px] rounded px-1 transition-colors hover:bg-white/[0.08]"
+              className="flex h-[22px] items-center justify-center gap-[2px] rounded-[5px] px-1 transition-colors hover:bg-white/[0.08]"
             >
               {[0, 1, 2, 3].map((idx) => (
                 <span
@@ -1485,7 +1797,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               align="right"
               disabled={timelineZoom >= 8}
               onClick={onZoomIn}
-              className="flex h-6 w-6 items-center justify-center rounded text-white/75 transition-colors hover:bg-white/[0.1] hover:text-white disabled:opacity-25"
+              className="flex h-[22px] w-[22px] items-center justify-center rounded-[5px] text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-25"
             >
               <ZoomIn className="h-3.5 w-3.5" />
             </StudioTooltipBtn>
@@ -1504,7 +1816,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
         <div
           ref={timelineTrackRef}
           style={{width: `${timelineZoom * 100}%`, minWidth: '100%'}}
-          className="relative flex flex-col gap-1.5 pb-2 pr-1"
+          className="relative flex flex-col gap-1.5 pb-11 pr-1"
         >
           {/* SCRUBBABLE TIME RULER */}
           <div
@@ -1523,119 +1835,166 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             ))}
           </div>
 
-          {/* LANE V2: OVERLAY / PIP VIDEO (Appears when V2 clips exist OR while dragging V1 upward!) */}
-          {showV2Lane && (
-            <div
-              className={`relative h-10 rounded-lg transition-all ${
-                activeDragLaneHint === 'v2'
-                  ? 'bg-[#A855F7]/22 ring-1 ring-[#C084FC]'
-                  : 'bg-[#161024]/75'
-              } ${trackVisibility.v2 ? 'opacity-100' : 'opacity-30'}`}
-            >
-              {activeDragLaneHint === 'v2' && v2Clips.length === 0 && (
-                <div className="pointer-events-none flex h-full items-center justify-center gap-1.5 text-[10px] font-bold text-[#D8B4FE]">
-                  <PictureInPicture2 className="h-3.5 w-3.5" />
-                  <span>{tr('Üst PiP Katmanına Bırak (V2)', 'Drop onto V2 PiP Overlay')}</span>
-                </div>
-              )}
-              {v2Clips.map((clip, idx) => {
-                const dur = clipTimelineDuration(clip);
-                const leftPct = (clip.timelineStart / safeCanvasDur) * 100;
-                const widthPct = Math.max(5.5, (dur / safeCanvasDur) * 100);
-                const isSelected = selectedLayerType === 'video' && selectedClip?.id === clip.id;
-                const assetThumb = assetThumbMap.get(getClipMediaId(clip));
-                const prev = idx > 0 ? v2Clips[idx - 1] : null;
-                const isTouchingPrev = prev
-                  ? Math.abs(clip.timelineStart - clipTimelineEnd(prev)) < 0.12
-                  : false;
+          {/* DYNAMIC OVERLAY / PIP VIDEO LANES (V2, V3, V4, V5) */}
+          {pipRowIndices.map((pipTrackIdx) => {
+            const rowClips = allPipClips
+              .filter((c) => getClipTrackIndex(c) === pipTrackIdx)
+              .sort((a, b) => a.timelineStart - b.timelineStart);
+            const isDropTarget =
+              activeDragLaneHint?.kind === 'video' && activeDragLaneHint.row === pipTrackIdx;
+            const rowLabel = `V${pipTrackIdx + 1}`;
+            const isRemovableEmpty =
+              rowClips.length === 0 && pipTrackIdx === pipRowCount && pipTrackIdx > maxUsedPipRow;
 
-                return (
-                  <React.Fragment key={clip.id}>
-                    <div
-                      onPointerDown={(e) => onStartTimelineDrag(e, 'move-video', clip.id)}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSelectClip(clip.id);
-                      }}
-                      style={{
-                        left: `${Math.min(94, Math.max(0, leftPct))}%`,
-                        width: `${Math.min(100 - Math.max(0, leftPct), widthPct)}%`,
-                      }}
-                      className={`absolute inset-y-0.5 overflow-hidden rounded-md ${
-                        isSelected
-                          ? 'z-20 cursor-grab touch-none ring-2 ring-[#C084FC] shadow-[0_0_12px_rgba(192,132,252,0.4)] active:cursor-grabbing'
-                          : 'cursor-grab ring-1 ring-[#A855F7]/50 hover:ring-[#C084FC]'
-                      }`}
-                    >
-                      <div className="flex h-full w-full items-center bg-[#2B1B46]">
-                        {assetThumb && (
-                          <img
-                            src={assetThumb}
-                            alt=""
-                            draggable={false}
-                            className="h-full w-full object-cover opacity-55"
-                          />
+            return (
+              <div
+                key={`pip-row-${pipTrackIdx}`}
+                className={`relative h-10 rounded-lg transition-all ${
+                  isDropTarget
+                    ? 'bg-[#A855F7]/22 ring-1 ring-[#C084FC]'
+                    : pipTrackIdx % 2 === 0
+                      ? 'bg-[#1D1230]/75'
+                      : 'bg-[#161024]/75'
+                } ${trackVisibility.v2 ? 'opacity-100' : 'opacity-30'}`}
+              >
+                <span className="pointer-events-none absolute left-1.5 top-1/2 z-10 -translate-y-1/2 rounded bg-black/45 px-1 py-0.5 text-[8px] font-black tracking-wider text-[#D8B4FE]/75">
+                  {rowLabel}
+                </span>
+                {rowClips.length === 0 && (
+                  <div className="flex h-full items-center justify-center gap-1.5 px-7 text-[10px] font-bold text-[#D8B4FE]/80">
+                    {isDropTarget ? (
+                      <>
+                        <PictureInPicture2 className="h-3.5 w-3.5" />
+                        <span>
+                          {tr(
+                            `Üst PiP Katmanına Bırak (${rowLabel})`,
+                            `Drop onto PiP Overlay (${rowLabel})`
+                          )}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => onImportVideos(pipTrackIdx)}
+                          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[#D8B4FE]/80 transition-colors hover:bg-[#A855F7]/20 hover:text-white"
+                        >
+                          <Plus className="h-3 w-3" />
+                          <span>{tr(`${rowLabel} PiP Video Ekle`, `Add Video to ${rowLabel}`)}</span>
+                        </button>
+                        {isRemovableEmpty && onRemoveEmptyTrackRow && (
+                          <button
+                            type="button"
+                            onClick={() => onRemoveEmptyTrackRow('pip')}
+                            title={tr('Boş satırı kaldır', 'Remove empty row')}
+                            className="absolute right-1.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-white/40 hover:bg-white/10 hover:text-white/85"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
                         )}
-                      </div>
-                      <div className="pointer-events-none absolute inset-0 flex items-center gap-1 bg-gradient-to-r from-[#3B0764]/85 via-[#3B0764]/40 to-transparent pl-5 pr-5 text-[9px] font-bold text-purple-100">
-                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded bg-[#A855F7]/30 text-[#E9D5FF]">
-                          <PictureInPicture2 className="h-2.5 w-2.5" />
-                        </span>
-                        <span className="truncate">{clip.label}</span>
-                        <span className="font-mono-num ml-auto shrink-0 text-[8px] text-purple-200/80">
-                          {formatSecondsShort(dur)}
-                        </span>
-                      </div>
-                      <div
-                        onPointerDown={(e) => onStartTimelineDrag(e, 'trim-left', clip.id)}
-                        className={`absolute inset-y-0 left-0 z-20 flex w-4.5 cursor-ew-resize touch-none items-center justify-center after:absolute after:-inset-x-1 after:inset-y-0 after:content-[''] ${
-                          isSelected ? 'bg-[#C084FC] text-black' : 'bg-[#A855F7]/45 text-white'
-                        }`}
-                      >
-                        <ChevronLeft className="h-3 w-3 stroke-[3]" />
-                      </div>
-                      <div
-                        onPointerDown={(e) => onStartTimelineDrag(e, 'trim-right', clip.id)}
-                        className={`absolute inset-y-0 right-0 z-20 flex w-4.5 cursor-ew-resize touch-none items-center justify-center after:absolute after:-inset-x-1 after:inset-y-0 after:content-[''] ${
-                          isSelected ? 'bg-[#C084FC] text-black' : 'bg-[#A855F7]/45 text-white'
-                        }`}
-                      >
-                        <ChevronRight className="h-3 w-3 stroke-[3]" />
-                      </div>
-                    </div>
+                      </>
+                    )}
+                  </div>
+                )}
+                {rowClips.map((clip, idx) => {
+                  const dur = clipTimelineDuration(clip);
+                  const leftPct = (clip.timelineStart / safeCanvasDur) * 100;
+                  const widthPct = Math.max(5.5, (dur / safeCanvasDur) * 100);
+                  const isSelected = selectedLayerType === 'video' && selectedClip?.id === clip.id;
+                  const assetThumb = assetThumbMap.get(getClipMediaId(clip));
+                  const prev = idx > 0 ? rowClips[idx - 1] : null;
+                  const isTouchingPrev = prev
+                    ? Math.abs(clip.timelineStart - clipTimelineEnd(prev)) < 0.12
+                    : false;
 
-                    {isTouchingPrev && (
-                      <button
-                        type="button"
-                        onPointerDown={(e) => e.stopPropagation()}
+                  return (
+                    <React.Fragment key={clip.id}>
+                      <div
+                        onPointerDown={(e) => onStartTimelineDrag(e, 'move-video', clip.id)}
                         onClick={(e) => {
                           e.stopPropagation();
-                          onOpenSeamTransition('video', clip.id);
+                          onSelectClip(clip.id);
                         }}
-                        style={{left: `${Math.min(98, Math.max(2, leftPct))}%`}}
-                        className={`absolute top-1/2 z-30 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-md border shadow-md ${
-                          clip.transitionIn !== 'none'
-                            ? 'border-[#C084FC] bg-[#24123D] text-[#E9D5FF]'
-                            : 'border-white/35 bg-[#141418] text-white/85 hover:border-[#C084FC]'
+                        style={{
+                          left: `${Math.min(94, Math.max(0, leftPct))}%`,
+                          width: `${Math.min(100 - Math.max(0, leftPct), widthPct)}%`,
+                        }}
+                        className={`absolute inset-y-0.5 overflow-hidden rounded-md ${
+                          isSelected
+                            ? 'z-20 cursor-grab touch-none ring-2 ring-[#C084FC] shadow-[0_0_12px_rgba(192,132,252,0.4)] active:cursor-grabbing'
+                            : 'cursor-grab ring-1 ring-[#A855F7]/50 hover:ring-[#C084FC]'
                         }`}
                       >
-                        {clip.transitionIn !== 'none' ? (
-                          <Sparkles className="h-2.5 w-2.5" />
-                        ) : (
-                          <Plus className="h-3 w-3" />
-                        )}
-                      </button>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </div>
-          )}
+                        <div className="flex h-full w-full items-center bg-[#2B1B46]">
+                          {assetThumb && (
+                            <img
+                              src={assetThumb}
+                              alt=""
+                              draggable={false}
+                              className="h-full w-full object-cover opacity-55"
+                            />
+                          )}
+                        </div>
+                        <div className="pointer-events-none absolute inset-0 flex items-center gap-1 bg-gradient-to-r from-[#3B0764]/85 via-[#3B0764]/40 to-transparent pl-5 pr-5 text-[9px] font-bold text-purple-100">
+                          <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded bg-[#A855F7]/30 text-[#E9D5FF]">
+                            <PictureInPicture2 className="h-2.5 w-2.5" />
+                          </span>
+                          <span className="truncate">{clip.label}</span>
+                          <span className="font-mono-num ml-auto shrink-0 text-[8px] text-purple-200/80">
+                            {formatSecondsShort(dur)}
+                          </span>
+                        </div>
+                        <div
+                          onPointerDown={(e) => onStartTimelineDrag(e, 'trim-left', clip.id)}
+                          className={`absolute inset-y-0 left-0 z-20 flex w-4.5 cursor-ew-resize touch-none items-center justify-center after:absolute after:-inset-x-1 after:inset-y-0 after:content-[''] ${
+                            isSelected ? 'bg-[#C084FC] text-black' : 'bg-[#A855F7]/45 text-white'
+                          }`}
+                        >
+                          <ChevronLeft className="h-3 w-3 stroke-[3]" />
+                        </div>
+                        <div
+                          onPointerDown={(e) => onStartTimelineDrag(e, 'trim-right', clip.id)}
+                          className={`absolute inset-y-0 right-0 z-20 flex w-4.5 cursor-ew-resize touch-none items-center justify-center after:absolute after:-inset-x-1 after:inset-y-0 after:content-[''] ${
+                            isSelected ? 'bg-[#C084FC] text-black' : 'bg-[#A855F7]/45 text-white'
+                          }`}
+                        >
+                          <ChevronRight className="h-3 w-3 stroke-[3]" />
+                        </div>
+                      </div>
+
+                      {isTouchingPrev && (
+                        <button
+                          type="button"
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenSeamTransition('video', clip.id);
+                          }}
+                          style={{left: `${Math.min(98, Math.max(2, leftPct))}%`}}
+                          className={`absolute top-1/2 z-30 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-md border shadow-md ${
+                            clip.transitionIn !== 'none'
+                              ? 'border-[#C084FC] bg-[#24123D] text-[#E9D5FF]'
+                              : 'border-white/35 bg-[#141418] text-white/85 hover:border-[#C084FC]'
+                          }`}
+                        >
+                          {clip.transitionIn !== 'none' ? (
+                            <Sparkles className="h-2.5 w-2.5" />
+                          ) : (
+                            <Plus className="h-3 w-3" />
+                          )}
+                        </button>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            );
+          })}
 
           {/* LANE V1: PRIMARY VIDEO FILMSTRIP (Full Width, Inner-Left Film Icon, 2D Drag & Expandable Trimming) */}
           <div
             className={`relative h-13 rounded-lg transition-all ${
-              activeDragLaneHint === 'v1'
+              activeDragLaneHint?.kind === 'video' && activeDragLaneHint.row === 0
                 ? 'bg-[#F43F5E]/15 ring-1 ring-[#F43F5E]'
                 : 'bg-white/[0.03]'
             } ${trackVisibility.v1 ? 'opacity-100' : 'opacity-30'}`}
@@ -1817,11 +2176,15 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             })}
           </div>
 
-          {/* LANE T2 (Upper Text Row when occupied or dragging upward) */}
-          {showT2Lane && renderTextRow(t2Clips, 1)}
-
-          {/* LANE T1 (Primary Text Row — only appears when user adds text/SRT) */}
-          {(hasAnyText || activeDragLaneHint === 't1') && renderTextRow(t1Clips, 0)}
+          {/* DYNAMIC TEXT LANES (T1, T2, T3... T6) */}
+          {textRowIndices.map((rowIdx) => {
+            const rowClips = project.textClips
+              .filter((t) => (t.trackRow ?? 0) === rowIdx)
+              .sort((a, b) => a.timelineStart - b.timelineStart);
+            const isRemovableEmpty =
+              rowClips.length === 0 && rowIdx === textRowCount - 1 && rowIdx > maxUsedTextRow;
+            return renderTextRow(rowClips, rowIdx, isRemovableEmpty);
+          })}
 
           {/* LANE W1: WATERMARK TIMED BAR (Shown when watermark active) */}
           {hasWatermark && (
@@ -1882,14 +2245,17 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             </div>
           )}
 
-          {/* LANE A1: PRIMARY AUDIO (Attached Original Video Audio Cards — Auto-Detach on Drag/Trim/Split + Row-0 Independent Audio!) */}
+          {/* LANE A1: PRIMARY AUDIO (Attached Original Video Audio Cards + Row-0 Independent Audio — Zero Overlap!) */}
           <div
             className={`relative h-9 rounded-lg transition-all ${
-              activeDragLaneHint === 'a1'
+              activeDragLaneHint?.kind === 'audio' && activeDragLaneHint.row === 0
                 ? 'bg-[#34D399]/16 ring-1 ring-[#34D399]'
                 : 'bg-[#0C1614]/85'
             } ${trackVisibility.a1 && !project.masterMuted ? 'opacity-100' : 'opacity-40'}`}
           >
+            <span className="pointer-events-none absolute left-1.5 top-1/2 z-10 -translate-y-1/2 rounded bg-black/45 px-1 py-0.5 text-[8px] font-black tracking-wider text-[#6EE7B7]/70">
+              A1
+            </span>
             {/* Attached Original Audio Cards (Dragging or trimming automatically detaches them into independent clips!) */}
             {attachedOrigV1Clips.map((clip) => {
               const dur = clipTimelineDuration(clip);
@@ -1999,24 +2365,71 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             {renderIndependentAudioCards(a1Audios)}
           </div>
 
-          {/* LANE A2: SECONDARY AUDIO ROW (Appears when any audio moved to Row 2 OR while dragging downward!) */}
-          {showA2Lane && (
-            <div
-              className={`relative h-9 rounded-lg transition-all ${
-                activeDragLaneHint === 'a2'
-                  ? 'bg-[#818CF8]/22 ring-1 ring-[#818CF8]'
-                  : 'bg-[#12122A]/80'
-              } ${trackVisibility.a2 && !project.masterMuted ? 'opacity-100' : 'opacity-35'}`}
-            >
-              {activeDragLaneHint === 'a2' && a2Audios.length === 0 && (
-                <div className="pointer-events-none flex h-full items-center justify-center gap-1.5 text-[10px] font-bold text-[#C7D2FE]">
-                  <Music className="h-3.5 w-3.5" />
-                  <span>{tr('Alt Ses Katmanına Bırak (A2)', 'Drop onto Secondary Audio Row (A2)')}</span>
-                </div>
-              )}
-              {renderIndependentAudioCards(a2Audios)}
-            </div>
-          )}
+          {/* DYNAMIC EXTRA AUDIO LANES (A2, A3, A4, A5, A6 — Never overlap on same row!) */}
+          {extraAudioRowIndices.map((rowIdx) => {
+            const rowAudios = independentAudios
+              .filter((a) => (a.trackRow ?? 0) === rowIdx)
+              .sort((a, b) => a.timelineStart - b.timelineStart);
+            const isDropTarget =
+              activeDragLaneHint?.kind === 'audio' && activeDragLaneHint.row === rowIdx;
+            const rowLabel = `A${rowIdx + 1}`;
+            const isRemovableEmpty =
+              rowAudios.length === 0 && rowIdx === audioRowCount - 1 && rowIdx > maxUsedAudioRow;
+
+            return (
+              <div
+                key={`audio-row-${rowIdx}`}
+                className={`relative h-9 rounded-lg transition-all ${
+                  isDropTarget
+                    ? 'bg-[#818CF8]/22 ring-1 ring-[#818CF8]'
+                    : rowIdx % 2 === 1
+                      ? 'bg-[#12122A]/80'
+                      : 'bg-[#0F1B24]/80'
+                } ${trackVisibility.a2 && !project.masterMuted ? 'opacity-100' : 'opacity-35'}`}
+              >
+                <span className="pointer-events-none absolute left-1.5 top-1/2 z-10 -translate-y-1/2 rounded bg-black/45 px-1 py-0.5 text-[8px] font-black tracking-wider text-[#A5B4FC]/75">
+                  {rowLabel}
+                </span>
+                {rowAudios.length === 0 && (
+                  <div className="flex h-full items-center justify-center gap-1.5 px-7 text-[10px] font-bold text-[#C7D2FE]/75">
+                    {isDropTarget ? (
+                      <>
+                        <Music className="h-3.5 w-3.5" />
+                        <span>
+                          {tr(
+                            `Ses Satırına Bırak (${rowLabel})`,
+                            `Drop onto Audio Row (${rowLabel})`
+                          )}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => onQuickAddAudio(rowIdx)}
+                          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[#C7D2FE]/80 transition-colors hover:bg-[#818CF8]/20 hover:text-white"
+                        >
+                          <Plus className="h-3 w-3" />
+                          <span>{tr(`${rowLabel} Ses Ekle`, `Add Audio to ${rowLabel}`)}</span>
+                        </button>
+                        {isRemovableEmpty && onRemoveEmptyTrackRow && (
+                          <button
+                            type="button"
+                            onClick={() => onRemoveEmptyTrackRow('audio')}
+                            title={tr('Boş satırı kaldır', 'Remove empty row')}
+                            className="absolute right-1.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-white/40 hover:bg-white/10 hover:text-white/85"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+                {renderIndependentAudioCards(rowAudios)}
+              </div>
+            );
+          })}
 
           {/* OPTIONAL ACTIVE FX / COLOR INDICATOR BAR */}
           {hasActiveLookOrFx && (
@@ -2033,62 +2446,70 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             </button>
           )}
 
-          {/* SLEEK INLINE QUICK-ADD STRIP (Replaces bulky left track rail — CapCut style!) */}
-          <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto pt-0.5 text-[10px] font-bold">
-            <button
-              type="button"
-              onClick={() => onImportVideos(0)}
-              className="flex h-6.5 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-white/[0.08] bg-white/[0.03] px-2 text-white/70 hover:border-[#F43F5E]/45 hover:text-[#FB7185]"
-            >
-              <FilePlus2 className="h-3 w-3 shrink-0 text-[#FB7185]" />
-              <span>{tr('+ Video', '+ Video')}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onImportVideos(1)}
-              className="flex h-6.5 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-white/[0.08] bg-white/[0.03] px-2 text-white/70 hover:border-[#C084FC]/40 hover:text-[#C084FC]"
-            >
-              <PictureInPicture2 className="h-3 w-3 shrink-0 text-[#C084FC]" />
-              <span>{tr('+ PiP', '+ PiP')}</span>
-            </button>
-            <button
-              type="button"
-              onClick={onQuickAddAudio}
-              className="flex h-6.5 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-white/[0.08] bg-white/[0.03] px-2 text-white/70 hover:border-[#34D399]/40 hover:text-[#34D399]"
-            >
-              <Music className="h-3 w-3 shrink-0 text-[#34D399]" />
-              <span>{tr('+ Ses', '+ Audio')}</span>
-            </button>
-            <button
-              type="button"
-              onClick={onQuickAddText}
-              className="flex h-6.5 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-white/[0.08] bg-white/[0.03] px-2 text-white/70 hover:border-[#38BDF8]/40 hover:text-[#38BDF8]"
-            >
-              <Type className="h-3 w-3 shrink-0 text-[#38BDF8]" />
-              <span>{tr('+ Metin', '+ Text')}</span>
-            </button>
-            <button
-              type="button"
-              onClick={onOpenWatermarkTab}
-              className="flex h-6.5 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-white/[0.08] bg-white/[0.03] px-2 text-white/70 hover:border-[#FB923C]/45 hover:text-[#FB923C]"
-            >
-              <Stamp className="h-3 w-3 shrink-0 text-[#FB923C]" />
-              <span>{tr('Filigran', 'Mark')}</span>
-            </button>
-          </div>
+          {/* SLEEK INLINE QUICK-ADD STRIP (Toggleable from ^ Hidden Tools tray) */}
+          {showQuickAddBar && (
+            <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto pt-0.5 text-[10px] font-bold">
+              <button
+                type="button"
+                onClick={() => onImportVideos(0)}
+                className="flex h-6.5 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-white/[0.08] bg-white/[0.03] px-2 text-white/70 hover:border-[#F43F5E]/45 hover:text-[#FB7185]"
+              >
+                <FilePlus2 className="h-3 w-3 shrink-0 text-[#FB7185]" />
+                <span>{tr('+ Video', '+ Video')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onImportVideos(1)}
+                className="flex h-6.5 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-white/[0.08] bg-white/[0.03] px-2 text-white/70 hover:border-[#C084FC]/40 hover:text-[#C084FC]"
+              >
+                <PictureInPicture2 className="h-3 w-3 shrink-0 text-[#C084FC]" />
+                <span>{tr('+ PiP', '+ PiP')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onQuickAddAudio()}
+                className="flex h-6.5 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-white/[0.08] bg-white/[0.03] px-2 text-white/70 hover:border-[#34D399]/40 hover:text-[#34D399]"
+              >
+                <Music className="h-3 w-3 shrink-0 text-[#34D399]" />
+                <span>{tr('+ Ses', '+ Audio')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onQuickAddText()}
+                className="flex h-6.5 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-white/[0.08] bg-white/[0.03] px-2 text-white/70 hover:border-[#38BDF8]/40 hover:text-[#38BDF8]"
+              >
+                <Type className="h-3 w-3 shrink-0 text-[#38BDF8]" />
+                <span>{tr('+ Metin', '+ Text')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={onOpenWatermarkTab}
+                className="flex h-6.5 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-white/[0.08] bg-white/[0.03] px-2 text-white/70 hover:border-[#FB923C]/45 hover:text-[#FB923C]"
+              >
+                <Stamp className="h-3 w-3 shrink-0 text-[#FB923C]" />
+                <span>{tr('Filigran', 'Mark')}</span>
+              </button>
+            </div>
+          )}
 
           {/* MAGNETIC SNAP GUIDE LINE */}
           {snapGuideTime !== null && (
             <div
               style={{left: `${Math.min(100, Math.max(0, (snapGuideTime / safeCanvasDur) * 100))}%`}}
-              className="pointer-events-none absolute top-0 bottom-9 z-30 w-px -translate-x-1/2 bg-[#38BDF8] shadow-[0_0_8px_#38BDF8]"
-            />
+              className={`pointer-events-none absolute top-0 ${
+                showQuickAddBar ? 'bottom-9' : 'bottom-1'
+              } z-30 w-[1.5px] -translate-x-1/2 bg-[#38BDF8] shadow-[0_0_10px_#38BDF8]`}
+            >
+              <span className="absolute -top-0.5 left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-[#38BDF8] shadow-[0_0_6px_#38BDF8]" />
+            </div>
           )}
 
           {/* PLAYHEAD NEEDLE + INTERACTIVE SPLIT TRIGGER */}
           <div
             style={{left: `${playheadPct}%`}}
-            className="pointer-events-none absolute top-0 bottom-9 z-40 w-[2px] -translate-x-1/2 bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]"
+            className={`pointer-events-none absolute top-0 ${
+              showQuickAddBar ? 'bottom-9' : 'bottom-1'
+            } z-40 w-[2px] -translate-x-1/2 bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]`}
           >
             {/* Draggable Playhead Cap on Ruler */}
             <div
@@ -2119,6 +2540,30 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
           </div>
         </div>
       </div>
+
+      {/* FLOATING CORNER QUICK-ADD & ADD-ROW ICON BUTTON (Pinned in bottom-right corner of timeline) */}
+      <button
+        ref={fabTriggerRef}
+        type="button"
+        onClick={toggleFloatingAddPopup}
+        title={
+          fabAnchor
+            ? tr('Ekleme Menüsünü Kapat', 'Close Quick-Add Menu')
+            : tr('Medya, Katman & Satır Ekle', 'Add Media, Layer & Track Row')
+        }
+        aria-label={tr('Medya ve Satır Ekle', 'Add Media and Track Row')}
+        className={`absolute bottom-2.5 right-2.5 z-35 flex h-9 w-9 items-center justify-center rounded-full border transition-all duration-200 active:scale-92 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F43F5E]/60 ${
+          fabAnchor
+            ? 'border-[#F43F5E]/75 bg-[#F43F5E] text-white shadow-[0_6px_24px_rgba(244,63,94,0.55)]'
+            : 'border-white/[0.18] bg-[#17171F]/92 text-white shadow-[0_6px_22px_rgba(0,0,0,0.68)] backdrop-blur-md hover:border-[#F43F5E]/55 hover:bg-[#231720] hover:text-[#FB7185]'
+        }`}
+      >
+        <Plus
+          className={`h-4.5 w-4.5 stroke-[2.5] transition-transform duration-200 ${
+            fabAnchor ? 'rotate-45' : ''
+          }`}
+        />
+      </button>
     </section>
   );
 };

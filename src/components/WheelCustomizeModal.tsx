@@ -217,12 +217,12 @@ export const WheelCustomizeModal: React.FC<WheelCustomizeModalProps> = ({
             onClick={(e) => moveItemEarlier(listKey, itemId, e)}
             title={t('MoveLeftShort', lang)}
             aria-label={t('MoveLeftShort', lang)}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--accent)] transition-colors hover:border-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--accent-single-ink)]"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--accent)] transition-colors hover:border-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--accent-single-ink)]"
           >
-            <ArrowUp className="h-3.5 w-3.5" />
+            <ArrowUp className="h-4 w-4" />
           </button>
         ) : (
-          <span className="h-7 w-7 shrink-0" aria-hidden="true" />
+          <span className="h-9 w-9 shrink-0" aria-hidden="true" />
         )}
 
         <div className="flex w-7 shrink-0 items-center justify-end">
@@ -240,21 +240,22 @@ export const WheelCustomizeModal: React.FC<WheelCustomizeModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3.5 pt-[calc(var(--morph-safe-top)+0.75rem)] pb-[calc(var(--morph-safe-bottom)+0.75rem)] backdrop-blur-sm sm:p-5"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/65 backdrop-blur-sm sm:items-center sm:p-5"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label={t('WheelCustomizeTitle', lang)}
     >
       <div
-        className="flex max-h-[88vh] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] shadow-2xl"
+        className="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-t-3xl border-t border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] shadow-2xl sm:max-h-[88vh] sm:rounded-3xl sm:border"
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="mx-auto mt-2.5 h-1.5 w-11 shrink-0 rounded-full bg-[var(--line)] sm:hidden" />
         {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-[var(--line)] px-5 py-4">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[var(--accent)]/45 bg-[var(--accent)]/14 text-[var(--accent)]">
-              <Settings className="morph-gear-spin h-5 w-5" />
+              <Settings className="h-5 w-5" />
             </div>
             <div className="min-w-0">
               <h2 className="truncate text-base font-extrabold tracking-tight text-[var(--ink)] sm:text-lg">
@@ -507,14 +508,14 @@ export const WheelCustomizeModal: React.FC<WheelCustomizeModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between gap-2.5 border-t border-[var(--line)] px-5 py-3.5">
+        <div className="flex items-center justify-between gap-2.5 border-t border-[var(--line)] px-5 pt-3.5 pb-[calc(var(--morph-safe-bottom)+0.95rem)] sm:pb-3.5">
           <button
             type="button"
             onClick={() => {
               setLimitAlert(null);
               onChangeConfig(() => DEFAULT_WHEEL_CONFIG);
             }}
-            className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--inset)] px-4 text-xs font-semibold text-[var(--muted)] transition-colors hover:text-[var(--ink)] whitespace-nowrap shrink-0"
+            className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-4 text-xs font-semibold text-[var(--muted)] transition-colors hover:text-[var(--ink)] whitespace-nowrap shrink-0"
           >
             <RotateCcw className="h-3.5 w-3.5 shrink-0" />
             <span>{t('ResetWheelDefaults', lang)}</span>
@@ -523,7 +524,7 @@ export const WheelCustomizeModal: React.FC<WheelCustomizeModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="morph-accent-btn flex min-h-[44px] min-w-[116px] items-center justify-center rounded-full px-6 text-xs font-semibold whitespace-nowrap shrink-0"
+            className="morph-accent-btn flex min-h-[44px] min-w-[120px] items-center justify-center rounded-2xl px-6 text-xs font-bold whitespace-nowrap shrink-0"
           >
             {t('Done', lang)}
           </button>

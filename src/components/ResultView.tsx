@@ -1,7 +1,8 @@
-import React from 'react';
-import {AlertTriangle, Check, Download, Grid, Share2} from 'lucide-react';
+import React, {useEffect, useRef, useState} from 'react';
+import {AlertTriangle, Check, ChevronDown, Download, Eye, Grid, Music, Share2, X} from 'lucide-react';
 import {Lang, t} from '../data/i18n';
 import {ExportItem, ExportResult, detectFileKind, formatBytes} from '../data/models';
+import {isNativeApp} from '../engine/nativeBridge';
 import {FileThumb} from './FileThumb';
 
 interface ResultViewProps {
@@ -15,6 +16,8 @@ interface ResultViewProps {
   onKeepFiles?: () => void;
 }
 
+const WEB_PERSIST_LIMIT_BYTES = 100 * 1024 * 1024;
+
 export const ResultView: React.FC<ResultViewProps> = ({
   result,
   lang,
@@ -25,24 +28,84 @@ export const ResultView: React.FC<ResultViewProps> = ({
   onNewTask,
   onKeepFiles,
 }) => {
+  const [visibleCount, setVisibleCount] = useState(24);
+  const [previewItem, setPreviewItem] = useState<{item: ExportItem; url: string} | null>(null);
+  const ownedPreviewUrlRef = useRef<string | null>(null);
+
   const outputBytes = result.items.reduce((sum, i) => sum + i.size, 0);
   const sourceBytes = result.sourceBytes;
   const deltaBytes = outputBytes - sourceBytes;
   const isTinySource = sourceBytes > 0 && sourceBytes < 100 * 1024;
   const pct = sourceBytes > 0 && outputBytes > 0 ? Math.round((outputBytes / sourceBytes) * 100) : null;
+  const hasLargeWebItem =
+    !isNativeApp() && result.items.some((i) => !i.nativeUri && i.size > WEB_PERSIST_LIMIT_BYTES);
+  const visibleItems = result.items.slice(0, visibleCount);
+  const remainingCount = Math.max(0, result.items.length - visibleCount);
+
+  const openPreview = (item: ExportItem) => {
+    if (ownedPreviewUrlRef.current) {
+      URL.revokeObjectURL(ownedPreviewUrlRef.current);
+      ownedPreviewUrlRef.current = null;
+    }
+    const url = item.previewUrl || URL.createObjectURL(item.blob);
+    if (url !== item.previewUrl) {
+      ownedPreviewUrlRef.current = url;
+    }
+    setPreviewItem({item, url});
+  };
+
+  const closePreview = () => {
+    if (ownedPreviewUrlRef.current) {
+      URL.revokeObjectURL(ownedPreviewUrlRef.current);
+      ownedPreviewUrlRef.current = null;
+    }
+    setPreviewItem(null);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (ownedPreviewUrlRef.current) {
+        URL.revokeObjectURL(ownedPreviewUrlRef.current);
+        ownedPreviewUrlRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!previewItem) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closePreview();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [previewItem]);
+
+  const previewKind = previewItem
+    ? detectFileKind(previewItem.item.name, previewItem.item.mime)
+    : null;
+
+  const downloadAllLabel =
+    result.items.length > 1
+      ? lang === 'tr'
+        ? `Tümünü İndir (${result.items.length})`
+        : `Download All (${result.items.length})`
+      : t('Download', lang);
 
   return (
-    <div className="mx-auto w-full max-w-lg px-4 pb-28 pt-6 sm:px-6">
-      <div className="morph-accent-btn flex h-14 w-14 items-center justify-center rounded-full shadow-lg">
-        <Check className="h-7 w-7" />
+    <div className="mx-auto w-full max-w-2xl px-4 pb-28 pt-6 sm:px-6 lg:pb-12">
+      <div className="flex items-center gap-4">
+        <div className="morph-accent-btn flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl shadow-lg">
+          <Check className="h-7 w-7" />
+        </div>
+        <div className="min-w-0">
+          <h1 className="text-2xl font-extrabold tracking-tight text-[var(--ink)] sm:text-3xl">
+            {t('JobDoneTitle', lang)}
+          </h1>
+          <p className="mt-0.5 truncate text-sm text-[var(--muted)]">
+            {result.items.length} {t('FilesCount', lang)} · {result.tool}
+          </p>
+        </div>
       </div>
-
-      <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-[var(--ink)] sm:text-3xl">
-        {t('JobDoneTitle', lang)}
-      </h1>
-      <p className="mt-1 text-sm text-[var(--muted)]">
-        {result.items.length} {t('FilesCount', lang)} · {result.tool}
-      </p>
 
       {/* Tabular Summary Strip */}
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -64,7 +127,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
             <p className="font-mono-num mt-1 text-base font-bold text-[var(--accent-text)]">
               {isTinySource
                 ? deltaBytes === 0
-                  ? (lang === 'tr' ? 'Aynı boyut' : 'Same size')
+                  ? lang === 'tr'
+                    ? 'Aynı boyut'
+                    : 'Same size'
                   : deltaBytes < 0
                     ? `▼ -${formatBytes(Math.abs(deltaBytes))}`
                     : `▲ +${formatBytes(deltaBytes)}`
@@ -76,70 +141,136 @@ export const ResultView: React.FC<ResultViewProps> = ({
         )}
       </div>
 
-      {/* Output Files List */}
-      <div className="mt-5 space-y-2.5">
-        {result.items.slice(0, 24).map((item) => (
-          <div
-            key={item.id}
-            className="flex items-center gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-3"
-          >
-            <FileThumb
-              previewUrl={item.previewUrl}
-              kind={detectFileKind(item.name, item.mime)}
-              alt={item.name}
-            />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-[var(--ink)]">{item.name}</p>
-              <p className="font-mono-num text-xs text-[var(--muted)]">{formatBytes(item.size)}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => onShareItem(item)}
-              aria-label={t('Share', lang)}
-              className="flex min-h-[42px] min-w-[42px] items-center justify-center rounded-full border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] hover:border-[var(--accent)]"
-            >
-              <Share2 className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onDownloadItem(item)}
-              aria-label={t('Download', lang)}
-              className="flex min-h-[42px] min-w-[42px] items-center justify-center rounded-full border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)] hover:border-[var(--accent)]"
-            >
-              <Download className="h-4 w-4" />
-            </button>
-          </div>
-        ))}
-        {result.items.length > 24 && (
-          <p className="text-xs text-[var(--muted)]">
-            +{result.items.length - 24} {t('FilesCount', lang)}
+      {/* Web-Only 100 MB+ Session Storage Warning (adaptive Light & Dark contrast) */}
+      {hasLargeWebItem && (
+        <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-[var(--warn-border)] bg-[var(--warn-bg)] px-3.5 py-3 text-xs font-medium text-[var(--warn-text)]">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p className="leading-relaxed">
+            {lang === 'tr'
+              ? '100 MB üzerindeki çıktılar web tarayıcısında sayfa yenilendiğinde saklanmaz. Kaybetmemek için şimdi indirin.'
+              : 'Outputs over 100 MB are not persisted in web browser storage after reload. Download now to keep them.'}
           </p>
-        )}
+        </div>
+      )}
+
+      {/* Output Files List (clean single surface with dividers, tap to preview) */}
+      <div className="mt-5 overflow-hidden rounded-3xl border border-[var(--line)] bg-[var(--surface)] divide-y divide-[var(--line)]">
+        {visibleItems.map((item) => {
+          const kind = detectFileKind(item.name, item.mime);
+          const canPreview =
+            Boolean(item.blob && item.blob.size > 0) &&
+            (kind === 'image' || kind === 'pdf' || kind === 'video' || kind === 'audio');
+          return (
+            <div key={item.id} className="flex items-center gap-3 px-3.5 py-3">
+              <button
+                type="button"
+                disabled={!canPreview}
+                onClick={() => canPreview && openPreview(item)}
+                className={`flex min-w-0 flex-1 items-center gap-3 text-left ${
+                  canPreview ? 'cursor-pointer group' : 'cursor-default'
+                }`}
+              >
+                <FileThumb previewUrl={item.previewUrl} kind={kind} alt={item.name} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-[var(--ink)] group-hover:text-[var(--accent-text)] transition-colors">
+                    {item.name}
+                  </p>
+                  <p className="font-mono-num mt-0.5 flex items-center gap-1.5 text-xs text-[var(--muted)]">
+                    <span>{formatBytes(item.size)}</span>
+                    {canPreview && (
+                      <>
+                        <span>·</span>
+                        <span className="font-sans text-[11px] font-semibold text-[var(--accent-text)]">
+                          {t('Preview', lang)}
+                        </span>
+                      </>
+                    )}
+                  </p>
+                </div>
+              </button>
+              <div className="flex shrink-0 items-center gap-1.5">
+                {canPreview && (
+                  <button
+                    type="button"
+                    onClick={() => openPreview(item)}
+                    aria-label={t('Preview', lang)}
+                    className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--ink)]"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onShareItem(item)}
+                  aria-label={t('Share', lang)}
+                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
+                >
+                  <Share2 className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDownloadItem(item)}
+                  aria-label={t('Download', lang)}
+                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--accent)]/40 bg-[var(--accent)]/12 text-[var(--accent-text)] transition-colors hover:border-[var(--accent)]"
+                >
+                  <Download className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
+      {remainingCount > 0 && (
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setVisibleCount((c) => c + 24)}
+            className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-4 text-xs font-semibold text-[var(--ink)] hover:border-[var(--accent)]"
+          >
+            <ChevronDown className="h-3.5 w-3.5 text-[var(--accent)]" />
+            <span>
+              {lang === 'tr'
+                ? `Daha Fazla Göster (+${Math.min(24, remainingCount)})`
+                : `Show More (+${Math.min(24, remainingCount)})`}
+            </span>
+          </button>
+          {remainingCount > 24 && (
+            <button
+              type="button"
+              onClick={() => setVisibleCount(result.items.length)}
+              className="flex min-h-[44px] shrink-0 items-center justify-center rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-4 text-xs font-semibold text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]"
+            >
+              {lang === 'tr' ? `Tümü (${result.items.length})` : `Show All (${result.items.length})`}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Action Hierarchy: Primary rounded-2xl CTA, Secondary tonal, Tertiary bordered/ghost */}
       <div className="mt-6 space-y-2.5">
         <button
           type="button"
           onClick={onDownloadAll}
-          className="morph-accent-btn flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full text-sm font-semibold transition-transform active:scale-[0.98]"
+          className="morph-accent-btn flex min-h-[50px] w-full items-center justify-center gap-2 rounded-2xl text-sm font-bold shadow-md transition-transform active:scale-[0.98]"
         >
-          <Download className="h-4 w-4" />
-          <span>{t('Download', lang)}</span>
+          <Download className="h-4.5 w-4.5" />
+          <span>{downloadAllLabel}</span>
         </button>
         <button
           type="button"
           onClick={onOpenLibrary}
-          className="flex min-h-[46px] w-full items-center justify-center gap-2 rounded-full border border-[var(--line)] bg-[var(--inset)] text-sm font-semibold text-[var(--ink)]"
+          className="flex min-h-[46px] w-full items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--surface)] text-sm font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
         >
-          <Grid className="h-4 w-4" />
+          <Grid className="h-4 w-4 text-[var(--accent-text)]" />
           <span>{t('OpenLibrary', lang)}</span>
         </button>
-        <div className={onKeepFiles ? 'grid grid-cols-2 gap-2.5' : ''}>
+        <div className={onKeepFiles ? 'grid grid-cols-2 gap-2.5 pt-0.5' : 'pt-0.5'}>
           {onKeepFiles && (
             <button
               type="button"
               onClick={onKeepFiles}
-              className="flex min-h-[44px] w-full items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--ink)] hover:border-[var(--accent)]"
+              className="flex min-h-[44px] w-full items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
             >
               {lang === 'tr' ? 'Dosyaları Koru' : 'Keep Files'}
             </button>
@@ -147,9 +278,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
           <button
             type="button"
             onClick={onNewTask}
-            className={`flex min-h-[44px] w-full items-center justify-center rounded-full px-3 text-sm font-semibold ${
+            className={`flex min-h-[44px] w-full items-center justify-center rounded-xl px-3 text-xs font-semibold transition-colors ${
               onKeepFiles
-                ? 'border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
+                ? 'border border-transparent bg-transparent text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)]'
                 : 'text-[var(--muted)] hover:text-[var(--ink)]'
             }`}
           >
@@ -157,6 +288,83 @@ export const ResultView: React.FC<ResultViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Inline Full-Screen Quick Preview Modal */}
+      {previewItem && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={previewItem.item.name}
+          className="fixed inset-0 z-50 flex flex-col bg-black/88 px-4 pt-[calc(var(--morph-safe-top)+0.75rem)] pb-[calc(var(--morph-safe-bottom)+1rem)] backdrop-blur-sm"
+          onClick={closePreview}
+        >
+          <div className="flex items-center justify-between gap-3 pb-3 text-white" onClick={(e) => e.stopPropagation()}>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold">{previewItem.item.name}</p>
+              <p className="font-mono-num text-[11px] text-white/60">
+                {formatBytes(previewItem.item.size)}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => onDownloadItem(previewItem.item)}
+                className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/12 text-white hover:bg-white/20"
+                aria-label={t('Download', lang)}
+              >
+                <Download className="h-4.5 w-4.5" />
+              </button>
+              <button
+                type="button"
+                onClick={closePreview}
+                className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/12 text-white hover:bg-white/20"
+                aria-label={t('Close', lang)}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+          <div
+            className="flex flex-1 items-center justify-center overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {previewKind === 'image' ? (
+              <img
+                src={previewItem.url}
+                alt={previewItem.item.name}
+                className="max-h-full max-w-full rounded-2xl object-contain"
+              />
+            ) : previewKind === 'video' ? (
+              <video
+                src={previewItem.url}
+                controls
+                playsInline
+                autoPlay
+                className="max-h-full max-w-full rounded-2xl bg-black"
+              />
+            ) : previewKind === 'audio' ? (
+              <div className="flex w-full max-w-md flex-col items-center gap-5 rounded-3xl border border-white/15 bg-[#141418] p-6 text-white shadow-2xl">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-400">
+                  <Music className="h-8 w-8" />
+                </div>
+                <div className="w-full text-center">
+                  <p className="truncate text-sm font-bold">{previewItem.item.name}</p>
+                  <p className="font-mono-num mt-1 text-xs text-white/60">
+                    {formatBytes(previewItem.item.size)}
+                  </p>
+                </div>
+                <audio src={previewItem.url} controls autoPlay className="w-full" />
+              </div>
+            ) : (
+              <iframe
+                src={previewItem.url}
+                title={previewItem.item.name}
+                className="h-full w-full max-w-3xl rounded-2xl bg-white"
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -203,7 +411,7 @@ export const ErrorView: React.FC<{
 
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-lg flex-col items-center justify-center px-5 py-8 text-center">
-      <div className="flex h-16 w-16 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--inset)] text-[var(--danger)]">
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-[var(--danger)]/35 bg-[var(--danger)]/10 text-[var(--danger)]">
         <AlertTriangle className="h-7 w-7" />
       </div>
       <h2 className="mt-5 text-xl font-bold text-[var(--ink)]">{t('ProcessFailed', lang)}</h2>
@@ -213,7 +421,7 @@ export const ErrorView: React.FC<{
         <button
           type="button"
           onClick={handleCopyReport}
-          className="flex min-h-[42px] flex-1 items-center justify-center gap-1.5 rounded-full border border-[var(--accent)]/45 bg-[var(--inset)] px-4 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
+          className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-[var(--accent)]/45 bg-[var(--inset)] px-4 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
         >
           <Check className={`h-3.5 w-3.5 text-[var(--accent)] ${copied ? 'opacity-100' : 'opacity-70'}`} />
           <span>{copied ? (lang === 'tr' ? 'Kopyalandı!' : 'Copied!') : t('CopyErrorReportBtn', lang)}</span>
@@ -221,7 +429,7 @@ export const ErrorView: React.FC<{
         <button
           type="button"
           onClick={handleShareReport}
-          className="flex min-h-[42px] items-center justify-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--inset)] px-4 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
+          className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-4 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
         >
           <Share2 className="h-3.5 w-3.5 text-[var(--accent)]" />
           <span>{t('ShareDiagnosticBtn', lang)}</span>
@@ -233,7 +441,7 @@ export const ErrorView: React.FC<{
           <button
             type="button"
             onClick={() => setShowDetails((s) => !s)}
-            className="text-xs font-semibold text-[var(--muted)] underline decoration-[var(--line)] underline-offset-4 hover:text-[var(--ink)]"
+            className="min-h-[36px] text-xs font-semibold text-[var(--muted)] underline decoration-[var(--line)] underline-offset-4 hover:text-[var(--ink)]"
           >
             {showDetails ? t('HideDiagnosticLogs', lang) : t('ShowDiagnosticLogs', lang)}
           </button>
@@ -248,7 +456,7 @@ export const ErrorView: React.FC<{
       <button
         type="button"
         onClick={onDismiss}
-        className="morph-accent-btn mt-6 min-h-[46px] rounded-full px-8 text-sm font-semibold"
+        className="morph-accent-btn mt-6 min-h-[48px] rounded-2xl px-10 text-sm font-bold"
       >
         {t('Done', lang)}
       </button>

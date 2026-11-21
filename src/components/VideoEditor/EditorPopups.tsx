@@ -109,31 +109,40 @@ export const ClipQuickActionPopup: React.FC<ClipQuickActionPopupProps> = ({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
       onClick={onClose}
-      className="fixed inset-0 z-[75] flex items-end justify-center bg-black/55 p-3 pb-6 backdrop-blur-[2px] sm:items-center sm:p-4"
+      className="morph-studio-dark fixed inset-0 z-[75] flex items-end justify-center bg-black/60 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm overflow-hidden rounded-2xl border border-white/[0.12] bg-[#121216] shadow-2xl"
+        className="w-full max-w-sm overflow-hidden rounded-t-3xl border border-white/[0.12] bg-[#121216] pb-[calc(var(--morph-safe-bottom)+0.5rem)] shadow-2xl sm:rounded-2xl sm:pb-0"
       >
-        <div className="flex items-center justify-between border-b border-white/[0.08] bg-[#18181E] px-3.5 py-2.5">
-          <div className="min-w-0">
-            <h3 className="truncate text-xs font-extrabold text-white">
-              {clip.label} {isV2 ? '· V2 PiP' : '· V1'}
-            </h3>
-            <p className="font-mono-num text-[10px] text-white/50">
-              {formatSecondsShort(clip.timelineStart)} →{' '}
-              {formatSecondsShort(clip.timelineStart + clipTimelineDuration(clip))} ·{' '}
-              {clip.speed}×
-            </p>
+        <div className="flex flex-col border-b border-white/[0.08] bg-[#18181E] px-3.5 pt-2 pb-2.5 sm:py-2.5">
+          <div
+            aria-hidden="true"
+            className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/15 sm:hidden"
+          />
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="truncate text-xs font-extrabold text-white">
+                {clip.label} {isV2 ? '· V2 PiP' : '· V1'}
+              </h3>
+              <p className="font-mono-num text-[10px] text-white/50">
+                {formatSecondsShort(clip.timelineStart)} →{' '}
+                {formatSecondsShort(clip.timelineStart + clipTimelineDuration(clip))} ·{' '}
+                {clip.speed}×
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={tr('Kapat', 'Close')}
+              className="flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] shrink-0 items-center justify-center rounded-xl text-white/60 hover:bg-white/[0.08] hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-white/60 hover:bg-white/[0.08] hover:text-white"
-          >
-            <X className="h-4 w-4" />
-          </button>
         </div>
 
         <div className="grid grid-cols-2 gap-2 p-3">
@@ -296,37 +305,46 @@ export const MediaLayerQuickPopup: React.FC<MediaLayerQuickPopupProps> = ({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
       onClick={onClose}
-      className="fixed inset-0 z-[75] flex items-end justify-center bg-black/55 p-3 pb-6 backdrop-blur-[2px] sm:items-center sm:p-4"
+      className="morph-studio-dark fixed inset-0 z-[75] flex items-end justify-center bg-black/60 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm overflow-hidden rounded-2xl border border-white/[0.12] bg-[#121216] shadow-2xl"
+        className="w-full max-w-sm overflow-hidden rounded-t-3xl border border-white/[0.12] bg-[#121216] pb-[calc(var(--morph-safe-bottom)+0.5rem)] shadow-2xl sm:rounded-2xl sm:pb-0"
       >
-        <div className="flex items-center justify-between border-b border-white/[0.08] bg-[#18181E] px-3.5 py-2.5">
-          <div className="flex min-w-0 items-center gap-2">
-            {isAudio ? (
-              <AudioLines className="h-4 w-4 shrink-0 text-[#34D399]" />
-            ) : (
-              <Type className="h-4 w-4 shrink-0 text-[#A78BFA]" />
-            )}
-            <div className="min-w-0">
-              <h3 className="truncate text-xs font-extrabold text-white">
-                {title} · {isAudio ? (row === 1 ? 'A2' : 'A1') : row === 1 ? 'T2' : 'T1'}
-              </h3>
-              <p className="font-mono-num text-[10px] text-white/50">
-                {formatSecondsShort(startSec)} → {formatSecondsShort(startSec + durSec)} (
-                {formatSecondsShort(durSec)})
-              </p>
+        <div className="flex flex-col border-b border-white/[0.08] bg-[#18181E] px-3.5 pt-2 pb-2.5 sm:py-2.5">
+          <div
+            aria-hidden="true"
+            className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/15 sm:hidden"
+          />
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              {isAudio ? (
+                <AudioLines className="h-4 w-4 shrink-0 text-[#34D399]" />
+              ) : (
+                <Type className="h-4 w-4 shrink-0 text-[#A78BFA]" />
+              )}
+              <div className="min-w-0">
+                <h3 className="truncate text-xs font-extrabold text-white">
+                  {title} · {isAudio ? (row === 1 ? 'A2' : 'A1') : row === 1 ? 'T2' : 'T1'}
+                </h3>
+                <p className="font-mono-num text-[10px] text-white/50">
+                  {formatSecondsShort(startSec)} → {formatSecondsShort(startSec + durSec)} (
+                  {formatSecondsShort(durSec)})
+                </p>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={tr('Kapat', 'Close')}
+              className="flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] shrink-0 items-center justify-center rounded-xl text-white/60 hover:bg-white/[0.08] hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-white/60 hover:bg-white/[0.08] hover:text-white"
-          >
-            <X className="h-4 w-4" />
-          </button>
         </div>
 
         <div className="grid grid-cols-2 gap-2 p-3">
@@ -525,28 +543,37 @@ export const TransitionPickerPopup: React.FC<TransitionPickerPopupProps> = ({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
       onClick={onClose}
-      className="fixed inset-0 z-[75] flex items-end justify-center bg-black/60 p-3 pb-6 backdrop-blur-[2px] sm:items-center sm:p-4"
+      className="morph-studio-dark fixed inset-0 z-[75] flex items-end justify-center bg-black/60 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm overflow-hidden rounded-2xl border border-white/[0.12] bg-[#121216] shadow-2xl"
+        className="w-full max-w-sm overflow-hidden rounded-t-3xl border border-white/[0.12] bg-[#121216] pb-[calc(var(--morph-safe-bottom)+0.5rem)] shadow-2xl sm:rounded-2xl sm:pb-0"
       >
-        <div className="flex items-center justify-between border-b border-white/[0.08] bg-[#18181E] px-3.5 py-2.5">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4" style={{color: accentColor}} />
-            <div>
-              <h3 className="text-xs font-extrabold text-white">{heading}</h3>
-              <p className="max-w-[230px] truncate text-[10px] text-white/50">{targetLabel}</p>
+        <div className="flex flex-col border-b border-white/[0.08] bg-[#18181E] px-3.5 pt-2 pb-2.5 sm:py-2.5">
+          <div
+            aria-hidden="true"
+            className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/15 sm:hidden"
+          />
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <Sparkles className="h-4 w-4 shrink-0" style={{color: accentColor}} />
+              <div className="min-w-0">
+                <h3 className="text-xs font-extrabold text-white">{heading}</h3>
+                <p className="max-w-[230px] truncate text-[10px] text-white/50">{targetLabel}</p>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={tr('Kapat', 'Close')}
+              className="flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] shrink-0 items-center justify-center rounded-xl text-white/60 hover:bg-white/[0.08] hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-white/60 hover:bg-white/[0.08] hover:text-white"
-          >
-            <X className="h-4 w-4" />
-          </button>
         </div>
 
         <div className="space-y-3 p-3.5">
@@ -675,30 +702,39 @@ export const ExportConfirmPopup: React.FC<ExportConfirmPopupProps> = ({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
       onClick={onClose}
-      className="fixed inset-0 z-[78] flex items-end justify-center bg-black/70 p-3 pb-6 backdrop-blur-sm sm:items-center sm:p-4"
+      className="morph-studio-dark fixed inset-0 z-[78] flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-4"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md overflow-hidden rounded-2xl border border-white/[0.12] bg-[#121216] shadow-2xl"
+        className="w-full max-w-md overflow-hidden rounded-t-3xl border border-white/[0.12] bg-[#121216] pb-[calc(var(--morph-safe-bottom)+0.5rem)] shadow-2xl sm:rounded-2xl sm:pb-0"
       >
-        <div className="flex items-center justify-between border-b border-white/[0.08] bg-[#18181E] px-4 py-3">
-          <div className="flex items-center gap-2">
-            <Share className="h-4 w-4 text-[#FB7185]" />
-            <div>
-              <h3 className="text-sm font-extrabold text-white">
-                {tr('Dışa Aktarmaya Hazır', 'Ready to Export')}
-              </h3>
-              <p className="truncate text-[11px] text-white/50">{project.projectName}</p>
+        <div className="flex flex-col border-b border-white/[0.08] bg-[#18181E] px-4 pt-2 pb-3 sm:py-3">
+          <div
+            aria-hidden="true"
+            className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/15 sm:hidden"
+          />
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <Share className="h-4 w-4 shrink-0 text-[#FB7185]" />
+              <div className="min-w-0">
+                <h3 className="text-sm font-extrabold text-white">
+                  {tr('Dışa Aktarmaya Hazır', 'Ready to Export')}
+                </h3>
+                <p className="truncate text-[11px] text-white/50">{project.projectName}</p>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={tr('Kapat', 'Close')}
+              className="flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] shrink-0 items-center justify-center rounded-xl text-white/60 hover:bg-white/[0.08] hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-white/60 hover:bg-white/[0.08] hover:text-white"
-          >
-            <X className="h-4 w-4" />
-          </button>
         </div>
 
         <div className="space-y-3 p-4">

@@ -89,24 +89,36 @@ export const ProjectsModal: React.FC<ProjectsModalProps> = ({
   const tr = (t: string, e: string) => (isTr ? t : e);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-xs">
-      <div className="flex max-h-[86vh] w-full max-w-md flex-col rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-4 shadow-2xl">
-        <div className="mb-3 flex items-center justify-between border-b border-[var(--line)] pb-2.5">
-          <div>
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+      className="morph-studio-dark fixed inset-0 z-50 flex items-end justify-center bg-black/75 p-0 backdrop-blur-xs sm:items-center sm:p-4"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="flex max-h-[88vh] w-full max-w-md flex-col rounded-t-3xl border border-[var(--line)] bg-[var(--surface)] px-4 pt-2 pb-[calc(var(--morph-safe-bottom)+1rem)] shadow-2xl sm:rounded-2xl sm:p-4"
+      >
+        <div
+          aria-hidden="true"
+          className="mx-auto mb-2.5 h-1 w-10 shrink-0 rounded-full bg-white/15 sm:hidden"
+        />
+        <div className="mb-3 flex items-center justify-between gap-2 border-b border-[var(--line)] pb-2.5">
+          <div className="min-w-0">
             <h3 className="text-sm font-extrabold text-[var(--ink)]">
               {tr('Projeler, Şablonlar & .morph Paketleri', 'Projects, Templates & .morph Packages')}
             </h3>
             <p className="text-[11px] text-[var(--muted)]">
               {tr(
-                'IndexedDB kalıcı medya deposu · Kaynak yeniden bağlama destekli',
-                'IndexedDB persistent media store · Source relink ready'
+                'Cihaz içi kalıcı proje deposu · Kaynak yeniden bağlama destekli',
+                'On-device persistent project store · Source relink ready'
               )}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2.5 py-1 text-xs font-bold text-[var(--muted)] hover:text-[var(--ink)]"
+            className="min-h-[var(--ve-btn-size,36px)] shrink-0 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 py-1.5 text-xs font-bold text-[var(--muted)] hover:text-[var(--ink)]"
           >
             {tr('Kapat', 'Close')}
           </button>
@@ -119,7 +131,7 @@ export const ProjectsModal: React.FC<ProjectsModalProps> = ({
               type="button"
               disabled={isBusyPackage}
               onClick={onExportMorph}
-              className="flex flex-col items-center justify-center gap-1 rounded-xl border border-[var(--accent)]/40 bg-[var(--accent)]/12 px-2 py-2 text-[10px] font-bold text-[var(--accent)] transition-colors hover:bg-[var(--accent)]/20 disabled:opacity-50"
+              className="flex min-h-[54px] flex-col items-center justify-center gap-1 rounded-xl border border-[var(--accent)]/40 bg-[var(--accent)]/12 px-2 py-2 text-[10.5px] font-bold text-[var(--accent)] transition-colors hover:bg-[var(--accent)]/20 disabled:opacity-50"
             >
               <Download className="h-3.5 w-3.5" />
               <span className="truncate">{tr('.morph Aktar', 'Export .morph')}</span>
@@ -128,7 +140,7 @@ export const ProjectsModal: React.FC<ProjectsModalProps> = ({
               type="button"
               disabled={isBusyPackage}
               onClick={onTriggerImportMorph}
-              className="flex flex-col items-center justify-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2 py-2 text-[10px] font-bold text-[var(--ink)] transition-colors hover:border-[var(--accent)] disabled:opacity-50"
+              className="flex min-h-[54px] flex-col items-center justify-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2 py-2 text-[10.5px] font-bold text-[var(--ink)] transition-colors hover:border-[var(--accent)] disabled:opacity-50"
             >
               <Upload className="h-3.5 w-3.5 text-[#45C5D7]" />
               <span className="truncate">{tr('.morph Aç', 'Import .morph')}</span>
@@ -136,14 +148,14 @@ export const ProjectsModal: React.FC<ProjectsModalProps> = ({
             <button
               type="button"
               onClick={onTriggerRelinkVideo}
-              className="flex flex-col items-center justify-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2 py-2 text-[10px] font-bold text-[var(--ink)] transition-colors hover:border-[#61C995]"
+              className="flex min-h-[54px] flex-col items-center justify-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2 py-2 text-[10.5px] font-bold text-[var(--ink)] transition-colors hover:border-[#61C995]"
             >
               <FolderSync className="h-3.5 w-3.5 text-[#61C995]" />
               <span className="truncate">{tr('Medya Bağla', 'Relink Media')}</span>
             </button>
           </div>
 
-          {/* 1-Tap Social Project Templates (Page 5 Roadmap) */}
+          {/* 1-Tap Social Project Templates */}
           <div className="space-y-1.5">
             <div className="flex items-center gap-1.5 text-[11px] font-bold text-[var(--muted)]">
               <Sparkles className="h-3 w-3 text-[#FF8A3D]" />
@@ -155,19 +167,19 @@ export const ProjectsModal: React.FC<ProjectsModalProps> = ({
                   key={tpl.id}
                   type="button"
                   onClick={() => onApplyTemplate(tpl)}
-                  className="flex flex-col items-start rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2.5 py-2 text-left transition-colors hover:border-[var(--accent)]"
+                  className="flex min-h-[52px] flex-col items-start justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2.5 py-2 text-left transition-colors hover:border-[var(--accent)]"
                 >
                   <span className="flex items-center gap-1 text-[11px] font-extrabold text-[var(--ink)]">
                     <Film className="h-3 w-3 text-[var(--accent)]" />
                     {isTr ? tpl.labelTr : tpl.labelEn}
                   </span>
-                  <span className="font-mono-num text-[9px] text-[var(--muted)]">{tpl.meta}</span>
+                  <span className="font-mono-num text-[10px] text-[var(--muted)]">{tpl.meta}</span>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Saved IndexedDB Projects List */}
+          {/* Saved Projects List */}
           <div className="space-y-1.5">
             <div className="text-[11px] font-bold text-[var(--muted)]">
               {tr('Kayıtlı Projeler', 'Saved Projects')} ({savedProjects.length})
@@ -192,11 +204,11 @@ export const ProjectsModal: React.FC<ProjectsModalProps> = ({
                         {p.clipCount} {tr('Klip', 'Clips')} · {formatSecondsShort(p.durationSec)}
                       </p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-1">
+                    <div className="flex shrink-0 items-center gap-1.5">
                       <button
                         type="button"
                         onClick={() => onLoadProject(p)}
-                        className="morph-accent-btn rounded-lg px-2.5 py-1 text-[11px] font-bold"
+                        className="morph-accent-btn min-h-[var(--ve-btn-size,36px)] rounded-xl px-3 py-1.5 text-[11px] font-bold"
                       >
                         {tr('Aç', 'Load')}
                       </button>
@@ -204,7 +216,8 @@ export const ProjectsModal: React.FC<ProjectsModalProps> = ({
                         type="button"
                         onClick={() => onDuplicateProject(p.projectId)}
                         title={tr('Projeyi Kopyala', 'Duplicate Project')}
-                        className="rounded-lg border border-[var(--line)] bg-[var(--surface)] p-1.5 text-[var(--muted)] hover:text-[var(--ink)]"
+                        aria-label={tr('Projeyi Kopyala', 'Duplicate Project')}
+                        className="flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)]"
                       >
                         <Copy className="h-3.5 w-3.5" />
                       </button>
@@ -212,7 +225,8 @@ export const ProjectsModal: React.FC<ProjectsModalProps> = ({
                         type="button"
                         onClick={() => onDeleteProject(p.projectId)}
                         title={tr('Projeyi Sil', 'Delete Project')}
-                        className="rounded-lg border border-rose-500/30 bg-rose-500/15 p-1.5 text-rose-400"
+                        aria-label={tr('Projeyi Sil', 'Delete Project')}
+                        className="flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl border border-rose-500/30 bg-rose-500/15 text-rose-400"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>

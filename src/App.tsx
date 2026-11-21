@@ -1,5 +1,6 @@
-import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {
+  AlertTriangle,
   ArrowLeftRight,
   ArrowUpDown,
   CheckCircle2,
@@ -21,6 +22,7 @@ import {
   Grid,
   Hash,
   Image as ImageIcon,
+  Info,
   Layers,
   LayoutGrid,
   Maximize2,
@@ -242,9 +244,56 @@ export default function App() {
     return () => mq.removeEventListener('change', onChange);
   }, [prefs]);
 
+  const replaceLibrarySafely = useCallback((nextItems: ExportItem[]) => {
+    setLibrary((prev) => {
+      const prevById = new Map<string, ExportItem>(prev.map((i) => [i.id, i]));
+      const merged = nextItems.map((item) => {
+        const existing = prevById.get(item.id);
+        // Preserve in-memory session blob for 100MB+ web items whose IDB record holds a 0-byte placeholder
+        if (
+          existing &&
+          !item.nativeUri &&
+          item.size > 0 &&
+          (!item.blob || item.blob.size === 0) &&
+          existing.blob &&
+          existing.blob.size > 0
+        ) {
+          return {
+            ...item,
+            blob: existing.blob,
+            previewUrl: item.previewUrl || existing.previewUrl,
+          };
+        }
+        return item;
+      });
+      const activeUrls = new Set(merged.map((i) => i.previewUrl).filter(Boolean));
+      prev.forEach((old) => {
+        if (old.previewUrl && !activeUrls.has(old.previewUrl)) {
+          URL.revokeObjectURL(old.previewUrl);
+        }
+      });
+      return merged;
+    });
+  }, []);
+
+  const prependLibraryItems = useCallback((added: ExportItem[]) => {
+    setLibrary((prev) => {
+      const addedIds = new Set(added.map((a) => a.id));
+      const kept = prev.filter((p) => !addedIds.has(p.id));
+      const next = [...added, ...kept].slice(0, 200);
+      const activeUrls = new Set(next.map((i) => i.previewUrl).filter(Boolean));
+      prev.forEach((old) => {
+        if (old.previewUrl && !activeUrls.has(old.previewUrl)) {
+          URL.revokeObjectURL(old.previewUrl);
+        }
+      });
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     const refreshLibrary = () => {
-      loadLibraryItems().then(setLibrary).catch(() => {});
+      loadLibraryItems().then(replaceLibrarySafely).catch(() => {});
     };
     refreshLibrary();
     const unsub = subscribeLibraryChanges(refreshLibrary);
@@ -253,13 +302,13 @@ export default function App() {
       ensureStoragePermission(true).catch(() => {});
     }
     return unsub;
-  }, []);
+  }, [replaceLibrarySafely]);
 
   useEffect(() => {
     if (tab === 'library') {
-      loadLibraryItems().then(setLibrary).catch(() => {});
+      loadLibraryItems().then(replaceLibrarySafely).catch(() => {});
     }
-  }, [tab]);
+  }, [tab, replaceLibrarySafely]);
 
   const resetNavigationFlow = useCallback(() => {
     setDirectTool(null);
@@ -274,10 +323,11 @@ export default function App() {
       if (e.key !== 'Escape') return;
       if (previewTarget) {
         e.preventDefault();
+        const shouldRevoke = !previewTarget.previewUrl;
         setPreviewTarget(null);
         setSourcePreviewText(null);
         setSourcePreviewUrl((prev) => {
-          if (prev) URL.revokeObjectURL(prev);
+          if (prev && shouldRevoke) URL.revokeObjectURL(prev);
           return null;
         });
       } else if (showMainWheelCustomize) {
@@ -301,42 +351,62 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [previewTarget, showMainWheelCustomize, customizeModal.open, showManageTools, showFileActions, wheelKind]);
 
-  // Android / browser hardware Back button closes modals/tool flows instead of exiting app (U-10, A-9)
-  const hasOverlayOrSubView = Boolean(
-    previewTarget ||
-      showMainWheelCustomize ||
-      customizeModal.open ||
-      showManageTools ||
-      showFileActions ||
-      wheelKind ||
-      toolMode ||
-      job.status === 'done' ||
-      job.status === 'failed' ||
-      tab !== 'studio'
-  );
-  const pushedHistoryRef = useRef(false);
+  const hasDimmedOverlay =
+    wheelKind !== null ||
+    showFileActions ||
+    showManageTools ||
+    customizeModal.open ||
+    showMainWheelCustomize ||
+    Boolean(previewTarget) ||
+    job.status === 'running';
+
+  useLayoutEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    root.classList.toggle('morph-overlay-active', hasDimmedOverlay);
+    return () => {
+      root.classList.remove('morph-overlay-active');
+    };
+  }, [hasDimmedOverlay]);
+
+  // Android / browser hardware Back button steps back layer-by-layer instead of exiting early (U-10, A-9)
+  const overlayDepth =
+    (tab !== 'studio' ? 1 : 0) +
+    (toolMode ? 1 : 0) +
+    (job.status === 'done' || job.status === 'failed' ? 1 : 0) +
+    (wheelKind ? 1 : 0) +
+    (showFileActions ? 1 : 0) +
+    (showManageTools ? 1 : 0) +
+    (customizeModal.open ? 1 : 0) +
+    (showMainWheelCustomize ? 1 : 0) +
+    (previewTarget ? 1 : 0);
+  const pushedHistoryDepthRef = useRef(0);
 
   useEffect(() => {
-    if (hasOverlayOrSubView && !pushedHistoryRef.current) {
+    if (overlayDepth > pushedHistoryDepthRef.current) {
+      const toPush = overlayDepth - pushedHistoryDepthRef.current;
       try {
-        window.history.pushState({morphLayer: true}, '');
-        pushedHistoryRef.current = true;
+        for (let i = 0; i < toPush; i++) {
+          window.history.pushState({morphLayer: true, depth: pushedHistoryDepthRef.current + i + 1}, '');
+        }
+        pushedHistoryDepthRef.current = overlayDepth;
       } catch {
         // Ignore restricted history environments
       }
-    } else if (!hasOverlayOrSubView) {
-      pushedHistoryRef.current = false;
+    } else if (overlayDepth === 0) {
+      pushedHistoryDepthRef.current = 0;
     }
-  }, [hasOverlayOrSubView]);
+  }, [overlayDepth]);
 
   useEffect(() => {
     const onPopState = () => {
-      pushedHistoryRef.current = false;
+      pushedHistoryDepthRef.current = Math.max(0, pushedHistoryDepthRef.current - 1);
       if (previewTarget) {
+        const shouldRevoke = !previewTarget.previewUrl;
         setPreviewTarget(null);
         setSourcePreviewText(null);
         setSourcePreviewUrl((prev) => {
-          if (prev) URL.revokeObjectURL(prev);
+          if (prev && shouldRevoke) URL.revokeObjectURL(prev);
           return null;
         });
         return;
@@ -444,7 +514,12 @@ export default function App() {
           setUpdateDownload((cur) => (cur?.phase === 'done' ? null : cur));
         }, 4000);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Güncelleme indirilemedi.';
+        const msg =
+          err instanceof Error
+            ? err.message
+            : lang === 'tr'
+              ? 'Güncelleme indirilemedi.'
+              : 'Update download failed.';
         setUpdateDownload({
           active: false,
           percent: 0,
@@ -638,7 +713,7 @@ export default function App() {
           ctrl.signal
         );
         await saveExportItems(result.items);
-        setLibrary((prev) => [...result.items, ...prev].slice(0, 200));
+        prependLibraryItems(result.items);
         setJob({status: 'done', result});
       } catch (err) {
         if (ctrl.signal.aborted) {
@@ -695,7 +770,7 @@ export default function App() {
           }
           if (items.length === 0) throw new Error('No output produced.');
           await saveExportItems(items);
-          setLibrary((prev) => [...items, ...prev].slice(0, 200));
+          prependLibraryItems(items);
           activeServerJobIdRef.current = null;
           setJob({status: 'done', result: {items, tool: title, sourceBytes}});
           return;
@@ -751,7 +826,7 @@ export default function App() {
           ctrl.signal
         );
         await saveExportItems(result.items);
-        setLibrary((prev) => [...result.items, ...prev].slice(0, 200));
+        prependLibraryItems(result.items);
         setJob({status: 'done', result});
       } catch (err) {
         activeServerJobIdRef.current = null;
@@ -795,7 +870,7 @@ export default function App() {
             : prefs
         );
         await saveExportItems([item]);
-        setLibrary((prev) => [item, ...prev].slice(0, 200));
+        prependLibraryItems([item]);
         setJob({status: 'done', result: {items: [item], tool: title, sourceBytes: item.size}});
       } catch (err) {
         activeServerJobIdRef.current = null;
@@ -950,7 +1025,9 @@ export default function App() {
           const text = await extractDocumentText(target);
           setPreviewTarget(target);
           setSourcePreviewUrl(null);
-          setSourcePreviewText(text.slice(0, 120000) || '(Boş belge)');
+          setSourcePreviewText(
+            text.slice(0, 120000) || (lang === 'tr' ? '(Boş belge)' : '(Empty document)')
+          );
           return;
         } catch {
           // Fallback below
@@ -1294,8 +1371,10 @@ export default function App() {
     const finalMainIds =
       configuredMainIds.length > 0 ? configuredMainIds : DEFAULT_MAIN_WHEEL_ITEMS;
 
+    const compatibleLocalIds = new Set(toolsForSelection(files).map((d) => `local:${d.id}`));
     const mainActions: WheelActionItem[] = finalMainIds.map((itemId) => {
       const def = mainCatalogMap.get(itemId)!;
+      const isLocalTool = itemId.startsWith('local:');
       const requiresFiles =
         itemId === 'open:convert' ||
         itemId === 'open:tools' ||
@@ -1303,14 +1382,15 @@ export default function App() {
         itemId === 'action:share' ||
         itemId === 'action:save' ||
         itemId === 'action:clear' ||
-        itemId.startsWith('local:');
+        isLocalTool;
+      const incompatibleLocal = isLocalTool && files.length > 0 && !compatibleLocalIds.has(itemId);
       return {
         id: itemId,
-        label: itemId.startsWith('local:')
+        label: isLocalTool
           ? shortWheelToolLabel(itemId.slice(6), lang, t(def.labelKey, lang))
           : t(def.labelKey, lang),
         icon: iconForMainItem(itemId),
-        disabled: requiresFiles && files.length === 0,
+        disabled: (requiresFiles && files.length === 0) || incompatibleLocal,
       };
     });
 
@@ -1461,7 +1541,7 @@ export default function App() {
       />
 
       {/* Compact 3-Zone Top Bar with Android/iOS Safe-Area Top Inset */}
-      <header className="sticky top-0 z-30 border-b border-[var(--line)]/70 bg-[var(--paper)]/92 pt-safe backdrop-blur-md">
+      <header className="morph-app-header sticky top-0 z-30 border-b border-[var(--line)]/70 bg-[var(--paper)]/92 pt-safe backdrop-blur-md">
         <div className="mx-auto flex h-13 max-w-6xl items-center justify-between gap-8 px-4 sm:px-6">
           {/* Zone 1: Single-line Brand Wordmark */}
           <button
@@ -1511,10 +1591,14 @@ export default function App() {
             })}
           </nav>
 
-          {/* Zone 3: Continuously Spinning Settings Gear + Hover Info Cloud */}
+          {/* Zone 3: Settings Gear (static by default; spins only if Experimental toggle enabled) */}
           <div
             className="relative flex items-center shrink-0"
-            onMouseEnter={() => setShowGearCloud(true)}
+            onMouseEnter={() => {
+              if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
+                setShowGearCloud(true);
+              }
+            }}
             onMouseLeave={() => setShowGearCloud(false)}
           >
             <button
@@ -1526,16 +1610,26 @@ export default function App() {
                 setSettingsCategory('appearance');
                 setTab('settings');
               }}
-              onFocus={() => setShowGearCloud(true)}
+              onFocus={() => {
+                if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
+                  setShowGearCloud(true);
+                }
+              }}
               onBlur={() => setShowGearCloud(false)}
               aria-label={t('Settings', lang)}
-              className={`flex h-11 w-11 items-center justify-center rounded-full border transition-colors ${
+              className={`group flex h-11 w-11 items-center justify-center rounded-full border transition-colors ${
                 tab === 'settings' && !toolMode
                   ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent)]'
                   : 'border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] hover:border-[var(--accent)]'
               }`}
             >
-              <Settings className="morph-gear-spin h-5 w-5" />
+              <Settings
+                className={
+                  prefs.expSpinningGear
+                    ? 'morph-gear-spin h-5 w-5'
+                    : 'h-5 w-5 transition-transform duration-300 group-hover:rotate-45'
+                }
+              />
             </button>
 
             {!toolMode && job.status === 'idle' && showGearCloud && (
@@ -1624,6 +1718,7 @@ export default function App() {
             onShare={handleShareItem}
             onDelete={handleDeleteExport}
             onClearAll={handleClearLibrary}
+            onShowToast={showToast}
           />
         ) : tab === 'settings' ? (
           <SettingsScreen
@@ -1634,6 +1729,9 @@ export default function App() {
             checkingUpdate={checkingUpdate}
             updateDownload={updateDownload}
             initialCategory={settingsCategory}
+            libraryCount={library.length}
+            libraryBytes={library.reduce((sum, item) => sum + item.size, 0)}
+            onClearLibrary={handleClearLibrary}
             onChangePrefs={setPrefs}
             onTestServer={handleTestServer}
             onCheckUpdate={handleCheckUpdate}
@@ -1681,13 +1779,22 @@ export default function App() {
           hidden={wheelKind !== null}
           side={prefs.wheelSide ?? 'right'}
           iconStyle={prefs.wheelIconStyle ?? 'wheel'}
+          expWheelBurnEffect={Boolean(prefs.expWheelBurnEffect)}
           onChangeSide={(wheelSide) => setPrefs((p) => ({...p, wheelSide}))}
-          onHoverChange={setShowWheelCloud}
+          onHoverChange={(hover) => {
+            if (!hover || window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
+              setShowWheelCloud(hover);
+            }
+          }}
           onClick={() => {
             setShowWheelCloud(false);
             setWheelKind('main');
           }}
-          onFocus={() => setShowWheelCloud(true)}
+          onFocus={() => {
+            if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
+              setShowWheelCloud(true);
+            }
+          }}
           onBlur={() => setShowWheelCloud(false)}
           label={t('Tools', lang)}
           cloud={
@@ -1718,11 +1825,46 @@ export default function App() {
         />
       )}
 
+      {/* Mobile Bottom Navigation Bar — shown strictly on mobile when Quick Wheel is disabled */}
+      {prefs.showQuickWheel === false && !toolMode && job.status === 'idle' && (
+        <nav
+          aria-label={lang === 'tr' ? 'Alt gezinme' : 'Bottom navigation'}
+          className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t border-[var(--line)] bg-[var(--surface)]/95 px-3 pt-1.5 pb-[calc(var(--morph-safe-bottom)+0.5rem)] backdrop-blur-md md:hidden"
+        >
+          {(
+            [
+              {id: 'studio' as Tab, label: t('Studio', lang), Icon: LayoutGrid},
+              {id: 'library' as Tab, label: t('Library', lang), Icon: Grid},
+              {id: 'settings' as Tab, label: t('Settings', lang), Icon: Settings},
+            ] as const
+          ).map(({id, label, Icon}) => {
+            const active = tab === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setTab(id)}
+                className={`flex min-h-[44px] min-w-[78px] flex-col items-center justify-center gap-0.5 rounded-2xl px-3 py-1 text-[11px] font-semibold transition-colors ${
+                  active
+                    ? 'bg-[var(--accent)]/15 text-[var(--accent-text)]'
+                    : 'text-[var(--muted)] hover:text-[var(--ink)]'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      )}
+
       <WheelMenu
         open={wheelKind !== null}
         title={wheelTitle}
         actions={wheelActions}
         lang={lang}
+        expDualRingWheel={Boolean(prefs.expDualRingWheel)}
+        expWheelCenterHoldCustomize={Boolean(prefs.expWheelCenterHoldCustomize)}
         onDismiss={() => setWheelKind(null)}
         onSelect={handleWheelSelect}
         onDisabledSelect={() => showToast(t('SliceDisabledToast', lang))}
@@ -1811,13 +1953,17 @@ export default function App() {
       {/* Manage Tools / Morph Engine Modal */}
       {showManageTools && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('ManageTools', lang)}
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-4"
           onClick={() => setShowManageTools(false)}
         >
           <div
-            className="w-full max-w-md rounded-t-3xl border border-[var(--line)] bg-[var(--surface)] p-5 pb-[calc(var(--morph-safe-bottom)+1.25rem)] shadow-2xl sm:rounded-3xl sm:pb-5"
+            className="w-full max-w-md rounded-t-3xl border border-[var(--line)] bg-[var(--surface)] p-5 pt-3 pb-[calc(var(--morph-safe-bottom)+1.25rem)] shadow-2xl sm:rounded-3xl sm:pt-5 sm:pb-5"
             onClick={(e) => e.stopPropagation()}
           >
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[var(--line)] sm:hidden" aria-hidden="true" />
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--muted)]">
@@ -1829,7 +1975,7 @@ export default function App() {
                 type="button"
                 onClick={() => setShowManageTools(false)}
                 aria-label={t('Close', lang)}
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]"
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -1862,7 +2008,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleApplyUpdate}
-                  className="flex min-h-[44px] min-w-0 flex-1 items-center justify-center gap-2 rounded-full border border-[var(--accent)]/40 bg-[var(--accent)]/15 px-3.5 py-2 text-center text-xs font-semibold leading-tight text-[var(--ink)] hover:border-[var(--accent)]"
+                  className="flex min-h-[46px] min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl border border-[var(--accent)]/40 bg-[var(--accent)]/15 px-3.5 py-2 text-center text-xs font-semibold leading-tight text-[var(--ink)] hover:border-[var(--accent)]"
                 >
                   <Download className="h-4 w-4 shrink-0 text-[var(--accent)]" />
                   <span>{t('DownloadUpdate', lang)}</span>
@@ -1872,7 +2018,7 @@ export default function App() {
                   type="button"
                   onClick={handleCheckUpdate}
                   disabled={checkingUpdate}
-                  className="flex min-h-[44px] min-w-0 flex-1 items-center justify-center gap-2 rounded-full border border-[var(--line)] bg-[var(--inset)] px-3.5 py-2 text-center text-xs font-semibold leading-tight text-[var(--ink)] hover:border-[var(--accent)] disabled:opacity-70"
+                  className="flex min-h-[46px] min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3.5 py-2 text-center text-xs font-semibold leading-tight text-[var(--ink)] hover:border-[var(--accent)] disabled:opacity-70"
                 >
                   <RefreshCw className={`h-4 w-4 shrink-0 text-[var(--accent)] ${checkingUpdate ? 'animate-spin' : ''}`} />
                   <span>{checkingUpdate ? t('CheckingUpdates', lang) : t('CheckUpdates', lang)}</span>
@@ -1881,7 +2027,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setShowManageTools(false)}
-                className="morph-accent-btn min-h-[44px] shrink-0 rounded-full px-6 text-xs font-semibold"
+                className="morph-accent-btn min-h-[46px] shrink-0 rounded-2xl px-6 text-xs font-semibold"
               >
                 {t('Done', lang)}
               </button>
@@ -1893,6 +2039,9 @@ export default function App() {
       {/* Universal Source File Preview Modal (Image, PDF, Video, Audio, Document) */}
       {previewTarget && (sourcePreviewUrl || sourcePreviewText !== null) && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={previewTarget.name}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 pt-[calc(var(--morph-safe-top)+1rem)] pb-[calc(var(--morph-safe-bottom)+1rem)] backdrop-blur-sm"
           onClick={closeSourcePreview}
         >
@@ -1905,7 +2054,8 @@ export default function App() {
               <button
                 type="button"
                 onClick={closeSourcePreview}
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)]"
+                aria-label={t('Close', lang)}
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)]"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -1948,11 +2098,59 @@ export default function App() {
         </div>
       )}
 
-      {toast && (
-        <div className="pointer-events-none fixed bottom-[calc(var(--morph-safe-bottom)+5.5rem)] left-1/2 z-[70] w-max max-w-[min(92vw,28rem)] -translate-x-1/2 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-4 py-2.5 text-center text-xs font-semibold leading-relaxed text-[var(--ink)] shadow-xl">
-          {toast}
-        </div>
-      )}
+      {/* Top-Center Semantic Toast (never collides with Quick Wheel, Bottom Nav, or Video Editor) */}
+      {toast && (() => {
+        const lower = toast.toLowerCase();
+        const isError =
+          lower.includes('hata') ||
+          lower.includes('başarısız') ||
+          lower.includes('error') ||
+          lower.includes('failed') ||
+          lower.includes('indirilemedi') ||
+          lower.includes('uygun değil') ||
+          lower.includes('not available') ||
+          lower.includes('sınırı') ||
+          lower.includes('limit');
+        const isSuccess =
+          !isError &&
+          (lower.includes('kaydedildi') ||
+            lower.includes('saved') ||
+            lower.includes('kopyalandı') ||
+            lower.includes('copied') ||
+            lower.includes('temizlendi') ||
+            lower.includes('cleared') ||
+            lower.includes('güncel') ||
+            lower.includes('up to date') ||
+            lower.includes('güncellendi') ||
+            lower.includes('updated') ||
+            lower.includes('etkin') ||
+            lower.includes('enabled') ||
+            lower.includes('sıralandı') ||
+            lower.includes('sorted') ||
+            lower.includes('kapatıldı'));
+        return (
+          <div
+            role="status"
+            aria-live="polite"
+            className={`pointer-events-none fixed top-[calc(var(--morph-safe-top)+3.75rem)] left-1/2 z-[90] flex w-max max-w-[min(92vw,28rem)] -translate-x-1/2 items-center gap-2 rounded-2xl border px-3.5 py-2.5 text-xs font-semibold leading-snug shadow-2xl backdrop-blur-md ${
+              isError
+                ? 'border-[var(--danger)]/50 bg-[var(--surface)]/95 text-[var(--ink)]'
+                : isSuccess
+                  ? 'border-emerald-500/45 bg-[var(--surface)]/95 text-[var(--ink)]'
+                  : 'border-[var(--line)] bg-[var(--surface)]/95 text-[var(--ink)]'
+            }`}
+          >
+            {isError ? (
+              <AlertTriangle className="h-4 w-4 shrink-0 text-[var(--danger)]" />
+            ) : isSuccess ? (
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+            ) : (
+              <Info className="h-4 w-4 shrink-0 text-[var(--accent-text)]" />
+            )}
+            <span className="min-w-0 text-left">{toast}</span>
+          </div>
+        );
+      })()}
     </div>
   );
 }

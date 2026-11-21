@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {LucideIcon} from 'lucide-react';
+import {ChevronRight, LucideIcon, SlidersHorizontal} from 'lucide-react';
 import {Lang} from '../data/i18n';
 import {MAX_WHEEL_SLICES, WheelIconStylePref, WheelSidePref} from '../data/models';
 
@@ -15,6 +15,8 @@ interface WheelMenuProps {
   title?: string;
   actions: WheelActionItem[];
   lang: Lang;
+  expDualRingWheel?: boolean;
+  expWheelCenterHoldCustomize?: boolean;
   onDismiss: () => void;
   onSelect: (id: string) => void;
   onDisabledSelect?: (item: WheelActionItem) => void;
@@ -68,8 +70,8 @@ interface WheelGeometry {
   containerWidthClass: string;
 }
 
-function getWheelGeometry(count: number): WheelGeometry {
-  if (count >= 8) {
+function getWheelGeometry(count: number, allowDualRing = false): WheelGeometry {
+  if (allowDualRing && count >= 8) {
     const size = 384;
     const outerCount = Math.min(9, Math.ceil(count * 0.6));
     const innerCount = Math.max(1, count - outerCount);
@@ -231,6 +233,8 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
   title,
   actions,
   lang,
+  expDualRingWheel = false,
+  expWheelCenterHoldCustomize = false,
   onDismiss,
   onSelect,
   onDisabledSelect,
@@ -239,6 +243,7 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
   const [activeIndex, setActiveIndex] = useState<number>(-1);
   const [holdProgress, setHoldProgress] = useState<number>(0);
   const [orbitDeg, setOrbitDeg] = useState<number>(0);
+  const [pageIdx, setPageIdx] = useState<number>(0);
 
   const wheelRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<number>(-1);
@@ -247,7 +252,17 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
   const holdingCenterRef = useRef<boolean>(false);
   const completedHoldRef = useRef<boolean>(false);
 
-  const pageActions = actions.slice(0, MAX_WHEEL_SLICES);
+  const cappedActions = actions.slice(0, MAX_WHEEL_SLICES);
+  const SINGLE_RING_PAGE_SIZE = 8;
+  const usePagination = !expDualRingWheel && cappedActions.length > SINGLE_RING_PAGE_SIZE;
+  const totalPages = usePagination ? Math.ceil(cappedActions.length / SINGLE_RING_PAGE_SIZE) : 1;
+  const safePageIdx = Math.min(pageIdx, Math.max(0, totalPages - 1));
+  const pageActions = usePagination
+    ? cappedActions.slice(
+        safePageIdx * SINGLE_RING_PAGE_SIZE,
+        (safePageIdx + 1) * SINGLE_RING_PAGE_SIZE
+      )
+    : cappedActions;
 
   useEffect(() => {
     if (!open) return;
@@ -283,6 +298,7 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
     if (!open) {
       setActiveIndex(-1);
       activeRef.current = -1;
+      setPageIdx(0);
       stopHoldAnimation(true);
     }
   }, [open, stopHoldAnimation]);
@@ -294,10 +310,10 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
   }, [stopHoldAnimation]);
 
   const count = pageActions.length;
-  const geo = getWheelGeometry(Math.max(1, count));
+  const geo = getWheelGeometry(Math.max(1, count), expDualRingWheel);
 
   const startCenterHold = useCallback(() => {
-    if (!onOpenCustomize || holdingCenterRef.current || completedHoldRef.current) return;
+    if (!expWheelCenterHoldCustomize || !onOpenCustomize || holdingCenterRef.current || completedHoldRef.current) return;
     holdingCenterRef.current = true;
     let revealHapticDone = false;
     const startAt = performance.now();
@@ -335,7 +351,7 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
     };
 
     holdRafRef.current = window.requestAnimationFrame(tick);
-  }, [onOpenCustomize]);
+  }, [expWheelCenterHoldCustomize, onOpenCustomize]);
 
   const updatePointer = useCallback(
     (clientX: number, clientY: number, isPressed: boolean) => {
@@ -352,7 +368,7 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
         }
       }
 
-      if (onOpenCustomize && !completedHoldRef.current) {
+      if (expWheelCenterHoldCustomize && onOpenCustomize && !completedHoldRef.current) {
         if (isPressed && hit.zone === 'center') {
           startCenterHold();
         } else if (holdingCenterRef.current && hit.zone !== 'center') {
@@ -362,15 +378,17 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
 
       return hit;
     },
-    [geo, onOpenCustomize, pageActions, startCenterHold, stopHoldAnimation]
+    [expWheelCenterHoldCustomize, geo, onOpenCustomize, pageActions, startCenterHold, stopHoldAnimation]
   );
 
   if (!open || count === 0) return null;
 
-  const canCustomize = Boolean(onOpenCustomize);
+  // Strictly mutually exclusive: top button OR center 3-second hold — never both at once
+  const canTopCustomize = Boolean(onOpenCustomize) && !expWheelCenterHoldCustomize;
+  const canCenterHoldCustomize = Boolean(onOpenCustomize) && expWheelCenterHoldCustomize;
 
   // Strict non-overlapping two-stage swap: m and gear NEVER appear at the same time (zero ghost shadow!)
-  const showSolidGear = canCustomize && holdProgress >= 0.88;
+  const showSolidGear = canCenterHoldCustomize && holdProgress >= 0.88;
   const markRetractT = holdProgress <= 0.8 ? 0 : Math.min(1, (holdProgress - 0.8) / 0.08);
   const markScale =
     holdProgress > 0
@@ -410,9 +428,9 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
     const labelWidthPct = Math.min(26, (safeChordPx / geo.size) * 100);
     const labelMaxHeightPct = (safeRadialPx / geo.size) * 100;
 
-    const iconSizeClass = geo.dualRing || rCount >= 7 ? 'h-[14px] w-[14px]' : 'h-[17px] w-[17px]';
+    const iconSizeClass = geo.dualRing ? 'h-[14px] w-[14px]' : rCount >= 7 ? 'h-[16px] w-[16px]' : 'h-[18px] w-[18px]';
     const labelTextClass =
-      geo.dualRing || rCount >= 8 ? 'text-[9px]' : rCount >= 6 ? 'text-[9.5px]' : 'text-[10.5px]';
+      geo.dualRing ? 'text-[9px]' : rCount >= 7 ? 'text-[10.5px]' : 'text-[11px]';
 
     const paths = ringItems.map((action, localIdx) => {
       const globalIdx = indexOffset + localIdx;
@@ -508,7 +526,7 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
 
   return (
     <div
-      className="no-touch-callout fixed inset-0 z-50 flex flex-col items-center justify-end gap-3 bg-black/65 pb-8 backdrop-blur-sm sm:justify-center sm:pb-0"
+      className="no-touch-callout fixed inset-0 z-50 flex flex-col items-center justify-end gap-3 overflow-hidden pb-8 sm:justify-center sm:pb-0"
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) {
           e.stopPropagation();
@@ -533,19 +551,62 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
       aria-modal="true"
       aria-label={title || (lang === 'tr' ? 'Hızlı çark menüsü' : 'Quick wheel menu')}
     >
-      {title && (
+      {/* Clean uniform dim scrim without backdrop bokeh/blur */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 bg-black/55"
+      />
+
+      {(title || canTopCustomize || usePagination) && (
         <div
-          className="flex max-w-[90vw] items-center gap-2 truncate rounded-full border border-[var(--line)] bg-[var(--surface)]/95 px-4 py-1.5 text-xs font-bold tracking-wide text-[var(--ink)] shadow-lg whitespace-nowrap"
+          className="relative z-10 flex max-w-[94vw] flex-wrap items-center justify-center gap-2"
           onClick={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
         >
-          <span>{title}</span>
+          {title && (
+            <div className="flex items-center gap-2 truncate rounded-full border border-[var(--line)] bg-[var(--surface)]/95 px-4 py-1.5 text-xs font-bold tracking-wide text-[var(--ink)] shadow-lg whitespace-nowrap">
+              <span>{title}</span>
+            </div>
+          )}
+          {usePagination && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveIndex(-1);
+                activeRef.current = -1;
+                setPageIdx((p) => (p + 1) % totalPages);
+              }}
+              className="flex min-h-[34px] items-center gap-1 rounded-full border border-[var(--accent)]/50 bg-[var(--surface)]/95 px-3 py-1 text-xs font-bold text-[var(--ink)] shadow-lg transition-colors hover:border-[var(--accent)] whitespace-nowrap"
+            >
+              <span className="font-mono-num text-[var(--accent-text)]">
+                {safePageIdx + 1}/{totalPages}
+              </span>
+              <span>{lang === 'tr' ? 'Diğerleri' : 'More'}</span>
+              <ChevronRight className="h-3.5 w-3.5 text-[var(--accent-text)]" />
+            </button>
+          )}
+          {canTopCustomize && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                installGhostClickShield();
+                onOpenCustomize?.();
+              }}
+              className="flex min-h-[34px] items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)]/95 px-3 py-1 text-xs font-semibold text-[var(--ink)] shadow-lg transition-colors hover:border-[var(--accent)] whitespace-nowrap"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5 text-[var(--accent-text)]" />
+              <span>{lang === 'tr' ? 'Özelleştir' : 'Customize'}</span>
+            </button>
+          )}
         </div>
       )}
 
       {/* Responsive square wheel container with single or dual concentric rings */}
       <div
         ref={wheelRef}
-        className={`no-touch-callout relative aspect-square ${geo.containerWidthClass} select-none touch-none`}
+        className={`no-touch-callout relative z-10 aspect-square ${geo.containerWidthClass} select-none touch-none`}
         onClick={(e) => e.stopPropagation()}
         onContextMenu={(e) => e.preventDefault()}
         onPointerDown={(e) => {
@@ -638,7 +699,7 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
           />
 
           {/* Orbiting & filling ring around the center circle during 3-second hold (no numeric timer) */}
-          {canCustomize && holdProgress > 0.005 && (
+          {canCenterHoldCustomize && holdProgress > 0.005 && (
             <g pointerEvents="none">
               <circle
                 cx={geo.cx}
@@ -680,7 +741,7 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
 
         {/* Center Hub Mark: strictly mutually exclusive (m OR solid gear — NEVER overlapped) */}
         <div
-          data-customizable={canCustomize ? 'true' : 'false'}
+          data-customizable={canCenterHoldCustomize ? 'true' : 'false'}
           className="pointer-events-none absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center"
           style={{
             width: `${((geo.centerR * 1.65) / geo.size) * 100}%`,
@@ -839,6 +900,7 @@ export const WheelFab: React.FC<{
   hidden?: boolean;
   side?: WheelSidePref;
   iconStyle?: WheelIconStylePref;
+  expWheelBurnEffect?: boolean;
   onChangeSide?: (side: WheelSidePref) => void;
   onHoverChange?: (hover: boolean) => void;
   cloud?: React.ReactNode;
@@ -851,6 +913,7 @@ export const WheelFab: React.FC<{
   hidden = false,
   side = 'right',
   iconStyle = 'wheel',
+  expWheelBurnEffect = false,
   onChangeSide,
   onHoverChange,
   cloud,
@@ -900,11 +963,27 @@ export const WheelFab: React.FC<{
     setPreviewSide(side);
   }, [side]);
 
-  const isHeating = isPressing || isHovering;
+  const isHeating = expWheelBurnEffect && (isPressing || isHovering);
 
   useEffect(() => {
     heatingActiveRef.current = isHeating && phaseRef.current === 'idle';
   }, [isHeating]);
+
+  useEffect(() => {
+    if (!expWheelBurnEffect) {
+      hoverMsRef.current = 0;
+      spinDegRef.current = 0;
+      heatingActiveRef.current = false;
+      phaseRef.current = 'idle';
+      setPhase('idle');
+      setHeat(0);
+      setBurnLevel(0);
+      setSpinDeg(0);
+      setEmbers([]);
+      setAshFlakes([]);
+      setAshProgress(0);
+    }
+  }, [expWheelBurnEffect]);
 
   useEffect(() => {
     return () => {
@@ -913,6 +992,7 @@ export const WheelFab: React.FC<{
   }, []);
 
   useEffect(() => {
+    if (!expWheelBurnEffect) return;
     if (phase === 'idle' && !isHeating && hoverMsRef.current <= 0) return;
 
     const prefersReducedMotion =
@@ -1111,7 +1191,7 @@ export const WheelFab: React.FC<{
     return () => {
       if (rafId) window.cancelAnimationFrame(rafId);
     };
-  }, [isHeating, phase]);
+  }, [expWheelBurnEffect, isHeating, phase]);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     if (phaseRef.current !== 'idle') return;

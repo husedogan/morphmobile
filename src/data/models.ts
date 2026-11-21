@@ -204,6 +204,8 @@ export interface Prefs {
   reducedMotion?: boolean;
   hapticsEnabled?: boolean;
   showIntegratedEngines?: boolean;
+  /** Defaults to false (icon-first compact tool UI); set true to show verbose tool descriptions & button labels */
+  showToolLabels?: boolean;
   lastEngineAction?: 'update' | 'manage';
   lastEngineSegment?: 'ffmpeg' | 'office' | 'link' | null;
   downloadEngine?: DownloadEngineId;
@@ -216,6 +218,53 @@ export interface Prefs {
   cobaltApiKey?: string;
   quickEnginePicker?: boolean;
   wheelConfig?: WheelConfigPrefs;
+  videoEditorSizing?: Partial<VideoEditorSizingPrefs>;
+  // Experimental / reversible UI flags
+  expSpinningGear?: boolean;
+  expWheelBurnEffect?: boolean;
+  /** Defaults to true (Armadillo Reel ON); set false to use flat StudioDock in portrait */
+  expArmadilloReel?: boolean;
+  expDualRingWheel?: boolean;
+  expWheelCenterHoldCustomize?: boolean;
+  expTouchTooltips?: boolean;
+  expDevCloudEasterEgg?: boolean;
+  expLegacySliders?: boolean;
+}
+
+export interface VideoEditorSizingPrefs {
+  dockTabHeight: number;
+  controlBtnSize: number;
+  colorSwatchSize: number;
+  watermarkGridHeight: number;
+}
+
+export const VE_SIZING_BOUNDS = {
+  dockTabHeight: {min: 36, max: 56, step: 2, def: 44},
+  controlBtnSize: {min: 28, max: 44, step: 2, def: 36},
+  colorSwatchSize: {min: 24, max: 40, step: 2, def: 32},
+  watermarkGridHeight: {min: 28, max: 48, step: 2, def: 40},
+} as const;
+
+export const DEFAULT_VE_SIZING: VideoEditorSizingPrefs = {
+  dockTabHeight: VE_SIZING_BOUNDS.dockTabHeight.def,
+  controlBtnSize: VE_SIZING_BOUNDS.controlBtnSize.def,
+  colorSwatchSize: VE_SIZING_BOUNDS.colorSwatchSize.def,
+  watermarkGridHeight: VE_SIZING_BOUNDS.watermarkGridHeight.def,
+};
+
+export function clampVideoEditorSizing(
+  raw?: Partial<VideoEditorSizingPrefs> | null
+): VideoEditorSizingPrefs {
+  const clamp = (val: unknown, b: {min: number; max: number; def: number}) => {
+    const n = typeof val === 'number' && Number.isFinite(val) ? Math.round(val) : b.def;
+    return Math.max(b.min, Math.min(b.max, n));
+  };
+  return {
+    dockTabHeight: clamp(raw?.dockTabHeight, VE_SIZING_BOUNDS.dockTabHeight),
+    controlBtnSize: clamp(raw?.controlBtnSize, VE_SIZING_BOUNDS.controlBtnSize),
+    colorSwatchSize: clamp(raw?.colorSwatchSize, VE_SIZING_BOUNDS.colorSwatchSize),
+    watermarkGridHeight: clamp(raw?.watermarkGridHeight, VE_SIZING_BOUNDS.watermarkGridHeight),
+  };
 }
 
 export const ENCODABLE_IMAGE_FORMATS = ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'ico', 'gif', 'svg'];

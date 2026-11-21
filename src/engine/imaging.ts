@@ -149,7 +149,26 @@ export async function compressImageBlob(
     if (!targetBytes) {
       const {canvas, ctx} = createCanvas(decoded.width, decoded.height, needsWhiteBackdrop(format));
       ctx.drawImage(decoded.bitmap, 0, 0);
-      const blob = await canvasToBlob(canvas, format, quality);
+      if (format === 'png' && quality < 96) {
+        // Quantize color channels proportionally to quality so PNG DEFLATE shrinks meaningfully while preserving alpha
+        const imgData = ctx.getImageData(0, 0, decoded.width, decoded.height);
+        const data = imgData.data;
+        const levels = Math.max(8, Math.min(64, Math.round(8 + ((quality - 35) / 65) * 56)));
+        const step = 255 / (levels - 1);
+        for (let i = 0; i < data.length; i += 4) {
+          data[i] = Math.round(Math.round(data[i] / step) * step);
+          data[i + 1] = Math.round(Math.round(data[i + 1] / step) * step);
+          data[i + 2] = Math.round(Math.round(data[i + 2] / step) * step);
+          if (data[i + 3] < 250 && data[i + 3] > 5) {
+            data[i + 3] = Math.round(Math.round(data[i + 3] / step) * step);
+          }
+        }
+        ctx.putImageData(imgData, 0, 0);
+      }
+      let blob = await canvasToBlob(canvas, format, quality);
+      if (!maxDim && file.size > 0 && blob.size > file.size && format === ext.toLowerCase()) {
+        blob = file;
+      }
       return {blob, format};
     }
 
@@ -188,6 +207,9 @@ export async function compressImageBlob(
       const {canvas, ctx} = createCanvas(decoded.width, decoded.height, needsWhiteBackdrop(encodeFmt));
       ctx.drawImage(decoded.bitmap, 0, 0);
       bestBlob = await canvasToBlob(canvas, encodeFmt, quality);
+    }
+    if (!maxDim && file.size > 0 && bestBlob.size >= file.size && encodeFmt === normalizeImageFormat(ext)) {
+      bestBlob = file;
     }
     return {blob: bestBlob, format: encodeFmt};
   } finally {

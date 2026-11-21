@@ -52,7 +52,7 @@ export const StudioDock: React.FC<StudioDockProps> = ({
   ];
 
   return (
-    <nav className="pb-safe no-scrollbar flex shrink-0 items-center justify-between gap-0.5 overflow-x-auto border-t border-white/[0.08] bg-[#0B0B0E] px-1 pt-1.5">
+    <nav className="pb-safe no-scrollbar flex shrink-0 items-center justify-between gap-0.5 overflow-x-auto border-t border-white/[0.08] bg-[#0B0B0E] px-1.5 pt-1">
       {items.map((tab) => {
         const Icon = tab.icon;
         const isHighlighted = activeTab === tab.id && (!isPortraitMode || isInspectorOpen);
@@ -61,20 +61,20 @@ export const StudioDock: React.FC<StudioDockProps> = ({
             key={tab.id}
             type="button"
             onClick={() => onSelectTab(tab.id)}
-            className={`group relative flex min-h-[46px] min-w-[44px] flex-1 flex-col items-center justify-center gap-1 rounded-lg px-0.5 py-1 text-[10px] font-semibold transition-colors ${
+            className={`group relative flex min-h-[var(--ve-dock-h,44px)] min-w-[40px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[length:var(--ve-dock-font,10px)] font-semibold transition-colors ${
               isHighlighted
-                ? 'bg-[#F43F5E]/16 text-[#FB7185]'
-                : 'text-white/55 hover:bg-white/[0.05] hover:text-white'
+                ? 'bg-[#F43F5E]/18 text-[#FB7185]'
+                : 'text-white/60 hover:bg-white/[0.06] hover:text-white'
             }`}
           >
             <Icon
-              className={`h-[17px] w-[17px] transition-transform group-active:scale-90 ${
+              className={`h-[var(--ve-dock-icon,16px)] w-[var(--ve-dock-icon,16px)] shrink-0 transition-transform group-active:scale-90 ${
                 isHighlighted ? 'text-[#FB7185]' : ''
               }`}
             />
             <span className="max-w-full truncate leading-none">{tab.label}</span>
             {tab.badge && !isHighlighted && (
-              <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#34D399]" />
+              <span className="absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-[#34D399]" />
             )}
           </button>
         );

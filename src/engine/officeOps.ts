@@ -222,7 +222,24 @@ export async function extractDocumentText(file: PickedFile): Promise<string> {
     return xml.replace(/<[^>]+>/g, ' ').trim();
   }
 
-  if (ext === 'xlsx' || ext === 'pptx' || ext === 'doc' || ext === 'xls' || ext === 'ppt') {
+  if (ext === 'doc' || ext === 'xls' || ext === 'ppt') {
+    const headBytes = new Uint8Array(await file.file.slice(0, 8).arrayBuffer());
+    const isZipContainer = headBytes[0] === 0x50 && headBytes[1] === 0x4b;
+    const isOleBinary =
+      headBytes.length >= 4 &&
+      headBytes[0] === 0xd0 &&
+      headBytes[1] === 0xcf &&
+      headBytes[2] === 0x11 &&
+      headBytes[3] === 0xe0;
+    if (isOleBinary || !isZipContainer) {
+      const modernExt = ext === 'doc' ? '.docx' : ext === 'xls' ? '.xlsx' : '.pptx';
+      throw new Error(
+        `Eski ikili Office biçimi (.${ext}) cihaz içinde doğrudan ayrıştırılamıyor. Lütfen dosyayı ${modernExt} veya PDF olarak kaydedip tekrar deneyin.`
+      );
+    }
+  }
+
+  if (ext === 'xlsx' || ext === 'pptx') {
     if (ext === 'xlsx') {
       const rows = await extractXlsxRows(file.file);
       if (rows.length > 0) {

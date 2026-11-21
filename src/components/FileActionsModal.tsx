@@ -57,6 +57,12 @@ export const FileActionsModal: React.FC<FileActionsModalProps> = ({
   const [info, setInfo] = useState<InspectedFileInfo | null>(null);
   const [loadingInfo, setLoadingInfo] = useState(false);
 
+  useEffect(() => {
+    if (open) {
+      setInspectIdx(0);
+    }
+  }, [open, files.length]);
+
   const activeFile = files[Math.min(inspectIdx, Math.max(0, files.length - 1))] ?? null;
 
   useEffect(() => {
@@ -111,6 +117,9 @@ export const FileActionsModal: React.FC<FileActionsModalProps> = ({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={t('FileActionsTitle', lang)}
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-4"
       onClick={onClose}
     >
@@ -131,7 +140,7 @@ export const FileActionsModal: React.FC<FileActionsModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label={t('Close', lang)}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]"
           >
             <X className="h-4 w-4" />
           </button>
@@ -213,7 +222,7 @@ export const FileActionsModal: React.FC<FileActionsModalProps> = ({
                 className="flex min-h-[48px] items-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3 text-left text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
               >
                 <FileCheck2 className="h-4 w-4 shrink-0 text-[var(--accent)]" />
-                <span className="truncate">SHA-256 Raporu</span>
+                <span className="truncate">{lang === 'tr' ? 'SHA-256 Raporu' : 'SHA-256 Report'}</span>
               </button>
             </div>
           </div>
@@ -279,7 +288,7 @@ export const FileActionsModal: React.FC<FileActionsModalProps> = ({
                       key={f.id}
                       type="button"
                       onClick={() => setInspectIdx(idx)}
-                      className={`min-h-[36px] max-w-[165px] shrink-0 truncate rounded-xl border px-3 text-xs font-semibold transition-colors ${
+                      className={`min-h-[40px] max-w-[165px] shrink-0 truncate rounded-xl border px-3 text-xs font-semibold transition-colors ${
                         active
                           ? 'border-[var(--accent)] bg-[var(--accent)]/18 text-[var(--ink)]'
                           : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
@@ -322,7 +331,7 @@ export const FileActionsModal: React.FC<FileActionsModalProps> = ({
                     <button
                       type="button"
                       onClick={() => copyText(info.sha256)}
-                      className="flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--ink)] whitespace-nowrap transition-colors hover:border-[var(--accent)]"
+                      className="flex min-h-[42px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--ink)] whitespace-nowrap transition-colors hover:border-[var(--accent)]"
                     >
                       <ClipboardCopy className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
                       <span>{t('CopySha256', lang)}</span>
@@ -330,7 +339,7 @@ export const FileActionsModal: React.FC<FileActionsModalProps> = ({
                     <button
                       type="button"
                       onClick={handleCopyDataUrl}
-                      className="flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--ink)] whitespace-nowrap transition-colors hover:border-[var(--accent)]"
+                      className="flex min-h-[42px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--ink)] whitespace-nowrap transition-colors hover:border-[var(--accent)]"
                     >
                       <Code2 className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
                       <span>{t('CopyDataUrl', lang)}</span>
@@ -348,7 +357,7 @@ export const FileActionsModal: React.FC<FileActionsModalProps> = ({
               onClose();
               onClearFiles();
             }}
-            className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-full border border-[var(--line)] bg-[var(--inset)] px-4 text-xs font-semibold text-[var(--accent)] transition-colors hover:border-[var(--accent)]"
+            className="flex min-h-[46px] w-full items-center justify-center gap-2 rounded-2xl border border-[var(--danger)]/35 bg-[var(--danger)]/10 px-4 text-xs font-bold text-[var(--danger)] transition-colors hover:border-[var(--danger)]"
           >
             <Trash2 className="h-4 w-4" />
             <span>{t('Clear', lang)}</span>

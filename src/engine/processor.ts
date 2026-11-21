@@ -199,9 +199,13 @@ export async function runLocalTool(
           const blob = await optimizeOrStripPdfBlob(files[i].file);
           outputs.push({name: `${files[i].baseName}-clean.pdf`, blob});
         } else {
-          const candidateFmt = ENCODABLE_IMAGE_FORMATS.includes(files[i].ext)
-            ? normalizeImageFormat(files[i].ext)
-            : opts.format;
+          const requestedFmt = opts.format ? normalizeImageFormat(opts.format) : '';
+          const candidateFmt =
+            requestedFmt && ENCODABLE_IMAGE_FORMATS.includes(requestedFmt)
+              ? requestedFmt
+              : ENCODABLE_IMAGE_FORMATS.includes(files[i].ext)
+                ? normalizeImageFormat(files[i].ext)
+                : 'jpg';
           const fmt = ['ico', 'svg'].includes(candidateFmt) ? 'png' : candidateFmt;
           const blob = await convertImageBlob(files[i].file, fmt, opts.quality);
           outputs.push({name: `${files[i].baseName}-clean.${fmt}`, blob});
@@ -546,7 +550,9 @@ export async function runLocalTool(
 
     case 'PDF_OPTIMIZE': {
       onProgress(0.35, files[0].name);
-      const blob = await optimizeOrStripPdfBlob(files[0].file);
+      const optimized = await optimizeOrStripPdfBlob(files[0].file);
+      const blob =
+        files[0].size > 0 && optimized.size >= files[0].size ? files[0].file : optimized;
       outputs.push({name: `${files[0].baseName}-optimized.pdf`, blob});
       break;
     }
