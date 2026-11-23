@@ -261,9 +261,9 @@ export const EXP_WHEEL_SHAPES: readonly WheelShapeMeta[] = [
   {
     id: 'star_prism',
     titleTr: 'Yıldız',
-    titleEn: 'Star Prism',
-    descTr: '4 köşeli yıldız',
-    descEn: '4-point star',
+    titleEn: 'Star Orbit',
+    descTr: 'Yıldız & yörünge',
+    descEn: 'Star & orbit core',
   },
 ] as const;
 

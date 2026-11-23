@@ -1348,6 +1348,7 @@ export const WheelFab: React.FC<{
   const spinDegRef = useRef(0);
   const idleSpinRef = useRef({outer: 0, inner: 0, elapsedSec: 0});
   const heatingActiveRef = useRef(false);
+  const innerBurnDirRef = useRef<1 | -1>(1);
   const phaseRef = useRef<WheelPhase>('idle');
   const vibrated15Ref = useRef(false);
   const onHoverChangeRef = useRef(onHoverChange);
@@ -1367,7 +1368,18 @@ export const WheelFab: React.FC<{
     setPreviewSide(side);
   }, [side]);
 
-  const isHeating = expWheelBurnEffect && (isPressing || isHovering);
+  const isHeating =
+    expWheelBurnEffect &&
+    (expWheelSpinEnabled && expWheelSpinTrigger === 'press'
+      ? isPressing
+      : isPressing || isHovering);
+
+  // Keep burn acceleration direction strictly aligned with the selected dual-layer spin mode's inner direction
+  innerBurnDirRef.current =
+    expWheelSpinEnabled &&
+    (expWheelSpinMode === 'both_ccw' || expWheelSpinMode === 'outer_cw_inner_ccw')
+      ? -1
+      : 1;
 
   useEffect(() => {
     heatingActiveRef.current = isHeating && phaseRef.current === 'idle';
@@ -1396,11 +1408,11 @@ export const WheelFab: React.FC<{
   }, []);
 
   // Independent dual-layer rotation loop (outer button shell + inner icon artwork)
-  // Supports 'always' (continuous) OR 'press' (spins while pressing/hovering, smoothly settles upright on release)
+  // Supports 'always' (continuous) OR 'press' (spins strictly while pressed, smoothly settles upright on release)
   const spinActiveNow =
     expWheelSpinEnabled &&
     !hidden &&
-    (expWheelSpinTrigger === 'always' || isPressing || isHovering);
+    (expWheelSpinTrigger === 'always' || isPressing);
   const spinActiveRef = useRef<boolean>(spinActiveNow);
   spinActiveRef.current = spinActiveNow;
 
@@ -1568,7 +1580,8 @@ export const WheelFab: React.FC<{
           const speedDegPerSec =
             (36 + Math.pow(nextHeat, 2.15) * 1600 + Math.pow(nextBurn, 1.3) * 900) *
             (1 - nextChar * 0.48);
-          spinDegRef.current = (spinDegRef.current + speedDegPerSec * dtSec) % 360;
+          spinDegRef.current =
+            (spinDegRef.current + innerBurnDirRef.current * speedDegPerSec * dtSec) % 360;
           setSpinDeg(spinDegRef.current);
 
           // Spawn rising sparks cleanly visible above fingertip, intensifying after 15s into ash flakes
@@ -1881,7 +1894,7 @@ export const WheelFab: React.FC<{
     }
   }
 
-  const rainbowHueA = Math.round((spinDeg * 1.4) % 360);
+  const rainbowHueA = ((Math.round(Math.abs(spinDeg) * 1.4) % 360) + 360) % 360;
   const rainbowHueB = (rainbowHueA + 130) % 360;
   const baseGradStart = burnTheme.isRainbow
     ? `color-mix(in srgb, hsl(${rainbowHueA} 92% 58%) ${Math.round(emberRatio * 100)}%, var(--accent))`
@@ -1895,12 +1908,6 @@ export const WheelFab: React.FC<{
       } ${Math.round(emberRatio * 100)}%, var(--accent-end))`;
 
   // Shape geometry for both classic circular & 6 new non-circular designs
-  const isCircularShape =
-    iconStyle === 'wheel' ||
-    iconStyle === 'morph' ||
-    iconStyle === 'gear' ||
-    iconStyle === 'compass' ||
-    iconStyle === 'hex';
 
   const shapeShellClass =
     iconStyle === 'squircle'
@@ -1978,170 +1985,486 @@ export const WheelFab: React.FC<{
           ? 'rounded-[2px] rotate-45'
           : 'rounded-full';
 
+  interface PerimeterSample {
+    x: number;
+    y: number;
+    nx: number;
+    ny: number;
+  }
+
+  const getCoronaGeometry = () => {
+    const vbW = iconStyle === 'pill_dock' ? 114 : 96;
+    const vbH = iconStyle === 'pill_dock' ? 84 : 96;
+    const cx = vbW / 2;
+    const cy = vbH / 2;
+
+    const samplePolygon = (verts: Array<[number, number]>, count: number): PerimeterSample[] => {
+      const n = verts.length;
+      const edgeLens: number[] = [];
+      let totalLen = 0;
+      for (let i = 0; i < n; i++) {
+        const [x1, y1] = verts[i];
+        const [x2, y2] = verts[(i + 1) % n];
+        const l = Math.hypot(x2 - x1, y2 - y1);
+        edgeLens.push(l);
+        totalLen += l;
+      }
+      const out: PerimeterSample[] = [];
+      for (let k = 0; k < count; k++) {
+        let dist = (k / count) * totalLen;
+        let edgeIdx = 0;
+        while (edgeIdx < n - 1 && dist > edgeLens[edgeIdx]) {
+          dist -= edgeLens[edgeIdx];
+          edgeIdx++;
+        }
+        const [x1, y1] = verts[edgeIdx];
+        const [x2, y2] = verts[(edgeIdx + 1) % n];
+        const len = Math.max(0.001, edgeLens[edgeIdx]);
+        const frac = Math.min(1, Math.max(0, dist / len));
+        const x = x1 + (x2 - x1) * frac;
+        const y = y1 + (y2 - y1) * frac;
+        // Clockwise polygon in SVG Y-down coords -> outward normal is (dy/len, -dx/len)
+        let nx = (y2 - y1) / len;
+        let ny = -(x2 - x1) / len;
+        // Blend smoothly at sharp vertices so corner flames point directly off the tip
+        if (frac < 0.06 || frac > 0.94) {
+          const adjIdx = frac < 0.06 ? (edgeIdx - 1 + n) % n : (edgeIdx + 1) % n;
+          const [ax1, ay1] = verts[adjIdx];
+          const [ax2, ay2] = verts[(adjIdx + 1) % n];
+          const alen = Math.max(0.001, edgeLens[adjIdx]);
+          const anx = (ay2 - ay1) / alen;
+          const any = -(ax2 - ax1) / alen;
+          const bx = nx + anx;
+          const by = ny + any;
+          const blen = Math.hypot(bx, by);
+          if (blen > 0.001) {
+            nx = bx / blen;
+            ny = by / blen;
+          }
+        }
+        out.push({x: cx + x, y: cy + y, nx, ny});
+      }
+      return out;
+    };
+
+    const sampleRoundedRect = (hw: number, hh: number, rRaw: number, count: number): PerimeterSample[] => {
+      const r = Math.min(rRaw, hw, hh);
+      const topLen = Math.max(0, 2 * (hw - r));
+      const sideLen = Math.max(0, 2 * (hh - r));
+      const arcLen = (Math.PI / 2) * r;
+      const segs = [
+        {kind: 'line' as const, len: topLen, x1: -hw + r, y1: -hh, x2: hw - r, y2: -hh, nx: 0, ny: -1},
+        {kind: 'arc' as const, len: arcLen, ax: hw - r, ay: -hh + r, a0: -Math.PI / 2, a1: 0},
+        {kind: 'line' as const, len: sideLen, x1: hw, y1: -hh + r, x2: hw, y2: hh - r, nx: 1, ny: 0},
+        {kind: 'arc' as const, len: arcLen, ax: hw - r, ay: hh - r, a0: 0, a1: Math.PI / 2},
+        {kind: 'line' as const, len: topLen, x1: hw - r, y1: hh, x2: -hw + r, y2: hh, nx: 0, ny: 1},
+        {kind: 'arc' as const, len: arcLen, ax: -hw + r, ay: hh - r, a0: Math.PI / 2, a1: Math.PI},
+        {kind: 'line' as const, len: sideLen, x1: -hw, y1: hh - r, x2: -hw, y2: -hh + r, nx: -1, ny: 0},
+        {kind: 'arc' as const, len: arcLen, ax: -hw + r, ay: -hh + r, a0: Math.PI, a1: 1.5 * Math.PI},
+      ];
+      const totalLen = segs.reduce((s, g) => s + g.len, 0);
+      const out: PerimeterSample[] = [];
+      for (let k = 0; k < count; k++) {
+        let dist = (k / count) * totalLen;
+        let seg = segs[0];
+        for (let i = 0; i < segs.length; i++) {
+          if (dist <= segs[i].len || i === segs.length - 1) {
+            seg = segs[i];
+            break;
+          }
+          dist -= segs[i].len;
+        }
+        const frac = seg.len > 0.001 ? Math.min(1, Math.max(0, dist / seg.len)) : 0;
+        if (seg.kind === 'line') {
+          out.push({
+            x: cx + seg.x1 + (seg.x2 - seg.x1) * frac,
+            y: cy + seg.y1 + (seg.y2 - seg.y1) * frac,
+            nx: seg.nx,
+            ny: seg.ny,
+          });
+        } else {
+          const ang = seg.a0 + (seg.a1 - seg.a0) * frac;
+          const cos = Math.cos(ang);
+          const sin = Math.sin(ang);
+          out.push({
+            x: cx + seg.ax + r * cos,
+            y: cy + seg.ay + r * sin,
+            nx: cos,
+            ny: sin,
+          });
+        }
+      }
+      return out;
+    };
+
+    const buildRoundedRectPath = (hw: number, hh: number, rRaw: number) => {
+      const r = Math.min(rRaw, hw, hh);
+      const x0 = cx - hw;
+      const x1 = cx + hw;
+      const y0 = cy - hh;
+      const y1 = cy + hh;
+      return `M ${x0 + r} ${y0} L ${x1 - r} ${y0} A ${r} ${r} 0 0 1 ${x1} ${y0 + r} L ${x1} ${y1 - r} A ${r} ${r} 0 0 1 ${x1 - r} ${y1} L ${x0 + r} ${y1} A ${r} ${r} 0 0 1 ${x0} ${y1 - r} L ${x0} ${y0 + r} A ${r} ${r} 0 0 1 ${x0 + r} ${y0} Z`;
+    };
+
+    const buildPolygonPath = (verts: Array<[number, number]>, scale = 1) =>
+      verts
+        .map(([vx, vy], i) => `${i === 0 ? 'M' : 'L'} ${(cx + vx * scale).toFixed(2)} ${(cy + vy * scale).toFixed(2)}`)
+        .join(' ') + ' Z';
+
+    const starVerts: Array<[number, number]> = [
+      [0, -29.8],
+      [10.5, -10.5],
+      [29.8, 0],
+      [10.5, 10.5],
+      [0, 29.8],
+      [-10.5, 10.5],
+      [-29.8, 0],
+      [-10.5, -10.5],
+    ];
+    const octaVerts: Array<[number, number]> = [
+      [-12.2, -27.8],
+      [12.2, -27.8],
+      [27.8, -12.2],
+      [27.8, 12.2],
+      [12.2, 27.8],
+      [-12.2, 27.8],
+      [-27.8, 12.2],
+      [-27.8, -12.2],
+    ];
+    const hexVerts: Array<[number, number]> = [
+      [-15.0, -24.8],
+      [15.0, -24.8],
+      [29.4, 0],
+      [15.0, 24.8],
+      [-15.0, 24.8],
+      [-29.4, 0],
+    ];
+
+    const sample = (count: number): PerimeterSample[] => {
+      switch (iconStyle) {
+        case 'star_prism':
+          return samplePolygon(starVerts, count);
+        case 'octa_shield':
+          return samplePolygon(octaVerts, count);
+        case 'blade_hex':
+          return samplePolygon(hexVerts, count);
+        case 'squircle':
+          return sampleRoundedRect(27.5, 27.5, 17.5, count);
+        case 'diamond':
+          return sampleRoundedRect(24.5, 24.5, 13.5, count);
+        case 'pill_dock':
+          return sampleRoundedRect(38.5, 23.5, 23.5, count);
+        default:
+          return Array.from({length: count}, (_, k) => {
+            const ang = (k / count) * Math.PI * 2;
+            const cos = Math.cos(ang);
+            const sin = Math.sin(ang);
+            return {x: cx + 27.5 * cos, y: cy + 27.5 * sin, nx: cos, ny: sin};
+          });
+      }
+    };
+
+    const contourPath = (inflatePx = 0): string => {
+      switch (iconStyle) {
+        case 'star_prism':
+          return buildPolygonPath(starVerts, 1 + inflatePx / 29.8);
+        case 'octa_shield':
+          return buildPolygonPath(octaVerts, 1 + inflatePx / 27.8);
+        case 'blade_hex':
+          return buildPolygonPath(hexVerts, 1 + inflatePx / 27.0);
+        case 'squircle':
+          return buildRoundedRectPath(27.5 + inflatePx, 27.5 + inflatePx, 17.5 + inflatePx * 0.65);
+        case 'diamond':
+          return buildRoundedRectPath(24.5 + inflatePx, 24.5 + inflatePx, 13.5 + inflatePx * 0.65);
+        case 'pill_dock':
+          return buildRoundedRectPath(38.5 + inflatePx, 23.5 + inflatePx, 23.5 + inflatePx);
+        default: {
+          const r = 27.5 + inflatePx;
+          return `M ${cx - r} ${cy} A ${r} ${r} 0 1 0 ${cx + r} ${cy} A ${r} ${r} 0 1 0 ${cx - r} ${cy} Z`;
+        }
+      }
+    };
+
+    return {vbW, vbH, cx, cy, sample, contourPath};
+  };
+
+  const renderShapeHeatAura = () => {
+    if (!(heat > 0.32 && phase === 'idle' && flameFade > 0.05)) return null;
+    const {vbW, vbH, contourPath} = getCoronaGeometry();
+    const auraOpacity = Math.min(1, (heat - 0.32) * 1.55 + burnLevel * 0.22) * flameFade;
+    const glowColorA = burnTheme.isRainbow ? `hsl(${rainbowHueA} 95% 60%)` : burnTheme.coronaFillA;
+    const glowColorB = burnTheme.isRainbow ? `hsl(${rainbowHueB} 92% 54%)` : burnTheme.coronaFillB;
+
+    return (
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute left-1/2 top-1/2"
+        style={{
+          width: `${vbW}px`,
+          height: `${vbH}px`,
+          transform: `translate(-50%, -50%) rotate(${baseOuterRot.toFixed(1)}deg) scale(${effectiveBtnScale.toFixed(3)})`,
+          opacity: auraOpacity,
+        }}
+      >
+        <svg
+          className={`h-full w-full overflow-visible ${isBlazing ? 'morph-flame-flicker' : ''}`}
+          viewBox={`0 0 ${vbW} ${vbH}`}
+          fill="none"
+          style={{filter: 'blur(6px)'}}
+        >
+          <path
+            d={contourPath(2.5)}
+            stroke={glowColorA}
+            strokeWidth="7"
+            strokeLinejoin="round"
+            strokeOpacity="0.88"
+          />
+          <path
+            d={contourPath(5)}
+            stroke={glowColorB}
+            strokeWidth="4.5"
+            strokeLinejoin="round"
+            strokeOpacity="0.55"
+          />
+        </svg>
+      </div>
+    );
+  };
+
   const renderBurnCorona = () => {
     if (!isBlazing) return null;
     const fillA = burnTheme.isRainbow ? `hsl(${rainbowHueA} 95% 60%)` : burnTheme.coronaFillA;
     const fillB = burnTheme.isRainbow ? `hsl(${rainbowHueB} 95% 58%)` : burnTheme.coronaFillB;
+    const {vbW, vbH, sample, contourPath} = getCoronaGeometry();
+    const dashSpinOffset = -(spinDeg * 0.35);
 
     return (
-      <svg
+      <div
         aria-hidden="true"
-        className="morph-flame-flicker pointer-events-none absolute left-1/2 top-1/2 h-[82px] w-[82px] -translate-x-1/2 -translate-y-1/2"
-        viewBox="0 0 72 72"
-        fill="none"
-        style={{opacity: flameFade}}
+        className="pointer-events-none absolute left-1/2 top-1/2"
+        style={{
+          width: `${vbW}px`,
+          height: `${vbH}px`,
+          transform: `translate(-50%, -50%) rotate(${baseOuterRot.toFixed(1)}deg) scale(${effectiveBtnScale.toFixed(3)})`,
+          opacity: flameFade,
+        }}
       >
-        {burnTheme.coronaKind === 'plasma' && (
-          <>
-            <circle cx="36" cy="36" r="32" stroke={fillA} strokeWidth="2.4" strokeDasharray="10 6" strokeOpacity="0.92" />
-            <circle cx="36" cy="36" r="28" stroke={fillB} strokeWidth="1.6" strokeDasharray="5 8" strokeOpacity="0.82" />
-            {Array.from({length: 8}).map((_, idx) => {
-              const a = ((idx * 45 + spinDeg * 0.6) * Math.PI) / 180;
-              return (
+        <svg
+          className="morph-flame-flicker h-full w-full overflow-visible"
+          viewBox={`0 0 ${vbW} ${vbH}`}
+          fill="none"
+        >
+          {burnTheme.coronaKind === 'plasma' && (
+            <>
+              <path
+                d={contourPath(4.5)}
+                stroke={fillA}
+                strokeWidth="2.4"
+                strokeDasharray="10 6"
+                strokeDashoffset={dashSpinOffset}
+                strokeLinejoin="round"
+                strokeOpacity="0.95"
+              />
+              <path
+                d={contourPath(1.5)}
+                stroke={fillB}
+                strokeWidth="1.6"
+                strokeDasharray="5 8"
+                strokeDashoffset={-dashSpinOffset * 0.8}
+                strokeLinejoin="round"
+                strokeOpacity="0.85"
+              />
+              {sample(8).map((pt, idx) => (
                 <circle
                   key={idx}
-                  cx={36 + 32.5 * Math.cos(a)}
-                  cy={36 + 32.5 * Math.sin(a)}
-                  r={idx % 2 === 0 ? 2.4 : 1.6}
+                  cx={pt.x + pt.nx * 5.2}
+                  cy={pt.y + pt.ny * 5.2}
+                  r={idx % 2 === 0 ? 2.4 : 1.7}
                   fill={idx % 2 === 0 ? '#FFFFFF' : fillA}
+                />
+              ))}
+            </>
+          )}
+
+          {burnTheme.coronaKind === 'acid' && (
+            <>
+              <path
+                d={contourPath(2)}
+                stroke={fillB}
+                strokeWidth="2"
+                strokeLinejoin="round"
+                strokeOpacity="0.72"
+              />
+              {sample(12).map((pt, idx) => {
+                const offset = idx % 2 === 0 ? 5.8 : 3.6;
+                return (
+                  <circle
+                    key={idx}
+                    cx={pt.x + pt.nx * offset}
+                    cy={pt.y + pt.ny * offset}
+                    r={idx % 3 === 0 ? 3.3 : 2.2}
+                    fill={idx % 2 === 0 ? fillA : fillB}
+                    fillOpacity="0.9"
+                  />
+                );
+              })}
+            </>
+          )}
+
+          {burnTheme.coronaKind === 'void' && (
+            <>
+              <path
+                d={contourPath(5)}
+                stroke={fillA}
+                strokeWidth="2.8"
+                strokeDasharray="16 9"
+                strokeDashoffset={dashSpinOffset}
+                strokeLinejoin="round"
+                strokeOpacity="0.92"
+              />
+              <path
+                d={contourPath(2)}
+                stroke={fillB}
+                strokeWidth="1.7"
+                strokeDasharray="7 10"
+                strokeDashoffset={-dashSpinOffset * 0.7}
+                strokeLinejoin="round"
+                strokeOpacity="0.85"
+              />
+            </>
+          )}
+
+          {burnTheme.coronaKind === 'solar' &&
+            sample(16).map((pt, idx) => {
+              const rayLen = idx % 2 === 0 ? 9.5 : 5.8;
+              return (
+                <line
+                  key={idx}
+                  x1={pt.x + pt.nx * 0.5}
+                  y1={pt.y + pt.ny * 0.5}
+                  x2={pt.x + pt.nx * rayLen}
+                  y2={pt.y + pt.ny * rayLen}
+                  stroke={idx % 2 === 0 ? fillB : fillA}
+                  strokeWidth={idx % 2 === 0 ? '2.4' : '1.5'}
+                  strokeLinecap="round"
                 />
               );
             })}
-          </>
-        )}
 
-        {burnTheme.coronaKind === 'acid' &&
-          Array.from({length: 12}).map((_, idx) => {
-            const a = ((idx * 30 + spinDeg * 0.4) * Math.PI) / 180;
-            const r = idx % 2 === 0 ? 32.5 : 30.2;
-            return (
-              <circle
-                key={idx}
-                cx={36 + r * Math.cos(a)}
-                cy={36 + r * Math.sin(a)}
-                r={idx % 3 === 0 ? 3.4 : 2.3}
-                fill={idx % 2 === 0 ? fillA : fillB}
-                fillOpacity="0.88"
-              />
-            );
-          })}
-
-        {burnTheme.coronaKind === 'void' && (
-          <>
-            <circle cx="36" cy="36" r="33" stroke={fillA} strokeWidth="2.8" strokeDasharray="18 10" strokeOpacity="0.9" />
-            <circle cx="36" cy="36" r="29.5" stroke={fillB} strokeWidth="1.6" strokeDasharray="7 11" strokeOpacity="0.85" />
-          </>
-        )}
-
-        {burnTheme.coronaKind === 'solar' &&
-          Array.from({length: 16}).map((_, idx) => {
-            const a = (idx * 22.5 * Math.PI) / 180;
-            const r1 = 27;
-            const r2 = idx % 2 === 0 ? 36 : 31.8;
-            return (
-              <line
-                key={idx}
-                x1={36 + r1 * Math.cos(a)}
-                y1={36 + r1 * Math.sin(a)}
-                x2={36 + r2 * Math.cos(a)}
-                y2={36 + r2 * Math.sin(a)}
-                stroke={idx % 2 === 0 ? fillB : fillA}
-                strokeWidth={idx % 2 === 0 ? '2.4' : '1.5'}
-                strokeLinecap="round"
-              />
-            );
-          })}
-
-        {burnTheme.coronaKind === 'frost' &&
-          Array.from({length: 6}).map((_, idx) => {
-            const a = ((idx * 60) * Math.PI) / 180;
-            const x1 = 36 + 26 * Math.cos(a);
-            const y1 = 36 + 26 * Math.sin(a);
-            const x2 = 36 + 35.5 * Math.cos(a);
-            const y2 = 36 + 35.5 * Math.sin(a);
-            const bA1 = a - 0.25;
-            const bA2 = a + 0.25;
-            return (
-              <g key={idx} stroke={idx % 2 === 0 ? fillA : fillB} strokeWidth="2" strokeLinecap="round">
-                <line x1={x1} y1={y1} x2={x2} y2={y2} />
-                <line x1={36 + 31 * Math.cos(a)} y1={36 + 31 * Math.sin(a)} x2={36 + 34 * Math.cos(bA1)} y2={36 + 34 * Math.sin(bA1)} />
-                <line x1={36 + 31 * Math.cos(a)} y1={36 + 31 * Math.sin(a)} x2={36 + 34 * Math.cos(bA2)} y2={36 + 34 * Math.sin(bA2)} />
-              </g>
-            );
-          })}
-
-        {burnTheme.coronaKind === 'glitch' &&
-          Array.from({length: 10}).map((_, idx) => {
-            const a = ((idx * 36) * Math.PI) / 180;
-            const x = 36 + 31.5 * Math.cos(a);
-            const y = 36 + 31.5 * Math.sin(a);
-            return (
-              <rect
-                key={idx}
-                x={x - 3.2}
-                y={y - 1.6}
-                width={idx % 2 === 0 ? 7.5 : 5}
-                height="3"
-                fill={idx % 2 === 0 ? fillA : fillB}
-                fillOpacity="0.92"
-              />
-            );
-          })}
-
-        {burnTheme.coronaKind === 'lightning' &&
-          Array.from({length: 8}).map((_, idx) => {
-            const a = ((idx * 45) * Math.PI) / 180;
-            const aMid = ((idx * 45 + 11) * Math.PI) / 180;
-            const x1 = 36 + 26.5 * Math.cos(a);
-            const y1 = 36 + 26.5 * Math.sin(a);
-            const xm = 36 + 31.5 * Math.cos(aMid);
-            const ym = 36 + 31.5 * Math.sin(aMid);
-            const x2 = 36 + 35.8 * Math.cos(a);
-            const y2 = 36 + 35.8 * Math.sin(a);
-            return (
-              <polyline
-                key={idx}
-                points={`${x1},${y1} ${xm},${ym} ${x2},${y2}`}
-                stroke={idx % 2 === 0 ? fillA : fillB}
-                strokeWidth="2.1"
-                strokeLinejoin="miter"
-                strokeLinecap="round"
-              />
-            );
-          })}
-
-        {(burnTheme.coronaKind === 'flame' ||
-          burnTheme.coronaKind === 'magma' ||
-          burnTheme.coronaKind === 'sakura' ||
-          burnTheme.coronaKind === 'prism') &&
-          Array.from({length: 12}).map((_, idx) => {
-            const baseAngle = idx * 30;
-            const rad1 = ((baseAngle - 10) * Math.PI) / 180;
-            const radTip = (baseAngle * Math.PI) / 180;
-            const rad2 = ((baseAngle + 10) * Math.PI) / 180;
-            const rBase = 27.5;
-            const rTip = idx % 2 === 0 ? 35.8 : 33.2;
-            const x1 = 36 + rBase * Math.cos(rad1);
-            const y1 = 36 + rBase * Math.sin(rad1);
-            const xt = 36 + rTip * Math.cos(radTip);
-            const yt = 36 + rTip * Math.sin(radTip);
-            const x2 = 36 + rBase * Math.cos(rad2);
-            const y2 = 36 + rBase * Math.sin(rad2);
-            const wedgeFill = burnTheme.isRainbow
-              ? `hsl(${(idx * 30 + rainbowHueA) % 360} 92% 60%)`
-              : idx % 2 === 0
-                ? fillA
-                : fillB;
-            return (
+          {burnTheme.coronaKind === 'frost' && (
+            <>
               <path
-                key={idx}
-                d={`M ${x1} ${y1} Q ${xt} ${yt} ${x2} ${y2} Z`}
-                fill={wedgeFill}
-                fillOpacity="0.92"
+                d={contourPath(1.5)}
+                stroke={fillA}
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+                strokeOpacity="0.78"
               />
-            );
-          })}
-      </svg>
+              {sample(iconStyle === 'star_prism' ? 8 : 6).map((pt, idx) => {
+                const tx = -pt.ny;
+                const ty = pt.nx;
+                const x1 = pt.x + pt.nx * 0.5;
+                const y1 = pt.y + pt.ny * 0.5;
+                const x2 = pt.x + pt.nx * 9.8;
+                const y2 = pt.y + pt.ny * 9.8;
+                const xm = pt.x + pt.nx * 5.6;
+                const ym = pt.y + pt.ny * 5.6;
+                return (
+                  <g key={idx} stroke={idx % 2 === 0 ? fillA : fillB} strokeWidth="2" strokeLinecap="round">
+                    <line x1={x1} y1={y1} x2={x2} y2={y2} />
+                    <line x1={xm} y1={ym} x2={xm + pt.nx * 2.8 + tx * 2.4} y2={ym + pt.ny * 2.8 + ty * 2.4} />
+                    <line x1={xm} y1={ym} x2={xm + pt.nx * 2.8 - tx * 2.4} y2={ym + pt.ny * 2.8 - ty * 2.4} />
+                  </g>
+                );
+              })}
+            </>
+          )}
+
+          {burnTheme.coronaKind === 'glitch' &&
+            sample(12).map((pt, idx) => {
+              const angDeg = (Math.atan2(pt.ny, pt.nx) * 180) / Math.PI + 90;
+              const bx = pt.x + pt.nx * 4.2;
+              const by = pt.y + pt.ny * 4.2;
+              const w = idx % 2 === 0 ? 7.4 : 4.8;
+              return (
+                <rect
+                  key={idx}
+                  x={bx - w / 2}
+                  y={by - 1.5}
+                  width={w}
+                  height="3"
+                  transform={`rotate(${angDeg.toFixed(1)} ${bx.toFixed(1)} ${by.toFixed(1)})`}
+                  fill={idx % 2 === 0 ? fillA : fillB}
+                  fillOpacity="0.92"
+                />
+              );
+            })}
+
+          {burnTheme.coronaKind === 'lightning' &&
+            sample(iconStyle === 'star_prism' ? 8 : 10).map((pt, idx) => {
+              const tx = -pt.ny;
+              const ty = pt.nx;
+              const zig = idx % 2 === 0 ? 2.8 : -2.8;
+              const x1 = pt.x + pt.nx * 0.5;
+              const y1 = pt.y + pt.ny * 0.5;
+              const xm = pt.x + pt.nx * 5.2 + tx * zig;
+              const ym = pt.y + pt.ny * 5.2 + ty * zig;
+              const x2 = pt.x + pt.nx * 10.2;
+              const y2 = pt.y + pt.ny * 10.2;
+              return (
+                <polyline
+                  key={idx}
+                  points={`${x1.toFixed(1)},${y1.toFixed(1)} ${xm.toFixed(1)},${ym.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`}
+                  stroke={idx % 2 === 0 ? fillA : fillB}
+                  strokeWidth="2.1"
+                  strokeLinejoin="miter"
+                  strokeLinecap="round"
+                />
+              );
+            })}
+
+          {(burnTheme.coronaKind === 'flame' ||
+            burnTheme.coronaKind === 'magma' ||
+            burnTheme.coronaKind === 'sakura' ||
+            burnTheme.coronaKind === 'prism') && (
+            <>
+              <path
+                d={contourPath(1.2)}
+                stroke={fillA}
+                strokeWidth="2.6"
+                strokeLinejoin="round"
+                strokeOpacity="0.88"
+              />
+              {sample(16).map((pt, idx) => {
+                const tx = -pt.ny;
+                const ty = pt.nx;
+                const halfBase = iconStyle === 'star_prism' ? 4.4 : 5.2;
+                const flameHeight = idx % 2 === 0 ? 11.2 : 8.2;
+                const tilt = idx % 3 === 0 ? 1.8 : idx % 3 === 1 ? -1.8 : 0;
+                const x1 = pt.x - tx * halfBase - pt.nx * 0.8;
+                const y1 = pt.y - ty * halfBase - pt.ny * 0.8;
+                const x2 = pt.x + tx * halfBase - pt.nx * 0.8;
+                const y2 = pt.y + ty * halfBase - pt.ny * 0.8;
+                const xt = pt.x + pt.nx * flameHeight + tx * tilt;
+                const yt = pt.y + pt.ny * flameHeight + ty * tilt;
+                const wedgeFill = burnTheme.isRainbow
+                  ? `hsl(${(idx * 22 + rainbowHueA) % 360} 92% 60%)`
+                  : idx % 2 === 0
+                    ? fillA
+                    : fillB;
+                return (
+                  <path
+                    key={idx}
+                    d={`M ${x1.toFixed(1)} ${y1.toFixed(1)} Q ${xt.toFixed(1)} ${yt.toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)} Z`}
+                    fill={wedgeFill}
+                    fillOpacity="0.93"
+                  />
+                );
+              })}
+            </>
+          )}
+        </svg>
+      </div>
     );
   };
 
@@ -2276,21 +2599,8 @@ export const WheelFab: React.FC<{
         } ${hidden ? 'pointer-events-none invisible opacity-0' : ''}`}
       >
         {!isDragging && !isPressing && heat < 0.08 && phase === 'idle' && cloud}
-        {heat > 0.32 && phase === 'idle' && flameFade > 0.05 && (
-          <span
-            aria-hidden="true"
-            className={`pointer-events-none absolute -inset-3.5 rounded-full blur-md transition-opacity duration-200 ${
-              isBlazing ? 'morph-flame-flicker' : ''
-            }`}
-            style={{
-              opacity: Math.min(1, (heat - 0.32) * 1.55 + burnLevel * 0.22) * flameFade,
-              background: burnTheme.isRainbow
-                ? `radial-gradient(circle, hsla(${rainbowHueA}, 95%, 62%, 0.85) 0%, hsla(${rainbowHueB}, 90%, 54%, 0.58) 55%, transparent 78%)`
-                : `radial-gradient(circle, ${burnTheme.auraInner} 0%, ${burnTheme.auraMid} 55%, ${burnTheme.auraOuter} 78%)`,
-            }}
-          />
-        )}
-        {/* Outer burn corona sits outside clipped polygon shells so octagon/hex never crop flames! */}
+        {/* Shape-contoured glowing heat aura + perimeter flames rotated in lockstep with outer shell */}
+        {renderShapeHeatAura()}
         {renderBurnCorona()}
         <button
           type="button"
@@ -2326,28 +2636,6 @@ export const WheelFab: React.FC<{
             } ${isDragging ? 'cursor-grabbing shadow-2xl' : 'cursor-grab'}`
           }
         >
-          {/* Subtle orbiting specular rim on circular shapes when full-body spin is actively turning */}
-          {expWheelSpinEnabled && isCircularShape && (spinActiveNow || Math.abs(idleOuterDeg) > 0.3) && (
-            <svg
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0 h-full w-full"
-              viewBox="0 0 56 56"
-              fill="none"
-            >
-              <circle
-                cx="28"
-                cy="28"
-                r="25"
-                stroke="white"
-                strokeOpacity="0.45"
-                strokeWidth="2"
-                strokeDasharray="16 24"
-                strokeLinecap="round"
-              />
-              <circle cx="28" cy="3" r="2.2" fill="white" fillOpacity="0.88" />
-              <circle cx="28" cy="53" r="1.6" fill="white" fillOpacity="0.55" />
-            </svg>
-          )}
           <svg
             className={`pointer-events-none relative z-10 ${
               iconStyle === 'pill_dock' ? 'h-6 w-12' : 'h-7 w-7'
@@ -2523,14 +2811,21 @@ export const WheelFab: React.FC<{
             {iconStyle === 'star_prism' && (
               <>
                 <path
-                  d="M14 4 L16.9 11.1 L24 14 L16.9 16.9 L14 24 L11.1 16.9 L4 14 L11.1 11.1 Z"
+                  d="M 8.6 10.6 A 6.4 6.4 0 0 1 19.4 10.6"
                   stroke={wheelTone}
-                  strokeWidth="1.9"
-                  strokeLinejoin="round"
-                  fill={wheelTone}
-                  fillOpacity="0.22"
+                  strokeWidth="2.1"
+                  strokeLinecap="round"
                 />
-                <circle cx="14" cy="14" r={2.7 + toothReveal * 0.5} fill={wheelTone} />
+                <path
+                  d="M 19.4 17.4 A 6.4 6.4 0 0 1 8.6 17.4"
+                  stroke={wheelTone}
+                  strokeWidth="2.1"
+                  strokeLinecap="round"
+                  strokeOpacity="0.82"
+                />
+                <circle cx="19.6" cy="10.8" r="1.5" fill={wheelTone} />
+                <circle cx="8.4" cy="17.2" r="1.5" fill={wheelTone} fillOpacity="0.85" />
+                <circle cx="14" cy="14" r={2.5 + toothReveal * 0.5} fill={wheelTone} />
               </>
             )}
           </svg>

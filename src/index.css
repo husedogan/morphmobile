@@ -276,16 +276,13 @@ html[data-corners="soft"] .rounded-xl {
 @keyframes morph-flame-flicker {
   0%,
   100% {
-    transform: scale(1) rotate(0deg);
-    opacity: 0.92;
+    transform: scale(1);
   }
   33% {
-    transform: scale(1.09) rotate(4deg);
-    opacity: 1;
+    transform: scale(1.045);
   }
   66% {
-    transform: scale(0.97) rotate(-3deg);
-    opacity: 0.85;
+    transform: scale(0.98);
   }
 }
 

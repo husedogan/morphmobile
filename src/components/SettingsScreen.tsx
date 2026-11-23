@@ -2869,7 +2869,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       return (
                         <svg viewBox="0 0 28 28" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
                           <path d="M14 3L17.4 10.6L25 14L17.4 17.4L14 25L10.6 17.4L3 14L10.6 10.6Z" strokeLinejoin="round" />
-                          <circle cx="14" cy="14" r="2.2" fill="currentColor" stroke="none" />
+                          <circle cx="14" cy="14" r="3.8" strokeDasharray="5 3" strokeOpacity="0.72" />
+                          <circle cx="14" cy="14" r="1.7" fill="currentColor" stroke="none" />
                         </svg>
                       );
                     default:
@@ -3080,26 +3081,26 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     case 'both_cw':
                       return (
                         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M12 3a9 9 0 1 1-7.5 4" />
-                          <path d="M12 3l2.8-1.5M12 3l1.5 2.8" />
-                          <path d="M12 8a4 4 0 1 1-3.4 1.9" strokeOpacity="0.7" />
+                          <path d="M18.5 17.5a8.5 8.5 0 1 1-6.5-14" />
+                          <path d="M9.5 1.7L12 3.5L9.5 5.6" />
+                          <path d="M15 14.8a4 4 0 1 1-3-6.8" strokeOpacity="0.7" />
                         </svg>
                       );
                     case 'both_ccw':
                       return (
                         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M12 3a9 9 0 1 0 7.5 4" />
-                          <path d="M12 3l-2.8-1.5M12 3l-1.5 2.8" />
-                          <path d="M12 8a4 4 0 1 0 3.4 1.9" strokeOpacity="0.7" />
+                          <path d="M5.5 17.5a8.5 8.5 0 1 0 6.5-14" />
+                          <path d="M14.5 1.7L12 3.5L14.5 5.6" />
+                          <path d="M9 14.8a4 4 0 1 0 3-6.8" strokeOpacity="0.7" />
                         </svg>
                       );
                     case 'outer_cw_inner_ccw':
                       return (
                         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M5 9a8 8 0 0 1 14 0" />
-                          <path d="M19 9l-1-3M19 9l-3 .5" />
-                          <path d="M16 15a5 5 0 0 1-8 0" strokeOpacity="0.75" />
-                          <path d="M8 15l1 2.5M8 15l2.5-.5" strokeOpacity="0.75" />
+                          <path d="M18 6l1 3-3 .5" />
+                          <path d="M8 15a5 5 0 0 0 8 0" strokeOpacity="0.75" />
+                          <path d="M15 17.5l1-2.5-2.5-.5" strokeOpacity="0.75" />
                         </svg>
                       );
                     case 'pendulum_gyro':
@@ -3123,9 +3124,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       return (
                         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M19 9a8 8 0 0 0-14 0" />
-                          <path d="M5 9l1-3M5 9l3 .5" />
-                          <path d="M8 15a5 5 0 0 0 8 0" strokeOpacity="0.75" />
-                          <path d="M16 15l-1 2.5M16 15l-2.5-.5" strokeOpacity="0.75" />
+                          <path d="M6 6l-1 3 3 .5" />
+                          <path d="M16 15a5 5 0 0 1-8 0" strokeOpacity="0.75" />
+                          <path d="M9 17.5l-1-2.5 2.5-.5" strokeOpacity="0.75" />
                         </svg>
                       );
                   }
@@ -3162,7 +3163,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                         <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
                           {lang === 'tr'
                             ? 'Seçili çarkın dış gövdesini ve iç simgesini ayrı yönlerde her zaman ya da sadece basılı tutunca döndürür.'
-                            : 'Rotates the Quick Wheel outer shell and inner icon independently, always or only while pressed/hovered.'}
+                            : 'Rotates the Quick Wheel outer shell and inner icon independently, always or strictly while pressed.'}
                         </p>
                       </div>
                       <span className="morph-switch shrink-0" data-checked={spinEnabled ? 'true' : 'false'}>
@@ -3214,7 +3215,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                               {
                                 id: 'press' as const,
                                 labelTr: 'Üzerine Basınca',
-                                labelEn: 'On Press / Hover',
+                                labelEn: 'On Press',
                               },
                             ] as const
                           ).map((trig) => {
