@@ -690,7 +690,7 @@ const DICT: Record<string, {tr: string; en: string}> = {
   MainWheelCatNav: {tr: 'Gezinme', en: 'Navigation'},
   MainWheelCatMedia: {tr: 'Medya & Giriş', en: 'Media & Input'},
   MainWheelCatTools: {tr: 'Hızlı Araçlar', en: 'Quick Tools'},
-  MainWheelVideoEditor: {tr: 'Video Editör', en: 'Video Editor'},
+  MainWheelVideoEditor: {tr: 'Video Düzenleyici', en: 'Video Editor'},
   MainWheelDescStudio: {tr: 'Ana çalışma alanı ve dosya kuyruğu', en: 'Main workspace and file queue'},
   MainWheelDescLibrary: {tr: 'Dışa aktarılan geçmiş dosyalar', en: 'Exported file history'},
   MainWheelDescSettings: {tr: 'Tema, görünüm ve uygulama ayarları', en: 'Theme, appearance and app settings'},
@@ -717,8 +717,8 @@ const DICT: Record<string, {tr: string; en: string}> = {
   },
 
   // Video Editor Studio & Live Media Previews
-  VideoEditorTitle: {tr: 'Video Editörü', en: 'Video Editor'},
-  VeOpenStudioBtn: {tr: 'Video Editörde Düzenle & Kes', en: 'Open in Video Editor'},
+  VideoEditorTitle: {tr: 'Video Düzenleyici', en: 'Video Editor'},
+  VeOpenStudioBtn: {tr: 'Video Düzenleyicide Düzenle & Kes', en: 'Open in Video Editor'},
   VeTabTrim: {tr: 'Kırp & Böl', en: 'Trim & Split'},
   VeTabTransform: {tr: 'Kadraj & Yön', en: 'Crop & Rotate'},
   VeTabFx: {tr: 'Hız & Efekt', en: 'Speed & FX'},

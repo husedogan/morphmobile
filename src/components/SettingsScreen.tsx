@@ -19,6 +19,7 @@ import {
   HardDrive,
   Image as ImageIcon,
   Info,
+  Lock,
   Minus,
   Moon,
   Palette,
@@ -30,8 +31,10 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Smartphone,
+  Sparkles,
   Sun,
   Trash2,
+  Volume2,
   Wifi,
 } from 'lucide-react';
 import {Lang, t} from '../data/i18n';
@@ -39,16 +42,29 @@ import {
   CornerStylePref,
   DEFAULT_VE_SIZING,
   DownloadEngineId,
+  EXP_WHEEL_SHAPES,
+  ExpLauncherLabelMode,
+  ExpLauncherStyle,
+  ExpLauncherTextSize,
   Prefs,
   UiScalePref,
   VE_SIZING_BOUNDS,
   VideoEditorSizingPrefs,
   VideoQualityPref,
+  WHEEL_BURN_STYLES,
+  WheelBurnStylePref,
   WheelIconStylePref,
   WheelSidePref,
   clampVideoEditorSizing,
   formatBytes,
 } from '../data/models';
+import {
+  EXP_LAUNCHER_LABEL_MODES,
+  EXP_LAUNCHER_STYLES,
+  LauncherDesc,
+  LauncherLabel,
+  resolveLauncherLabelPrefs,
+} from './ExperimentalToolLauncher';
 import {THEME_PRESETS} from '../data/themes';
 import {
   DIAGNOSTICS_UPDATED_EVENT,
@@ -205,6 +221,62 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [copiedDiag, setCopiedDiag] = useState(false);
   const [diagExpanded, setDiagExpanded] = useState(false);
   const [serverExpanded, setServerExpanded] = useState(false);
+
+  // Experimental tab password gate (session-scoped)
+  const EXP_UNLOCK_KEY = 'morph_exp_unlocked_v1';
+  const [expUnlocked, setExpUnlocked] = useState<boolean>(() => {
+    try {
+      return typeof window !== 'undefined' && window.sessionStorage.getItem(EXP_UNLOCK_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [expPassInput, setExpPassInput] = useState('');
+  const [expPassVisible, setExpPassVisible] = useState(false);
+  const [expPassError, setExpPassError] = useState(false);
+
+  const verifyExpPassphrase = (raw: string): boolean => {
+    const s = raw.trim().replace(/İ/g, 'i').toLowerCase().replace(/ı/g, 'i');
+    let h1 = 2166136261 >>> 0;
+    let h2 = 0x9e3779b9 >>> 0;
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 16777619) >>> 0;
+      h2 = Math.imul(h2 ^ (c + i * 31), 2246822519) >>> 0;
+    }
+    return `${h1.toString(16)}-${h2.toString(16)}` === 'd76a0e7e-3f3532d8';
+  };
+
+  const handleExpUnlockSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (verifyExpPassphrase(expPassInput)) {
+      setExpUnlocked(true);
+      setExpPassInput('');
+      setExpPassError(false);
+      try {
+        window.sessionStorage.setItem(EXP_UNLOCK_KEY, '1');
+      } catch {
+        // Ignore storage restrictions
+      }
+      onShowToast?.(
+        lang === 'tr' ? 'Deneysel sekmesinin kilidi açıldı.' : 'Experimental tab unlocked.'
+      );
+    } else {
+      setExpPassError(true);
+    }
+  };
+
+  const handleExpLock = () => {
+    setExpUnlocked(false);
+    setExpPassInput('');
+    setExpPassError(false);
+    try {
+      window.sessionStorage.removeItem(EXP_UNLOCK_KEY);
+    } catch {
+      // Ignore storage restrictions
+    }
+    onShowToast?.(lang === 'tr' ? 'Deneysel sekmesi kilitlendi.' : 'Experimental tab locked.');
+  };
 
   // 15-second Developer Cloud Easter Egg
   const [isHoldingDev, setIsHoldingDev] = useState(false);
@@ -958,7 +1030,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="text-xs font-bold text-[var(--ink)]">
-                        {lang === 'tr' ? 'Video Editör Kontrol Boyutları' : 'Video Editor Control Sizes'}
+                        {lang === 'tr' ? 'Video Düzenleyici Kontrol Boyutları' : 'Video Editor Control Sizes'}
                       </p>
                       <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
                         {lang === 'tr'
@@ -1128,6 +1200,24 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 </button>
               )}
             </div>
+
+            {/* Notice only when Experimental Launcher is specifically assigned to the Main Wheel menu */}
+            {prefs.expAltLauncher && prefs.expAltLauncherForMain === true && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-[var(--accent)]/40 bg-[var(--accent)]/10 p-3.5">
+                <p className="min-w-0 flex-1 text-xs font-medium leading-snug text-[var(--ink)]">
+                  {lang === 'tr'
+                    ? 'Ana Ekran Çark düğmesi (ve 30 sn alev efekti) aktif kalır; dokunulduğunda seçili deneysel başlatıcı açılır.'
+                    : 'The Quick Wheel button (and 30s burn effect) stays active; tapping it opens your selected experimental launcher.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onChangePrefs((p) => ({...p, expAltLauncherForMain: false}))}
+                  className="min-h-[36px] shrink-0 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)] whitespace-nowrap"
+                >
+                  {lang === 'tr' ? 'Klasik Çarka Dön' : 'Use Classic Wheel'}
+                </button>
+              </div>
+            )}
 
             {/* Home Screen Quick Wheel Show / Hide Switch */}
             <button
@@ -2094,16 +2184,90 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </div>
       )}
 
-      {/* CATEGORY 4: EXPERIMENTAL & CLASSIC REVERSIBLE FEATURES */}
-      {category === 'experimental' && (
+      {/* CATEGORY 4: EXPERIMENTAL & CLASSIC REVERSIBLE FEATURES (PASSWORD-LOCKED) */}
+      {category === 'experimental' && !expUnlocked && (
+        <div className="mt-5">
+          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-6">
+            <div className="mx-auto flex max-w-sm flex-col items-center text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--accent)]/35 bg-[var(--inset)] text-[var(--accent)]">
+                <Lock className="h-5 w-5" />
+              </div>
+              <h2 className="mt-3.5 text-base font-bold text-[var(--ink)]">
+                {lang === 'tr' ? 'Deneysel Sekmesi Kilitli' : 'Experimental Tab Locked'}
+              </h2>
+              <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
+                {lang === 'tr'
+                  ? 'Bu alandaki deneysel ayarlara erişmek için şifreyi gir.'
+                  : 'Enter the password to access experimental controls.'}
+              </p>
+
+              <form onSubmit={handleExpUnlockSubmit} className="mt-4 w-full space-y-3">
+                <div className="relative">
+                  <input
+                    type={expPassVisible ? 'text' : 'password'}
+                    value={expPassInput}
+                    onChange={(e) => {
+                      setExpPassInput(e.target.value);
+                      if (expPassError) setExpPassError(false);
+                    }}
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder={lang === 'tr' ? 'Şifre' : 'Password'}
+                    aria-label={lang === 'tr' ? 'Deneysel sekme şifresi' : 'Experimental tab password'}
+                    className={`h-11 w-full rounded-2xl border bg-[var(--inset)] pl-4 pr-11 text-sm font-semibold text-[var(--ink)] placeholder:text-[var(--muted)] focus:outline-none ${
+                      expPassError
+                        ? 'border-red-500/80 focus:border-red-500'
+                        : 'border-[var(--line)] focus:border-[var(--accent)]'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setExpPassVisible((v) => !v)}
+                    aria-label={
+                      expPassVisible
+                        ? lang === 'tr'
+                          ? 'Şifreyi gizle'
+                          : 'Hide password'
+                        : lang === 'tr'
+                          ? 'Şifreyi göster'
+                          : 'Show password'
+                    }
+                    className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-xl text-[var(--muted)] transition-colors hover:text-[var(--ink)]"
+                  >
+                    {expPassVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+
+                {expPassError && (
+                  <p className="text-left text-xs font-semibold text-red-400">
+                    {lang === 'tr'
+                      ? 'Şifre hatalı. Lütfen tekrar dene.'
+                      : 'Incorrect password. Please try again.'}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--accent)] px-4 text-xs font-bold text-white shadow-sm transition-transform active:scale-[0.98]"
+                >
+                  <Lock className="h-3.5 w-3.5" />
+                  <span>{lang === 'tr' ? 'Kilidi Aç' : 'Unlock'}</span>
+                </button>
+              </form>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {category === 'experimental' && expUnlocked && (
         <div className="mt-5 space-y-4">
           <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="flex items-start gap-3">
+            <div className="flex items-start justify-between gap-2.5">
+              <div className="flex min-w-0 flex-1 items-start gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
                   <FlaskConical className="h-5 w-5" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h2 className="text-base font-bold leading-tight text-[var(--ink)]">
                     {lang === 'tr' ? 'Deneysel & Klasik Özellikler' : 'Experimental & Classic Features'}
                   </h2>
@@ -2115,62 +2279,772 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 </div>
               </div>
 
-              {(prefs.expSpinningGear ||
-                prefs.expWheelBurnEffect ||
-                prefs.expArmadilloReel === false ||
-                prefs.expDualRingWheel ||
-                prefs.expWheelCenterHoldCustomize ||
-                prefs.expTouchTooltips ||
-                prefs.expLegacySliders ||
-                prefs.expDevCloudEasterEgg) && (
+              <div className="flex shrink-0 items-center gap-1.5">
+                {(prefs.expAltLauncher ||
+                  prefs.expAltLauncherForMain === true ||
+                  prefs.expAltLauncherForMenus === false ||
+                  prefs.expAltLauncherForVideo === false ||
+                  prefs.expAltLauncherLabelsEnabled === false ||
+                  (prefs.expAltLauncherLabelMode && prefs.expAltLauncherLabelMode !== 'wrap') ||
+                  prefs.expAltLauncherShowDesc === false ||
+                  (prefs.expAltLauncherTextSize && prefs.expAltLauncherTextSize !== 'md') ||
+                  prefs.expSpinningGear ||
+                  prefs.expWheelBurnEffect ||
+                  (prefs.expWheelBurnStyle && prefs.expWheelBurnStyle !== 'classic_fire') ||
+                  (prefs.wheelIconStyle && EXP_WHEEL_SHAPES.some((s) => s.id === prefs.wheelIconStyle)) ||
+                  prefs.expArmadilloReel === false ||
+                  prefs.expVideoExtraTimecodes ||
+                  prefs.expDualRingWheel ||
+                  prefs.expWheelCenterHoldCustomize ||
+                  prefs.expTouchTooltips ||
+                  prefs.expLegacySliders) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onChangePrefs((p) => ({
+                        ...p,
+                        expAltLauncher: false,
+                        expAltLauncherStyle: 'cascade_sheet',
+                        expAltLauncherForMain: false,
+                        expAltLauncherForMenus: true,
+                        expAltLauncherForVideo: true,
+                        expAltLauncherLabelsEnabled: true,
+                        expAltLauncherLabelMode: 'wrap',
+                        expAltLauncherShowDesc: true,
+                        expAltLauncherTextSize: 'md',
+                        expSpinningGear: false,
+                        expWheelBurnEffect: false,
+                        expWheelBurnStyle: 'classic_fire',
+                        wheelIconStyle: EXP_WHEEL_SHAPES.some((s) => s.id === p.wheelIconStyle)
+                          ? 'wheel'
+                          : p.wheelIconStyle,
+                        expArmadilloReel: true,
+                        expVideoExtraTimecodes: false,
+                        expDualRingWheel: false,
+                        expWheelCenterHoldCustomize: false,
+                        expTouchTooltips: false,
+                        expLegacySliders: false,
+                      }));
+                      onShowToast?.(
+                        lang === 'tr'
+                          ? 'Deneysel ayarlar varsayılana döndürüldü.'
+                          : 'Experimental settings restored to defaults.'
+                      );
+                    }}
+                    title={lang === 'tr' ? 'Varsayılana Dön' : 'Reset Defaults'}
+                    aria-label={lang === 'tr' ? 'Varsayılana Dön' : 'Reset Defaults'}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent-text)] transition-colors hover:border-[var(--accent)] active:scale-95"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                  </button>
+                )}
+
                 <button
                   type="button"
-                  onClick={() => {
-                    onChangePrefs((p) => ({
-                      ...p,
-                      expSpinningGear: false,
-                      expWheelBurnEffect: false,
-                      expArmadilloReel: true,
-                      expDualRingWheel: false,
-                      expWheelCenterHoldCustomize: false,
-                      expTouchTooltips: false,
-                      expLegacySliders: false,
-                      expDevCloudEasterEgg: false,
-                    }));
-                    onShowToast?.(
-                      lang === 'tr'
-                        ? 'Deneysel ayarlar varsayılana döndürüldü.'
-                        : 'Experimental settings restored to defaults.'
-                    );
-                  }}
-                  className="flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3.5 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
+                  onClick={handleExpLock}
+                  title={lang === 'tr' ? 'Kilitle' : 'Lock'}
+                  aria-label={lang === 'tr' ? 'Kilitle' : 'Lock'}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)] transition-colors hover:border-[var(--accent)] active:scale-95"
                 >
-                  <RotateCcw className="h-3.5 w-3.5 text-[var(--accent-text)]" />
-                  <span>{lang === 'tr' ? 'Varsayılana Dön' : 'Reset Defaults'}</span>
+                  <Lock className="h-4 w-4" />
                 </button>
-              )}
+              </div>
             </div>
 
             <div className="mt-4 space-y-2.5">
+              {/* Single Master Experimental Feature: Cascading Tool Launcher with ON/OFF, 5 Styles, Target Scope & Label Settings */}
+              {(() => {
+                const altEnabled = Boolean(prefs.expAltLauncher);
+                const altStyle: ExpLauncherStyle = prefs.expAltLauncherStyle ?? 'cascade_sheet';
+                const forMenus = prefs.expAltLauncherForMenus !== false;
+                const forMain = prefs.expAltLauncherForMain === true;
+                const forVideo = prefs.expAltLauncherForVideo !== false;
+                const {labelsEnabled, labelMode, showDesc, textSize} =
+                  resolveLauncherLabelPrefs(prefs);
+                const previewTitleSize =
+                  textSize === 'sm' ? 'text-[10.5px]' : textSize === 'lg' ? 'text-[12.5px]' : 'text-[11.5px]';
+                const previewDescSize =
+                  textSize === 'sm' ? 'text-[9.5px]' : textSize === 'lg' ? 'text-[10.5px]' : 'text-[10px]';
+
+                return (
+                  <div
+                    className={`rounded-2xl border p-3.5 transition-colors ${
+                      altEnabled
+                        ? 'border-[var(--accent)]/55 bg-[var(--accent)]/[0.06]'
+                        : 'border-[var(--line)] bg-[var(--inset)]'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={altEnabled}
+                      onClick={() => {
+                        const next = !altEnabled;
+                        onChangePrefs((p) => ({
+                          ...p,
+                          expAltLauncher: next,
+                          expAltLauncherStyle: p.expAltLauncherStyle ?? 'cascade_sheet',
+                        }));
+                        onShowToast?.(
+                          next
+                            ? lang === 'tr'
+                              ? 'Kademeli Araç Başlatıcı aktif — hangi menülerde çalışacağını aşağıdan seçebilirsin.'
+                              : 'Cascading Tool Launcher enabled — pick target menus below.'
+                            : lang === 'tr'
+                              ? 'Tüm menülerde klasik çark sistemi tekrar aktif.'
+                              : 'Classic wheel system restored everywhere.'
+                        );
+                      }}
+                      className="flex min-h-[56px] w-full items-center justify-between gap-3 text-left"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-[var(--ink)]">
+                          {lang === 'tr'
+                            ? 'Kademeli Araç Başlatıcı (5 Farklı Stil)'
+                            : 'Cascading Tool Launcher (5 Styles)'}
+                        </p>
+                        <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
+                          {lang === 'tr'
+                            ? 'Ana ekrandaki çark düğmesi ve 30 sn alev efekti her zaman korunur; seçtiğin menülerde klasik çark yerine kademeli başlatıcı açılır.'
+                            : 'Your floating Quick Wheel button & 30s burn effect always stay intact; selected menus open the cascading launcher.'}
+                        </p>
+                      </div>
+                      <span
+                        className="morph-switch shrink-0"
+                        data-checked={altEnabled ? 'true' : 'false'}
+                      >
+                        <span className="morph-switch-thumb" />
+                      </span>
+                    </button>
+
+                    {/* Independent Scope Toggles: Convert/Tools/Actions vs Main Wheel vs Video Editor */}
+                    <div
+                      className={`mt-3 border-t border-[var(--line)]/75 pt-3 ${
+                        altEnabled ? 'opacity-100' : 'opacity-65'
+                      }`}
+                    >
+                      <p className="text-[11px] font-bold text-[var(--ink)]">
+                        {lang === 'tr' ? 'Hangi Menülerde Kullanılsın?' : 'Where Should It Apply?'}
+                      </p>
+                      <p className="mt-0.5 text-[10px] leading-snug text-[var(--muted)]">
+                        {lang === 'tr'
+                          ? 'Kapalı bıraktığın menüler klasik çark olarak çalışmaya devam eder.'
+                          : 'Any area left off keeps using the classic radial wheel.'}
+                      </p>
+                      <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+                        {(
+                          [
+                            {
+                              key: 'expAltLauncherForMenus' as const,
+                              checked: forMenus,
+                              titleTr: 'Dönüştür · Araçlar · İşlemler',
+                              titleEn: 'Convert · Tools · Actions',
+                            },
+                            {
+                              key: 'expAltLauncherForMain' as const,
+                              checked: forMain,
+                              titleTr: 'Ana Ekran Çarkı',
+                              titleEn: 'Home Quick Wheel',
+                            },
+                            {
+                              key: 'expAltLauncherForVideo' as const,
+                              checked: forVideo,
+                              titleTr: 'Video Düzenleyici',
+                              titleEn: 'Video Editor',
+                            },
+                          ] as const
+                        ).map((scope) => (
+                          <button
+                            key={scope.key}
+                            type="button"
+                            role="switch"
+                            aria-checked={scope.checked}
+                            onClick={() =>
+                              onChangePrefs((p) => ({
+                                ...p,
+                                [scope.key]: !scope.checked,
+                              }))
+                            }
+                            className={`flex min-h-[42px] items-center justify-between gap-2 rounded-xl border px-2.5 py-2 text-left transition-colors ${
+                              scope.checked
+                                ? 'border-[var(--accent)]/60 bg-[var(--surface)] text-[var(--ink)]'
+                                : 'border-[var(--line)] bg-[var(--surface)]/50 text-[var(--muted)] hover:border-[var(--accent)]/40'
+                            }`}
+                          >
+                            <span className="text-[11px] font-bold leading-tight">
+                              {lang === 'tr' ? scope.titleTr : scope.titleEn}
+                            </span>
+                            <span
+                              className="morph-switch shrink-0 scale-[0.86] origin-right"
+                              data-checked={scope.checked ? 'true' : 'false'}
+                            >
+                              <span className="morph-switch-thumb" />
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 5 Selectable Styles */}
+                    <div
+                      role="radiogroup"
+                      aria-label={lang === 'tr' ? 'Başlatıcı stili seç' : 'Choose launcher style'}
+                      className={`mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2 ${
+                        altEnabled ? 'opacity-100' : 'opacity-65'
+                      }`}
+                    >
+                      {EXP_LAUNCHER_STYLES.map((st, idx) => {
+                        const StyleIcon = st.icon;
+                        const selected = altStyle === st.id;
+                        return (
+                          <button
+                            key={st.id}
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            onClick={() =>
+                              onChangePrefs((p) => ({
+                                ...p,
+                                expAltLauncherStyle: st.id,
+                              }))
+                            }
+                            className={`flex min-h-[54px] items-start gap-2.5 rounded-xl border p-2.5 text-left transition-all ${
+                              selected
+                                ? 'border-[var(--accent)] bg-[var(--surface)] shadow-xs'
+                                : 'border-[var(--line)] bg-[var(--surface)]/60 hover:border-[var(--accent)]/45'
+                            }`}
+                          >
+                            <span
+                              className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+                                selected
+                                  ? 'bg-[var(--accent)] text-white'
+                                  : 'bg-[var(--inset)] text-[var(--muted)]'
+                              }`}
+                            >
+                              <StyleIcon className="h-3.5 w-3.5" />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-1">
+                                <p className="truncate text-xs font-bold text-[var(--ink)]">
+                                  {idx + 1}. {lang === 'tr' ? st.titleTr : st.titleEn}
+                                </p>
+                                {selected && (
+                                  <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                                )}
+                              </div>
+                              <p className="mt-0.5 text-[10px] leading-snug text-[var(--muted)]">
+                                {lang === 'tr' ? st.descTr : st.descEn}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Label & Text Appearance Settings — SINGLE ON/OFF Switch + Symmetric 2x2 Display Mode Grid */}
+                    <div
+                      className={`mt-3.5 border-t border-[var(--line)]/80 pt-3.5 ${
+                        altEnabled ? 'opacity-100' : 'opacity-70'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-[var(--ink)]">
+                            {lang === 'tr'
+                              ? 'Stil Yazıları ve Etiket Görünümü'
+                              : 'Launcher Labels & Text Display'}
+                          </p>
+                          <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
+                            {lang === 'tr'
+                              ? 'Kapattığında sadece ikon görünür; açıkken yazının nasıl yerleşeceğini aşağıdan seç.'
+                              : 'Turn off for an icon-only look; when on, choose how labels display below.'}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={labelsEnabled}
+                          aria-label={
+                            lang === 'tr' ? 'Stil yazılarını aç veya kapat' : 'Toggle launcher labels'
+                          }
+                          onClick={() =>
+                            onChangePrefs((p) => ({
+                              ...p,
+                              expAltLauncherLabelsEnabled: !labelsEnabled,
+                              expAltLauncherLabelMode:
+                                p.expAltLauncherLabelMode === 'hidden'
+                                  ? 'wrap'
+                                  : (p.expAltLauncherLabelMode ?? 'wrap'),
+                            }))
+                          }
+                          className="flex min-h-[40px] shrink-0 items-center gap-2 pl-2"
+                        >
+                          <span className="text-[11px] font-semibold text-[var(--muted)]">
+                            {labelsEnabled
+                              ? lang === 'tr'
+                                ? 'Açık'
+                                : 'On'
+                              : lang === 'tr'
+                                ? 'Kapalı'
+                                : 'Off'}
+                          </span>
+                          <span
+                            className="morph-switch"
+                            data-checked={labelsEnabled ? 'true' : 'false'}
+                          >
+                            <span className="morph-switch-thumb" />
+                          </span>
+                        </button>
+                      </div>
+
+                      {/* Symmetric 2x2 Grid of 4 Label Display Modes (No duplicate OFF button) */}
+                      <div
+                        role="radiogroup"
+                        aria-label={
+                          lang === 'tr' ? 'Yazı gösterim biçimi' : 'Label display mode'
+                        }
+                        className={`mt-2.5 grid grid-cols-2 gap-1.5 transition-opacity ${
+                          labelsEnabled ? 'opacity-100' : 'pointer-events-none opacity-45'
+                        }`}
+                      >
+                        {EXP_LAUNCHER_LABEL_MODES.map((m) => {
+                          const ModeIcon = m.icon;
+                          const selected = labelMode === m.id;
+                          return (
+                            <button
+                              key={m.id}
+                              type="button"
+                              role="radio"
+                              aria-checked={selected}
+                              onClick={() =>
+                                onChangePrefs((p) => ({
+                                  ...p,
+                                  expAltLauncherLabelsEnabled: true,
+                                  expAltLauncherLabelMode: m.id,
+                                }))
+                              }
+                              className={`flex min-h-[52px] items-start gap-2 rounded-xl border p-2.5 text-left transition-all ${
+                                selected
+                                  ? 'border-[var(--accent)] bg-[var(--surface)] shadow-xs'
+                                  : 'border-[var(--line)] bg-[var(--surface)]/55 hover:border-[var(--accent)]/45'
+                              }`}
+                            >
+                              <span
+                                className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${
+                                  selected
+                                    ? 'bg-[var(--accent)] text-white'
+                                    : 'bg-[var(--inset)] text-[var(--muted)]'
+                                }`}
+                              >
+                                <ModeIcon className="h-3.5 w-3.5" />
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-1">
+                                  <p className="truncate text-[11px] font-bold text-[var(--ink)]">
+                                    {lang === 'tr' ? m.titleTr : m.titleEn}
+                                  </p>
+                                  {selected && (
+                                    <Check className="h-3 w-3 shrink-0 text-[var(--accent)]" />
+                                  )}
+                                </div>
+                                <p className="mt-0.5 text-[10px] leading-snug text-[var(--muted)]">
+                                  {lang === 'tr' ? m.descTr : m.descEn}
+                                </p>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Text Size + Secondary Descriptions Row */}
+                      <div
+                        className={`mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2 ${
+                          labelsEnabled ? '' : 'pointer-events-none opacity-45'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface)]/65 px-2.5 py-2">
+                          <span className="text-[11px] font-semibold text-[var(--ink)]">
+                            {lang === 'tr' ? 'Yazı Boyutu' : 'Text Size'}
+                          </span>
+                          <div className="flex items-center gap-1 rounded-lg bg-[var(--inset)] p-0.5">
+                            {(
+                              [
+                                {id: 'sm' as ExpLauncherTextSize, tr: 'Küçük', en: 'Small'},
+                                {id: 'md' as ExpLauncherTextSize, tr: 'Normal', en: 'Medium'},
+                                {id: 'lg' as ExpLauncherTextSize, tr: 'Büyük', en: 'Large'},
+                              ] as const
+                            ).map((sz) => {
+                              const active = textSize === sz.id;
+                              return (
+                                <button
+                                  key={sz.id}
+                                  type="button"
+                                  onClick={() =>
+                                    onChangePrefs((p) => ({
+                                      ...p,
+                                      expAltLauncherTextSize: sz.id,
+                                    }))
+                                  }
+                                  className={`min-h-[30px] rounded-md px-2 text-[11px] font-bold transition-colors whitespace-nowrap ${
+                                    active
+                                      ? 'bg-[var(--accent)] text-white'
+                                      : 'text-[var(--muted)] hover:text-[var(--ink)]'
+                                  }`}
+                                >
+                                  {lang === 'tr' ? sz.tr : sz.en}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={showDesc}
+                          onClick={() =>
+                            onChangePrefs((p) => ({
+                              ...p,
+                              expAltLauncherShowDesc: !showDesc,
+                            }))
+                          }
+                          className="flex min-h-[44px] items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface)]/65 px-3 py-2 text-left transition-colors hover:border-[var(--accent)]/45"
+                        >
+                          <span className="text-[11px] font-semibold text-[var(--ink)]">
+                            {lang === 'tr' ? 'Alt Açıklamalar' : 'Sub-Descriptions'}
+                          </span>
+                          <span
+                            className="morph-switch"
+                            data-checked={showDesc ? 'true' : 'false'}
+                          >
+                            <span className="morph-switch-thumb" />
+                          </span>
+                        </button>
+                      </div>
+
+                      {/* Live Mini-Preview of Long Tool Labels */}
+                      <div className="mt-2.5 rounded-xl border border-[var(--line)] bg-[var(--surface)]/75 p-2.5">
+                        <p className="mb-2 text-[10px] font-semibold text-[var(--muted)]">
+                          {lang === 'tr' ? 'Canlı Önizleme' : 'Live Preview'}
+                        </p>
+                        <div
+                          className={`grid gap-2 ${
+                            labelsEnabled ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-2 max-w-[144px]'
+                          }`}
+                        >
+                          {[
+                            {
+                              id: 'p1',
+                              label: lang === 'tr' ? 'Ses Normalleştir (LUFS)' : 'Audio Loudness Normalize',
+                              desc: lang === 'tr' ? 'Yayın seviyesine dengeler' : 'Broadcast loudness match',
+                              accent: '#E94F78',
+                              Icon: Volume2,
+                            },
+                            {
+                              id: 'p2',
+                              label: lang === 'tr' ? 'Arka Plan Gürültü Azalt' : 'Background Noise Reduce',
+                              desc: lang === 'tr' ? 'Dip sesleri temizler' : 'Cleans ambient hiss',
+                              accent: '#42C9D9',
+                              Icon: Sparkles,
+                            },
+                          ].map((sample) => (
+                            <div
+                              key={sample.id}
+                              className={`flex overflow-hidden rounded-xl border ${
+                                labelsEnabled && labelMode === 'cloud'
+                                  ? 'border-transparent bg-transparent'
+                                  : 'border-[var(--line)] bg-[var(--inset)]'
+                              } ${
+                                labelsEnabled
+                                  ? 'min-h-[52px] items-center gap-2.5 px-2.5 py-2'
+                                  : 'min-h-[46px] items-center justify-center p-2'
+                              }`}
+                            >
+                              <span
+                                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                                style={{
+                                  backgroundColor: `${sample.accent}22`,
+                                  color: sample.accent,
+                                }}
+                              >
+                                <sample.Icon className="h-3.5 w-3.5" />
+                              </span>
+                              {labelsEnabled && (
+                                <div className="min-w-0 flex-1 overflow-hidden">
+                                  <LauncherLabel
+                                    text={sample.label}
+                                    mode={labelMode}
+                                    enabled={labelsEnabled}
+                                    accent={sample.accent}
+                                    className={`font-bold text-[var(--ink)] ${previewTitleSize}`}
+                                  />
+                                  {showDesc && (
+                                    <LauncherDesc
+                                      text={sample.desc}
+                                      mode={labelMode}
+                                      className={`mt-0.5 text-[var(--muted)] ${previewDescSize}`}
+                                    />
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Quick Wheel 30s Burn Effect (11 Designs) + 5 New Non-Circular Wheel Shapes */}
+              {(() => {
+                const burnEnabled = Boolean(prefs.expWheelBurnEffect);
+                const activeBurnStyle: WheelBurnStylePref = prefs.expWheelBurnStyle ?? 'classic_fire';
+                const activeWheelStyle: WheelIconStylePref = prefs.wheelIconStyle ?? 'wheel';
+                const isCustomExpShape = EXP_WHEEL_SHAPES.some((s) => s.id === activeWheelStyle);
+
+                const renderShapeGlyph = (shapeId: WheelIconStylePref) => {
+                  switch (shapeId) {
+                    case 'squircle':
+                      return (
+                        <svg viewBox="0 0 28 28" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                          <rect x="4" y="4" width="20" height="20" rx="6" />
+                          <rect x="9.5" y="9.5" width="9" height="9" rx="2.5" strokeOpacity="0.65" />
+                          <circle cx="14" cy="14" r="1.8" fill="currentColor" stroke="none" />
+                        </svg>
+                      );
+                    case 'diamond':
+                      return (
+                        <svg viewBox="0 0 28 28" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                          <path d="M14 3.5L24.5 14L14 24.5L3.5 14Z" strokeLinejoin="round" />
+                          <path d="M14 8.5L19.5 14L14 19.5L8.5 14Z" strokeLinejoin="round" strokeOpacity="0.65" />
+                          <circle cx="14" cy="14" r="1.6" fill="currentColor" stroke="none" />
+                        </svg>
+                      );
+                    case 'pill_dock':
+                      return (
+                        <svg viewBox="0 0 28 28" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                          <rect x="2.5" y="7.5" width="23" height="13" rx="6.5" />
+                          <circle cx="9.5" cy="14" r="2" fill="currentColor" stroke="none" />
+                          <circle cx="14" cy="14" r="1.3" fill="currentColor" fillOpacity="0.65" stroke="none" />
+                          <circle cx="18.5" cy="14" r="2" fill="currentColor" stroke="none" />
+                        </svg>
+                      );
+                    case 'octa_shield':
+                      return (
+                        <svg viewBox="0 0 28 28" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                          <polygon points="9.5,3.5 18.5,3.5 24.5,9.5 24.5,18.5 18.5,24.5 9.5,24.5 3.5,18.5 3.5,9.5" strokeLinejoin="round" />
+                          <circle cx="14" cy="14" r="4.2" strokeDasharray="2.5 2" strokeOpacity="0.7" />
+                          <circle cx="14" cy="14" r="1.6" fill="currentColor" stroke="none" />
+                        </svg>
+                      );
+                    case 'blade_hex':
+                      return (
+                        <svg viewBox="0 0 28 28" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                          <polygon points="8,4 20,4 25.5,14 20,24 8,24 2.5,14" strokeLinejoin="round" />
+                          <path d="M14 7.5v13M8.5 10.7l11 6.6M19.5 10.7l-11 6.6" strokeOpacity="0.6" strokeLinecap="round" />
+                          <circle cx="14" cy="14" r="2" fill="currentColor" stroke="none" />
+                        </svg>
+                      );
+                    default:
+                      return (
+                        <svg viewBox="0 0 28 28" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                          <circle cx="14" cy="14" r="10" />
+                          <circle cx="14" cy="14" r="3" />
+                        </svg>
+                      );
+                  }
+                };
+
+                return (
+                  <div
+                    className={`rounded-2xl border p-3.5 transition-colors ${
+                      burnEnabled || isCustomExpShape
+                        ? 'border-[var(--accent)]/55 bg-[var(--accent)]/[0.06]'
+                        : 'border-[var(--line)] bg-[var(--inset)]'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={burnEnabled}
+                      onClick={() =>
+                        onChangePrefs((p) => ({
+                          ...p,
+                          expWheelBurnEffect: !p.expWheelBurnEffect,
+                        }))
+                      }
+                      className="flex w-full items-center justify-between gap-3 text-left"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-[var(--ink)]">
+                          {lang === 'tr'
+                            ? 'Hızlı Çark 30 sn Yanma Efekti & Özel Tasarımlar'
+                            : 'Quick Wheel 30s Burn Effects & Custom Shapes'}
+                        </p>
+                        <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
+                          {lang === 'tr'
+                            ? 'Hızlı Çark düğmesine uzun basıldığında veya üzerinde beklendiğinde 30 saniyede seçtiğin efektle yanıp dağılmasını sağlar; alttan 5 yeni çark formu ve 11 farklı yanma stili seçebilirsin.'
+                            : 'Triggers a 30-second heat & disintegration effect on hold/hover, plus 5 non-circular wheel silhouettes and 11 distinct burn styles.'}
+                        </p>
+                      </div>
+                      <span className="morph-switch shrink-0" data-checked={burnEnabled ? 'true' : 'false'}>
+                        <span className="morph-switch-thumb" />
+                      </span>
+                    </button>
+
+                    {/* 5 New Non-Circular Wheel Designs */}
+                    <div className="mt-3.5 border-t border-[var(--line)]/75 pt-3">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="text-[11px] font-bold text-[var(--ink)]">
+                          {lang === 'tr' ? '5 Yeni Çark Tasarımı' : '5 New Wheel Shapes'}
+                        </p>
+                        {isCustomExpShape && (
+                          <button
+                            type="button"
+                            onClick={() => onChangePrefs((p) => ({...p, wheelIconStyle: 'wheel'}))}
+                            className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2 py-0.5 text-[10px] font-semibold text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--ink)]"
+                          >
+                            {lang === 'tr' ? 'Klasiğe Dön' : 'Reset Classic'}
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {EXP_WHEEL_SHAPES.map((shape) => {
+                          const selected = activeWheelStyle === shape.id;
+                          return (
+                            <button
+                              key={shape.id}
+                              type="button"
+                              onClick={() =>
+                                onChangePrefs((p) => ({
+                                  ...p,
+                                  wheelIconStyle: shape.id,
+                                }))
+                              }
+                              className={`flex items-center gap-2 rounded-xl border p-2 text-left transition-all active:scale-[0.98] ${
+                                selected
+                                  ? 'border-[var(--accent)] bg-[var(--accent)]/14 text-[var(--ink)]'
+                                  : 'border-[var(--line)] bg-[var(--surface)]/75 text-[var(--muted)] hover:border-[var(--accent)]/45 hover:text-[var(--ink)]'
+                              }`}
+                            >
+                              <span
+                                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                                  selected
+                                    ? 'bg-[var(--accent)] text-white'
+                                    : 'bg-[var(--inset)] text-[var(--accent-text)]'
+                                }`}
+                              >
+                                {renderShapeGlyph(shape.id)}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-[11px] font-bold text-[var(--ink)]">
+                                  {lang === 'tr' ? shape.titleTr : shape.titleEn}
+                                </p>
+                                <p className="mt-0.5 line-clamp-2 text-[9.5px] leading-tight text-[var(--muted)]">
+                                  {lang === 'tr' ? shape.descTr : shape.descEn}
+                                </p>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* 11 Distinct 30-Second Burn Effects */}
+                    <div className="mt-3.5 border-t border-[var(--line)]/75 pt-3">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="text-[11px] font-bold text-[var(--ink)]">
+                          {lang === 'tr' ? 'Yanma Efekti Stili (11 Tasarım)' : 'Burn Effect Style (11 Designs)'}
+                        </p>
+                        <span className="text-[10px] font-medium text-[var(--muted)]">
+                          {burnEnabled
+                            ? lang === 'tr'
+                              ? 'Aktif'
+                              : 'Active'
+                            : lang === 'tr'
+                              ? 'Seçince açılır'
+                              : 'Tap to enable'}
+                        </span>
+                      </div>
+
+                      <div
+                        className={`grid grid-cols-2 gap-1.5 sm:grid-cols-3 transition-opacity ${
+                          burnEnabled ? 'opacity-100' : 'opacity-75'
+                        }`}
+                      >
+                        {WHEEL_BURN_STYLES.map((styleItem) => {
+                          const selected = activeBurnStyle === styleItem.id;
+                          return (
+                            <button
+                              key={styleItem.id}
+                              type="button"
+                              onClick={() =>
+                                onChangePrefs((p) => ({
+                                  ...p,
+                                  expWheelBurnEffect: true,
+                                  expWheelBurnStyle: styleItem.id,
+                                }))
+                              }
+                              className={`flex min-h-[38px] items-center gap-2 rounded-xl border px-2.5 py-1.5 text-left transition-all active:scale-[0.98] ${
+                                selected && burnEnabled
+                                  ? 'border-[var(--accent)] bg-[var(--accent)]/14 text-[var(--ink)]'
+                                  : selected
+                                    ? 'border-[var(--accent)]/50 bg-[var(--surface)] text-[var(--ink)]'
+                                    : 'border-[var(--line)] bg-[var(--surface)]/70 text-[var(--muted)] hover:border-[var(--accent)]/45 hover:text-[var(--ink)]'
+                              }`}
+                            >
+                              <span
+                                className="h-4 w-4 shrink-0 rounded-full border border-white/25 shadow-sm"
+                                style={{
+                                  background: `linear-gradient(135deg, ${styleItem.accent}, ${styleItem.secondary})`,
+                                }}
+                              />
+                              <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-[var(--ink)]">
+                                {lang === 'tr' ? styleItem.titleTr : styleItem.titleEn}
+                              </span>
+                              {selected && burnEnabled && (
+                                <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent-text)]" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {(
                 [
                   {
                     key: 'expArmadilloReel' as const,
                     defaultOn: true,
-                    titleTr: 'Video Editörü Katlanan Armadillo Çarkı',
+                    titleTr: 'Video Düzenleyici Katlanan Armadillo Çarkı',
                     titleEn: 'Video Editor Armadillo Fold Reel',
                     descTr:
-                      'Varsayılan olarak açıktır. Kapatırsan Video Stüdyosu dikey görünümünde standart sabit alt araç çubuğu kullanılır.',
+                      'Varsayılan olarak açıktır. Kapatırsan Video Düzenleyici dikey görünümünde standart sabit alt araç çubuğu kullanılır.',
                     descEn:
-                      'Enabled by default. Turn off to use the flat bottom dock in portrait Video Studio instead of the 3D folding reel.',
+                      'Enabled by default. Turn off to use the flat bottom dock in portrait Video Editor instead of the 3D folding reel.',
+                  },
+                  {
+                    key: 'expVideoExtraTimecodes' as const,
+                    defaultOn: false,
+                    titleTr: 'Video Düzenleyici Ek Süre Göstergeleri',
+                    titleEn: 'Video Editor Extra Timecode Badges',
+                    descTr:
+                      'Çarkın ortasındaki süre her zaman görünür. Bu ayar açıldığında çarkın üst şeridi, deneysel alt çubuk ve deneysel araç penceresi başlığında da anlık zaman kodu gösterilir.',
+                    descEn:
+                      'The center wheel timecode always stays visible. Turn on to also show extra timecodes in the wheel top badge, experimental bottom bar, and experimental tool launcher header.',
                   },
                   {
                     key: 'expTouchTooltips' as const,
                     defaultOn: false,
-                    titleTr: 'Dokunmatikte Editör İpucu Baloncukları',
+                    titleTr: 'Dokunmatikte Düzenleyici İpucu Baloncukları',
                     titleEn: 'Touch-Device Editor Tooltips',
                     descTr:
-                      'Açıkken Video Editör butonlarının açıklama baloncukları telefon ve dokunmatik ekranlarda da görünür.',
+                      'Açıkken Video Düzenleyici butonlarının açıklama baloncukları telefon ve dokunmatik ekranlarda da görünür.',
                     descEn:
                       'Shows floating tooltip bubbles on Video Editor buttons on touch screens in addition to desktop mouse hover.',
                   },
@@ -2181,16 +3055,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     titleEn: 'Continuously Spinning Settings Gear',
                     descTr: 'Üst çubuktaki Ayarlar ikonunu sürekli döndürür.',
                     descEn: 'Keeps the top-bar Settings gear continuously rotating.',
-                  },
-                  {
-                    key: 'expWheelBurnEffect' as const,
-                    defaultOn: false,
-                    titleTr: 'Hızlı Çark 30 sn Alev & Kül Efekti',
-                    titleEn: 'Quick Wheel 30s Flame & Ash Effect',
-                    descTr:
-                      'Hızlı Çark düğmesine uzun basıldığında veya fareyle üzerinde beklendiğinde ısınıp alev almasını ve 30 saniyede küle dönüşmesini sağlar.',
-                    descEn:
-                      'Overheats the Quick Wheel button on hover/hold into flames and turns it into ash after 30 seconds.',
                   },
                   {
                     key: 'expDualRingWheel' as const,
@@ -2221,16 +3085,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       'Arayüz boyutu, köşe stili ve çark konumu seçeneklerinin üstünde ek kaydırma çubuklarını gösterir.',
                     descEn:
                       'Restores duplicate range sliders above the segmented buttons for UI Scale, Corner Radius, and Wheel Position.',
-                  },
-                  {
-                    key: 'expDevCloudEasterEgg' as const,
-                    defaultOn: false,
-                    titleTr: 'Geliştirici Kartı 8 sn Bulut Efekti',
-                    titleEn: 'Developer Card 8s Cloud Easter Egg',
-                    descTr:
-                      'Hakkında sekmesindeki geliştirici kartına 8 saniye basılı tutulduğunda bulut animasyonunu tetikler.',
-                    descEn:
-                      'Triggers the border spinner and rising cloud burst when holding the developer card in About for 8 seconds.',
                   },
                 ] as const
               ).map((item) => {
@@ -2288,7 +3142,24 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
             {/* Uniform 48px (h-12) rows with matching rounded-2xl geometry */}
             <div className="mt-4 space-y-2.5">
-              {updateInfo?.hasUpdate ? (
+              <div className="space-y-1">
+                {updateInfo?.checkedAt && (
+                  <div className="flex items-center justify-end px-1 text-[11px] text-[var(--muted)]">
+                    <span>{lang === 'tr' ? 'Son denetim:' : 'Last checked:'}&nbsp;</span>
+                    <span className="font-mono-num tabular-nums">
+                      {new Date(updateInfo.checkedAt).toLocaleDateString(
+                        lang === 'tr' ? 'tr-TR' : 'en-US',
+                        {day: '2-digit', month: 'short'}
+                      )}{' '}
+                      ·{' '}
+                      {new Date(updateInfo.checkedAt).toLocaleTimeString(
+                        lang === 'tr' ? 'tr-TR' : 'en-US',
+                        {hour: '2-digit', minute: '2-digit'}
+                      )}
+                    </span>
+                  </div>
+                )}
+                {updateInfo?.hasUpdate ? (
                 (() => {
                   const apkDownloaded =
                     updateDownload?.phase === 'done' || isUpdateApkDownloaded(updateInfo);
@@ -2335,6 +3206,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   </span>
                 </button>
               )}
+              </div>
 
               {/* In-App APK Download Progress Card */}
               {updateDownload && (updateDownload.active || updateDownload.phase === 'done') && (
@@ -2403,18 +3275,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       ? `GitHub API günlük istek sınırı aşıldı${updateInfo.retryAfterSec ? ` (~${Math.ceil(updateInfo.retryAfterSec / 60)} dk sonra yenilenir)` : ''}. Güncel APK paketini doğrudan GitHub Sürümler sayfasından indirebilirsin.`
                       : `GitHub API rate limit exceeded${updateInfo.retryAfterSec ? ` (resets in ~${Math.ceil(updateInfo.retryAfterSec / 60)} min)` : ''}. Download the latest APK directly from GitHub Releases.`
                     : updateInfo.error}
-                </p>
-              )}
-
-              {updateInfo?.checkedAt && (
-                <p className="px-1 text-[11px] text-[var(--muted)]">
-                  {lang === 'tr' ? 'Son denetim:' : 'Last checked:'}{' '}
-                  <span className="font-mono-num">
-                    {new Date(updateInfo.checkedAt).toLocaleTimeString(lang === 'tr' ? 'tr-TR' : 'en-US', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </span>
                 </p>
               )}
 
@@ -2557,10 +3417,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             )}
           </section>
 
-          {/* Equal-Width Developer Card with optional Experimental 8s Cloud Easter Egg */}
+          {/* Equal-Width Developer Card with permanent 8s Cloud Easter Egg */}
           <div
             onPointerDown={() => {
-              if (!prefs.expDevCloudEasterEgg) return;
               clearDevHoldTimer();
               suppressDevLinkRef.current = false;
               devHoldStartRef.current = Date.now();

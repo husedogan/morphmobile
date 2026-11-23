@@ -1,7 +1,12 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {ChevronRight, LucideIcon, SlidersHorizontal} from 'lucide-react';
 import {Lang} from '../data/i18n';
-import {MAX_WHEEL_SLICES, WheelIconStylePref, WheelSidePref} from '../data/models';
+import {
+  MAX_WHEEL_SLICES,
+  WheelBurnStylePref,
+  WheelIconStylePref,
+  WheelSidePref,
+} from '../data/models';
 
 export interface WheelActionItem {
   id: string;
@@ -862,27 +867,380 @@ interface AshFlake {
   swayPhase: number;
 }
 
-function createAshBurst(cx: number, cy: number, startId: number): AshFlake[] {
-  const shades = ['#D4D4D8', '#A1A1AA', '#71717A', '#52525B', '#3F3F46', '#FB923C'];
+interface BurnThemeConfig {
+  gradWarmStart: string;
+  gradHotStart: string;
+  gradWarmEnd: string;
+  gradHotEnd: string;
+  charDarkA: string;
+  charDarkB: string;
+  glowRgb1: string;
+  glowRgb2: string;
+  auraInner: string;
+  auraMid: string;
+  auraOuter: string;
+  iconHotTone: string;
+  iconCharMid: string;
+  iconCharEnd: string;
+  sparkStart: string;
+  sparkMid: string;
+  sparkEnd: string;
+  sparkGlow: string;
+  ashMid: string;
+  ashEnd: string;
+  burstShades: string[];
+  burstHotAccent: string;
+  coronaFillA: string;
+  coronaFillB: string;
+  coronaKind:
+    | 'flame'
+    | 'plasma'
+    | 'acid'
+    | 'void'
+    | 'solar'
+    | 'frost'
+    | 'glitch'
+    | 'magma'
+    | 'lightning'
+    | 'sakura'
+    | 'prism';
+  particleShape: 'round' | 'square' | 'shard' | 'petal';
+  isRainbow?: boolean;
+}
+
+const BURN_THEMES: Record<WheelBurnStylePref, BurnThemeConfig> = {
+  classic_fire: {
+    gradWarmStart: '#EA580C',
+    gradHotStart: '#DC2626',
+    gradWarmEnd: '#FF3D00',
+    gradHotEnd: '#991B1B',
+    charDarkA: '#27272A',
+    charDarkB: '#18181B',
+    glowRgb1: '239, 68, 68',
+    glowRgb2: '251, 146, 60',
+    auraInner: 'rgba(255,95,31,0.82)',
+    auraMid: 'rgba(220,38,38,0.62)',
+    auraOuter: 'rgba(185,28,28,0)',
+    iconHotTone: '#FFF3C4',
+    iconCharMid: '#A1A1AA',
+    iconCharEnd: '#71717A',
+    sparkStart: '#FFF3C4',
+    sparkMid: '#FF5722',
+    sparkEnd: '#DC2626',
+    sparkGlow: '0 0 8px rgba(255, 61, 0, 0.9)',
+    ashMid: '#A1A1AA',
+    ashEnd: '#52525B',
+    burstShades: ['#D4D4D8', '#A1A1AA', '#71717A', '#52525B', '#3F3F46'],
+    burstHotAccent: '#FB923C',
+    coronaFillA: '#FF3D00',
+    coronaFillB: '#FF1744',
+    coronaKind: 'flame',
+    particleShape: 'round',
+  },
+  plasma_blue: {
+    gradWarmStart: '#0EA5E9',
+    gradHotStart: '#2563EB',
+    gradWarmEnd: '#38BDF8',
+    gradHotEnd: '#1D4ED8',
+    charDarkA: '#0F172A',
+    charDarkB: '#020617',
+    glowRgb1: '56, 189, 248',
+    glowRgb2: '37, 99, 235',
+    auraInner: 'rgba(125,211,252,0.88)',
+    auraMid: 'rgba(37,99,235,0.62)',
+    auraOuter: 'rgba(29,78,216,0)',
+    iconHotTone: '#E0F2FE',
+    iconCharMid: '#94A3B8',
+    iconCharEnd: '#475569',
+    sparkStart: '#FFFFFF',
+    sparkMid: '#38BDF8',
+    sparkEnd: '#2563EB',
+    sparkGlow: '0 0 9px rgba(56, 189, 248, 0.95)',
+    ashMid: '#94A3B8',
+    ashEnd: '#334155',
+    burstShades: ['#E0F2FE', '#7DD3FC', '#38BDF8', '#64748B', '#1E293B'],
+    burstHotAccent: '#38BDF8',
+    coronaFillA: '#38BDF8',
+    coronaFillB: '#60A5FA',
+    coronaKind: 'plasma',
+    particleShape: 'round',
+  },
+  emerald_acid: {
+    gradWarmStart: '#10B981',
+    gradHotStart: '#059669',
+    gradWarmEnd: '#84CC16',
+    gradHotEnd: '#065F46',
+    charDarkA: '#14261C',
+    charDarkB: '#09150F',
+    glowRgb1: '52, 211, 153',
+    glowRgb2: '132, 204, 22',
+    auraInner: 'rgba(110,231,183,0.85)',
+    auraMid: 'rgba(16,185,129,0.62)',
+    auraOuter: 'rgba(5,150,105,0)',
+    iconHotTone: '#ECFCCB',
+    iconCharMid: '#86EFAC',
+    iconCharEnd: '#4B5563',
+    sparkStart: '#D9F99D',
+    sparkMid: '#34D399',
+    sparkEnd: '#059669',
+    sparkGlow: '0 0 9px rgba(52, 211, 153, 0.92)',
+    ashMid: '#6EE7B7',
+    ashEnd: '#374151',
+    burstShades: ['#BEF264', '#6EE7B7', '#34D399', '#4B5563', '#1F2937'],
+    burstHotAccent: '#A3E635',
+    coronaFillA: '#34D399',
+    coronaFillB: '#84CC16',
+    coronaKind: 'acid',
+    particleShape: 'round',
+  },
+  violet_void: {
+    gradWarmStart: '#9333EA',
+    gradHotStart: '#6D28D9',
+    gradWarmEnd: '#D946EF',
+    gradHotEnd: '#3B0764',
+    charDarkA: '#1E112E',
+    charDarkB: '#0D0716',
+    glowRgb1: '168, 85, 247',
+    glowRgb2: '217, 70, 239',
+    auraInner: 'rgba(216,180,254,0.84)',
+    auraMid: 'rgba(147,51,234,0.65)',
+    auraOuter: 'rgba(88,28,135,0)',
+    iconHotTone: '#F5D0FE',
+    iconCharMid: '#C084FC',
+    iconCharEnd: '#581C87',
+    sparkStart: '#FAF5FF',
+    sparkMid: '#C084FC',
+    sparkEnd: '#7E22CE',
+    sparkGlow: '0 0 10px rgba(192, 132, 252, 0.95)',
+    ashMid: '#A855F7',
+    ashEnd: '#3B0764',
+    burstShades: ['#F5D0FE', '#C084FC', '#9333EA', '#581C87', '#1E1B4B'],
+    burstHotAccent: '#E879F9',
+    coronaFillA: '#A855F7',
+    coronaFillB: '#E879F9',
+    coronaKind: 'void',
+    particleShape: 'shard',
+  },
+  solar_gold: {
+    gradWarmStart: '#F59E0B',
+    gradHotStart: '#D97706',
+    gradWarmEnd: '#FDE047',
+    gradHotEnd: '#92400E',
+    charDarkA: '#292012',
+    charDarkB: '#18120B',
+    glowRgb1: '251, 191, 36',
+    glowRgb2: '245, 158, 11',
+    auraInner: 'rgba(254,240,138,0.9)',
+    auraMid: 'rgba(245,158,11,0.66)',
+    auraOuter: 'rgba(180,83,9,0)',
+    iconHotTone: '#FEF9C3',
+    iconCharMid: '#D6D3D1',
+    iconCharEnd: '#78716C',
+    sparkStart: '#FFFFFF',
+    sparkMid: '#FDE047',
+    sparkEnd: '#F59E0B',
+    sparkGlow: '0 0 10px rgba(251, 191, 36, 0.95)',
+    ashMid: '#FDE68A',
+    ashEnd: '#78716C',
+    burstShades: ['#FEF08A', '#FBBF24', '#D97706', '#A8A29E', '#57534E'],
+    burstHotAccent: '#FDE047',
+    coronaFillA: '#FBBF24',
+    coronaFillB: '#FEF08A',
+    coronaKind: 'solar',
+    particleShape: 'shard',
+  },
+  frost_shatter: {
+    gradWarmStart: '#22D3EE',
+    gradHotStart: '#0284C7',
+    gradWarmEnd: '#A5F3FC',
+    gradHotEnd: '#0C4A6E',
+    charDarkA: '#162736',
+    charDarkB: '#0B1622',
+    glowRgb1: '103, 232, 249',
+    glowRgb2: '14, 165, 233',
+    auraInner: 'rgba(207,250,254,0.9)',
+    auraMid: 'rgba(34,211,238,0.6)',
+    auraOuter: 'rgba(2,132,199,0)',
+    iconHotTone: '#ECFEFF',
+    iconCharMid: '#BAE6FD',
+    iconCharEnd: '#64748B',
+    sparkStart: '#FFFFFF',
+    sparkMid: '#A5F3FC',
+    sparkEnd: '#0EA5E9',
+    sparkGlow: '0 0 9px rgba(103, 232, 249, 0.95)',
+    ashMid: '#CBD5E1',
+    ashEnd: '#64748B',
+    burstShades: ['#ECFEFF', '#A5F3FC', '#67E8F9', '#38BDF8', '#94A3B8'],
+    burstHotAccent: '#FFFFFF',
+    coronaFillA: '#A5F3FC',
+    coronaFillB: '#38BDF8',
+    coronaKind: 'frost',
+    particleShape: 'shard',
+  },
+  cyber_glitch: {
+    gradWarmStart: '#F43F5E',
+    gradHotStart: '#E11D48',
+    gradWarmEnd: '#06B6D4',
+    gradHotEnd: '#0891B2',
+    charDarkA: '#181826',
+    charDarkB: '#0A0A12',
+    glowRgb1: '244, 63, 94',
+    glowRgb2: '6, 182, 212',
+    auraInner: 'rgba(244,63,94,0.8)',
+    auraMid: 'rgba(6,182,212,0.64)',
+    auraOuter: 'rgba(15,23,42,0)',
+    iconHotTone: '#FDF2F8',
+    iconCharMid: '#94A3B8',
+    iconCharEnd: '#475569',
+    sparkStart: '#22D3EE',
+    sparkMid: '#F43F5E',
+    sparkEnd: '#A855F7',
+    sparkGlow: '0 0 8px rgba(34, 211, 238, 0.95)',
+    ashMid: '#64748B',
+    ashEnd: '#1E293B',
+    burstShades: ['#22D3EE', '#F43F5E', '#A855F7', '#F8FAFC', '#334155'],
+    burstHotAccent: '#22D3EE',
+    coronaFillA: '#F43F5E',
+    coronaFillB: '#22D3EE',
+    coronaKind: 'glitch',
+    particleShape: 'square',
+  },
+  crimson_magma: {
+    gradWarmStart: '#C2410C',
+    gradHotStart: '#7F1D1D',
+    gradWarmEnd: '#EA580C',
+    gradHotEnd: '#450A0A',
+    charDarkA: '#1C1917',
+    charDarkB: '#0C0A09',
+    glowRgb1: '234, 88, 12',
+    glowRgb2: '153, 27, 27',
+    auraInner: 'rgba(251,146,60,0.85)',
+    auraMid: 'rgba(153,27,27,0.7)',
+    auraOuter: 'rgba(69,10,10,0)',
+    iconHotTone: '#FFEDD5',
+    iconCharMid: '#78716C',
+    iconCharEnd: '#44403C',
+    sparkStart: '#FDBA74',
+    sparkMid: '#EA580C',
+    sparkEnd: '#7F1D1D',
+    sparkGlow: '0 0 9px rgba(234, 88, 12, 0.92)',
+    ashMid: '#57534E',
+    ashEnd: '#292524',
+    burstShades: ['#FB923C', '#EA580C', '#57534E', '#44403C', '#292524'],
+    burstHotAccent: '#F97316',
+    coronaFillA: '#EA580C',
+    coronaFillB: '#991B1B',
+    coronaKind: 'magma',
+    particleShape: 'square',
+  },
+  lightning_arc: {
+    gradWarmStart: '#EAB308',
+    gradHotStart: '#0284C7',
+    gradWarmEnd: '#FDE047',
+    gradHotEnd: '#1E40AF',
+    charDarkA: '#172033',
+    charDarkB: '#0B101D',
+    glowRgb1: '253, 224, 71',
+    glowRgb2: '56, 189, 248',
+    auraInner: 'rgba(254,249,195,0.92)',
+    auraMid: 'rgba(56,189,248,0.65)',
+    auraOuter: 'rgba(30,64,175,0)',
+    iconHotTone: '#FEFCE8',
+    iconCharMid: '#CBD5E1',
+    iconCharEnd: '#475569',
+    sparkStart: '#FFFFFF',
+    sparkMid: '#FDE047',
+    sparkEnd: '#38BDF8',
+    sparkGlow: '0 0 10px rgba(253, 224, 71, 0.98)',
+    ashMid: '#94A3B8',
+    ashEnd: '#334155',
+    burstShades: ['#FEF08A', '#FDE047', '#38BDF8', '#E2E8F0', '#475569'],
+    burstHotAccent: '#FDE047',
+    coronaFillA: '#FDE047',
+    coronaFillB: '#38BDF8',
+    coronaKind: 'lightning',
+    particleShape: 'shard',
+  },
+  sakura_ember: {
+    gradWarmStart: '#FB7185',
+    gradHotStart: '#DB2777',
+    gradWarmEnd: '#F472B6',
+    gradHotEnd: '#9D174D',
+    charDarkA: '#291822',
+    charDarkB: '#160C12',
+    glowRgb1: '244, 114, 182',
+    glowRgb2: '251, 113, 133',
+    auraInner: 'rgba(251,207,232,0.88)',
+    auraMid: 'rgba(236,72,153,0.62)',
+    auraOuter: 'rgba(157,23,77,0)',
+    iconHotTone: '#FCE7F3',
+    iconCharMid: '#D4A5B9',
+    iconCharEnd: '#6B4E5B',
+    sparkStart: '#FCE7F3',
+    sparkMid: '#FB7185',
+    sparkEnd: '#DB2777',
+    sparkGlow: '0 0 9px rgba(244, 114, 182, 0.92)',
+    ashMid: '#D4A5B9',
+    ashEnd: '#52525B',
+    burstShades: ['#FBCFE8', '#F472B6', '#FB7185', '#9CA3AF', '#52525B'],
+    burstHotAccent: '#F472B6',
+    coronaFillA: '#FB7185',
+    coronaFillB: '#F472B6',
+    coronaKind: 'sakura',
+    particleShape: 'petal',
+  },
+  rainbow_prism: {
+    gradWarmStart: '#EC4899',
+    gradHotStart: '#8B5CF6',
+    gradWarmEnd: '#06B6D4',
+    gradHotEnd: '#F59E0B',
+    charDarkA: '#232030',
+    charDarkB: '#12101A',
+    glowRgb1: '192, 132, 252',
+    glowRgb2: '45, 212, 191',
+    auraInner: 'rgba(255,255,255,0.85)',
+    auraMid: 'rgba(168,85,247,0.62)',
+    auraOuter: 'rgba(45,212,191,0)',
+    iconHotTone: '#FFFFFF',
+    iconCharMid: '#D4D4D8',
+    iconCharEnd: '#71717A',
+    sparkStart: '#FDE047',
+    sparkMid: '#2DD4BF',
+    sparkEnd: '#EC4899',
+    sparkGlow: '0 0 10px rgba(192, 132, 252, 0.95)',
+    ashMid: '#C4B5FD',
+    ashEnd: '#64748B',
+    burstShades: ['#F43F5E', '#FBBF24', '#34D399', '#38BDF8', '#C084FC'],
+    burstHotAccent: '#FFFFFF',
+    coronaFillA: '#C084FC',
+    coronaFillB: '#2DD4BF',
+    coronaKind: 'prism',
+    particleShape: 'shard',
+    isRainbow: true,
+  },
+};
+
+function createAshBurst(cx: number, cy: number, startId: number, theme: BurnThemeConfig): AshFlake[] {
+  const shades = theme.burstShades;
   const flakes: AshFlake[] = [];
   for (let i = 0; i < 46; i++) {
     const angle = Math.random() * Math.PI * 2;
     const radius = Math.sqrt(Math.random()) * 28;
-    const isEmberTip = i < 6;
+    const isEmberTip = i < 8;
     flakes.push({
       id: startId + i,
       x: cx + Math.cos(angle) * radius,
       y: cy + Math.sin(angle) * radius,
-      vx: -14 + Math.random() * 48,
+      vx: -18 + Math.random() * 52,
       vy: -(34 + Math.random() * 68),
       rot: Math.random() * 360,
-      vRot: (Math.random() - 0.5) * 240,
-      w: isEmberTip ? 2.8 + Math.random() * 2.2 : 3.2 + Math.random() * 5.2,
-      h: isEmberTip ? 2.8 + Math.random() * 2.2 : 2.2 + Math.random() * 3.8,
+      vRot: (Math.random() - 0.5) * 260,
+      w: isEmberTip ? 3 + Math.random() * 2.4 : 3.2 + Math.random() * 5.2,
+      h: isEmberTip ? 3 + Math.random() * 2.4 : 2.2 + Math.random() * 3.8,
       delay: Math.random() * 260,
       life: 0,
       maxLife: 1000 + Math.random() * 700,
-      shade: isEmberTip ? '#FB923C' : shades[Math.floor(Math.random() * (shades.length - 1))],
+      shade: isEmberTip ? theme.burstHotAccent : shades[Math.floor(Math.random() * shades.length)],
       swayPhase: Math.random() * Math.PI * 2,
     });
   }
@@ -901,6 +1259,7 @@ export const WheelFab: React.FC<{
   side?: WheelSidePref;
   iconStyle?: WheelIconStylePref;
   expWheelBurnEffect?: boolean;
+  burnStyle?: WheelBurnStylePref;
   onChangeSide?: (side: WheelSidePref) => void;
   onHoverChange?: (hover: boolean) => void;
   cloud?: React.ReactNode;
@@ -914,6 +1273,7 @@ export const WheelFab: React.FC<{
   side = 'right',
   iconStyle = 'wheel',
   expWheelBurnEffect = false,
+  burnStyle = 'classic_fire',
   onChangeSide,
   onHoverChange,
   cloud,
@@ -921,6 +1281,11 @@ export const WheelFab: React.FC<{
   onFocus,
   onBlur,
 }) => {
+  const burnTheme = BURN_THEMES[burnStyle] ?? BURN_THEMES.classic_fire;
+  const burnThemeRef = useRef<BurnThemeConfig>(burnTheme);
+  useEffect(() => {
+    burnThemeRef.current = burnTheme;
+  }, [burnTheme]);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const suppressClickRef = useRef(false);
   const snapTimerRef = useRef<number | null>(null);
@@ -1105,7 +1470,7 @@ export const WheelFab: React.FC<{
             }
             fx.elapsed = 0;
             fx.activeEmbers = [];
-            fx.activeAsh = createAshBurst(cx, cy, fx.particleId);
+            fx.activeAsh = createAshBurst(cx, cy, fx.particleId, burnThemeRef.current);
             fx.particleId += fx.activeAsh.length + 1;
             setEmbers([]);
             setAshFlakes([...fx.activeAsh]);
@@ -1345,11 +1710,11 @@ export const WheelFab: React.FC<{
   const glowFade = 1 - charLevel * 0.86;
   const wheelTone =
     charLevel > 0.65
-      ? '#71717A'
+      ? burnTheme.iconCharEnd
       : charLevel > 0.3
-        ? '#A1A1AA'
+        ? burnTheme.iconCharMid
         : isBlazing || heat > 0.35
-          ? '#FFF3C4'
+          ? burnTheme.iconHotTone
           : 'var(--accent-ink)';
 
   let ashBtnOpacity = 1;
@@ -1377,34 +1742,72 @@ export const WheelFab: React.FC<{
     }
   }
 
-  const baseGradStart = `color-mix(in srgb, ${
-    heat > 0.62 ? '#DC2626' : '#EA580C'
-  } ${Math.round(emberRatio * 100)}%, var(--accent))`;
-  const baseGradEnd = `color-mix(in srgb, ${
-    heat > 0.72 ? '#991B1B' : '#FF3D00'
-  } ${Math.round(emberRatio * 100)}%, var(--accent-end))`;
+  const rainbowHueA = Math.round((spinDeg * 1.4) % 360);
+  const rainbowHueB = (rainbowHueA + 130) % 360;
+  const baseGradStart = burnTheme.isRainbow
+    ? `color-mix(in srgb, hsl(${rainbowHueA} 92% 58%) ${Math.round(emberRatio * 100)}%, var(--accent))`
+    : `color-mix(in srgb, ${
+        heat > 0.62 ? burnTheme.gradHotStart : burnTheme.gradWarmStart
+      } ${Math.round(emberRatio * 100)}%, var(--accent))`;
+  const baseGradEnd = burnTheme.isRainbow
+    ? `color-mix(in srgb, hsl(${rainbowHueB} 92% 52%) ${Math.round(emberRatio * 100)}%, var(--accent-end))`
+    : `color-mix(in srgb, ${
+        heat > 0.72 ? burnTheme.gradHotEnd : burnTheme.gradWarmEnd
+      } ${Math.round(emberRatio * 100)}%, var(--accent-end))`;
+
+  // Shape geometry for both classic circular & 5 new non-circular designs
+  const shapeShellClass =
+    iconStyle === 'squircle'
+      ? 'h-14 w-14 rounded-[18px]'
+      : iconStyle === 'diamond'
+        ? 'h-[50px] w-[50px] rounded-[14px]'
+        : iconStyle === 'pill_dock'
+          ? 'h-12 w-[78px] rounded-full'
+          : iconStyle === 'octa_shield'
+            ? 'h-[58px] w-[58px] rounded-none'
+            : iconStyle === 'blade_hex'
+              ? 'h-[54px] w-[60px] rounded-none'
+              : 'h-14 w-14 rounded-full';
+
+  const shapeClipPath: string | undefined =
+    iconStyle === 'octa_shield'
+      ? 'polygon(29% 2%, 71% 2%, 98% 29%, 98% 71%, 71% 98%, 29% 98%, 2% 71%, 2% 29%)'
+      : iconStyle === 'blade_hex'
+        ? 'polygon(25% 4%, 75% 4%, 99% 50%, 75% 96%, 25% 96%, 1% 50%)'
+        : undefined;
+
+  const baseButtonTransform =
+    iconStyle === 'diamond'
+      ? phase === 'ash'
+        ? `rotate(45deg) scale(${ashBtnScale.toFixed(3)})`
+        : isDragging
+          ? 'rotate(45deg) scale(1.1)'
+          : isBlazing || isPressing
+            ? 'rotate(45deg) scale(1.05)'
+            : 'rotate(45deg)'
+      : phase === 'ash'
+        ? `scale(${ashBtnScale.toFixed(3)})`
+        : undefined;
 
   const fireStyle: React.CSSProperties | undefined =
     heat > 0.04 && (phase === 'idle' || ashProgress < 0.7)
       ? {
-          backgroundImage: `linear-gradient(135deg, color-mix(in srgb, #27272A ${Math.round(
+          backgroundImage: `linear-gradient(135deg, color-mix(in srgb, ${burnTheme.charDarkA} ${Math.round(
             charLevel * 92
-          )}%, ${baseGradStart}) 0%, color-mix(in srgb, #18181B ${Math.round(
+          )}%, ${baseGradStart}) 0%, color-mix(in srgb, ${burnTheme.charDarkB} ${Math.round(
             charLevel * 94
           )}%, ${baseGradEnd}) 100%)`,
           borderColor:
             charLevel > 0.25
               ? `rgba(161, 161, 170, ${(0.45 - charLevel * 0.2).toFixed(2)})`
-              : `rgba(255, ${Math.round(255 - emberRatio * 145)}, ${Math.round(
-                  255 - emberRatio * 210
-                )}, ${0.24 + emberRatio * 0.65})`,
+              : `rgba(${burnTheme.glowRgb1}, ${(0.35 + emberRatio * 0.58).toFixed(2)})`,
           boxShadow:
-            phase === 'ash'
+            phase === 'ash' || shapeClipPath
               ? 'none'
-              : `0 0 ${Math.round((14 + emberRatio * 28 + burnLevel * 14) * glowFade)}px rgba(239, 68, 68, ${(
+              : `0 0 ${Math.round((14 + emberRatio * 28 + burnLevel * 14) * glowFade)}px rgba(${burnTheme.glowRgb1}, ${(
                   (emberRatio * 0.85 + burnLevel * 0.12) *
                   glowFade
-                ).toFixed(2)}), 0 0 ${Math.round((6 + emberRatio * 16 + burnLevel * 10) * glowFade)}px rgba(251, 146, 60, ${(
+                ).toFixed(2)}), 0 0 ${Math.round((6 + emberRatio * 16 + burnLevel * 10) * glowFade)}px rgba(${burnTheme.glowRgb2}, ${(
                   emberRatio *
                   0.75 *
                   glowFade
@@ -1412,44 +1815,223 @@ export const WheelFab: React.FC<{
         }
       : undefined;
 
+  const particleRadiusClass =
+    burnTheme.particleShape === 'square'
+      ? 'rounded-[1px]'
+      : burnTheme.particleShape === 'petal'
+        ? 'rounded-tl-full rounded-br-full'
+        : burnTheme.particleShape === 'shard'
+          ? 'rounded-[2px] rotate-45'
+          : 'rounded-full';
+
+  const renderBurnCorona = () => {
+    if (!isBlazing) return null;
+    const fillA = burnTheme.isRainbow ? `hsl(${rainbowHueA} 95% 60%)` : burnTheme.coronaFillA;
+    const fillB = burnTheme.isRainbow ? `hsl(${rainbowHueB} 95% 58%)` : burnTheme.coronaFillB;
+
+    return (
+      <svg
+        aria-hidden="true"
+        className="morph-flame-flicker pointer-events-none absolute left-1/2 top-1/2 h-[82px] w-[82px] -translate-x-1/2 -translate-y-1/2"
+        viewBox="0 0 72 72"
+        fill="none"
+        style={{opacity: flameFade}}
+      >
+        {burnTheme.coronaKind === 'plasma' && (
+          <>
+            <circle cx="36" cy="36" r="32" stroke={fillA} strokeWidth="2.4" strokeDasharray="10 6" strokeOpacity="0.92" />
+            <circle cx="36" cy="36" r="28" stroke={fillB} strokeWidth="1.6" strokeDasharray="5 8" strokeOpacity="0.82" />
+            {Array.from({length: 8}).map((_, idx) => {
+              const a = ((idx * 45 + spinDeg * 0.6) * Math.PI) / 180;
+              return (
+                <circle
+                  key={idx}
+                  cx={36 + 32.5 * Math.cos(a)}
+                  cy={36 + 32.5 * Math.sin(a)}
+                  r={idx % 2 === 0 ? 2.4 : 1.6}
+                  fill={idx % 2 === 0 ? '#FFFFFF' : fillA}
+                />
+              );
+            })}
+          </>
+        )}
+
+        {burnTheme.coronaKind === 'acid' &&
+          Array.from({length: 12}).map((_, idx) => {
+            const a = ((idx * 30 + spinDeg * 0.4) * Math.PI) / 180;
+            const r = idx % 2 === 0 ? 32.5 : 30.2;
+            return (
+              <circle
+                key={idx}
+                cx={36 + r * Math.cos(a)}
+                cy={36 + r * Math.sin(a)}
+                r={idx % 3 === 0 ? 3.4 : 2.3}
+                fill={idx % 2 === 0 ? fillA : fillB}
+                fillOpacity="0.88"
+              />
+            );
+          })}
+
+        {burnTheme.coronaKind === 'void' && (
+          <>
+            <circle cx="36" cy="36" r="33" stroke={fillA} strokeWidth="2.8" strokeDasharray="18 10" strokeOpacity="0.9" />
+            <circle cx="36" cy="36" r="29.5" stroke={fillB} strokeWidth="1.6" strokeDasharray="7 11" strokeOpacity="0.85" />
+          </>
+        )}
+
+        {burnTheme.coronaKind === 'solar' &&
+          Array.from({length: 16}).map((_, idx) => {
+            const a = (idx * 22.5 * Math.PI) / 180;
+            const r1 = 27;
+            const r2 = idx % 2 === 0 ? 36 : 31.8;
+            return (
+              <line
+                key={idx}
+                x1={36 + r1 * Math.cos(a)}
+                y1={36 + r1 * Math.sin(a)}
+                x2={36 + r2 * Math.cos(a)}
+                y2={36 + r2 * Math.sin(a)}
+                stroke={idx % 2 === 0 ? fillB : fillA}
+                strokeWidth={idx % 2 === 0 ? '2.4' : '1.5'}
+                strokeLinecap="round"
+              />
+            );
+          })}
+
+        {burnTheme.coronaKind === 'frost' &&
+          Array.from({length: 6}).map((_, idx) => {
+            const a = ((idx * 60) * Math.PI) / 180;
+            const x1 = 36 + 26 * Math.cos(a);
+            const y1 = 36 + 26 * Math.sin(a);
+            const x2 = 36 + 35.5 * Math.cos(a);
+            const y2 = 36 + 35.5 * Math.sin(a);
+            const bA1 = a - 0.25;
+            const bA2 = a + 0.25;
+            return (
+              <g key={idx} stroke={idx % 2 === 0 ? fillA : fillB} strokeWidth="2" strokeLinecap="round">
+                <line x1={x1} y1={y1} x2={x2} y2={y2} />
+                <line x1={36 + 31 * Math.cos(a)} y1={36 + 31 * Math.sin(a)} x2={36 + 34 * Math.cos(bA1)} y2={36 + 34 * Math.sin(bA1)} />
+                <line x1={36 + 31 * Math.cos(a)} y1={36 + 31 * Math.sin(a)} x2={36 + 34 * Math.cos(bA2)} y2={36 + 34 * Math.sin(bA2)} />
+              </g>
+            );
+          })}
+
+        {burnTheme.coronaKind === 'glitch' &&
+          Array.from({length: 10}).map((_, idx) => {
+            const a = ((idx * 36) * Math.PI) / 180;
+            const x = 36 + 31.5 * Math.cos(a);
+            const y = 36 + 31.5 * Math.sin(a);
+            return (
+              <rect
+                key={idx}
+                x={x - 3.2}
+                y={y - 1.6}
+                width={idx % 2 === 0 ? 7.5 : 5}
+                height="3"
+                fill={idx % 2 === 0 ? fillA : fillB}
+                fillOpacity="0.92"
+              />
+            );
+          })}
+
+        {burnTheme.coronaKind === 'lightning' &&
+          Array.from({length: 8}).map((_, idx) => {
+            const a = ((idx * 45) * Math.PI) / 180;
+            const aMid = ((idx * 45 + 11) * Math.PI) / 180;
+            const x1 = 36 + 26.5 * Math.cos(a);
+            const y1 = 36 + 26.5 * Math.sin(a);
+            const xm = 36 + 31.5 * Math.cos(aMid);
+            const ym = 36 + 31.5 * Math.sin(aMid);
+            const x2 = 36 + 35.8 * Math.cos(a);
+            const y2 = 36 + 35.8 * Math.sin(a);
+            return (
+              <polyline
+                key={idx}
+                points={`${x1},${y1} ${xm},${ym} ${x2},${y2}`}
+                stroke={idx % 2 === 0 ? fillA : fillB}
+                strokeWidth="2.1"
+                strokeLinejoin="miter"
+                strokeLinecap="round"
+              />
+            );
+          })}
+
+        {(burnTheme.coronaKind === 'flame' ||
+          burnTheme.coronaKind === 'magma' ||
+          burnTheme.coronaKind === 'sakura' ||
+          burnTheme.coronaKind === 'prism') &&
+          Array.from({length: 12}).map((_, idx) => {
+            const baseAngle = idx * 30;
+            const rad1 = ((baseAngle - 10) * Math.PI) / 180;
+            const radTip = (baseAngle * Math.PI) / 180;
+            const rad2 = ((baseAngle + 10) * Math.PI) / 180;
+            const rBase = 27.5;
+            const rTip = idx % 2 === 0 ? 35.8 : 33.2;
+            const x1 = 36 + rBase * Math.cos(rad1);
+            const y1 = 36 + rBase * Math.sin(rad1);
+            const xt = 36 + rTip * Math.cos(radTip);
+            const yt = 36 + rTip * Math.sin(radTip);
+            const x2 = 36 + rBase * Math.cos(rad2);
+            const y2 = 36 + rBase * Math.sin(rad2);
+            const wedgeFill = burnTheme.isRainbow
+              ? `hsl(${(idx * 30 + rainbowHueA) % 360} 92% 60%)`
+              : idx % 2 === 0
+                ? fillA
+                : fillB;
+            return (
+              <path
+                key={idx}
+                d={`M ${x1} ${y1} Q ${xt} ${yt} ${x2} ${y2} Z`}
+                fill={wedgeFill}
+                fillOpacity="0.92"
+              />
+            );
+          })}
+      </svg>
+    );
+  };
+
   return (
     <>
       {isDragging && (
         <div className="pointer-events-none fixed inset-0 z-20">
-          <div
-            className={`morph-fab-bottom fixed left-5 flex h-14 w-14 items-center justify-center rounded-full border-2 border-dashed transition-all duration-150 lg:left-8 ${
-              previewSide === 'left'
-                ? 'scale-105 border-[var(--accent)] bg-[var(--accent)]/15'
-                : 'border-[var(--line)] bg-[var(--surface)]/30 opacity-60'
-            }`}
-          />
-          <div
-            className={`morph-fab-bottom fixed left-1/2 flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-full border-2 border-dashed transition-all duration-150 ${
-              previewSide === 'center'
-                ? 'scale-105 border-[var(--accent)] bg-[var(--accent)]/15'
-                : 'border-[var(--line)] bg-[var(--surface)]/30 opacity-60'
-            }`}
-          />
-          <div
-            className={`morph-fab-bottom fixed right-5 flex h-14 w-14 items-center justify-center rounded-full border-2 border-dashed transition-all duration-150 lg:right-8 ${
-              previewSide === 'right'
-                ? 'scale-105 border-[var(--accent)] bg-[var(--accent)]/15'
-                : 'border-[var(--line)] bg-[var(--surface)]/30 opacity-60'
-            }`}
-          />
+          {(['left', 'center', 'right'] as WheelSidePref[]).map((s) => (
+            <div
+              key={s}
+              style={
+                iconStyle === 'diamond'
+                  ? {transform: s === 'center' ? 'translateX(-50%) rotate(45deg)' : 'rotate(45deg)'}
+                  : shapeClipPath
+                    ? {clipPath: shapeClipPath}
+                    : undefined
+              }
+              className={`morph-fab-bottom fixed flex items-center justify-center border-2 border-dashed transition-all duration-150 ${shapeShellClass} ${
+                s === 'left'
+                  ? 'left-5 lg:left-8'
+                  : s === 'center'
+                    ? 'left-1/2 -translate-x-1/2'
+                    : 'right-5 lg:right-8'
+              } ${
+                previewSide === s
+                  ? 'scale-105 border-[var(--accent)] bg-[var(--accent)]/15'
+                  : 'border-[var(--line)] bg-[var(--surface)]/30 opacity-60'
+              }`}
+            />
+          ))}
         </div>
       )}
 
-      {/* Rising ember sparks transitioning to early ash flakes as 30s approaches */}
+      {/* Rising sparks transitioning to early ash/shard flakes as 30s approaches */}
       {phase === 'idle' && embers.length > 0 && (
         <div className="pointer-events-none fixed inset-0 z-30 overflow-hidden">
           {embers.map((em) => {
             const p = em.life / em.maxLife;
+            const rainbowCol = `hsl(${(em.id * 47) % 360} 92% 62%)`;
             return (
               <span
                 key={em.id}
                 className={`fixed -translate-x-1/2 -translate-y-1/2 ${
-                  em.ash ? 'rounded-[2px]' : 'rounded-full'
+                  em.ash ? 'rounded-[2px]' : particleRadiusClass
                 }`}
                 style={{
                   left: `${em.x}px`,
@@ -1459,14 +2041,16 @@ export const WheelFab: React.FC<{
                   opacity: Math.max(0, (1 - p) * 0.9),
                   backgroundColor: em.ash
                     ? p < 0.4
-                      ? '#A1A1AA'
-                      : '#52525B'
-                    : p < 0.35
-                      ? '#FFF3C4'
-                      : p < 0.7
-                        ? '#FF5722'
-                        : '#DC2626',
-                  boxShadow: em.ash ? undefined : '0 0 8px rgba(255, 61, 0, 0.9)',
+                      ? burnTheme.ashMid
+                      : burnTheme.ashEnd
+                    : burnTheme.isRainbow
+                      ? rainbowCol
+                      : p < 0.35
+                        ? burnTheme.sparkStart
+                        : p < 0.7
+                          ? burnTheme.sparkMid
+                          : burnTheme.sparkEnd,
+                  boxShadow: em.ash ? undefined : burnTheme.sparkGlow,
                 }}
               />
             );
@@ -1474,19 +2058,21 @@ export const WheelFab: React.FC<{
         </div>
       )}
 
-      {/* 30s Ash flakes drifting upward and fading */}
+      {/* 30s Disintegration flakes drifting upward and fading */}
       {phase === 'ash' && ashFlakes.length > 0 && (
         <div className="pointer-events-none fixed inset-0 z-30 overflow-hidden">
           {ashFlakes.map((f) => {
             const p = f.life / f.maxLife;
             const fadeIn = Math.min(1, f.life / 120);
             const fadeOut = Math.max(0, 1 - Math.pow(p, 1.35));
-            const isOrange = f.shade === '#FB923C';
-            const color = isOrange && p > 0.35 ? '#52525B' : f.shade;
+            const isHot = f.shade === burnTheme.burstHotAccent;
+            const color = isHot && p > 0.35 ? burnTheme.ashEnd : f.shade;
             return (
               <span
                 key={f.id}
-                className="fixed rounded-[2px]"
+                className={`fixed ${
+                  burnTheme.particleShape === 'petal' ? 'rounded-tl-full rounded-br-full' : 'rounded-[2px]'
+                }`}
                 style={{
                   left: `${f.x}px`,
                   top: `${f.y}px`,
@@ -1497,7 +2083,7 @@ export const WheelFab: React.FC<{
                   transform: `translate(-50%, -50%) rotate(${f.rot.toFixed(1)}deg) scale(${(
                     1 - p * 0.35
                   ).toFixed(2)})`,
-                  boxShadow: isOrange && p <= 0.35 ? '0 0 6px rgba(251, 146, 60, 0.75)' : undefined,
+                  boxShadow: isHot && p <= 0.35 ? burnTheme.sparkGlow : undefined,
                 }}
               />
             );
@@ -1544,11 +2130,14 @@ export const WheelFab: React.FC<{
             }`}
             style={{
               opacity: Math.min(1, (heat - 0.32) * 1.55 + burnLevel * 0.22) * flameFade,
-              background:
-                'radial-gradient(circle, rgba(255,95,31,0.82) 0%, rgba(220,38,38,0.62) 55%, rgba(185,28,28,0) 78%)',
+              background: burnTheme.isRainbow
+                ? `radial-gradient(circle, hsla(${rainbowHueA}, 95%, 62%, 0.85) 0%, hsla(${rainbowHueB}, 90%, 54%, 0.58) 55%, transparent 78%)`
+                : `radial-gradient(circle, ${burnTheme.auraInner} 0%, ${burnTheme.auraMid} 55%, ${burnTheme.auraOuter} 78%)`,
             }}
           />
         )}
+        {/* Outer burn corona sits outside clipped polygon shells so octagon/hex never crop flames! */}
+        {renderBurnCorona()}
         <button
           type="button"
           onContextMenu={(e) => e.preventDefault()}
@@ -1570,63 +2159,44 @@ export const WheelFab: React.FC<{
           aria-label={label}
           style={{
             ...fireStyle,
+            clipPath: shapeClipPath,
             opacity: phase === 'ash' ? ashBtnOpacity : undefined,
             filter: ashCharFilter || undefined,
-            transform: phase === 'ash' ? `scale(${ashBtnScale.toFixed(3)})` : undefined,
+            transform: baseButtonTransform,
             pointerEvents: phase === 'ash' ? 'none' : undefined,
           }}
           className={
             className ??
-            `morph-accent-btn no-touch-callout relative flex h-14 w-14 touch-none select-none items-center justify-center rounded-full border border-white/20 shadow-xl transition-transform duration-150 ${
-              isDragging
-                ? 'scale-110 cursor-grabbing shadow-2xl'
-                : isBlazing || isPressing
-                  ? 'scale-105 cursor-grab'
+            `morph-accent-btn no-touch-callout relative flex ${shapeShellClass} touch-none select-none items-center justify-center border border-white/20 shadow-xl transition-transform duration-150 ${
+              iconStyle === 'diamond'
+                ? isDragging
+                  ? 'cursor-grabbing shadow-2xl'
                   : 'cursor-grab'
+                : isDragging
+                  ? 'scale-110 cursor-grabbing shadow-2xl'
+                  : isBlazing || isPressing
+                    ? 'scale-105 cursor-grab'
+                    : 'cursor-grab'
             }`
           }
         >
-          {isBlazing && (
-            <svg
-              aria-hidden="true"
-              className="morph-flame-flicker pointer-events-none absolute -inset-2.5 h-[76px] w-[76px]"
-              viewBox="0 0 72 72"
-              fill="none"
-              style={{opacity: flameFade}}
-            >
-              {Array.from({length: 12}).map((_, idx) => {
-                const baseAngle = idx * 30;
-                const rad1 = ((baseAngle - 10) * Math.PI) / 180;
-                const radTip = (baseAngle * Math.PI) / 180;
-                const rad2 = ((baseAngle + 10) * Math.PI) / 180;
-                const rBase = 27.5;
-                const rTip = idx % 2 === 0 ? 35.8 : 33.2;
-                const x1 = 36 + rBase * Math.cos(rad1);
-                const y1 = 36 + rBase * Math.sin(rad1);
-                const xt = 36 + rTip * Math.cos(radTip);
-                const yt = 36 + rTip * Math.sin(radTip);
-                const x2 = 36 + rBase * Math.cos(rad2);
-                const y2 = 36 + rBase * Math.sin(rad2);
-                return (
-                  <path
-                    key={idx}
-                    d={`M ${x1} ${y1} Q ${xt} ${yt} ${x2} ${y2} Z`}
-                    fill={idx % 2 === 0 ? '#FF3D00' : '#FF1744'}
-                    fillOpacity="0.92"
-                  />
-                );
-              })}
-            </svg>
-          )}
           <svg
-            className="pointer-events-none relative z-10 h-7 w-7"
-            viewBox="0 0 28 28"
+            className={`pointer-events-none relative z-10 ${
+              iconStyle === 'pill_dock' ? 'h-6 w-12' : 'h-7 w-7'
+            }`}
+            viewBox={iconStyle === 'pill_dock' ? '0 0 48 24' : '0 0 28 28'}
             fill="none"
             style={{
-              transform: `rotate(${spinDeg.toFixed(1)}deg) scale(${(1 + toothReveal * 0.08).toFixed(3)})`,
+              transform:
+                iconStyle === 'pill_dock'
+                  ? `scale(${(1 + toothReveal * 0.08).toFixed(3)})`
+                  : `rotate(${(iconStyle === 'diamond' ? spinDeg - 45 : spinDeg).toFixed(1)}deg) scale(${(
+                      1 + toothReveal * 0.08
+                    ).toFixed(3)})`,
             }}
           >
-            {toothReveal > 0.02 &&
+            {iconStyle !== 'pill_dock' &&
+              toothReveal > 0.02 &&
               Array.from({length: 12}).map((_, idx) => {
                 const deg = idx * 30;
                 const radA = ((deg - 7) * Math.PI) / 180;
@@ -1649,6 +2219,7 @@ export const WheelFab: React.FC<{
                   />
                 );
               })}
+
             {iconStyle === 'wheel' && (
               <>
                 {[0, 60, 120, 180, 240, 300].map((deg) => {
@@ -1714,6 +2285,71 @@ export const WheelFab: React.FC<{
                   strokeLinejoin="round"
                 />
                 <circle cx="14" cy="14" r={3 + toothReveal * 0.6} fill={wheelTone} />
+              </>
+            )}
+
+            {/* 5 NEW NON-CIRCULAR DESIGN ARTWORKS */}
+            {iconStyle === 'squircle' && (
+              <>
+                <rect x="4.8" y="4.8" width="7.2" height="7.2" rx="2.2" stroke={wheelTone} strokeWidth="2" />
+                <rect x="16" y="4.8" width="7.2" height="7.2" rx="2.2" stroke={wheelTone} strokeWidth="2" />
+                <rect x="4.8" y="16" width="7.2" height="7.2" rx="2.2" stroke={wheelTone} strokeWidth="2" />
+                <rect x="16" y="16" width="7.2" height="7.2" rx="2.2" fill={wheelTone} />
+              </>
+            )}
+            {iconStyle === 'diamond' && (
+              <>
+                <polygon
+                  points="14,3.5 24.5,14 14,24.5 3.5,14"
+                  stroke={wheelTone}
+                  strokeWidth="2"
+                  strokeLinejoin="round"
+                />
+                <polygon
+                  points="14,8.5 19.5,14 14,19.5 8.5,14"
+                  fill={wheelTone}
+                  fillOpacity="0.9"
+                />
+              </>
+            )}
+            {iconStyle === 'pill_dock' && (
+              <>
+                <g transform={`rotate(${spinDeg.toFixed(1)} 14 12)`}>
+                  <circle cx="14" cy="12" r="6.8" stroke={wheelTone} strokeWidth="2" strokeDasharray="7 3.5" strokeLinecap="round" />
+                  <circle cx="14" cy="12" r="2.2" fill={wheelTone} />
+                </g>
+                <rect x="26" y="7.5" width="14" height="2.4" rx="1.2" fill={wheelTone} fillOpacity="0.92" />
+                <rect x="26" y="12.2" width="10" height="2.4" rx="1.2" fill={wheelTone} fillOpacity="0.65" />
+                <circle cx="39" cy="13.4" r="1.5" fill={wheelTone} />
+              </>
+            )}
+            {iconStyle === 'octa_shield' && (
+              <>
+                <polygon
+                  points="10,4.2 18,4.2 23.8,10 23.8,18 18,23.8 10,23.8 4.2,18 4.2,10"
+                  stroke={wheelTone}
+                  strokeWidth="1.9"
+                  strokeLinejoin="round"
+                  strokeOpacity="0.72"
+                />
+                <line x1="14" y1="7" x2="14" y2="10.2" stroke={wheelTone} strokeWidth="2" strokeLinecap="round" />
+                <line x1="14" y1="17.8" x2="14" y2="21" stroke={wheelTone} strokeWidth="2" strokeLinecap="round" />
+                <line x1="7" y1="14" x2="10.2" y2="14" stroke={wheelTone} strokeWidth="2" strokeLinecap="round" />
+                <line x1="17.8" y1="14" x2="21" y2="14" stroke={wheelTone} strokeWidth="2" strokeLinecap="round" />
+                <circle cx="14" cy="14" r={2.8 + toothReveal * 0.5} fill={wheelTone} />
+              </>
+            )}
+            {iconStyle === 'blade_hex' && (
+              <>
+                {[0, 120, 240].map((deg) => (
+                  <path
+                    key={deg}
+                    d="M14 14 Q 18 7.5 22.8 10.5 Q 19.5 14.5 14 14 Z"
+                    fill={wheelTone}
+                    transform={`rotate(${deg} 14 14)`}
+                  />
+                ))}
+                <circle cx="14" cy="14" r={2.6 + toothReveal * 0.5} fill={wheelTone} />
               </>
             )}
           </svg>

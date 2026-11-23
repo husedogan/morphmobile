@@ -39,6 +39,9 @@ import nleSampleImg from '../assets/images/nle_filter_reference_1795084645929.jp
 import {Lang} from '../data/i18n';
 import {
   DEFAULT_VE_SIZING,
+  ExpLauncherLabelMode,
+  ExpLauncherStyle,
+  ExpLauncherTextSize,
   PickedFile,
   VE_SIZING_BOUNDS,
   VideoEditorSizingPrefs,
@@ -46,6 +49,12 @@ import {
   clampVideoEditorSizing,
   formatBytes,
 } from '../data/models';
+import {
+  EXP_LAUNCHER_STYLES,
+  ExperimentalToolLauncher,
+  LauncherCategoryNode,
+  resolveLauncherLabelPrefs,
+} from './ExperimentalToolLauncher';
 import {isNativeApp} from '../engine/nativeBridge';
 import {
   AspectRatioPreset,
@@ -238,6 +247,13 @@ interface VideoEditorProps {
   initialTab?: VideoEditorTab;
   initialPreset?: Partial<VideoEditorState>;
   expArmadilloReel?: boolean;
+  expVideoExtraTimecodes?: boolean;
+  expAltLauncher?: boolean;
+  expAltLauncherStyle?: ExpLauncherStyle;
+  expAltLauncherLabelsEnabled?: boolean;
+  expAltLauncherLabelMode?: ExpLauncherLabelMode;
+  expAltLauncherShowDesc?: boolean;
+  expAltLauncherTextSize?: ExpLauncherTextSize;
   videoEditorSizing?: Partial<VideoEditorSizingPrefs>;
   onChangeVideoEditorSizing?: (patch: Partial<VideoEditorSizingPrefs>) => void;
   onBack: () => void;
@@ -516,6 +532,13 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   initialTab = 'trim',
   initialPreset,
   expArmadilloReel = true,
+  expVideoExtraTimecodes = false,
+  expAltLauncher = false,
+  expAltLauncherStyle = 'cascade_sheet',
+  expAltLauncherLabelsEnabled,
+  expAltLauncherLabelMode = 'wrap',
+  expAltLauncherShowDesc = true,
+  expAltLauncherTextSize = 'md',
   videoEditorSizing,
   onChangeVideoEditorSizing,
   onBack,
@@ -524,6 +547,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const isTr = lang === 'tr';
   const tr = useCallback((trText: string, enText: string) => (isTr ? trText : enText), [isTr]);
   const veSizing = useMemo(() => clampVideoEditorSizing(videoEditorSizing), [videoEditorSizing]);
+  // Classic Armadillo Wheel becomes passive whenever Experimental Cascading Launcher is active
+  const effectiveArmadilloReel = expArmadilloReel && !expAltLauncher;
 
   // Lock html/body/#root/theme-color/status-bar to cinema dark synchronously before paint so Light Mode never bleeds white edges or rounded corners
   useLayoutEffect(() => {
@@ -658,6 +683,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const [showExportConfirm, setShowExportConfirm] = useState(false);
   const [isPreparingExport, setIsPreparingExport] = useState(false);
   const [wheelMenuOpen, setWheelMenuOpen] = useState(false);
+  const [expEditorLauncherOpen, setExpEditorLauncherOpen] = useState(false);
   const [editorWheelSide, setEditorWheelSide] = useState<WheelSidePref>('right');
   const [kfPosX, setKfPosX] = useState(0);
   const [kfPosY, setKfPosY] = useState(0);
@@ -675,9 +701,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const [isBusyPackage, setIsBusyPackage] = useState(false);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
 
-  // Near-fullscreen expanded preview finishes the Armadillo roll-up ONLY when Experimental Armadillo Reel is enabled
+  // Near-fullscreen expanded preview finishes the Armadillo roll-up ONLY when Experimental Armadillo Reel is active
   const isExpandedWheelMode =
-    expArmadilloReel && isPortraitMode && !isFullscreenPreview && previewHeightVh >= 65;
+    effectiveArmadilloReel && isPortraitMode && !isFullscreenPreview && previewHeightVh >= 65;
   const prevExpandedWheelRef = useRef<boolean>(false);
 
   useEffect(() => {
@@ -7331,7 +7357,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       isPortraitMode={isPortraitMode}
       isInspectorOpen={isInspectorOpen}
       isExpandedWheelMode={isExpandedWheelMode}
-      expArmadilloReel={expArmadilloReel}
+      expArmadilloReel={effectiveArmadilloReel}
       isFullscreenPreview={isFullscreenPreview}
       previewHeightVh={previewHeightVh}
       isResizingPreview={isResizingPreview}
@@ -7667,8 +7693,34 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             </>
           )}
 
-          {/* Default ergonomic StudioDock; Experimental ArmadilloReelDock only when enabled in Settings -> Experimental */}
-          {expArmadilloReel ? (
+          {/* Default ergonomic StudioDock; ArmadilloReelDock (passive if expAltLauncher ON); Experimental Launcher Bar when expAltLauncher ON */}
+          {expAltLauncher ? (
+            <div className="pb-safe flex shrink-0 items-center justify-between gap-2.5 border-t border-white/[0.1] bg-[#0D0E13]/95 px-3.5 py-2.5 backdrop-blur-md">
+              <div className="flex min-w-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsInspectorOpen((v) => !v)}
+                  className="flex min-h-[40px] items-center gap-2 rounded-xl border border-white/12 bg-white/[0.06] px-3 text-xs font-bold text-white transition-colors hover:border-white/25"
+                >
+                  <Sliders className="h-3.5 w-3.5 text-[var(--accent)]" />
+                  <span className="truncate">{activeTabTitle[activeTab]}</span>
+                </button>
+                {expVideoExtraTimecodes && (
+                  <span className="font-mono-num text-[11px] font-semibold text-white/55 tabular-nums">
+                    {formatSmpteTimecode(playhead, project.fps)}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setExpEditorLauncherOpen(true)}
+                className="flex min-h-[42px] shrink-0 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-xs font-bold text-white shadow-md transition-transform active:scale-95"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>{tr('Araçlar', 'Tools')}</span>
+              </button>
+            </div>
+          ) : effectiveArmadilloReel ? (
             <ArmadilloReelDock
               isTr={isTr}
               lang={lang}
@@ -7678,6 +7730,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
               isResizingPreview={isResizingPreview}
               hasActiveWatermark={hasActiveWatermark}
               timecodeText={formatSmpteTimecode(playhead, project.fps)}
+              showExtraTimecodes={expVideoExtraTimecodes}
               wheelOpen={wheelMenuOpen}
               wheelSide={editorWheelSide}
               hideFab={hideEditorWheelFab}
@@ -7704,7 +7757,24 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             </div>
             <div className="col-span-6 flex min-h-0 flex-col overflow-hidden lg:col-span-5">
               {renderInspectorPanel()}
-              {studioDockNode}
+              {expAltLauncher ? (
+                <div className="flex shrink-0 items-center justify-between gap-2 border-t border-white/[0.1] bg-[#0D0E13] px-3.5 py-2">
+                  <span className="truncate text-xs font-bold text-white/80">
+                    {activeTabTitle[activeTab]}
+                    {expVideoExtraTimecodes ? ` · ${formatSmpteTimecode(playhead, project.fps)}` : ''}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setExpEditorLauncherOpen(true)}
+                    className="flex min-h-[38px] items-center gap-1.5 rounded-xl bg-[var(--accent)] px-3.5 text-xs font-bold text-white transition-transform active:scale-95"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    <span>{tr('Kademeli Araçlar', 'Cascading Tools')}</span>
+                  </button>
+                </div>
+              ) : (
+                studioDockNode
+              )}
             </div>
           </div>
 
@@ -7713,6 +7783,207 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
           </div>
         </div>
       )}
+
+      {/* Experimental Cascading Tool Launcher inside Video Editor (Studio Dark Tone) */}
+      {expAltLauncher && (() => {
+        const veLabelPrefs = resolveLauncherLabelPrefs({
+          expAltLauncherLabelsEnabled,
+          expAltLauncherLabelMode,
+          expAltLauncherShowDesc,
+          expAltLauncherTextSize,
+        });
+        return (
+        <ExperimentalToolLauncher
+          open={expEditorLauncherOpen}
+          title={tr('Video Düzenleyici Araçları', 'Video Editor Tools')}
+          subtitle={
+            (EXP_LAUNCHER_STYLES.find((s) => s.id === expAltLauncherStyle)?.[
+              isTr ? 'titleTr' : 'titleEn'
+            ] ?? '') +
+            (expVideoExtraTimecodes ? ` · ${formatSmpteTimecode(playhead, project.fps)}` : '')
+          }
+          styleMode={expAltLauncherStyle}
+          labelsEnabled={veLabelPrefs.labelsEnabled}
+          labelMode={veLabelPrefs.labelMode}
+          showDesc={veLabelPrefs.showDesc}
+          textSize={veLabelPrefs.textSize}
+          lang={lang}
+          surfaceTone="studio"
+          categories={
+            [
+              {
+                id: 've-cut',
+                label: tr('Kurgu & Zaman', 'Edit & Timeline'),
+                subtitle: tr('Klip kırp, böl ve hızlandır', 'Trim, split & speed FX'),
+                icon: Scissors,
+                accent: '#F43F5E',
+                items: [
+                  {
+                    id: 'tab:trim',
+                    label: tr('Klip & Kırpma', 'Clip & Trim'),
+                    desc: tr('Başlangıç / bitiş düzenle', 'Adjust in/out bounds'),
+                    icon: Scissors,
+                    active: activeTab === 'trim',
+                  },
+                  {
+                    id: 'act:split',
+                    label: tr('Oynatma Noktasından Böl', 'Split at Playhead'),
+                    desc: tr('Klibi bu saniyede ikiye böl', 'Cut clip right here'),
+                    icon: Scissors,
+                    accent: '#FB7185',
+                  },
+                  {
+                    id: 'tab:fx',
+                    label: tr('Hız, Ters & FX', 'Speed, Reverse & FX'),
+                    desc: tr('Yavaşlat, hızlandır, geçişler', 'Slow-mo, speed, transitions'),
+                    icon: Gauge,
+                    accent: '#F472B6',
+                    active: activeTab === 'fx',
+                  },
+                ],
+              },
+              {
+                id: 've-audio',
+                label: tr('Ses Stüdyosu', 'Audio Studio'),
+                subtitle: tr('Ses düzeyi, müzik, susturma', 'Volume, music & mute'),
+                icon: AudioLines,
+                accent: '#34D399',
+                items: [
+                  {
+                    id: 'tab:audio',
+                    label: tr('Ses & Miks Paneli', 'Audio & Mix Panel'),
+                    desc: tr('Düzey, EQ, dış ses ekle', 'Levels, EQ, add voice/music'),
+                    icon: AudioLines,
+                    active: activeTab === 'audio',
+                  },
+                  {
+                    id: 'act:mute',
+                    label: project.masterMuted
+                      ? tr('Sesi Tekrar Aç', 'Unmute Master Audio')
+                      : tr('Videoyu Sessize Al', 'Mute Master Audio'),
+                    desc: project.masterMuted
+                      ? tr('Şu an sessiz', 'Currently muted')
+                      : tr('Ana sesi anında kapat', 'Instantly mute main audio'),
+                    icon: Music,
+                    accent: '#10B981',
+                    active: project.masterMuted,
+                  },
+                ],
+              },
+              {
+                id: 've-look',
+                label: tr('Kadraj & Renk', 'Frame & Color'),
+                subtitle: tr('Oran, döndürme ve filtreler', 'Aspect, rotate & grading'),
+                icon: Palette,
+                accent: '#A78BFA',
+                items: [
+                  {
+                    id: 'tab:transform',
+                    label: tr('Kadraj & Döndür', 'Crop & Transform'),
+                    desc: tr('9:16, 1:1, çevir, ölçekle', '9:16, 1:1, flip, scale'),
+                    icon: Crop,
+                    accent: '#2DD4BF',
+                    active: activeTab === 'transform',
+                  },
+                  {
+                    id: 'tab:color',
+                    label: tr('Renk & Filtreler', 'Color & Filters'),
+                    desc: tr('Sinematik presetler & ton', 'Cinematic presets & grading'),
+                    icon: Palette,
+                    accent: '#A78BFA',
+                    active: activeTab === 'color',
+                  },
+                  {
+                    id: 'act:compare',
+                    label: compareOriginal
+                      ? tr('Karşılaştırmayı Kapat', 'Exit Compare View')
+                      : tr('Önce / Sonra Karşılaştır', 'Compare Before / After'),
+                    desc: tr('Orijinal kare ile kıyasla', 'Inspect raw vs edited'),
+                    icon: Columns2,
+                    accent: '#38BDF8',
+                    active: compareOriginal,
+                  },
+                ],
+              },
+              {
+                id: 've-overlay',
+                label: tr('Metin & Damga', 'Text & Watermark'),
+                subtitle: tr('Başlık, altyazı ve logo', 'Titles, captions & mark'),
+                icon: Type,
+                accent: '#C084FC',
+                items: [
+                  {
+                    id: 'tab:text',
+                    label: tr('Metin & Altyazı', 'Text & Captions'),
+                    desc: tr('Yazı katmanı ekle/düzenle', 'Add or style text layers'),
+                    icon: Type,
+                    active: activeTab === 'text',
+                  },
+                  {
+                    id: 'tab:watermark',
+                    label: tr('Filigran & Logo', 'Watermark & Logo'),
+                    desc: tr('Konum ve şeffaflık ayarı', 'Position & opacity control'),
+                    icon: Stamp,
+                    accent: '#FB923C',
+                    active: activeTab === 'watermark',
+                  },
+                ],
+              },
+              {
+                id: 've-export',
+                label: tr('Dışa Aktar', 'Export'),
+                subtitle: tr('Çözünürlük, FPS ve çıktı', 'Resolution, FPS & render'),
+                icon: SlidersHorizontal,
+                accent: '#FB7185',
+                items: [
+                  {
+                    id: 'tab:export',
+                    label: tr('Format & Kalite', 'Format & Quality'),
+                    desc: tr('4K / 1080p, MP4 / WebM', '4K / 1080p, MP4 / WebM'),
+                    icon: SlidersHorizontal,
+                    active: activeTab === 'export',
+                  },
+                  {
+                    id: 'act:export_now',
+                    label: tr('Hemen Dışa Aktar', 'Export Now'),
+                    desc: tr('Çıktı onay penceresini aç', 'Open export confirmation'),
+                    icon: Download,
+                    accent: '#F43F5E',
+                  },
+                ],
+              },
+            ] as LauncherCategoryNode[]
+          }
+          onSelect={(actionId) => {
+            setExpEditorLauncherOpen(false);
+            if (actionId.startsWith('tab:')) {
+              const nextTab = actionId.slice(4) as VideoEditorTab;
+              setActiveTab(nextTab);
+              setIsInspectorOpen(true);
+              return;
+            }
+            if (actionId === 'act:split') {
+              handleSplitAtPlayhead();
+              return;
+            }
+            if (actionId === 'act:mute') {
+              setProject((prev) => ({...prev, masterMuted: !prev.masterMuted}));
+              setActiveTab('audio');
+              setIsInspectorOpen(true);
+              return;
+            }
+            if (actionId === 'act:compare') {
+              setCompareOriginal((v) => !v);
+              return;
+            }
+            if (actionId === 'act:export_now') {
+              setShowExportConfirm(true);
+            }
+          }}
+          onDismiss={() => setExpEditorLauncherOpen(false)}
+        />
+        );
+      })()}
 
       {/* Hidden Multi-Video Import, .morph Package & Source Relink Inputs */}
       <input

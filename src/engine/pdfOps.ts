@@ -3,8 +3,15 @@ import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import {canvasToBlob, decodeImage, normalizeImageFormat} from './imaging';
 
-if (typeof pdfWorkerUrl === 'string' && pdfWorkerUrl) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+const resolvedPdfWorkerUrl =
+  typeof pdfWorkerUrl === 'string' && pdfWorkerUrl
+    ? typeof window !== 'undefined'
+      ? new URL(pdfWorkerUrl, window.location.href).href
+      : pdfWorkerUrl
+    : '';
+
+if (resolvedPdfWorkerUrl) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = resolvedPdfWorkerUrl;
 }
 
 let pdfWorkerReadyPromise: Promise<void> | null = null;
@@ -12,19 +19,24 @@ let pdfWorkerReadyPromise: Promise<void> | null = null;
 export function ensurePdfWorker(): Promise<void> {
   if (!pdfWorkerReadyPromise) {
     pdfWorkerReadyPromise = (async () => {
-      if (typeof pdfWorkerUrl !== 'string' || !pdfWorkerUrl) return;
+      if (!resolvedPdfWorkerUrl) return;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = resolvedPdfWorkerUrl;
+      // Only create a Blob URL in production builds (never in Vite dev where /@vite/client
+      // or root-relative ES imports fail inside non-hierarchical blob: URLs).
+      if (import.meta.env.DEV) return;
       try {
-        const res = await fetch(pdfWorkerUrl);
+        const res = await fetch(resolvedPdfWorkerUrl);
         if (res.ok) {
-          const buf = await res.arrayBuffer();
-          if (buf.byteLength > 1024) {
+          const text = await res.text();
+          const hasRootRelativeImport = /\b(?:import|from)\s*["']\//.test(text);
+          if (text.length > 1024 && !hasRootRelativeImport) {
             pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(
-              new Blob([buf], {type: 'text/javascript'})
+              new Blob([text], {type: 'text/javascript'})
             );
           }
         }
       } catch {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+        pdfjsLib.GlobalWorkerOptions.workerSrc = resolvedPdfWorkerUrl;
       }
     })();
   }

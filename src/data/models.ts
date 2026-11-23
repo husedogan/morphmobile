@@ -187,7 +187,108 @@ export const ALL_MAIN_WHEEL_CATALOG: MainWheelItemDef[] = [
 export type UiScalePref = 'compact' | 'default' | 'large';
 export type CornerStylePref = 'sharp' | 'balanced' | 'soft';
 export type WheelSidePref = 'left' | 'center' | 'right';
-export type WheelIconStylePref = 'wheel' | 'morph' | 'gear' | 'compass' | 'hex';
+export type WheelIconStylePref =
+  | 'wheel'
+  | 'morph'
+  | 'gear'
+  | 'compass'
+  | 'hex'
+  | 'squircle'
+  | 'diamond'
+  | 'pill_dock'
+  | 'octa_shield'
+  | 'blade_hex';
+
+export type WheelBurnStylePref =
+  | 'classic_fire'
+  | 'plasma_blue'
+  | 'emerald_acid'
+  | 'violet_void'
+  | 'solar_gold'
+  | 'frost_shatter'
+  | 'cyber_glitch'
+  | 'crimson_magma'
+  | 'lightning_arc'
+  | 'sakura_ember'
+  | 'rainbow_prism';
+
+export interface WheelShapeMeta {
+  id: WheelIconStylePref;
+  titleTr: string;
+  titleEn: string;
+  descTr: string;
+  descEn: string;
+}
+
+export const EXP_WHEEL_SHAPES: readonly WheelShapeMeta[] = [
+  {
+    id: 'squircle',
+    titleTr: 'Karemsi',
+    titleEn: 'Squircle',
+    descTr: 'Yuvarlatılmış kare blok & 4 köşe odak',
+    descEn: 'Architectural rounded square tile',
+  },
+  {
+    id: 'diamond',
+    titleTr: 'Elmas',
+    titleEn: 'Diamond',
+    descTr: '45° baklava kesim & prizma çekirdek',
+    descEn: '45° faceted diamond chassis',
+  },
+  {
+    id: 'pill_dock',
+    titleTr: 'Kapsül',
+    titleEn: 'Capsule',
+    descTr: 'Yatay kapsül bar & ikili yörünge',
+    descEn: 'Sleek horizontal pill dock bar',
+  },
+  {
+    id: 'octa_shield',
+    titleTr: 'Sekizgen',
+    titleEn: 'Octagon',
+    descTr: 'Pahlı sekizgen kalkan & radar ağı',
+    descEn: 'Beveled 8-sided tactical shield',
+  },
+  {
+    id: 'blade_hex',
+    titleTr: 'Altıgen',
+    titleEn: 'Cyber Hex',
+    descTr: 'Keskin altıgen gövde & türbin bıçak',
+    descEn: 'Sharp flat-top hexagon turbine',
+  },
+] as const;
+
+export interface WheelBurnStyleMeta {
+  id: WheelBurnStylePref;
+  titleTr: string;
+  titleEn: string;
+  accent: string;
+  secondary: string;
+}
+
+export const WHEEL_BURN_STYLES: readonly WheelBurnStyleMeta[] = [
+  {id: 'classic_fire', titleTr: 'Klasik Alev', titleEn: 'Classic Flame', accent: '#FF5722', secondary: '#DC2626'},
+  {id: 'plasma_blue', titleTr: 'Mavi Plazma', titleEn: 'Blue Plasma', accent: '#38BDF8', secondary: '#2563EB'},
+  {id: 'emerald_acid', titleTr: 'Zümrüt Asit', titleEn: 'Emerald Acid', accent: '#34D399', secondary: '#059669'},
+  {id: 'violet_void', titleTr: 'Mor Kara Delik', titleEn: 'Violet Void', accent: '#A855F7', secondary: '#6D28D9'},
+  {id: 'solar_gold', titleTr: 'Güneş Patlaması', titleEn: 'Solar Flare', accent: '#FBBF24', secondary: '#D97706'},
+  {id: 'frost_shatter', titleTr: 'Buzul Kırılması', titleEn: 'Frost Shatter', accent: '#67E8F9', secondary: '#0284C7'},
+  {id: 'cyber_glitch', titleTr: 'Siber Glitch', titleEn: 'Cyber Glitch', accent: '#F43F5E', secondary: '#06B6D4'},
+  {id: 'crimson_magma', titleTr: 'Volkanik Magma', titleEn: 'Crimson Magma', accent: '#EA580C', secondary: '#7F1D1D'},
+  {id: 'lightning_arc', titleTr: 'Şimşek Arkı', titleEn: 'Lightning Arc', accent: '#FDE047', secondary: '#38BDF8'},
+  {id: 'sakura_ember', titleTr: 'Kızıl Kıvılcım', titleEn: 'Sakura Ember', accent: '#FB7185', secondary: '#EC4899'},
+  {id: 'rainbow_prism', titleTr: 'Prizma Süpernova', titleEn: 'Prism Nova', accent: '#C084FC', secondary: '#2DD4BF'},
+] as const;
+
+export type ExpLauncherStyle =
+  | 'cascade_sheet'
+  | 'radial_fan'
+  | 'orbit_tree'
+  | 'pill_rail'
+  | 'command_deck';
+
+export type ExpLauncherLabelMode = 'wrap' | 'marquee' | 'cloud' | 'compact' | 'hidden';
+export type ExpLauncherTextSize = 'sm' | 'md' | 'lg';
 
 export interface Prefs {
   theme: 'system' | 'dark' | 'light';
@@ -222,13 +323,33 @@ export interface Prefs {
   // Experimental / reversible UI flags
   expSpinningGear?: boolean;
   expWheelBurnEffect?: boolean;
+  /** Active visual preset for the 30-second Quick Wheel burn/disintegration effect */
+  expWheelBurnStyle?: WheelBurnStylePref;
   /** Defaults to true (Armadillo Reel ON); set false to use flat StudioDock in portrait */
   expArmadilloReel?: boolean;
+  /** Optional extra timecode badges in Video Editor experimental bars & wheel top strip (wheel center timecode always stays ON) */
+  expVideoExtraTimecodes?: boolean;
   expDualRingWheel?: boolean;
   expWheelCenterHoldCustomize?: boolean;
   expTouchTooltips?: boolean;
-  expDevCloudEasterEgg?: boolean;
   expLegacySliders?: boolean;
+  /** Experimental cascading tool launcher master toggle */
+  expAltLauncher?: boolean;
+  expAltLauncherStyle?: ExpLauncherStyle;
+  /** Apply experimental launcher to Home Screen Quick Wheel menu (default false; WheelFab button & 30s burn effect always stay active) */
+  expAltLauncherForMain?: boolean;
+  /** Apply experimental launcher to Convert / Tools / Actions menus (default true) */
+  expAltLauncherForMenus?: boolean;
+  /** Apply experimental launcher inside Video Editor (default true) */
+  expAltLauncherForVideo?: boolean;
+  /** Master ON/OFF toggle for labels inside Experimental Tool Launcher (defaults to true) */
+  expAltLauncherLabelsEnabled?: boolean;
+  /** How tool & category labels render inside Experimental Tool Launcher */
+  expAltLauncherLabelMode?: ExpLauncherLabelMode;
+  /** Show secondary tool descriptions inside Experimental Tool Launcher (defaults to true) */
+  expAltLauncherShowDesc?: boolean;
+  /** Label text size inside Experimental Tool Launcher */
+  expAltLauncherTextSize?: ExpLauncherTextSize;
 }
 
 export interface VideoEditorSizingPrefs {
@@ -307,8 +428,8 @@ export const ALL_TOOLS: Record<ToolId, ToolDef> = {
 export const SERVER_TOOLS: ServerToolDef[] = [
   {
     id: 'video_studio',
-    titleTr: 'Video Düzenleyici (Pro Stüdyo)',
-    titleEn: 'Video Editor (Pro Studio)',
+    titleTr: 'Video Düzenleyici',
+    titleEn: 'Video Editor',
     descTr: 'Çok katmanlı zaman çizelgesi, ses dalga formu, renk filtresi, metin katmanı, bulanık arka plan, hız, ters & bumerang.',
     descEn: 'Pro NLE timeline with audio waveform, color grading, text captions, blur pad, trim, split, speed & boomerang.',
     kinds: ['video'],
@@ -1001,7 +1122,7 @@ const WHEEL_TOOL_LABELS: Record<string, {tr: string; en: string}> = {
   ZIP_EXTRACT: {tr: 'ZIP Aç', en: 'Extract'},
   BATCH_RENAME: {tr: 'Adlandır', en: 'Rename'},
   FILE_HASH_INFO: {tr: 'SHA-256', en: 'Checksum'},
-  video_studio: {tr: 'Video Editör', en: 'Video Editor'},
+  video_studio: {tr: 'Video Düzenleyici', en: 'Video Editor'},
   video_convert: {tr: 'Video Çevir', en: 'Convert'},
   video_compress: {tr: 'V. Sıkıştır', en: 'Compress'},
   video_extract_audio: {tr: 'Ses Al', en: 'To Audio'},

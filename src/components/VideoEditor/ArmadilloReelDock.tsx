@@ -23,7 +23,8 @@ interface ArmadilloReelDockProps {
   previewHeightVh: number;
   isResizingPreview: boolean;
   hasActiveWatermark: boolean;
-  timecodeText: string;
+  timecodeText?: string;
+  showExtraTimecodes?: boolean;
   wheelOpen: boolean;
   wheelSide: WheelSidePref;
   hideFab: boolean;
@@ -159,6 +160,7 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
   isResizingPreview,
   hasActiveWatermark,
   timecodeText,
+  showExtraTimecodes = false,
   wheelOpen,
   wheelSide,
   hideFab,
@@ -179,11 +181,45 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // Continuous fold progress: 0 = flat horizontal dock, 1 = completely rolled into Cinema Reel FAB
-  const fold = Math.min(1, Math.max(0, (previewHeightVh - 46) / 19));
+  // Binary threshold roll-up (matches VideoEditor's >=65vh expanded wheel mode):
+  // Below 65vh, ALL 8 dock buttons stay 100% flat, aligned, and clickable — NEVER stuck half-curled in mid-air!
+  // Crossing >=65vh smoothly triggers a complete 0 -> 1 Armadillo roll into the corner wheel (and 1 -> 0 when shrinking back).
+  const shouldRoll = previewHeightVh >= 65;
+  const [fold, setFold] = useState<number>(() => (shouldRoll ? 1 : 0));
+  const foldRef = useRef<number>(fold);
+
+  useEffect(() => {
+    const target = shouldRoll ? 1 : 0;
+    const startVal = foldRef.current;
+    if (Math.abs(target - startVal) < 0.001) {
+      foldRef.current = target;
+      setFold(target);
+      return;
+    }
+    const duration = 310;
+    const startTime = performance.now();
+    let rafId = 0;
+
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - startTime) / duration);
+      const eased = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+      const next = startVal + (target - startVal) * eased;
+      foldRef.current = next;
+      setFold(next);
+      if (p < 1) {
+        rafId = window.requestAnimationFrame(tick);
+      }
+    };
+
+    rafId = window.requestAnimationFrame(tick);
+    return () => {
+      if (rafId) window.cancelAnimationFrame(rafId);
+    };
+  }, [shouldRoll]);
+
   const easeFold = smoothstep(fold);
-  const isFlat = fold <= 0.015;
-  const isRolled = fold >= 0.92;
+  const isFlat = !shouldRoll && fold <= 0.02;
+  const isRolled = shouldRoll && fold >= 0.92;
 
   // Draggable corner FAB state when rolled up
   const [fabDragPos, setFabDragPos] = useState<{x: number; y: number} | null>(null);
@@ -195,6 +231,11 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
   // Radial wheel interactive selection state
   const wheelBoxRef = useRef<HTMLDivElement | null>(null);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const [hoveredDockTab, setHoveredDockTab] = useState<VideoEditorTab | null>(null);
+
+  useEffect(() => {
+    if (!isFlat) setHoveredDockTab(null);
+  }, [isFlat]);
 
   useEffect(() => {
     setPreviewSnapSide(wheelSide);
@@ -404,11 +445,18 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
             const plateOpacity =
               plateT < 0.72 ? 1 : Math.max(0, 1 - (plateT - 0.72) / 0.28);
 
+            const isHoveredDock = isFlat && hoveredDockTab === tab.id;
+            const isTinted = isHighlighted || isHoveredDock;
+
             return (
               <button
                 key={tab.id}
                 type="button"
                 disabled={!isFlat}
+                onMouseEnter={() => isFlat && setHoveredDockTab(tab.id)}
+                onMouseLeave={() => setHoveredDockTab((cur) => (cur === tab.id ? null : cur))}
+                onFocus={() => isFlat && setHoveredDockTab(tab.id)}
+                onBlur={() => setHoveredDockTab((cur) => (cur === tab.id ? null : cur))}
                 onClick={() => isFlat && onSelectTab(tab.id)}
                 style={{
                   left: 0,
@@ -423,26 +471,29 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
                       ? `${tab.accent}${Math.round(35 + plateT * 45)
                           .toString(16)
                           .padStart(2, '0')}`
-                      : 'transparent',
+                      : isHighlighted
+                        ? `${tab.accent}66`
+                        : isHoveredDock
+                          ? `${tab.accent}4D`
+                          : 'transparent',
                   backgroundColor:
                     plateT > 0.08
                       ? 'rgba(20, 20, 24, 0.96)'
                       : isHighlighted
-                        ? 'rgba(244, 63, 94, 0.16)'
-                        : 'transparent',
+                        ? `${tab.accent}24`
+                        : isHoveredDock
+                          ? `${tab.accent}18`
+                          : 'transparent',
                   boxShadow:
                     plateT > 0.1
                       ? `0 6px 14px rgba(0,0,0,0.55), inset 0 1px 0 ${tab.accent}55`
                       : undefined,
+                  color: isTinted ? tab.accent : undefined,
                   transition: smoothTransition,
                 }}
                 className={`group absolute flex flex-col items-center justify-center gap-1 border px-0.5 py-1 text-[10px] font-semibold ${
                   isFlat ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none'
-                } ${
-                  isHighlighted
-                    ? 'text-[#FB7185]'
-                    : 'text-white/65 hover:bg-white/[0.06] hover:text-white'
-                }`}
+                } ${isTinted ? '' : 'text-white/65'}`}
               >
                 {/* Armored color-coded ridge stripe visible as the plate curls */}
                 {plateT > 0.06 && (
@@ -454,15 +505,16 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
                 <Icon
                   className="h-[17px] w-[17px] transition-transform group-active:scale-90"
                   style={
-                    isHighlighted
-                      ? {color: '#FB7185'}
-                      : plateT > 0.12
-                        ? {color: tab.accent}
-                        : undefined
+                    isTinted || plateT > 0.12
+                      ? {color: tab.accent}
+                      : undefined
                   }
                 />
                 <span
-                  style={{opacity: Math.max(0, 1 - plateT * 2.2)}}
+                  style={{
+                    opacity: Math.max(0, 1 - plateT * 2.2),
+                    color: isTinted ? tab.accent : undefined,
+                  }}
                   className="max-w-full truncate leading-none"
                 >
                   {isTr ? tab.labelTr : tab.labelEn}
@@ -485,7 +537,7 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
               hapticPulse(12);
               onSetWheelOpen(true);
             }}
-            aria-label={tr('Video Editör Çarkı', 'Video Editor Wheel')}
+            aria-label={tr('Video Düzenleyici Çarkı', 'Video Editor Wheel')}
             style={
               fabDragPos
                 ? {
@@ -533,24 +585,22 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label={tr('Video Editör Çarkı', 'Video Editor Wheel')}
+          aria-label={tr('Video Düzenleyici Çarkı', 'Video Editor Wheel')}
           onClick={() => onSetWheelOpen(false)}
           className="fixed inset-0 z-[72] flex flex-col items-center justify-center gap-4 bg-[#050507]/80 p-4 backdrop-blur-md"
         >
-          {/* Cinema Studio Header Strip */}
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-2 rounded-xl border border-[#F43F5E]/35 bg-[#121216]/95 px-3.5 py-1.5 shadow-xl"
-          >
-            <span className="h-2 w-2 animate-pulse rounded-full bg-[#F43F5E]" />
-            <span className="text-xs font-extrabold tracking-wide text-white">
-              {tr('Stüdyo Araç Çarkı', 'Studio Tool Reel')}
-            </span>
-            <span className="text-white/25">·</span>
-            <span className="font-mono-num text-[11px] font-bold text-[#FB7185]">
-              {timecodeText}
-            </span>
-          </div>
+          {/* Optional Extra Timecode Strip (controlled via Settings -> Experimental) */}
+          {showExtraTimecodes && timecodeText && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-2 rounded-xl border border-[#F43F5E]/35 bg-[#121216]/95 px-3.5 py-1.5 shadow-xl"
+            >
+              <span className="h-2 w-2 animate-pulse rounded-full bg-[#F43F5E]" />
+              <span className="font-mono-num text-[11px] font-bold text-[#FB7185] tabular-nums">
+                {timecodeText}
+              </span>
+            </div>
+          )}
 
           {/* 352px Cinema Film-Reel Radial Wheel */}
           <div
@@ -725,10 +775,12 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
                 </>
               ) : (
                 <>
-                  <X className="h-5 w-5 text-white/70" />
-                  <span className="font-mono-num text-[9px] font-bold text-[#FB7185]">
-                    {timecodeText}
-                  </span>
+                  <X className="h-5 w-5 text-white/75" />
+                  {timecodeText && (
+                    <span className="font-mono-num text-[9px] font-bold text-[#FB7185] tabular-nums">
+                      {timecodeText}
+                    </span>
+                  )}
                 </>
               )}
             </button>

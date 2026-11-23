@@ -710,3 +710,80 @@ html.reduce-motion *::after {
 .morph-fx-anim-vhs {
   animation: morph-fx-vhs-drift 1.2s linear infinite;
 }
+
+/* Experimental Tool Launcher: Smooth ping-pong slide marquee & frosted cloud label bubbles */
+@keyframes morph-launcher-marquee {
+  0%, 16% {
+    transform: translate3d(0, 0, 0);
+  }
+  44%, 64% {
+    transform: translate3d(var(--marquee-shift, 0px), 0, 0);
+  }
+  90%, 100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.morph-marquee-viewport {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.morph-marquee-viewport[data-overflow='true'] {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 6%, #000 94%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0%, #000 6%, #000 94%, transparent 100%);
+}
+
+.morph-marquee-track {
+  display: inline-block;
+  white-space: nowrap;
+  padding-inline: 2px;
+  will-change: transform;
+}
+
+.morph-marquee-viewport[data-overflow='true'] .morph-marquee-track {
+  animation: morph-launcher-marquee var(--marquee-duration, 4.6s) ease-in-out infinite;
+}
+
+.morph-label-cloud {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border-radius: 13px;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  background: color-mix(in srgb, var(--surface) 88%, var(--accent) 12%);
+  box-shadow:
+    0 4px 12px -4px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.morph-label-cloud[data-studio='true'] {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(28, 30, 40, 0.92);
+  box-shadow:
+    0 5px 14px -4px rgba(0, 0, 0, 0.58),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.morph-label-cloud[data-pointer='top']::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  width: 10px;
+  height: 5px;
+  transform: translateX(-50%);
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  background: color-mix(in srgb, var(--surface) 88%, var(--accent) 12%);
+}
+
+.morph-label-cloud[data-studio='true'][data-pointer='top']::before {
+  background: rgba(28, 30, 40, 0.92);
+}
+

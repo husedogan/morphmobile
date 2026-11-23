@@ -2,8 +2,6 @@ import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ArrowLeftToLine,
   ArrowRightToLine,
-  ChevronLeft,
-  ChevronRight,
   Film,
   Flag,
   Music,
@@ -12,6 +10,9 @@ import {
   Repeat,
   RotateCcw,
   Scissors,
+  SkipBack,
+  SkipForward,
+  Sparkles,
   VolumeX,
   X,
 } from 'lucide-react';
@@ -45,6 +46,12 @@ function formatTrimTime(sec: number): string {
   return `${mins}:${String(whole).padStart(2, '0')}.${tenths}`;
 }
 
+function formatSpanShort(sec: number): string {
+  const safe = Number.isFinite(sec) && sec > 0 ? sec : 0;
+  if (safe < 60) return `${safe.toFixed(1)}s`;
+  return formatTrimTime(safe);
+}
+
 function parseSecSafe(raw: string, fallback = 0): number {
   const s = (raw || '').trim();
   if (!s) return fallback;
@@ -63,13 +70,17 @@ function toFixedStr(sec: number): string {
   return String(Number(Math.max(0, sec).toFixed(2)));
 }
 
-const FALLBACK_WAVEFORM = Array.from({length: 68}, (_, i) => {
+const WAVE_BAR_COUNT = 84;
+
+const FALLBACK_WAVEFORM = Array.from({length: WAVE_BAR_COUNT}, (_, i) => {
   const wave =
-    0.35 +
-    0.32 * Math.abs(Math.sin(i * 0.42 + 0.6)) +
-    0.22 * Math.abs(Math.cos(i * 0.91));
-  return Math.min(0.95, Math.max(0.16, Number(wave.toFixed(3))));
+    0.32 +
+    0.34 * Math.abs(Math.sin(i * 0.36 + 0.5)) +
+    0.22 * Math.abs(Math.cos(i * 0.83));
+  return Math.min(0.95, Math.max(0.14, Number(wave.toFixed(3))));
 });
+
+const RULER_TICKS = Array.from({length: 21}, (_, i) => i);
 
 export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
   files,
@@ -92,6 +103,7 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
   const [playhead, setPlayhead] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [loopSelection, setLoopSelection] = useState<boolean>(mode === 'trim');
+  const [bleepCompareMode, setBleepCompareMode] = useState<'result' | 'original'>('result');
   const [waveform, setWaveform] = useState<number[]>(FALLBACK_WAVEFORM);
   const [waveStatus, setWaveStatus] = useState<'loading' | 'ready' | 'fallback'>('loading');
   const [markers, setMarkers] = useState<CueMarker[]>([]);
@@ -130,12 +142,12 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
     };
   }, [activeFile]);
 
-  // Decode real audio waveform bars for visual trimming
+  // Decode high-density real audio waveform bars
   useEffect(() => {
     if (!activeFile) return;
     let cancelled = false;
     setWaveStatus('loading');
-    extractRealAudioWaveform(activeFile.file, 68)
+    extractRealAudioWaveform(activeFile.file, WAVE_BAR_COUNT)
       .then((bars) => {
         if (cancelled) return;
         if (bars && bars.length > 0) {
@@ -229,7 +241,8 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
           }
         }
       } else if (mode === 'bleep') {
-        const insideBleep = cur >= parsedStart && cur <= parsedEnd;
+        const insideBleep =
+          bleepCompareMode === 'result' && cur >= parsedStart && cur <= parsedEnd;
         if (el.muted !== insideBleep) {
           el.muted = insideBleep;
         }
@@ -251,9 +264,8 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
         rafRef.current = null;
       }
     };
-  }, [isPlaying, parsedStart, parsedEnd, loopSelection, mode]);
+  }, [isPlaying, parsedStart, parsedEnd, loopSelection, mode, bleepCompareMode]);
 
-  // Ensure audio isn't left muted when pausing or switching mode
   useEffect(() => {
     const el = mediaRef.current;
     if (!el) return;
@@ -276,6 +288,13 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
       }
     },
     [safeDur]
+  );
+
+  const nudgePlayhead = useCallback(
+    (delta: number) => {
+      seekTo(playhead + delta);
+    },
+    [playhead, seekTo]
   );
 
   const togglePlay = useCallback(() => {
@@ -322,7 +341,9 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
     (timeSec: number) => {
       if (duration <= 0) return;
       const clamped = Number(Math.min(safeDur, Math.max(0, timeSec)).toFixed(2));
-      const existing = markersRef.current.find((m) => Math.abs(m.time - clamped) < Math.max(0.15, safeDur * 0.015));
+      const existing = markersRef.current.find(
+        (m) => Math.abs(m.time - clamped) < Math.max(0.15, safeDur * 0.015)
+      );
       if (existing) {
         setSelectedMarkerId(existing.id);
         seekTo(existing.time);
@@ -493,34 +514,77 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
   const draggingMarker = sortedMarkers.find((m) => m.id === draggingMarkerId) || null;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] shadow-sm">
-      {/* Header: File Info */}
-      <div className="flex items-center justify-between gap-2 border-b border-[var(--line)] px-3.5 py-2.5">
-        <div className="flex min-w-0 items-center gap-2">
-          {activeFile.kind === 'video' ? (
-            <Film className="h-4 w-4 shrink-0 text-[var(--accent)]" />
-          ) : (
-            <Music className="h-4 w-4 shrink-0 text-[var(--accent)]" />
-          )}
-          <span className="truncate text-xs font-bold text-[var(--ink)]">{activeFile.name}</span>
+    <div className="overflow-hidden rounded-3xl border border-[var(--line)] bg-[var(--surface)] shadow-sm">
+      {/* Studio File Strip */}
+      <div className="flex items-center justify-between gap-2.5 border-b border-[var(--line)]/70 px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--accent)]/12 text-[var(--accent)]">
+            {activeFile.kind === 'video' ? (
+              <Film className="h-3.5 w-3.5" />
+            ) : (
+              <Music className="h-3.5 w-3.5" />
+            )}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-xs font-bold tracking-tight text-[var(--ink)]">
+              {activeFile.name}
+            </p>
+            {isBleep && (
+              <p className="font-mono-num text-[10px] font-medium text-[var(--muted)]">
+                {formatBytes(activeFile.size)}
+              </p>
+            )}
+          </div>
         </div>
-        <span className="font-mono-num shrink-0 text-[11px] font-semibold text-[var(--muted)]">
-          {formatBytes(activeFile.size)}
-        </span>
+        {isBleep ? (
+          <div
+            role="group"
+            aria-label={tr('Önizleme karşılaştırması', 'Preview comparison')}
+            className="flex shrink-0 items-center rounded-xl border border-[var(--line)] bg-[var(--inset)] p-0.5"
+          >
+            <button
+              type="button"
+              onClick={() => setBleepCompareMode('result')}
+              className={`flex h-7 items-center gap-1 rounded-lg px-2.5 text-[11px] font-bold transition-colors whitespace-nowrap ${
+                bleepCompareMode === 'result'
+                  ? 'bg-amber-500 text-white shadow-xs'
+                  : 'text-[var(--muted)] hover:text-[var(--ink)]'
+              }`}
+            >
+              <Sparkles className="h-3 w-3 shrink-0" />
+              <span>{tr('Sonuç', 'After')}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setBleepCompareMode('original')}
+              className={`flex h-7 items-center rounded-lg px-2.5 text-[11px] font-bold transition-colors whitespace-nowrap ${
+                bleepCompareMode === 'original'
+                  ? 'bg-[var(--surface)] text-[var(--ink)] shadow-xs'
+                  : 'text-[var(--muted)] hover:text-[var(--ink)]'
+              }`}
+            >
+              {tr('Orijinal', 'Before')}
+            </button>
+          </div>
+        ) : (
+          <span className="font-mono-num shrink-0 whitespace-nowrap text-[11px] font-medium text-[var(--muted)]">
+            {formatBytes(activeFile.size)}
+          </span>
+        )}
       </div>
 
-      {/* Optional Multi-File Tabs */}
+      {/* Optional Multi-File Selector */}
       {files.length > 1 && (
-        <div className="flex gap-1.5 overflow-x-auto border-b border-[var(--line)] bg-[var(--inset)]/60 px-3 py-1.5">
+        <div className="no-scrollbar flex gap-1.5 overflow-x-auto border-b border-[var(--line)]/70 bg-[var(--inset)]/50 px-4 py-2">
           {files.map((f, idx) => (
             <button
               key={f.id}
               type="button"
               onClick={() => setActiveIdx(idx)}
-              className={`shrink-0 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+              className={`shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors ${
                 idx === safeIdx
-                  ? 'border-[var(--accent)] bg-[var(--accent)]/16 text-[var(--ink)]'
-                  : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]'
+                  ? 'bg-[var(--accent)] text-white shadow-xs'
+                  : 'text-[var(--muted)] hover:bg-[var(--surface)] hover:text-[var(--ink)]'
               }`}
             >
               {idx + 1}. {f.name.slice(0, 18)}
@@ -529,7 +593,7 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
         </div>
       )}
 
-      {/* Hidden Audio Element OR Visual Video Preview */}
+      {/* Visual Video Preview OR Hidden Audio Element */}
       {activeFile.kind === 'video' && mediaUrl ? (
         <div onClick={togglePlay} className="relative cursor-pointer bg-black">
           <video
@@ -545,7 +609,7 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
           />
           {!isPlaying && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20">
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/65 text-white shadow-lg backdrop-blur-xs">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-white shadow-lg backdrop-blur-xs">
                 <Play className="ml-0.5 h-5 w-5 fill-current" />
               </span>
             </div>
@@ -564,98 +628,73 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
         />
       ) : null}
 
-      {/* Main Interactive Waveform Trim Studio Body */}
-      <div className="space-y-3 bg-[var(--inset)]/65 p-3.5">
-        {/* Top Row: Play/Pause + Non-Wrapping Timecode + Compact Icon-First Actions */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-1 items-center gap-2.5">
-            <button
-              type="button"
-              onClick={togglePlay}
-              disabled={duration <= 0}
-              aria-label={isPlaying ? tr('Duraklat', 'Pause') : tr('Oynat', 'Play')}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-md transition-transform active:scale-95 disabled:opacity-45"
-            >
-              {isPlaying ? (
-                <Pause className="h-4.5 w-4.5 fill-current" />
-              ) : (
-                <Play className="ml-0.5 h-4.5 w-4.5 fill-current" />
-              )}
-            </button>
-
-            <div className="min-w-0 flex-1">
-              <div className="font-mono-num flex items-baseline gap-1 whitespace-nowrap text-sm font-extrabold text-[var(--ink)]">
-                <span>{formatTrimTime(playhead)}</span>
-                <span className="text-[11px] font-semibold text-[var(--muted)]">
-                  / {duration > 0 ? formatTrimTime(safeDur) : '--:--'}
-                </span>
-              </div>
-              <p className="font-mono-num whitespace-nowrap text-[11px] font-semibold text-[var(--muted)]">
-                {isSplit
-                  ? `${formatTrimTime(parsedStart)} | ${formatTrimTime(
-                      Math.max(0, safeDur - parsedStart)
-                    )}`
-                  : `${formatTrimTime(parsedStart)}–${formatTrimTime(parsedEnd)} (${formatTrimTime(
-                      selectedSpanSec
-                    )})`}
-              </p>
-            </div>
+      {/* Main Acoustic Studio Workspace */}
+      <div className="space-y-4 p-4">
+        {/* Centered Hero Timecode & Clean Unboxed Range Readout */}
+        <div className="flex flex-col items-center text-center">
+          <div className="font-mono-num flex items-baseline justify-center gap-1.5 tabular-nums">
+            <span className="text-[26px] leading-none font-extrabold tracking-tight text-[var(--ink)]">
+              {formatTrimTime(playhead)}
+            </span>
+            <span className="text-xs font-semibold text-[var(--muted)]">
+              / {duration > 0 ? formatTrimTime(safeDur) : '--:--'}
+            </span>
           </div>
 
-          <div className="flex shrink-0 items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => addMarkerAt(playhead)}
-              disabled={duration <= 0}
-              aria-label={tr('Oynatma noktasına işaret ekle', 'Add marker at playhead')}
-              title={tr('İşaret ekle', 'Add marker')}
-              className={`flex h-9 items-center justify-center gap-1 rounded-xl border border-amber-500/45 bg-amber-500/12 text-[11px] font-bold text-amber-600 transition-colors hover:bg-amber-500/20 disabled:opacity-45 dark:text-amber-400 ${
-                showToolLabels ? 'px-2.5' : 'w-9 px-0'
-              }`}
-            >
-              <Flag className="h-3.5 w-3.5 shrink-0" />
-              {showToolLabels && <span className="whitespace-nowrap">{tr('İşaret', 'Mark')}</span>}
-            </button>
-            {mode === 'trim' && (
-              <button
-                type="button"
-                onClick={() => setLoopSelection((v) => !v)}
-                aria-label={tr('Seçili aralığı döngüde çal', 'Loop selected range')}
-                title={tr('Döngü', 'Loop')}
-                className={`flex h-9 items-center justify-center gap-1 rounded-xl border text-[11px] font-bold transition-colors ${
-                  showToolLabels ? 'px-2.5' : 'w-9 px-0'
-                } ${
-                  loopSelection
-                    ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent)]'
-                    : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)]'
-                }`}
-              >
-                <Repeat className="h-3.5 w-3.5 shrink-0" />
-                {showToolLabels && <span className="whitespace-nowrap">{tr('Döngü', 'Loop')}</span>}
-              </button>
+          <div className="font-mono-num mt-1.5 flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 text-[11px] font-semibold tabular-nums text-[var(--muted)]">
+            {isSplit ? (
+              <>
+                <span className="text-[var(--accent)]">
+                  {tr('1. Parça', 'Part 1')} {formatTrimTime(parsedStart)}
+                </span>
+                <span aria-hidden="true" className="opacity-45">
+                  ·
+                </span>
+                <span className="text-sky-500">
+                  {tr('2. Parça', 'Part 2')} {formatTrimTime(Math.max(0, safeDur - parsedStart))}
+                </span>
+              </>
+            ) : (
+              <>
+                <span>
+                  {formatTrimTime(parsedStart)} – {formatTrimTime(parsedEnd)}
+                </span>
+                <span aria-hidden="true" className="opacity-45">
+                  ·
+                </span>
+                <span className={isBleep ? 'text-amber-500' : 'text-[var(--accent)]'}>
+                  {formatSpanShort(selectedSpanSec)}
+                </span>
+              </>
             )}
-            <button
-              type="button"
-              onClick={handleReset}
-              aria-label={tr('Seçimi ve işaretleri sıfırla', 'Reset selection and markers')}
-              title={tr('Sıfırla', 'Reset')}
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] transition-colors hover:border-[var(--accent)]/40 hover:text-[var(--ink)]"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-            </button>
           </div>
         </div>
 
-        {/* Time Ruler + Marker Rail + Interactive Waveform Track */}
-        <div className="space-y-1">
-          <div className="font-mono-num flex items-center justify-between px-4 text-[10px] font-semibold text-[var(--muted)]">
-            {rulerLabels.map((lbl, idx) => (
-              <span key={idx}>{lbl}</span>
-            ))}
+        {/* Recessed Studio Waveform Stage with Precision Ruler */}
+        <div className="rounded-2xl border border-[var(--line)]/80 bg-[var(--inset)] px-5 pt-3 pb-4">
+          {/* Precision Tick Ruler (Aligned 1:1 with Waveform Track Edges) */}
+          <div className="mb-1.5 select-none">
+            <div className="font-mono-num flex items-center justify-between text-[10px] font-medium tabular-nums text-[var(--muted)]/85">
+              {rulerLabels.map((lbl, idx) => (
+                <span key={idx}>{lbl}</span>
+              ))}
+            </div>
+            <div className="mt-1 flex items-end justify-between" aria-hidden="true">
+              {RULER_TICKS.map((t) => (
+                <span
+                  key={t}
+                  className={`w-[1px] rounded-full ${
+                    t % 5 === 0
+                      ? 'h-2 bg-[var(--muted)]/55'
+                      : 'h-1 bg-[var(--muted)]/25'
+                  }`}
+                />
+              ))}
+            </div>
           </div>
 
-          {/* Outer Horizontal Gutter Keeps Trim Handles Inside Card Bounds With Zero Overlap */}
-          <div className="px-4 pt-5">
+          {/* Interactive Acoustic Track (px-5 parent gives generous breathing room for sculpted outer handles) */}
+          <div className="pt-3.5">
             <div
               ref={trackRef}
               onPointerDown={(e) => startDragInteraction(e, isSplit ? 'split' : 'scrub')}
@@ -665,10 +704,16 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
                 const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
                 addMarkerAt(ratio * safeDur);
               }}
-              className="relative h-20 w-full cursor-pointer select-none touch-none overflow-visible rounded-xl border border-[var(--line)] bg-[var(--surface)]"
+              className="relative h-24 w-full cursor-pointer select-none touch-none overflow-visible rounded-xl bg-[var(--surface)]/80 ring-1 ring-[var(--line)]/70"
             >
-              {/* Waveform Bars Canvas */}
-              <div className="pointer-events-none absolute inset-0 flex items-center gap-[2px] overflow-hidden rounded-[11px] px-1.5 py-2.5">
+              {/* Subtle 0dB Center Reference Axis */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-x-2 top-1/2 h-[1px] -translate-y-1/2 bg-[var(--line)]/65"
+              />
+
+              {/* High-Density Symmetrical Waveform Bars */}
+              <div className="pointer-events-none absolute inset-0 flex items-center gap-[1.5px] overflow-hidden rounded-xl px-1.5 py-2.5">
                 {waveform.map((amp, idx) => {
                   const barPct = ((idx + 0.5) / waveform.length) * 100;
                   const insideRange = isSplit
@@ -678,33 +723,37 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
 
                   const barColorClass = isBleep
                     ? insideRange
-                      ? 'bg-amber-500/85'
+                      ? 'bg-amber-500/90'
                       : isPlayed
                         ? 'bg-[var(--accent)]/85'
                         : 'bg-[var(--muted)]/35'
                     : isSplit
                       ? insideRange
-                        ? 'bg-[var(--accent)]/85'
-                        : 'bg-sky-500/75'
+                        ? isPlayed
+                          ? 'bg-[var(--accent)]'
+                          : 'bg-[var(--accent)]/75'
+                        : isPlayed
+                          ? 'bg-sky-500'
+                          : 'bg-sky-500/65'
                       : insideRange
                         ? isPlayed
                           ? 'bg-[var(--accent)]'
-                          : 'bg-[var(--accent)]/70'
-                        : 'bg-[var(--muted)]/28';
+                          : 'bg-[var(--accent)]/60'
+                        : 'bg-[var(--muted)]/22';
 
                   return (
                     <div
                       key={idx}
-                      style={{height: `${Math.max(14, Math.round(amp * 92))}%`}}
+                      style={{height: `${Math.max(12, Math.round(amp * 92))}%`}}
                       className={`flex-1 rounded-full transition-colors duration-75 ${barColorClass} ${
-                        waveStatus === 'loading' ? 'animate-pulse opacity-50' : ''
+                        waveStatus === 'loading' ? 'animate-pulse opacity-45' : ''
                       }`}
                     />
                   );
                 })}
               </div>
 
-              {/* User Cue Markers (Flags + Vertical Guide Lines across Waveform) */}
+              {/* Placed Cue Markers (Numbered Gold Guide Pins) */}
               {sortedMarkers.map((mk, mIdx) => {
                 const mkPct = Math.min(100, Math.max(0, (mk.time / safeDur) * 100));
                 const isSelected = mk.id === selectedMarkerId;
@@ -715,19 +764,17 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
                     onPointerDown={(e) => startDragInteraction(e, 'marker', mk.id)}
                     className="absolute inset-y-0 z-30 -translate-x-1/2 cursor-ew-resize touch-none"
                   >
-                    {/* Vertical Marker Guide */}
                     <span
                       className={`pointer-events-none absolute inset-y-0 left-1/2 w-[1.5px] -translate-x-1/2 ${
                         isSelected
-                          ? 'bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.75)]'
+                          ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.75)]'
                           : 'bg-amber-500/70'
                       }`}
                     />
-                    {/* Top Draggable Numbered Flag Pin */}
                     <span
-                      className={`absolute -top-5 left-1/2 flex h-5 min-w-[20px] -translate-x-1/2 items-center justify-center rounded-md px-1 text-[10px] font-extrabold shadow-sm transition-transform ${
+                      className={`absolute -top-4.5 left-1/2 flex h-4.5 min-w-[18px] -translate-x-1/2 items-center justify-center rounded-md px-1 text-[9px] font-extrabold shadow-xs transition-transform ${
                         isSelected
-                          ? 'scale-110 bg-amber-500 text-black ring-2 ring-amber-400/50'
+                          ? 'scale-110 bg-amber-500 text-black ring-2 ring-amber-400/45'
                           : 'bg-amber-500/90 text-black hover:scale-105'
                       }`}
                     >
@@ -738,81 +785,95 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
               })}
 
               {isSplit ? (
-                /* SPLIT MODE: Single Draggable Scissors Marker */
+                /* SPLIT MODE: Precision Glowing Cut Line + Sculpted Scissors Knob */
                 <>
                   <div
                     onPointerDown={(e) => startDragInteraction(e, 'split')}
                     style={{left: `${startPct}%`}}
-                    className="absolute -inset-y-1 z-20 flex w-6 -translate-x-1/2 cursor-ew-resize touch-none flex-col items-center justify-center"
+                    className="absolute -inset-y-1.5 z-20 flex w-8 -translate-x-1/2 cursor-ew-resize touch-none flex-col items-center justify-center"
                   >
-                    <span className="absolute inset-y-0 w-[2.5px] rounded-full bg-[var(--accent)] shadow-[0_0_10px_var(--accent)]" />
-                    <span className="relative z-10 flex h-7 w-7 items-center justify-center rounded-full border-2 border-[var(--surface)] bg-[var(--accent)] text-white shadow-md">
+                    <span className="absolute inset-y-0 w-[2.5px] rounded-full bg-[var(--accent)] shadow-[0_0_12px_var(--accent)]" />
+                    <span
+                      className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full border-2 border-[var(--surface)] bg-[var(--accent)] text-white shadow-md transition-transform ${
+                        activeDrag === 'split' ? 'scale-110' : 'hover:scale-105'
+                      }`}
+                    >
                       <Scissors className="h-3.5 w-3.5" />
                     </span>
                   </div>
                   {activeDrag === 'split' && (
                     <div
-                      style={{left: `${Math.min(88, Math.max(12, startPct))}%`}}
-                      className="font-mono-num pointer-events-none absolute -top-9 z-40 -translate-x-1/2 rounded-md bg-[var(--ink)] px-2 py-0.5 text-[10px] font-bold text-[var(--surface)] shadow-md"
+                      style={{left: `${Math.min(86, Math.max(14, startPct))}%`}}
+                      className="font-mono-num pointer-events-none absolute -top-9 z-40 -translate-x-1/2 rounded-lg bg-[var(--ink)] px-2.5 py-0.5 text-[10px] font-bold tabular-nums text-[var(--surface)] shadow-md"
                     >
                       {formatTrimTime(parsedStart)}
                     </div>
                   )}
                 </>
               ) : (
-                /* TRIM / BLEEP MODE: Dimmed Outer Masks + Draggable Selection Window + Flush Outer Handles */
+                /* TRIM / BLEEP MODE: Soft Frosted Outer Veils + Sculpted Caliper Frame */
                 <>
                   {!isBleep && startPct > 0.2 && (
                     <div
                       style={{width: `${startPct}%`}}
-                      className="pointer-events-none absolute inset-y-0 left-0 rounded-l-[11px] bg-black/35"
+                      className="pointer-events-none absolute inset-y-0 left-0 rounded-l-xl bg-black/20 dark:bg-black/45"
                     />
                   )}
                   {!isBleep && endPct < 99.8 && (
                     <div
                       style={{width: `${Math.max(0, 100 - endPct)}%`}}
-                      className="pointer-events-none absolute inset-y-0 right-0 rounded-r-[11px] bg-black/35"
+                      className="pointer-events-none absolute inset-y-0 right-0 rounded-r-xl bg-black/20 dark:bg-black/45"
                     />
                   )}
 
-                  {/* Draggable Highlighted Selection Window */}
+                  {/* Draggable Caliper Window */}
                   <div
                     onPointerDown={(e) => startDragInteraction(e, 'window')}
                     style={{
                       left: `${startPct}%`,
                       width: `${widthPct}%`,
                     }}
-                    className={`absolute inset-y-0 z-10 cursor-grab touch-none border-y-2 active:cursor-grabbing ${
+                    className={`absolute inset-y-0 z-10 cursor-grab touch-none border-y-[2.5px] active:cursor-grabbing ${
                       isBleep
-                        ? 'border-amber-500 bg-amber-500/15'
-                        : 'border-[var(--accent)] bg-[var(--accent)]/10'
+                        ? 'border-amber-500 bg-amber-500/14'
+                        : 'border-[var(--accent)] bg-[var(--accent)]/[0.07]'
                     }`}
                   >
-                    {isBleep && widthPct >= 16 && (
-                      <span className="pointer-events-none absolute left-1/2 top-1.5 flex -translate-x-1/2 items-center gap-1 rounded-full bg-amber-500/90 px-2 py-0.5 text-[9px] font-extrabold text-black shadow-xs">
+                    {isBleep && widthPct >= 18 && (
+                      <span className="pointer-events-none absolute left-1/2 top-1.5 flex -translate-x-1/2 items-center gap-1 rounded-md bg-amber-500/95 px-2 py-0.5 text-[9px] font-extrabold text-black shadow-xs">
                         <VolumeX className="h-2.5 w-2.5" />
                         <span>{tr('Sessiz', 'Mute')}</span>
                       </span>
                     )}
 
-                    {/* Left Trim Handle — sits cleanly in left gutter, zero playhead overlap */}
+                    {/* Left Sculpted Grip Bracket */}
                     <div
                       onPointerDown={(e) => startDragInteraction(e, 'left')}
-                      className={`absolute -inset-y-[2px] -left-4 z-20 flex w-4 cursor-ew-resize touch-none items-center justify-center rounded-l-lg text-white shadow-md after:absolute after:-inset-x-2.5 after:inset-y-0 after:content-[''] ${
-                        isBleep ? 'bg-amber-500 text-black' : 'bg-[var(--accent)]'
-                      }`}
+                      aria-label={tr('Sol kırpma kolu', 'Left trim handle')}
+                      className={`absolute -inset-y-[2.5px] -left-3.5 z-20 flex w-3.5 cursor-ew-resize touch-none items-center justify-center rounded-l-lg shadow-sm transition-transform after:absolute after:-inset-x-3 after:inset-y-0 after:content-[''] ${
+                        isBleep ? 'bg-amber-500' : 'bg-[var(--accent)]'
+                      } ${activeDrag === 'left' ? 'scale-y-105 brightness-110' : ''}`}
                     >
-                      <ChevronLeft className="h-3.5 w-3.5 stroke-[3]" />
+                      <span
+                        className={`h-7 w-[2.5px] rounded-full ${
+                          isBleep ? 'bg-black/60' : 'bg-white/90'
+                        }`}
+                      />
                     </div>
 
-                    {/* Right Trim Handle — sits cleanly in right gutter */}
+                    {/* Right Sculpted Grip Bracket */}
                     <div
                       onPointerDown={(e) => startDragInteraction(e, 'right')}
-                      className={`absolute -inset-y-[2px] -right-4 z-20 flex w-4 cursor-ew-resize touch-none items-center justify-center rounded-r-lg text-white shadow-md after:absolute after:-inset-x-2.5 after:inset-y-0 after:content-[''] ${
-                        isBleep ? 'bg-amber-500 text-black' : 'bg-[var(--accent)]'
-                      }`}
+                      aria-label={tr('Sağ kırpma kolu', 'Right trim handle')}
+                      className={`absolute -inset-y-[2.5px] -right-3.5 z-20 flex w-3.5 cursor-ew-resize touch-none items-center justify-center rounded-r-lg shadow-sm transition-transform after:absolute after:-inset-x-3 after:inset-y-0 after:content-[''] ${
+                        isBleep ? 'bg-amber-500' : 'bg-[var(--accent)]'
+                      } ${activeDrag === 'right' ? 'scale-y-105 brightness-110' : ''}`}
                     >
-                      <ChevronRight className="h-3.5 w-3.5 stroke-[3]" />
+                      <span
+                        className={`h-7 w-[2.5px] rounded-full ${
+                          isBleep ? 'bg-black/60' : 'bg-white/90'
+                        }`}
+                      />
                     </div>
                   </div>
 
@@ -824,9 +885,9 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
                     <div
                       style={{
                         left: `${Math.min(
-                          86,
+                          85,
                           Math.max(
-                            14,
+                            15,
                             activeDrag === 'marker' && draggingMarker
                               ? (draggingMarker.time / safeDur) * 100
                               : activeDrag === 'right'
@@ -837,7 +898,7 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
                           )
                         )}%`,
                       }}
-                      className="font-mono-num pointer-events-none absolute -top-10 z-40 -translate-x-1/2 whitespace-nowrap rounded-md bg-[var(--ink)] px-2 py-0.5 text-[10px] font-bold text-[var(--surface)] shadow-md"
+                      className="font-mono-num pointer-events-none absolute -top-9 z-40 -translate-x-1/2 whitespace-nowrap rounded-lg bg-[var(--ink)] px-2.5 py-0.5 text-[10px] font-bold tabular-nums text-[var(--surface)] shadow-md"
                     >
                       {activeDrag === 'marker' && draggingMarker
                         ? `#${sortedMarkers.findIndex((m) => m.id === draggingMarker.id) + 1} · ${formatTrimTime(
@@ -853,20 +914,117 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
                 </>
               )}
 
-              {/* Live Playhead Needle */}
+              {/* Crisp Studio Playhead Needle */}
               <div
                 style={{left: `${playheadPct}%`}}
-                className="pointer-events-none absolute inset-y-0 z-25 w-[2px] -translate-x-1/2 bg-[var(--ink)] shadow-[0_0_6px_rgba(0,0,0,0.45)]"
+                className="pointer-events-none absolute -top-1.5 bottom-0 z-25 w-[2px] -translate-x-1/2 bg-[var(--ink)]"
               >
-                <span className="absolute -top-1 left-1/2 h-2.5 w-2.5 -translate-x-1/2 rounded-full border-2 border-[var(--surface)] bg-[var(--ink)]" />
+                <span className="absolute -top-0.5 left-1/2 h-2.5 w-2.5 -translate-x-1/2 rotate-45 rounded-[2px] border border-[var(--surface)] bg-[var(--ink)] shadow-xs" />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Interactive Marker Bar (Only renders placed markers + 1-tap snap-to-cut actions) */}
+        {/* Ergonomic Centered Studio Transport Deck (Thumb Zone, >= 44px Targets) */}
+        <div className="flex items-center justify-center gap-2 pt-0.5">
+          {/* -1s Nudge */}
+          <button
+            type="button"
+            onClick={() => nudgePlayhead(-1)}
+            disabled={duration <= 0}
+            aria-label={tr('1 saniye geri', 'Back 1 second')}
+            title={tr('-1 sn', '-1s')}
+            className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-2xl text-[var(--muted)] transition-colors hover:bg-[var(--inset)] hover:text-[var(--ink)] active:scale-95 disabled:opacity-35"
+          >
+            <SkipBack className="h-4 w-4" />
+            {showToolLabels && <span className="text-[10px] font-semibold">-1s</span>}
+          </button>
+
+          {/* Add Cue Marker */}
+          <button
+            type="button"
+            onClick={() => addMarkerAt(playhead)}
+            disabled={duration <= 0}
+            aria-label={tr('Oynatma noktasına işaret ekle', 'Add marker at playhead')}
+            title={tr('İşaret ekle', 'Add marker')}
+            className={`flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-2xl transition-colors active:scale-95 disabled:opacity-35 ${
+              sortedMarkers.length > 0
+                ? 'bg-amber-500/12 text-amber-600 dark:text-amber-400'
+                : 'text-[var(--muted)] hover:bg-[var(--inset)] hover:text-amber-500'
+            }`}
+          >
+            <Flag className="h-4 w-4" />
+            {showToolLabels && (
+              <span className="text-[10px] font-semibold">{tr('İşaret', 'Mark')}</span>
+            )}
+          </button>
+
+          {/* Primary Play / Pause Anchor */}
+          <button
+            type="button"
+            onClick={togglePlay}
+            disabled={duration <= 0}
+            aria-label={isPlaying ? tr('Duraklat', 'Pause') : tr('Oynat', 'Play')}
+            className="mx-1.5 flex h-13 w-13 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[var(--accent)] to-[var(--accent-btn-start)] text-white shadow-[0_6px_18px_-4px_rgba(233,79,120,0.55)] transition-transform hover:brightness-105 active:scale-95 disabled:opacity-40"
+          >
+            {isPlaying ? (
+              <Pause className="h-5 w-5 fill-current" />
+            ) : (
+              <Play className="ml-0.5 h-5 w-5 fill-current" />
+            )}
+          </button>
+
+          {/* Loop Toggle (Trim) OR +1s Nudge (Split / Bleep) */}
+          {mode === 'trim' ? (
+            <button
+              type="button"
+              onClick={() => setLoopSelection((v) => !v)}
+              aria-label={tr('Seçili aralığı döngüde çal', 'Loop selected range')}
+              aria-pressed={loopSelection}
+              title={tr('Döngü', 'Loop')}
+              className={`flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-2xl transition-colors active:scale-95 ${
+                loopSelection
+                  ? 'bg-[var(--accent)]/14 text-[var(--accent)]'
+                  : 'text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)]'
+              }`}
+            >
+              <Repeat className="h-4 w-4" />
+              {showToolLabels && (
+                <span className="text-[10px] font-semibold">{tr('Döngü', 'Loop')}</span>
+              )}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => nudgePlayhead(1)}
+              disabled={duration <= 0}
+              aria-label={tr('1 saniye ileri', 'Forward 1 second')}
+              title={tr('+1 sn', '+1s')}
+              className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-2xl text-[var(--muted)] transition-colors hover:bg-[var(--inset)] hover:text-[var(--ink)] active:scale-95 disabled:opacity-35"
+            >
+              <SkipForward className="h-4 w-4" />
+              {showToolLabels && <span className="text-[10px] font-semibold">+1s</span>}
+            </button>
+          )}
+
+          {/* Reset Selection & Markers */}
+          <button
+            type="button"
+            onClick={handleReset}
+            aria-label={tr('Seçimi ve işaretleri sıfırla', 'Reset selection and markers')}
+            title={tr('Sıfırla', 'Reset')}
+            className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-2xl text-[var(--muted)] transition-colors hover:bg-[var(--inset)] hover:text-[var(--ink)] active:scale-95"
+          >
+            <RotateCcw className="h-4 w-4" />
+            {showToolLabels && (
+              <span className="text-[10px] font-semibold">{tr('Sıfırla', 'Reset')}</span>
+            )}
+          </button>
+        </div>
+
+        {/* Interactive Cue Marker Strip (Only rendered when user adds markers) */}
         {sortedMarkers.length > 0 && (
-          <div className="space-y-2 border-t border-[var(--line)] pt-2.5">
+          <div className="space-y-2 border-t border-[var(--line)]/70 pt-3">
             <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto">
               {sortedMarkers.map((mk, idx) => {
                 const isSelected = mk.id === selectedMarkerId;
@@ -878,10 +1036,10 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
                       setSelectedMarkerId(mk.id);
                       seekTo(mk.time);
                     }}
-                    className={`font-mono-num flex h-8 shrink-0 items-center gap-1.5 rounded-xl border px-2.5 text-[11px] font-bold transition-colors ${
+                    className={`font-mono-num flex h-9 shrink-0 items-center gap-1.5 rounded-xl border px-2.5 text-[11px] font-bold tabular-nums transition-colors ${
                       isSelected
-                        ? 'border-amber-500 bg-amber-500/18 text-[var(--ink)]'
-                        : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:border-amber-500/45 hover:text-[var(--ink)]'
+                        ? 'border-amber-500/70 bg-amber-500/14 text-[var(--ink)]'
+                        : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
                     }`}
                   >
                     <span className="flex h-4 w-4 items-center justify-center rounded bg-amber-500 text-[10px] font-extrabold text-black">
@@ -895,7 +1053,7 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
 
             {selectedMarker && (
               <div className="flex items-center justify-between gap-2 text-[11px]">
-                <span className="font-mono-num text-[var(--muted)]">
+                <span className="font-mono-num font-semibold tabular-nums text-[var(--muted)]">
                   #{sortedMarkers.findIndex((m) => m.id === selectedMarker.id) + 1} ·{' '}
                   {formatTrimTime(selectedMarker.time)}
                 </span>
@@ -906,8 +1064,8 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
                       onClick={() => applyMarkerAsLeft(selectedMarker.time)}
                       aria-label={tr('Buradan böl', 'Split here')}
                       title={tr('Buradan böl', 'Split here')}
-                      className={`flex h-8 items-center justify-center gap-1 rounded-lg border border-[var(--accent)]/45 bg-[var(--accent)]/12 font-bold text-[var(--accent)] transition-colors hover:bg-[var(--accent)]/20 ${
-                        showToolLabels ? 'px-2.5' : 'w-8 px-0'
+                      className={`flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[var(--accent)]/40 bg-[var(--accent)]/12 font-bold text-[var(--accent)] transition-colors hover:bg-[var(--accent)]/20 ${
+                        showToolLabels ? 'px-3' : 'w-9 px-0'
                       }`}
                     >
                       <Scissors className="h-3.5 w-3.5 shrink-0" />
@@ -920,8 +1078,8 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
                         onClick={() => applyMarkerAsLeft(selectedMarker.time)}
                         aria-label={tr('Sol kesimi bu işarete getir', 'Snap left cut to marker')}
                         title={tr('Sol kesimi buraya al', 'Snap left cut here')}
-                        className={`flex h-8 items-center justify-center gap-1 rounded-lg border border-[var(--line)] bg-[var(--surface)] font-bold text-[var(--ink)] transition-colors hover:border-[var(--accent)] ${
-                          showToolLabels ? 'px-2.5' : 'w-8 px-0'
+                        className={`flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] font-bold text-[var(--ink)] transition-colors hover:border-[var(--accent)] ${
+                          showToolLabels ? 'px-3' : 'w-9 px-0'
                         }`}
                       >
                         <ArrowLeftToLine className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
@@ -932,8 +1090,8 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
                         onClick={() => applyMarkerAsRight(selectedMarker.time)}
                         aria-label={tr('Sağ kesimi bu işarete getir', 'Snap right cut to marker')}
                         title={tr('Sağ kesimi buraya al', 'Snap right cut here')}
-                        className={`flex h-8 items-center justify-center gap-1 rounded-lg border border-[var(--line)] bg-[var(--surface)] font-bold text-[var(--ink)] transition-colors hover:border-[var(--accent)] ${
-                          showToolLabels ? 'px-2.5' : 'w-8 px-0'
+                        className={`flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] font-bold text-[var(--ink)] transition-colors hover:border-[var(--accent)] ${
+                          showToolLabels ? 'px-3' : 'w-9 px-0'
                         }`}
                       >
                         {showToolLabels && <span>{tr('Sağ', 'Right')}</span>}
@@ -945,7 +1103,7 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
                     type="button"
                     onClick={() => removeMarker(selectedMarker.id)}
                     aria-label={tr('İşareti sil', 'Remove marker')}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] transition-colors hover:border-red-500/45 hover:text-red-500"
+                    className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] transition-colors hover:border-red-500/45 hover:text-red-500"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>

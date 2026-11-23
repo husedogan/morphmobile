@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useState} from 'react';
 import {
   AudioLines,
   Crop,
@@ -34,21 +34,23 @@ export const StudioDock: React.FC<StudioDockProps> = ({
   onSelectTab,
 }) => {
   const tr = (t: string, e: string) => (isTr ? t : e);
+  const [hoveredTab, setHoveredTab] = useState<VideoEditorTab | null>(null);
 
   const items: {
     id: VideoEditorTab;
     label: string;
-    icon: React.ComponentType<{className?: string}>;
+    accent: string;
+    icon: React.ComponentType<{className?: string; style?: React.CSSProperties}>;
     badge?: boolean;
   }[] = [
-    {id: 'trim', label: tr('Klip', 'Clip'), icon: Scissors},
-    {id: 'audio', label: tr('Ses', 'Audio'), icon: AudioLines},
-    {id: 'transform', label: tr('Kadraj', 'Crop'), icon: Crop},
-    {id: 'color', label: tr('Renk', 'Color'), icon: Palette},
-    {id: 'text', label: tr('Metin', 'Text'), icon: Type},
-    {id: 'watermark', label: tr('Filigran', 'Mark'), icon: Stamp, badge: hasActiveWatermark},
-    {id: 'fx', label: tr('Hız/FX', 'FX'), icon: Gauge},
-    {id: 'export', label: tr('Aktar', 'Export'), icon: SlidersHorizontal},
+    {id: 'trim', label: tr('Klip', 'Clip'), accent: '#F43F5E', icon: Scissors},
+    {id: 'audio', label: tr('Ses', 'Audio'), accent: '#34D399', icon: AudioLines},
+    {id: 'transform', label: tr('Kadraj', 'Crop'), accent: '#2DD4BF', icon: Crop},
+    {id: 'color', label: tr('Renk', 'Color'), accent: '#A78BFA', icon: Palette},
+    {id: 'text', label: tr('Metin', 'Text'), accent: '#C084FC', icon: Type},
+    {id: 'watermark', label: tr('Filigran', 'Mark'), accent: '#FB923C', icon: Stamp, badge: hasActiveWatermark},
+    {id: 'fx', label: tr('Hız/FX', 'FX'), accent: '#F472B6', icon: Gauge},
+    {id: 'export', label: tr('Aktar', 'Export'), accent: '#FB7185', icon: SlidersHorizontal},
   ];
 
   return (
@@ -56,23 +58,44 @@ export const StudioDock: React.FC<StudioDockProps> = ({
       {items.map((tab) => {
         const Icon = tab.icon;
         const isHighlighted = activeTab === tab.id && (!isPortraitMode || isInspectorOpen);
+        const isHovered = hoveredTab === tab.id;
+        const isTinted = isHighlighted || isHovered;
         return (
           <button
             key={tab.id}
             type="button"
+            onMouseEnter={() => setHoveredTab(tab.id)}
+            onMouseLeave={() => setHoveredTab((cur) => (cur === tab.id ? null : cur))}
+            onFocus={() => setHoveredTab(tab.id)}
+            onBlur={() => setHoveredTab((cur) => (cur === tab.id ? null : cur))}
             onClick={() => onSelectTab(tab.id)}
-            className={`group relative flex min-h-[var(--ve-dock-h,44px)] min-w-[40px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[length:var(--ve-dock-font,10px)] font-semibold transition-colors ${
-              isHighlighted
-                ? 'bg-[#F43F5E]/18 text-[#FB7185]'
-                : 'text-white/60 hover:bg-white/[0.06] hover:text-white'
+            style={{
+              backgroundColor: isHighlighted
+                ? `${tab.accent}24`
+                : isHovered
+                  ? `${tab.accent}18`
+                  : 'transparent',
+              borderColor: isHighlighted
+                ? `${tab.accent}66`
+                : isHovered
+                  ? `${tab.accent}4D`
+                  : 'transparent',
+              color: isTinted ? tab.accent : undefined,
+            }}
+            className={`group relative flex min-h-[var(--ve-dock-h,44px)] min-w-[40px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border px-1 py-1 text-[length:var(--ve-dock-font,10px)] font-semibold transition-colors ${
+              isTinted ? '' : 'text-white/60'
             }`}
           >
             <Icon
-              className={`h-[var(--ve-dock-icon,16px)] w-[var(--ve-dock-icon,16px)] shrink-0 transition-transform group-active:scale-90 ${
-                isHighlighted ? 'text-[#FB7185]' : ''
-              }`}
+              className="h-[var(--ve-dock-icon,16px)] w-[var(--ve-dock-icon,16px)] shrink-0 transition-transform group-active:scale-90"
+              style={isTinted ? {color: tab.accent} : undefined}
             />
-            <span className="max-w-full truncate leading-none">{tab.label}</span>
+            <span
+              style={isTinted ? {color: tab.accent} : undefined}
+              className="max-w-full truncate leading-none"
+            >
+              {tab.label}
+            </span>
             {tab.badge && !isHighlighted && (
               <span className="absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-[#34D399]" />
             )}

@@ -97,10 +97,21 @@ import {extractRealAudioWaveform} from '../engine/audioEngine';
 import {EngineCardInfo, getAllEnginesStatus} from '../engine/morphEnginesBridge';
 import {ToolOptions} from '../engine/processor';
 import {CropEditor} from './CropEditor';
+import {AudioEffectPreview, AudioEffectToolId} from './AudioEffectPreview';
 import {FileThumb} from './FileThumb';
 import {MediaJoinTimeline} from './MediaJoinTimeline';
 import {MediaRangeMode, MediaRangeTrimmer} from './MediaRangeTrimmer';
 import type {VideoEditorState, VideoEditorTab} from './VideoEditor';
+
+const AUDIO_EFFECT_TOOL_IDS = new Set<AudioEffectToolId>([
+  'audio_normalize',
+  'audio_speed',
+  'audio_fade',
+  'audio_reverse',
+  'audio_channels',
+  'audio_to_video',
+  'audio_convert',
+]);
 
 const VideoEditor = lazy(() =>
   import('./VideoEditor').then((mod) => ({default: mod.VideoEditor}))
@@ -727,7 +738,7 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
           <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-[#07080B] text-white">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-[var(--accent)]" />
             <p className="text-xs font-semibold text-white/70">
-              {lang === 'tr' ? 'Video Stüdyosu yükleniyor...' : 'Loading Video Studio...'}
+              {lang === 'tr' ? 'Video Düzenleyici yükleniyor...' : 'Loading Video Editor...'}
             </p>
           </div>
         }
@@ -738,6 +749,13 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
           initialTab={initVeTab}
           initialPreset={initVePreset}
           expArmadilloReel={prefs?.expArmadilloReel !== false}
+          expVideoExtraTimecodes={Boolean(prefs?.expVideoExtraTimecodes)}
+          expAltLauncher={Boolean(prefs?.expAltLauncher) && prefs?.expAltLauncherForVideo !== false}
+          expAltLauncherStyle={prefs?.expAltLauncherStyle ?? 'cascade_sheet'}
+          expAltLauncherLabelsEnabled={prefs?.expAltLauncherLabelsEnabled}
+          expAltLauncherLabelMode={prefs?.expAltLauncherLabelMode ?? 'wrap'}
+          expAltLauncherShowDesc={prefs?.expAltLauncherShowDesc !== false}
+          expAltLauncherTextSize={prefs?.expAltLauncherTextSize ?? 'md'}
           videoEditorSizing={prefs?.videoEditorSizing}
           onChangeVideoEditorSizing={
             onChangePrefs
@@ -3258,6 +3276,8 @@ const ServerToolConfig: React.FC<{
     (tool.id === 'audio_join' || tool.id === 'video_join') &&
     files.length >= 2 &&
     (firstKind === 'audio' || firstKind === 'video');
+  const usesAudioEffectPreview =
+    firstKind === 'audio' && AUDIO_EFFECT_TOOL_IDS.has(tool.id as AudioEffectToolId);
   const trimMode: MediaRangeMode =
     tool.id === 'video_split' ? 'split' : tool.id === 'audio_bleep' ? 'bleep' : 'trim';
 
@@ -3321,6 +3341,17 @@ const ServerToolConfig: React.FC<{
           order={joinOrder}
           showToolLabels={showToolLabels}
           onChangeOrder={setJoinOrder}
+        />
+      ) : usesAudioEffectPreview ? (
+        <AudioEffectPreview
+          files={files}
+          lang={lang}
+          toolId={tool.id as AudioEffectToolId}
+          audioSpeedMode={audioSpeedMode}
+          fadeSec={fadeSec}
+          channels={channels}
+          format={format}
+          showToolLabels={showToolLabels}
         />
       ) : (firstKind === 'video' || firstKind === 'audio') ? (
         <InlineMediaPreview files={files} lang={lang} />

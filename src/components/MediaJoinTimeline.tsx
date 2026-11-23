@@ -9,6 +9,8 @@ import {
   Pause,
   Play,
   RotateCcw,
+  SkipBack,
+  SkipForward,
   X,
 } from 'lucide-react';
 import {Lang} from '../data/i18n';
@@ -46,35 +48,40 @@ function formatTime(sec: number): string {
 
 const SEGMENT_STYLES = [
   {
-    bg: 'bg-[var(--accent)]/14',
-    bar: 'bg-[var(--accent)]/75',
+    bg: 'bg-[var(--accent)]/[0.08]',
+    bar: 'bg-[var(--accent)]/60',
     barPlayed: 'bg-[var(--accent)]',
     dot: 'bg-[var(--accent)]',
   },
   {
-    bg: 'bg-sky-500/14',
-    bar: 'bg-sky-500/70',
+    bg: 'bg-sky-500/[0.08]',
+    bar: 'bg-sky-500/60',
     barPlayed: 'bg-sky-500',
     dot: 'bg-sky-500',
   },
   {
-    bg: 'bg-emerald-500/14',
-    bar: 'bg-emerald-500/70',
+    bg: 'bg-emerald-500/[0.08]',
+    bar: 'bg-emerald-500/60',
     barPlayed: 'bg-emerald-500',
     dot: 'bg-emerald-500',
   },
   {
-    bg: 'bg-violet-500/14',
-    bar: 'bg-violet-500/70',
+    bg: 'bg-violet-500/[0.08]',
+    bar: 'bg-violet-500/60',
     barPlayed: 'bg-violet-500',
     dot: 'bg-violet-500',
   },
 ];
 
-function fallbackBars(seed: number, count = 24): number[] {
+const RULER_TICKS = Array.from({length: 21}, (_, i) => i);
+
+function fallbackBars(seed: number, count = 28): number[] {
   return Array.from({length: count}, (_, i) => {
-    const v = 0.32 + 0.34 * Math.abs(Math.sin((i + seed * 3) * 0.55)) + 0.2 * Math.abs(Math.cos(i * 0.9 + seed));
-    return Math.min(0.94, Math.max(0.18, Number(v.toFixed(3))));
+    const v =
+      0.32 +
+      0.34 * Math.abs(Math.sin((i + seed * 3) * 0.55)) +
+      0.2 * Math.abs(Math.cos(i * 0.9 + seed));
+    return Math.min(0.94, Math.max(0.16, Number(v.toFixed(3))));
   });
 }
 
@@ -146,7 +153,7 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
         id: f.id,
         url,
         duration: 5,
-        bars: fallbackBars(idx + 1, 24),
+        bars: fallbackBars(idx + 1, 28),
       };
     });
     setMetaMap(initial);
@@ -165,7 +172,7 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
         );
       });
 
-      extractRealAudioWaveform(f.file, 26)
+      extractRealAudioWaveform(f.file, 28)
         .then((bars) => {
           if (cancelled || !bars || bars.length === 0) return;
           setMetaMap((prev) =>
@@ -176,7 +183,7 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
           if (!cancelled) {
             setMetaMap((prev) =>
               prev[f.id]
-                ? {...prev, [f.id]: {...prev[f.id], bars: fallbackBars(idx + 1, 24)}}
+                ? {...prev, [f.id]: {...prev[f.id], bars: fallbackBars(idx + 1, 28)}}
                 : prev
             );
           }
@@ -189,12 +196,8 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
     };
   }, [files]);
 
-  // Ordered segments with cumulative start/end times and join-point boundaries
   const segments = useMemo(() => {
-    const validIndices =
-      order.length === files.length
-        ? order
-        : files.map((_, idx) => idx);
+    const validIndices = order.length === files.length ? order : files.map((_, idx) => idx);
     let cursor = 0;
     return validIndices.map((origIdx, segIdx) => {
       const file = files[origIdx];
@@ -209,7 +212,7 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
         file,
         url: meta?.url || '',
         duration: dur,
-        bars: meta?.bars || fallbackBars(origIdx + 1, 24),
+        bars: meta?.bars || fallbackBars(origIdx + 1, 28),
         start,
         end,
         style: SEGMENT_STYLES[origIdx % SEGMENT_STYLES.length],
@@ -222,7 +225,6 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
     [segments]
   );
 
-  // Automatic Join-Point Markers at every seam between consecutive tracks
   const joinSeams = useMemo(() => {
     return segments.slice(0, -1).map((seg, idx) => ({
       id: `seam_${idx}`,
@@ -276,14 +278,16 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
           pendingSeekRef.current = {segIdx, localSec, autoPlay: shouldPlay};
         }
         if (shouldPlay && el.paused) {
-          void el.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+          void el
+            .play()
+            .then(() => setIsPlaying(true))
+            .catch(() => setIsPlaying(false));
         }
       }
     },
     [locateSegmentAt, activeSegIdx, isPlaying]
   );
 
-  // Sync newly switched segment's player element when pendingSeekRef is queued
   const handlePlayerReady = useCallback(() => {
     const el = playerRef.current;
     const pending = pendingSeekRef.current;
@@ -296,11 +300,13 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
       // ignore
     }
     if (pending.autoPlay) {
-      void el.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+      void el
+        .play()
+        .then(() => setIsPlaying(true))
+        .catch(() => setIsPlaying(false));
     }
   }, [activeSegIdx]);
 
-  // Auto-advance seamlessly across join-point seams!
   const handleSegmentEnded = useCallback(() => {
     const nextIdx = activeSegIdx + 1;
     if (nextIdx < segments.length) {
@@ -313,7 +319,6 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
     }
   }, [activeSegIdx, segments, totalDuration]);
 
-  // Smooth 60fps global playhead tracking
   useEffect(() => {
     const el = playerRef.current;
     if (!el || !activeSegment) return;
@@ -349,7 +354,10 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
       seekGlobal(0, true);
       return;
     }
-    void el.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+    void el
+      .play()
+      .then(() => setIsPlaying(true))
+      .catch(() => setIsPlaying(false));
   }, [globalTime, totalDuration, seekGlobal]);
 
   const addMarkerAt = useCallback(
@@ -437,25 +445,23 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
   const totalBytes = files.reduce((acc, f) => acc + f.size, 0);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] shadow-sm">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-2 border-b border-[var(--line)] px-3.5 py-2.5">
-        <div className="flex min-w-0 items-center gap-2">
-          {isVideo ? (
-            <Film className="h-4 w-4 shrink-0 text-[var(--accent)]" />
-          ) : (
-            <Music className="h-4 w-4 shrink-0 text-[var(--accent)]" />
-          )}
-          <span className="truncate text-xs font-bold text-[var(--ink)]">
+    <div className="overflow-hidden rounded-3xl border border-[var(--line)] bg-[var(--surface)] shadow-sm">
+      {/* Studio Header Strip */}
+      <div className="flex items-center justify-between gap-3 border-b border-[var(--line)]/70 px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--accent)]/12 text-[var(--accent)]">
+            {isVideo ? <Film className="h-3.5 w-3.5" /> : <Music className="h-3.5 w-3.5" />}
+          </span>
+          <span className="truncate text-xs font-bold tracking-tight text-[var(--ink)]">
             {tr(`${files.length} Parça Birleştirme`, `Joining ${files.length} Tracks`)}
           </span>
         </div>
-        <span className="font-mono-num shrink-0 text-[11px] font-semibold text-[var(--muted)]">
-          {formatTime(totalDuration)} · {formatBytes(totalBytes)}
+        <span className="font-mono-num shrink-0 whitespace-nowrap text-[11px] font-medium text-[var(--muted)]">
+          {formatBytes(totalBytes)}
         </span>
       </div>
 
-      {/* Synchronized Hidden Audio OR Active Video Preview */}
+      {/* Synchronized Video Preview OR Hidden Audio */}
       {activeSegment?.url &&
         (isVideo ? (
           <div onClick={togglePlay} className="relative cursor-pointer bg-black">
@@ -472,7 +478,7 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
             />
             {!isPlaying && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20">
-                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/65 text-white shadow-lg">
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-black/60 text-white shadow-lg backdrop-blur-xs">
                   <Play className="ml-0.5 h-5 w-5 fill-current" />
                 </span>
               </div>
@@ -491,75 +497,49 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
           />
         ))}
 
-      {/* Unified Multi-Clip Merge Bar + Join-Point Markers + Cue Markers */}
-      <div className="space-y-3 bg-[var(--inset)]/65 p-3.5">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-1 items-center gap-2.5">
-            <button
-              type="button"
-              onClick={togglePlay}
-              aria-label={isPlaying ? tr('Duraklat', 'Pause') : tr('Oynat', 'Play')}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-md transition-transform active:scale-95"
-            >
-              {isPlaying ? (
-                <Pause className="h-4.5 w-4.5 fill-current" />
-              ) : (
-                <Play className="ml-0.5 h-4.5 w-4.5 fill-current" />
-              )}
-            </button>
-            <div className="min-w-0 flex-1">
-              <div className="font-mono-num flex items-baseline gap-1 whitespace-nowrap text-sm font-extrabold text-[var(--ink)]">
-                <span>{formatTime(globalTime)}</span>
-                <span className="text-[11px] font-semibold text-[var(--muted)]">
-                  / {formatTime(totalDuration)}
-                </span>
-              </div>
-              <p className="truncate text-[11px] font-semibold text-[var(--muted)]">
-                {activeSegment?.file
-                  ? `#${activeSegIdx + 1} · ${activeSegment.file.name}`
-                  : ''}
-              </p>
+      {/* Main Acoustic Join Workspace */}
+      <div className="space-y-4 p-4">
+        {/* Centered Hero Timecode + Active Clip Caption */}
+        <div className="flex flex-col items-center text-center">
+          <div className="font-mono-num flex items-baseline justify-center gap-1.5 tabular-nums">
+            <span className="text-[26px] leading-none font-extrabold tracking-tight text-[var(--ink)]">
+              {formatTime(globalTime)}
+            </span>
+            <span className="text-xs font-semibold text-[var(--muted)]">
+              / {formatTime(totalDuration)}
+            </span>
+          </div>
+          {activeSegment?.file && (
+            <p className="mt-1.5 max-w-full truncate text-[11px] font-semibold text-[var(--muted)]">
+              #{activeSegIdx + 1} · {activeSegment.file.name}
+            </p>
+          )}
+        </div>
+
+        {/* Recessed Multi-Clip Waveform Stage */}
+        <div className="rounded-2xl border border-[var(--line)]/80 bg-[var(--inset)] px-5 pt-3 pb-4">
+          {/* Precision Tick Ruler */}
+          <div className="mb-1.5 select-none">
+            <div className="font-mono-num flex items-center justify-between text-[10px] font-medium tabular-nums text-[var(--muted)]/85">
+              {rulerLabels.map((lbl, idx) => (
+                <span key={idx}>{lbl}</span>
+              ))}
+            </div>
+            <div className="mt-1 flex items-end justify-between" aria-hidden="true">
+              {RULER_TICKS.map((t) => (
+                <span
+                  key={t}
+                  className={`w-[1px] rounded-full ${
+                    t % 5 === 0
+                      ? 'h-2 bg-[var(--muted)]/55'
+                      : 'h-1 bg-[var(--muted)]/25'
+                  }`}
+                />
+              ))}
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => addMarkerAt(globalTime)}
-              aria-label={tr('Oynatma noktasına işaret ekle', 'Add marker at playhead')}
-              title={tr('İşaret ekle', 'Add marker')}
-              className={`flex h-9 items-center justify-center gap-1 rounded-xl border border-amber-500/45 bg-amber-500/12 text-[11px] font-bold text-amber-600 transition-colors hover:bg-amber-500/20 dark:text-amber-400 ${
-                showToolLabels ? 'px-2.5' : 'w-9 px-0'
-              }`}
-            >
-              <Flag className="h-3.5 w-3.5 shrink-0" />
-              {showToolLabels && <span className="whitespace-nowrap">{tr('İşaret', 'Mark')}</span>}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMarkers([]);
-                setSelectedMarkerId(null);
-                seekGlobal(0, false);
-              }}
-              aria-label={tr('Başa dön ve işaretleri temizle', 'Reset to start and clear markers')}
-              title={tr('Sıfırla', 'Reset')}
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] transition-colors hover:border-[var(--accent)]/40 hover:text-[var(--ink)]"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Time Ruler + Unified Multi-Segment Waveform + Join Markers + Custom Cue Markers */}
-        <div className="space-y-1">
-          <div className="font-mono-num flex items-center justify-between px-1 text-[10px] font-semibold text-[var(--muted)]">
-            {rulerLabels.map((lbl, idx) => (
-              <span key={idx}>{lbl}</span>
-            ))}
-          </div>
-
-          <div className="pt-5">
+          <div className="pt-4">
             <div
               ref={trackRef}
               onPointerDown={(e) => startPointer(e, 'scrub')}
@@ -569,10 +549,16 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
                 const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
                 addMarkerAt(ratio * totalDuration);
               }}
-              className="relative h-20 w-full cursor-pointer select-none touch-none overflow-visible rounded-xl border border-[var(--line)] bg-[var(--surface)]"
+              className="relative h-24 w-full cursor-pointer select-none touch-none overflow-visible rounded-xl bg-[var(--surface)]/80 ring-1 ring-[var(--line)]/70"
             >
-              {/* Proportional Clip Segments + Waveforms */}
-              <div className="pointer-events-none absolute inset-0 flex overflow-hidden rounded-[11px]">
+              {/* Subtle 0dB Center Axis */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-x-2 top-1/2 h-[1px] -translate-y-1/2 bg-[var(--line)]/65"
+              />
+
+              {/* Proportional Multi-Clip Waveforms */}
+              <div className="pointer-events-none absolute inset-0 flex overflow-hidden rounded-xl">
                 {segments.map((seg) => {
                   const widthPct = (seg.duration / totalDuration) * 100;
                   return (
@@ -588,14 +574,14 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
                         return (
                           <div
                             key={bIdx}
-                            style={{height: `${Math.max(14, Math.round(amp * 88))}%`}}
+                            style={{height: `${Math.max(12, Math.round(amp * 88))}%`}}
                             className={`flex-1 rounded-full ${
                               played ? seg.style.barPlayed : seg.style.bar
                             }`}
                           />
                         );
                       })}
-                      <span className="absolute bottom-1 left-1.5 rounded bg-[var(--surface)]/85 px-1 py-0.2 text-[9px] font-extrabold text-[var(--ink)]">
+                      <span className="absolute bottom-1 left-1.5 rounded bg-[var(--surface)]/90 px-1 py-0.2 text-[9px] font-extrabold text-[var(--ink)]">
                         {seg.segIdx + 1}
                       </span>
                     </div>
@@ -603,7 +589,7 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
                 })}
               </div>
 
-              {/* Automatic Join-Point Seam Markers (Tap to preview transition seam!) */}
+              {/* Automatic Join-Point Seam Markers */}
               {joinSeams.map((seam) => (
                 <button
                   key={seam.id}
@@ -611,7 +597,6 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
                     e.stopPropagation();
-                    // Jump 1.5s before join point and play across the transition seam
                     seekGlobal(Math.max(0, seam.time - 1.5), true);
                   }}
                   style={{left: `${seam.pct}%`}}
@@ -621,7 +606,7 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
                   )}
                   className="group absolute inset-y-0 z-20 -translate-x-1/2 cursor-pointer"
                 >
-                  <span className="pointer-events-none absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 border-l-2 border-dashed border-[var(--accent)]" />
+                  <span className="pointer-events-none absolute inset-y-0 left-1/2 w-[1.5px] -translate-x-1/2 border-l-2 border-dashed border-[var(--accent)]" />
                   <span className="absolute -top-5 left-1/2 flex h-5 -translate-x-1/2 items-center gap-0.5 whitespace-nowrap rounded-md border border-[var(--accent)]/40 bg-[var(--surface)] px-1.5 text-[9px] font-extrabold text-[var(--accent)] shadow-xs transition-transform group-hover:scale-105">
                     <Link2 className="h-2.5 w-2.5" />
                     <span>{seam.label}</span>
@@ -643,14 +628,14 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
                     <span
                       className={`pointer-events-none absolute inset-y-0 left-1/2 w-[1.5px] -translate-x-1/2 ${
                         isSelected
-                          ? 'bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.75)]'
+                          ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.75)]'
                           : 'bg-amber-500/75'
                       }`}
                     />
                     <span
-                      className={`absolute -bottom-5 left-1/2 flex h-5 min-w-[20px] -translate-x-1/2 items-center justify-center rounded-md px-1 text-[10px] font-extrabold shadow-sm ${
+                      className={`absolute -bottom-4.5 left-1/2 flex h-4.5 min-w-[18px] -translate-x-1/2 items-center justify-center rounded-md px-1 text-[9px] font-extrabold shadow-xs ${
                         isSelected
-                          ? 'scale-110 bg-amber-500 text-black ring-2 ring-amber-400/50'
+                          ? 'scale-110 bg-amber-500 text-black ring-2 ring-amber-400/45'
                           : 'bg-amber-500/90 text-black'
                       }`}
                     >
@@ -660,21 +645,21 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
                 );
               })}
 
-              {/* Floating Drag / Scrub Time Badge */}
+              {/* Floating Scrub / Marker Time Tooltip */}
               {(isScrubbing || draggingMarker) && (
                 <div
                   style={{
                     left: `${Math.min(
-                      86,
+                      85,
                       Math.max(
-                        14,
+                        15,
                         draggingMarker
                           ? (draggingMarker.time / totalDuration) * 100
                           : playheadPct
                       )
                     )}%`,
                   }}
-                  className="font-mono-num pointer-events-none absolute -top-10 z-40 -translate-x-1/2 whitespace-nowrap rounded-md bg-[var(--ink)] px-2 py-0.5 text-[10px] font-bold text-[var(--surface)] shadow-md"
+                  className="font-mono-num pointer-events-none absolute -top-10 z-40 -translate-x-1/2 whitespace-nowrap rounded-lg bg-[var(--ink)] px-2.5 py-0.5 text-[10px] font-bold tabular-nums text-[var(--surface)] shadow-md"
                 >
                   {draggingMarker
                     ? `#${sortedMarkers.findIndex((m) => m.id === draggingMarker.id) + 1} · ${formatTime(
@@ -684,29 +669,101 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
                 </div>
               )}
 
-              {/* Live Global Playhead Needle */}
+              {/* Crisp Global Playhead Needle */}
               <div
                 style={{left: `${playheadPct}%`}}
-                className="pointer-events-none absolute inset-y-0 z-25 w-[2px] -translate-x-1/2 bg-[var(--ink)] shadow-[0_0_6px_rgba(0,0,0,0.45)]"
+                className="pointer-events-none absolute -top-1.5 bottom-0 z-25 w-[2px] -translate-x-1/2 bg-[var(--ink)]"
               >
-                <span className="absolute -top-1 left-1/2 h-2.5 w-2.5 -translate-x-1/2 rounded-full border-2 border-[var(--surface)] bg-[var(--ink)]" />
+                <span className="absolute -top-0.5 left-1/2 h-2.5 w-2.5 -translate-x-1/2 rotate-45 rounded-[2px] border border-[var(--surface)] bg-[var(--ink)] shadow-xs" />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Placed User Markers Strip (with 1-tap jump & delete) */}
+        {/* Ergonomic Centered Transport Deck */}
+        <div className="flex items-center justify-center gap-2 pt-0.5">
+          <button
+            type="button"
+            onClick={() => seekGlobal(globalTime - 1)}
+            aria-label={tr('1 saniye geri', 'Back 1 second')}
+            title={tr('-1 sn', '-1s')}
+            className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-2xl text-[var(--muted)] transition-colors hover:bg-[var(--inset)] hover:text-[var(--ink)] active:scale-95"
+          >
+            <SkipBack className="h-4 w-4" />
+            {showToolLabels && <span className="text-[10px] font-semibold">-1s</span>}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => addMarkerAt(globalTime)}
+            aria-label={tr('Oynatma noktasına işaret ekle', 'Add marker at playhead')}
+            title={tr('İşaret ekle', 'Add marker')}
+            className={`flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-2xl transition-colors active:scale-95 ${
+              sortedMarkers.length > 0
+                ? 'bg-amber-500/12 text-amber-600 dark:text-amber-400'
+                : 'text-[var(--muted)] hover:bg-[var(--inset)] hover:text-amber-500'
+            }`}
+          >
+            <Flag className="h-4 w-4" />
+            {showToolLabels && (
+              <span className="text-[10px] font-semibold">{tr('İşaret', 'Mark')}</span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={togglePlay}
+            aria-label={isPlaying ? tr('Duraklat', 'Pause') : tr('Oynat', 'Play')}
+            className="mx-1.5 flex h-13 w-13 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[var(--accent)] to-[var(--accent-btn-start)] text-white shadow-[0_6px_18px_-4px_rgba(233,79,120,0.55)] transition-transform hover:brightness-105 active:scale-95"
+          >
+            {isPlaying ? (
+              <Pause className="h-5 w-5 fill-current" />
+            ) : (
+              <Play className="ml-0.5 h-5 w-5 fill-current" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => seekGlobal(globalTime + 1)}
+            aria-label={tr('1 saniye ileri', 'Forward 1 second')}
+            title={tr('+1 sn', '+1s')}
+            className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-2xl text-[var(--muted)] transition-colors hover:bg-[var(--inset)] hover:text-[var(--ink)] active:scale-95"
+          >
+            <SkipForward className="h-4 w-4" />
+            {showToolLabels && <span className="text-[10px] font-semibold">+1s</span>}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMarkers([]);
+              setSelectedMarkerId(null);
+              seekGlobal(0, false);
+            }}
+            aria-label={tr('Başa dön ve işaretleri temizle', 'Reset to start and clear markers')}
+            title={tr('Sıfırla', 'Reset')}
+            className="flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-2xl text-[var(--muted)] transition-colors hover:bg-[var(--inset)] hover:text-[var(--ink)] active:scale-95"
+          >
+            <RotateCcw className="h-4 w-4" />
+            {showToolLabels && (
+              <span className="text-[10px] font-semibold">{tr('Sıfırla', 'Reset')}</span>
+            )}
+          </button>
+        </div>
+
+        {/* Placed User Markers Strip */}
         {sortedMarkers.length > 0 && (
-          <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto pt-3">
+          <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto border-t border-[var(--line)]/70 pt-3">
             {sortedMarkers.map((mk, idx) => {
               const isSelected = mk.id === selectedMarkerId;
               return (
                 <div
                   key={mk.id}
-                  className={`font-mono-num flex h-8 shrink-0 items-center rounded-xl border text-[11px] font-bold transition-colors ${
+                  className={`font-mono-num flex h-9 shrink-0 items-center rounded-xl border text-[11px] font-bold tabular-nums transition-colors ${
                     isSelected
-                      ? 'border-amber-500 bg-amber-500/18 text-[var(--ink)]'
-                      : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]'
+                      ? 'border-amber-500/70 bg-amber-500/14 text-[var(--ink)]'
+                      : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
                   }`}
                 >
                   <button
@@ -715,7 +772,7 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
                       setSelectedMarkerId(mk.id);
                       seekGlobal(mk.time);
                     }}
-                    className="flex h-full items-center gap-1.5 pl-2 pr-1.5"
+                    className="flex h-full items-center gap-1.5 pl-2.5 pr-1.5"
                   >
                     <span className="flex h-4 w-4 items-center justify-center rounded bg-amber-500 text-[10px] font-extrabold text-black">
                       {idx + 1}
@@ -726,7 +783,7 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
                     type="button"
                     onClick={() => removeMarker(mk.id)}
                     aria-label={tr('İşareti sil', 'Remove marker')}
-                    className="flex h-full items-center px-1.5 text-[var(--muted)] hover:text-red-500"
+                    className="flex h-full items-center px-2 text-[var(--muted)] hover:text-red-500"
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -736,35 +793,37 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
           </div>
         )}
 
-        {/* Track Order Strip with Join Timestamps */}
-        <div className="space-y-1.5 border-t border-[var(--line)] pt-2.5">
+        {/* Clean Numbered Track Order List */}
+        <div className="divide-y divide-[var(--line)]/60 border-t border-[var(--line)]/70 pt-1">
           {segments.map((seg, idx) => {
             const isActive = idx === activeSegIdx;
             return (
               <div
                 key={`${seg.file.id}_${idx}`}
-                className={`flex items-center justify-between gap-2 rounded-xl border px-2.5 py-1.5 transition-colors ${
-                  isActive
-                    ? 'border-[var(--accent)]/45 bg-[var(--surface)]'
-                    : 'border-[var(--line)] bg-[var(--surface)]/75'
-                }`}
+                className="flex items-center justify-between gap-2 py-2"
               >
                 <button
                   type="button"
                   onClick={() => seekGlobal(seg.start, true)}
-                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
                 >
                   <span
-                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[10px] font-extrabold text-white ${seg.style.dot}`}
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[10px] font-extrabold text-white ${seg.style.dot}`}
                   >
                     {idx + 1}
                   </span>
-                  <span className="truncate text-xs font-semibold text-[var(--ink)]">
-                    {seg.file.name}
-                  </span>
-                  <span className="font-mono-num shrink-0 text-[10px] font-semibold text-[var(--muted)]">
-                    {formatTime(seg.start)}–{formatTime(seg.end)}
-                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className={`truncate text-xs font-semibold ${
+                        isActive ? 'text-[var(--accent)]' : 'text-[var(--ink)]'
+                      }`}
+                    >
+                      {seg.file.name}
+                    </p>
+                    <p className="font-mono-num text-[10px] font-medium tabular-nums text-[var(--muted)]">
+                      {formatTime(seg.start)} – {formatTime(seg.end)}
+                    </p>
+                  </div>
                 </button>
                 <div className="flex shrink-0 items-center gap-1">
                   <button
@@ -772,7 +831,7 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
                     disabled={idx === 0}
                     onClick={() => moveClip(idx, -1)}
                     aria-label={tr('Yukarı taşı', 'Move up')}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] disabled:opacity-30"
+                    className="flex h-8 w-8 items-center justify-center rounded-xl text-[var(--muted)] transition-colors hover:bg-[var(--inset)] hover:text-[var(--ink)] disabled:opacity-25"
                   >
                     <ArrowUp className="h-3.5 w-3.5" />
                   </button>
@@ -781,7 +840,7 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
                     disabled={idx === segments.length - 1}
                     onClick={() => moveClip(idx, 1)}
                     aria-label={tr('Aşağı taşı', 'Move down')}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] disabled:opacity-30"
+                    className="flex h-8 w-8 items-center justify-center rounded-xl text-[var(--muted)] transition-colors hover:bg-[var(--inset)] hover:text-[var(--ink)] disabled:opacity-25"
                   >
                     <ArrowDown className="h-3.5 w-3.5" />
                   </button>

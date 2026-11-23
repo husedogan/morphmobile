@@ -51,6 +51,12 @@ import {ErrorView, ResultView} from './components/ResultView';
 import {SettingsCategory, SettingsScreen} from './components/SettingsScreen';
 import {StudioScreen} from './components/StudioScreen';
 import {ToolFlow} from './components/ToolFlow';
+import {
+  ExperimentalToolLauncher,
+  LauncherCategoryNode,
+  LauncherToolItem,
+  resolveLauncherLabelPrefs,
+} from './components/ExperimentalToolLauncher';
 import {MainWheelCustomizeModal} from './components/MainWheelCustomizeModal';
 import {CustomizeWheelTab, WheelCustomizeModal} from './components/WheelCustomizeModal';
 import {WheelActionItem, WheelFab, WheelMenu} from './components/WheelMenu';
@@ -1400,6 +1406,463 @@ export default function App() {
     };
   }, [wheelKind, files, lang, wheelConfig, prefs.mainWheelItems]);
 
+  // Nested cascading categories for Experimental Tool Launcher (active ONLY when prefs.expAltLauncher is ON)
+  const experimentalLauncherModel = useMemo<{
+    title: string;
+    subtitle: string;
+    categories: LauncherCategoryNode[];
+  }>(() => {
+    const isTr = lang === 'tr';
+    const tr = (a: string, b: string) => (isTr ? a : b);
+
+    const compatibleLocals = new Set(toolsForSelection(files).map((d) => d.id));
+    const compatibleServers = new Set(serverToolsForSelection(files).map((d) => d.id));
+    const serverById = new Map(SERVER_TOOLS.map((s) => [s.id, s]));
+
+    const mkLocalItem = (id: ToolId, accent?: string): LauncherToolItem => {
+      const def = ALL_TOOLS[id];
+      return {
+        id: `local:${id}`,
+        label: shortWheelToolLabel(id, lang, t(def.titleKey, lang)),
+        desc: t(def.descKey, lang),
+        icon: wheelIconForLocalTool(id),
+        accent,
+        disabled: !compatibleLocals.has(id),
+      };
+    };
+
+    const mkServerItem = (id: string, accent?: string): LauncherToolItem | null => {
+      const srv = serverById.get(id);
+      if (!srv) return null;
+      return {
+        id: `server:${srv.id}`,
+        label: isTr ? srv.titleTr : srv.titleEn,
+        desc: isTr ? srv.descTr : srv.descEn,
+        icon: srv.id.startsWith('video')
+          ? Film
+          : srv.id.startsWith('audio')
+            ? Music
+            : FileText,
+        accent,
+        disabled: !compatibleServers.has(srv.id),
+      };
+    };
+
+    const filterNonNull = (arr: Array<LauncherToolItem | null>): LauncherToolItem[] =>
+      arr.filter((x): x is LauncherToolItem => x !== null);
+
+    if (wheelKind === 'tools') {
+      const hasAudio = files.some((f) => f.kind === 'audio');
+      const hasVideo = files.some((f) => f.kind === 'video');
+      const hasImage = files.some((f) => f.kind === 'image');
+      const hasPdf = files.some((f) => f.kind === 'pdf');
+      const categories: LauncherCategoryNode[] = [];
+
+      if (hasAudio) {
+        categories.push(
+          {
+            id: 'audio-edit',
+            label: tr('Ses Kes & Kurgu', 'Audio Trim & Edit'),
+            subtitle: tr('Kırp, sustur ve birleştir', 'Trim, mute range & join'),
+            icon: Scissors,
+            accent: '#F43F5E',
+            items: filterNonNull([
+              mkServerItem('audio_trim', '#F43F5E'),
+              mkServerItem('audio_bleep', '#F59E0B'),
+              mkServerItem('audio_join', '#FB7185'),
+            ]),
+          },
+          {
+            id: 'audio-fx',
+            label: tr('Ses Efektleri', 'Audio Effects'),
+            subtitle: tr('Normalize, yumuşat ve ters çevir', 'Normalize, fade & reverse'),
+            icon: Sparkles,
+            accent: '#34D399',
+            items: filterNonNull([
+              mkServerItem('audio_normalize', '#34D399'),
+              mkServerItem('audio_fade', '#10B981'),
+              mkServerItem('audio_reverse', '#2DD4BF'),
+            ]),
+          },
+          {
+            id: 'audio-tempo',
+            label: tr('Hız, Ton & Kanal', 'Speed, Pitch & Channels'),
+            subtitle: tr('Slowed, Nightcore, Mono / Stereo', 'Slowed, Nightcore, Mono / Stereo'),
+            icon: SlidersHorizontal,
+            accent: '#A78BFA',
+            items: filterNonNull([
+              mkServerItem('audio_speed', '#A78BFA'),
+              mkServerItem('audio_channels', '#818CF8'),
+            ]),
+          },
+          {
+            id: 'audio-output',
+            label: tr('Video & Çıktı', 'Video & Output'),
+            subtitle: tr('Dalga formu video, dönüştür & arşiv', 'Waveform video, convert & archive'),
+            icon: Film,
+            accent: '#FB923C',
+            items: filterNonNull([
+              mkServerItem('audio_to_video', '#FB923C'),
+              mkServerItem('audio_convert', '#F97316'),
+              mkLocalItem('BATCH_RENAME', '#94A3B8'),
+              mkLocalItem('ZIP_CREATE', '#64748B'),
+            ]),
+          }
+        );
+      }
+
+      if (hasVideo) {
+        categories.push(
+          {
+            id: 'video-studio',
+            label: tr('Video Düzenleyici & Kesim', 'Video Editor & Cut'),
+            subtitle: tr('Zaman çizelgesi, kes, kırp, döndür', 'Timeline studio, trim, crop, rotate'),
+            icon: Film,
+            accent: '#F43F5E',
+            items: filterNonNull([
+              mkServerItem('video_studio', '#F43F5E'),
+              mkServerItem('video_trim', '#FB7185'),
+              mkServerItem('video_split', '#F97316'),
+              mkServerItem('video_crop', '#2DD4BF'),
+              mkServerItem('video_rotate', '#38BDF8'),
+              mkServerItem('video_join', '#EC4899'),
+            ]),
+          },
+          {
+            id: 'video-motion',
+            label: tr('Hız & Hareket', 'Speed & Motion'),
+            subtitle: tr('Hız, ters, boomerang ve döngü', 'Speed, reverse, boomerang & loop'),
+            icon: Sparkles,
+            accent: '#A78BFA',
+            items: filterNonNull([
+              mkServerItem('video_speed', '#A78BFA'),
+              mkServerItem('video_reverse', '#C084FC'),
+              mkServerItem('video_boomerang', '#E879F9'),
+              mkServerItem('video_loop', '#818CF8'),
+            ]),
+          },
+          {
+            id: 'video-audio-out',
+            label: tr('Ses, Sıkıştır & GIF', 'Audio, Compress & GIF'),
+            subtitle: tr('Ses ayır, sustur, GIF veya kare çıkar', 'Extract audio, mute, GIF or frames'),
+            icon: Music,
+            accent: '#34D399',
+            items: filterNonNull([
+              mkServerItem('video_extract_audio', '#34D399'),
+              mkServerItem('video_mute', '#F59E0B'),
+              mkServerItem('video_compress', '#38BDF8'),
+              mkServerItem('video_to_gif', '#FB923C'),
+              mkServerItem('video_frames', '#F472B6'),
+            ]),
+          }
+        );
+      }
+
+      if (hasImage) {
+        categories.push(
+          {
+            id: 'img-edit',
+            label: tr('Düzenle & Görünüm', 'Edit & Visuals'),
+            subtitle: tr('Kırp, çiz, filtre ve çerçeve', 'Crop, draw, filter & frame'),
+            icon: Crop,
+            accent: '#F43F5E',
+            items: [
+              mkLocalItem('CROP', '#F43F5E'),
+              mkLocalItem('EDIT', '#FB7185'),
+              mkLocalItem('FILTERS', '#A78BFA'),
+              mkLocalItem('FRAME', '#38BDF8'),
+            ],
+          },
+          {
+            id: 'img-layout',
+            label: tr('Boyut & Sosyal', 'Size & Social'),
+            subtitle: tr('Sıkıştır, sosyal uyum, kolaj, ızgara', 'Compress, social fit, collage, grid'),
+            icon: Maximize2,
+            accent: '#34D399',
+            items: [
+              mkLocalItem('COMPRESS', '#34D399'),
+              mkLocalItem('SOCIAL_FIT', '#2DD4BF'),
+              mkLocalItem('COLLAGE', '#FB923C'),
+              mkLocalItem('IMAGE_GRID_SPLIT', '#10B981'),
+              mkLocalItem('PASSPORT_GRID', '#F59E0B'),
+              mkLocalItem('GIF_MAKE', '#EC4899'),
+              mkLocalItem('ICON_PACK', '#38BDF8'),
+            ],
+          },
+          {
+            id: 'img-doc-privacy',
+            label: tr('Belge & Gizlilik', 'Docs & Privacy'),
+            subtitle: tr('Tara, PDF yap, filigran, sansürle', 'Scan, PDF, watermark, redact'),
+            icon: ScanLine,
+            accent: '#818CF8',
+            items: [
+              mkLocalItem('SCAN_DOC', '#818CF8'),
+              mkLocalItem('PDF_CREATE', '#6366F1'),
+              mkLocalItem('WATERMARK', '#C084FC'),
+              mkLocalItem('REDACT', '#F43F5E'),
+              mkLocalItem('METADATA', '#64748B'),
+            ],
+          }
+        );
+      }
+
+      if (hasPdf) {
+        categories.push(
+          {
+            id: 'pdf-pages',
+            label: tr('PDF Sayfa Yönetimi', 'PDF Pages'),
+            subtitle: tr('Birleştir, böl, çıkar, sil, döndür', 'Merge, split, extract, delete, rotate'),
+            icon: FileText,
+            accent: '#F43F5E',
+            items: [
+              mkLocalItem('PDF_MERGE', '#F43F5E'),
+              mkLocalItem('PDF_SPLIT', '#FB7185'),
+              mkLocalItem('PDF_EXTRACT_PAGES', '#F97316'),
+              mkLocalItem('PDF_REMOVE_PAGES', '#EF4444'),
+              mkLocalItem('PDF_ROTATE', '#F59E0B'),
+              mkLocalItem('PDF_NUP', '#A78BFA'),
+            ],
+          },
+          {
+            id: 'pdf-convert',
+            label: tr('PDF Çıktı & Güvenlik', 'PDF Output & Protect'),
+            subtitle: tr('Görsele çevir, optimize et, damga', 'To images, optimize, stamp'),
+            icon: FileOutput,
+            accent: '#38BDF8',
+            items: [
+              mkLocalItem('PDF_TO_IMAGES', '#38BDF8'),
+              mkLocalItem('PDF_OPTIMIZE', '#34D399'),
+              mkLocalItem('PDF_WATERMARK', '#A78BFA'),
+              mkLocalItem('PDF_STAMP', '#FB923C'),
+              mkLocalItem('PDF_GRAYSCALE', '#64748B'),
+            ],
+          }
+        );
+      }
+
+      // Catch-all for Office / Archive / Text / Other files
+      if (categories.length === 0) {
+        const compatLocalItems = toolsForSelection(files)
+          .filter((d) => d.id !== 'CONVERT')
+          .map((d) => mkLocalItem(d.id, '#F43F5E'));
+        const compatServerItems = serverToolsForSelection(files)
+          .map((s) => mkServerItem(s.id, '#38BDF8'))
+          .filter((x): x is LauncherToolItem => x !== null);
+        if (compatLocalItems.length > 0) {
+          categories.push({
+            id: 'general-local',
+            label: tr('Dosya Araçları', 'File Tools'),
+            subtitle: tr('Uyumlu yerel araçlar', 'Compatible local tools'),
+            icon: SlidersHorizontal,
+            accent: '#F43F5E',
+            items: compatLocalItems,
+          });
+        }
+        if (compatServerItems.length > 0) {
+          categories.push({
+            id: 'general-media',
+            label: tr('Belge & Medya Araçları', 'Document & Media'),
+            subtitle: tr('Dönüştür ve işle', 'Convert & process'),
+            icon: FileText,
+            accent: '#38BDF8',
+            items: compatServerItems,
+          });
+        }
+      }
+
+      // Always append quick utility link to All Tools view
+      categories.push({
+        id: 'tools-all',
+        label: tr('Dosya & Tüm Araçlar', 'Files & All Tools'),
+        subtitle: tr('ZIP, yeniden adlandır, tam liste', 'ZIP, rename, full list'),
+        icon: Layers,
+        accent: '#64748B',
+        items: [
+          {
+            id: 'open:tools',
+            label: tr('Tüm Araçları Aç', 'Open All Tools'),
+            desc: tr('Tam araç kataloğu', 'Full tool catalog'),
+            icon: LayoutGrid,
+            accent: '#F43F5E',
+          },
+          mkLocalItem('BATCH_RENAME', '#38BDF8'),
+          mkLocalItem('ZIP_CREATE', '#34D399'),
+          mkLocalItem('FILE_HASH_INFO', '#A78BFA'),
+        ],
+      });
+
+      return {
+        title: t('Tools', lang),
+        subtitle:
+          files.length > 0
+            ? `${files.length} ${t('FilesCount', lang)} · ${tr('Kategori seç, alt araçlar açılsın', 'Pick a category to unfold tools')}`
+            : tr('Kategori seç', 'Pick a category'),
+        categories,
+      };
+    }
+
+    if (wheelKind === 'convert') {
+      const compatible = convertTargetsForSelection(files);
+      const imageFmts = compatible.filter((f) => ['jpg', 'png', 'webp', 'gif', 'bmp', 'ico', 'avif', 'svg'].includes(f));
+      const avFmts = compatible.filter((f) => ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac', 'mp4', 'webm', 'mkv', 'mov'].includes(f));
+      const docFmts = compatible.filter((f) => !imageFmts.includes(f) && !avFmts.includes(f));
+      const toFmtItem = (fmt: string, accent: string): LauncherToolItem => ({
+        id: `fmt:${fmt}`,
+        label: fmt.toUpperCase(),
+        desc: `${tr('Hedef format', 'Target format')}: .${fmt}`,
+        icon: ArrowLeftRight,
+        accent,
+      });
+      const categories: LauncherCategoryNode[] = [];
+      if (avFmts.length > 0) {
+        categories.push({
+          id: 'fmt-av',
+          label: tr('Ses & Video Formatları', 'Audio & Video Formats'),
+          icon: Music,
+          accent: '#F43F5E',
+          items: avFmts.map((f) => toFmtItem(f, '#F43F5E')),
+        });
+      }
+      if (imageFmts.length > 0) {
+        categories.push({
+          id: 'fmt-img',
+          label: tr('Görsel Formatları', 'Image Formats'),
+          icon: ImageIcon,
+          accent: '#34D399',
+          items: imageFmts.map((f) => toFmtItem(f, '#34D399')),
+        });
+      }
+      if (docFmts.length > 0) {
+        categories.push({
+          id: 'fmt-doc',
+          label: tr('Belge & Arşiv Formatları', 'Document & Archive'),
+          icon: FileText,
+          accent: '#38BDF8',
+          items: docFmts.map((f) => toFmtItem(f, '#38BDF8')),
+        });
+      }
+      categories.push({
+        id: 'fmt-more',
+        label: tr('Tüm Dönüştürme Seçenekleri', 'All Convert Options'),
+        icon: SlidersHorizontal,
+        accent: '#A78BFA',
+        items: [
+          {
+            id: 'open:convert',
+            label: tr('Gelişmiş Dönüştürücü', 'Advanced Converter'),
+            desc: tr('Kalite ve tüm formatlar', 'Quality & all formats'),
+            icon: ArrowLeftRight,
+            accent: '#A78BFA',
+          },
+          mkLocalItem('ZIP_CREATE', '#64748B'),
+        ],
+      });
+      return {
+        title: t('Convert', lang),
+        subtitle: tr('Hedef format grubunu seç', 'Choose a target format group'),
+        categories,
+      };
+    }
+
+    if (wheelKind === 'actions') {
+      const noFiles = files.length === 0;
+      const single = files.length <= 1;
+      return {
+        title: t('FileActions', lang),
+        subtitle: tr('Seçili dosyalar için hızlı işlemler', 'Quick actions for selected files'),
+        categories: [
+          {
+            id: 'act-share',
+            label: tr('Aç, Paylaş & Kaydet', 'Open, Share & Save'),
+            icon: Share2,
+            accent: '#34D399',
+            items: [
+              {id: 'action:open', label: tr('Önizle / Aç', 'Preview / Open'), icon: ExternalLink, disabled: noFiles},
+              {id: 'action:share', label: t('WheelShare', lang), icon: Share2, disabled: noFiles},
+              {id: 'action:save', label: t('WheelSaveSource', lang), icon: Download, disabled: noFiles},
+              {id: 'action:sheet', label: tr('Detaylı İşlem Paneli', 'Full Actions Sheet'), icon: SlidersHorizontal, disabled: noFiles},
+            ],
+          },
+          {
+            id: 'act-order',
+            label: tr('Sırala & Adlandır', 'Sort & Rename'),
+            icon: ArrowUpDown,
+            accent: '#38BDF8',
+            items: [
+              {id: 'local:BATCH_RENAME', label: tr('Toplu Yeniden Adlandır', 'Batch Rename'), icon: PenLine, disabled: noFiles},
+              {id: 'action:sortAz', label: tr('A → Z Sırala', 'Sort A → Z'), icon: ArrowUpDown, disabled: single},
+              {id: 'action:reverse', label: tr('Sırayı Ters Çevir', 'Reverse Order'), icon: ArrowUpDown, disabled: single},
+              {id: 'action:autoNum', label: tr('Otomatik Numaralandır', 'Auto Number'), icon: Hash, disabled: single},
+            ],
+          },
+          {
+            id: 'act-pack',
+            label: tr('Paketle & Kontrol', 'Archive & Inspect'),
+            icon: FileArchive,
+            accent: '#F43F5E',
+            items: [
+              {id: 'local:ZIP_CREATE', label: tr('ZIP Oluştur', 'Create ZIP'), icon: FileArchive, disabled: noFiles},
+              {id: 'local:FILE_HASH_INFO', label: tr('Hash & Dosya Bilgisi', 'Hash & File Info'), icon: FileCheck2, disabled: noFiles},
+              {id: 'action:clear', label: tr('Listeyi Temizle', 'Clear Queue'), icon: Trash2, accent: '#EF4444', disabled: noFiles},
+            ],
+          },
+        ],
+      };
+    }
+
+    // Default: 'main' (corner floating launcher)
+    const mainCategories: LauncherCategoryNode[] = [
+      {
+        id: 'main-media',
+        label: tr('Dosya & Stüdyo', 'Files & Studio'),
+        subtitle: tr('Ekle, indir veya video düzenleyiciyi aç', 'Pick, download or open Video Editor'),
+        icon: Plus,
+        accent: '#F43F5E',
+        items: [
+          {id: 'pick:files', label: t('WheelPick', lang), desc: tr('Herhangi bir dosya ekle', 'Pick any file'), icon: Plus},
+          {id: 'pick:photos', label: t('WheelPhotos', lang), desc: tr('Galeri & fotoğraf seç', 'Pick from gallery'), icon: ImageIcon},
+          {id: 'open:web', label: t('WheelLink', lang), desc: tr('URL / sosyal medya indir', 'Download from link'), icon: Download},
+          {id: 'open:video_editor', label: t('MainWheelVideoEditor', lang), desc: tr('Çok katmanlı video kurgu', 'Multi-track video editor'), icon: Film},
+        ],
+      },
+      {
+        id: 'main-nav',
+        label: tr('Uygulama Gezinme', 'Navigation'),
+        subtitle: tr('Stüdyo, kütüphane, ayarlar', 'Studio, library, settings'),
+        icon: LayoutGrid,
+        accent: '#38BDF8',
+        items: [
+          {id: 'nav:studio', label: t('Studio', lang), icon: Sparkles},
+          {id: 'nav:library', label: t('Library', lang), icon: Grid},
+          {id: 'nav:settings', label: t('Settings', lang), icon: Settings},
+          {id: 'nav:server', label: t('WheelCloud', lang), icon: Cloud},
+        ],
+      },
+    ];
+
+    if (files.length > 0) {
+      mainCategories.unshift({
+        id: 'main-active',
+        label: tr('Aktif Dosya Araçları', 'Active File Tools'),
+        subtitle: `${files.length} ${t('FilesCount', lang)}`,
+        icon: SlidersHorizontal,
+        accent: '#34D399',
+        items: [
+          {id: 'open:tools', label: t('Tools', lang), desc: tr('Tüm uyumlu araçlar', 'All compatible tools'), icon: SlidersHorizontal},
+          {id: 'open:convert', label: t('Convert', lang), desc: tr('Format dönüştür', 'Convert format'), icon: ArrowLeftRight},
+          {id: 'action:sheet', label: t('FileActions', lang), desc: tr('Paylaş, kaydet, sırala', 'Share, save, sort'), icon: Share2},
+          {id: 'action:clear', label: t('WheelClear', lang), desc: tr('Seçimi temizle', 'Clear selection'), icon: Trash2, accent: '#EF4444'},
+        ],
+      });
+    }
+
+    return {
+      title: 'Morph',
+      subtitle: tr('Kademeli Hızlı Başlatıcı', 'Cascading Quick Launcher'),
+      categories: mainCategories,
+    };
+  }, [wheelKind, files, lang]);
+
   const handleWheelSelect = (id: string) => {
     setWheelKind(null);
     if (id === 'open:video_editor') {
@@ -1773,57 +2236,61 @@ export default function App() {
         )}
       </main>
 
-      {/* Draggable Corner-Snapping Radial Wheel Menu FAB + Hover Info Cloud */}
-      {prefs.showQuickWheel !== false && !toolMode && job.status === 'idle' && tab !== 'settings' && (
-        <WheelFab
-          hidden={wheelKind !== null}
-          side={prefs.wheelSide ?? 'right'}
-          iconStyle={prefs.wheelIconStyle ?? 'wheel'}
-          expWheelBurnEffect={Boolean(prefs.expWheelBurnEffect)}
-          onChangeSide={(wheelSide) => setPrefs((p) => ({...p, wheelSide}))}
-          onHoverChange={(hover) => {
-            if (!hover || window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
-              setShowWheelCloud(hover);
-            }
-          }}
-          onClick={() => {
-            setShowWheelCloud(false);
-            setWheelKind('main');
-          }}
-          onFocus={() => {
-            if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
-              setShowWheelCloud(true);
-            }
-          }}
-          onBlur={() => setShowWheelCloud(false)}
-          label={t('Tools', lang)}
-          cloud={
-            !wheelKind && showWheelCloud ? (
-              <div
-                role="tooltip"
-                className={`pointer-events-none absolute bottom-[68px] w-max max-w-[230px] rounded-2xl border border-[var(--accent)]/45 bg-[var(--surface)]/95 px-3.5 py-2 text-xs font-medium leading-snug text-[var(--ink)] shadow-2xl backdrop-blur-md ${
-                  (prefs.wheelSide ?? 'right') === 'left'
-                    ? 'left-0'
-                    : (prefs.wheelSide ?? 'right') === 'center'
-                      ? 'left-1/2 -translate-x-1/2'
-                      : 'right-0'
-                }`}
-              >
-                <span
-                  className={`absolute -bottom-1.5 h-3 w-3 rotate-45 border-b border-r border-[var(--accent)]/45 bg-[var(--surface)] ${
+      {/* Draggable Corner-Snapping Radial Wheel Menu FAB — ALWAYS preserved (including 30s flame & ash burn effect) */}
+      {prefs.showQuickWheel !== false &&
+        !toolMode &&
+        job.status === 'idle' &&
+        tab !== 'settings' && (
+          <WheelFab
+            hidden={wheelKind !== null}
+            side={prefs.wheelSide ?? 'right'}
+            iconStyle={prefs.wheelIconStyle ?? 'wheel'}
+            expWheelBurnEffect={Boolean(prefs.expWheelBurnEffect)}
+            burnStyle={prefs.expWheelBurnStyle ?? 'classic_fire'}
+            onChangeSide={(wheelSide) => setPrefs((p) => ({...p, wheelSide}))}
+            onHoverChange={(hover) => {
+              if (!hover || window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
+                setShowWheelCloud(hover);
+              }
+            }}
+            onClick={() => {
+              setShowWheelCloud(false);
+              setWheelKind('main');
+            }}
+            onFocus={() => {
+              if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
+                setShowWheelCloud(true);
+              }
+            }}
+            onBlur={() => setShowWheelCloud(false)}
+            label={t('Tools', lang)}
+            cloud={
+              !wheelKind && showWheelCloud ? (
+                <div
+                  role="tooltip"
+                  className={`pointer-events-none absolute bottom-[68px] w-max max-w-[230px] rounded-2xl border border-[var(--accent)]/45 bg-[var(--surface)]/95 px-3.5 py-2 text-xs font-medium leading-snug text-[var(--ink)] shadow-2xl backdrop-blur-md ${
                     (prefs.wheelSide ?? 'right') === 'left'
-                      ? 'left-5'
+                      ? 'left-0'
                       : (prefs.wheelSide ?? 'right') === 'center'
                         ? 'left-1/2 -translate-x-1/2'
-                        : 'right-5'
+                        : 'right-0'
                   }`}
-                />
-                {t('WheelCloudTip', lang)}
-              </div>
-            ) : null
-          }
-        />
-      )}
+                >
+                  <span
+                    className={`absolute -bottom-1.5 h-3 w-3 rotate-45 border-b border-r border-[var(--accent)]/45 bg-[var(--surface)] ${
+                      (prefs.wheelSide ?? 'right') === 'left'
+                        ? 'left-5'
+                        : (prefs.wheelSide ?? 'right') === 'center'
+                          ? 'left-1/2 -translate-x-1/2'
+                          : 'right-5'
+                    }`}
+                  />
+                  {t('WheelCloudTip', lang)}
+                </div>
+              ) : null
+            }
+          />
+        )}
 
       {/* Mobile Bottom Navigation Bar — shown strictly on mobile when Quick Wheel is disabled */}
       {prefs.showQuickWheel === false && !toolMode && job.status === 'idle' && (
@@ -1858,36 +2325,70 @@ export default function App() {
         </nav>
       )}
 
-      <WheelMenu
-        open={wheelKind !== null}
-        title={wheelTitle}
-        actions={wheelActions}
-        lang={lang}
-        expDualRingWheel={Boolean(prefs.expDualRingWheel)}
-        expWheelCenterHoldCustomize={Boolean(prefs.expWheelCenterHoldCustomize)}
-        onDismiss={() => setWheelKind(null)}
-        onSelect={handleWheelSelect}
-        onDisabledSelect={() => showToast(t('SliceDisabledToast', lang))}
-        onOpenCustomize={
-          wheelKind === 'main'
-            ? () => {
-                setWheelKind(null);
-                setShowMainWheelCustomize(true);
+      {/* Classic Radial WheelMenu (untouched) & Experimental Cascading Launcher routed independently by scope */}
+      {(() => {
+        const useExpForCurrent = Boolean(
+          prefs.expAltLauncher &&
+            (wheelKind === 'main'
+              ? prefs.expAltLauncherForMain === true
+              : wheelKind === 'convert' || wheelKind === 'tools' || wheelKind === 'actions'
+                ? prefs.expAltLauncherForMenus !== false
+                : false)
+        );
+        const labelPrefs = resolveLauncherLabelPrefs(prefs);
+        return (
+          <>
+            <WheelMenu
+              open={wheelKind !== null && !useExpForCurrent}
+              title={wheelTitle}
+              actions={wheelActions}
+              lang={lang}
+              expDualRingWheel={Boolean(prefs.expDualRingWheel)}
+              expWheelCenterHoldCustomize={Boolean(prefs.expWheelCenterHoldCustomize)}
+              onDismiss={() => setWheelKind(null)}
+              onSelect={handleWheelSelect}
+              onDisabledSelect={() => showToast(t('SliceDisabledToast', lang))}
+              onOpenCustomize={
+                wheelKind === 'main'
+                  ? () => {
+                      setWheelKind(null);
+                      setShowMainWheelCustomize(true);
+                    }
+                  : wheelKind === 'convert' || wheelKind === 'tools' || wheelKind === 'actions'
+                    ? () => {
+                        const initialTab: CustomizeWheelTab =
+                          wheelKind === 'convert'
+                            ? 'convert'
+                            : wheelKind === 'actions'
+                              ? 'actions'
+                              : 'tools';
+                        setWheelKind(null);
+                        setCustomizeModal({open: true, tab: initialTab});
+                      }
+                    : undefined
               }
-            : wheelKind === 'convert' || wheelKind === 'tools' || wheelKind === 'actions'
-              ? () => {
-                  const initialTab: CustomizeWheelTab =
-                    wheelKind === 'convert'
-                      ? 'convert'
-                      : wheelKind === 'actions'
-                        ? 'actions'
-                        : 'tools';
-                  setWheelKind(null);
-                  setCustomizeModal({open: true, tab: initialTab});
-                }
-              : undefined
-        }
-      />
+            />
+
+            {prefs.expAltLauncher && (
+              <ExperimentalToolLauncher
+                open={wheelKind !== null && useExpForCurrent}
+                title={experimentalLauncherModel.title}
+                subtitle={experimentalLauncherModel.subtitle}
+                categories={experimentalLauncherModel.categories}
+                styleMode={prefs.expAltLauncherStyle ?? 'cascade_sheet'}
+                labelsEnabled={labelPrefs.labelsEnabled}
+                labelMode={labelPrefs.labelMode}
+                showDesc={labelPrefs.showDesc}
+                textSize={labelPrefs.textSize}
+                lang={lang}
+                onSelect={handleWheelSelect}
+                onDisabledSelect={() => showToast(t('SliceDisabledToast', lang))}
+                onDismiss={() => setWheelKind(null)}
+              />
+            )}
+          </>
+        );
+      })()}
 
       <MainWheelCustomizeModal
         open={showMainWheelCustomize}
