@@ -275,6 +275,8 @@ export type WheelSpinModePref =
   | 'pendulum_gyro'
   | 'turbo_counter';
 
+export type WheelSpinTriggerPref = 'always' | 'press';
+
 export interface WheelSpinModeMeta {
   id: WheelSpinModePref;
   titleTr: string;
@@ -396,10 +398,14 @@ export interface Prefs {
   expWheelBurnEffect?: boolean;
   /** Active visual preset for the 30-second Quick Wheel burn/disintegration effect */
   expWheelBurnStyle?: WheelBurnStylePref;
+  /** Optional experimental non-circular wheel shape override; falls back to normal wheelIconStyle when disabled */
+  expWheelShape?: WheelIconStylePref | null;
   /** Separate experimental toggle: continuously rotate the Quick Wheel button shell & inner icon */
   expWheelSpinEnabled?: boolean;
   /** Active dual-layer rotation choreography for Quick Wheel */
   expWheelSpinMode?: WheelSpinModePref;
+  /** When dual-layer spin runs: 'always' (continuous) or 'press' (only on press/hover) */
+  expWheelSpinTrigger?: WheelSpinTriggerPref;
   /** Defaults to true (Armadillo Reel ON); set false to use flat StudioDock in portrait */
   expArmadilloReel?: boolean;
   /** Optional extra timecode badges in Video Editor experimental bars & wheel top strip (wheel center timecode always stays ON) */

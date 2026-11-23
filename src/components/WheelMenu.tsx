@@ -7,6 +7,7 @@ import {
   WheelIconStylePref,
   WheelSidePref,
   WheelSpinModePref,
+  WheelSpinTriggerPref,
 } from '../data/models';
 
 export interface WheelActionItem {
@@ -1291,6 +1292,7 @@ export const WheelFab: React.FC<{
   burnStyle?: WheelBurnStylePref;
   expWheelSpinEnabled?: boolean;
   expWheelSpinMode?: WheelSpinModePref;
+  expWheelSpinTrigger?: WheelSpinTriggerPref;
   onChangeSide?: (side: WheelSidePref) => void;
   onHoverChange?: (hover: boolean) => void;
   cloud?: React.ReactNode;
@@ -1307,6 +1309,7 @@ export const WheelFab: React.FC<{
   burnStyle = 'classic_fire',
   expWheelSpinEnabled = false,
   expWheelSpinMode = 'outer_ccw_inner_cw',
+  expWheelSpinTrigger = 'always',
   onChangeSide,
   onHoverChange,
   cloud,
@@ -1392,7 +1395,15 @@ export const WheelFab: React.FC<{
     };
   }, []);
 
-  // Independent continuous dual-layer rotation loop (outer button shell + inner icon artwork)
+  // Independent dual-layer rotation loop (outer button shell + inner icon artwork)
+  // Supports 'always' (continuous) OR 'press' (spins while pressing/hovering, smoothly settles upright on release)
+  const spinActiveNow =
+    expWheelSpinEnabled &&
+    !hidden &&
+    (expWheelSpinTrigger === 'always' || isPressing || isHovering);
+  const spinActiveRef = useRef<boolean>(spinActiveNow);
+  spinActiveRef.current = spinActiveNow;
+
   useEffect(() => {
     if (!expWheelSpinEnabled || hidden) {
       idleSpinRef.current = {outer: 0, inner: 0, elapsedSec: 0};
@@ -1412,53 +1423,90 @@ export const WheelFab: React.FC<{
       return;
     }
 
+    if (
+      !spinActiveNow &&
+      Math.abs(idleSpinRef.current.outer) < 0.15 &&
+      Math.abs(idleSpinRef.current.inner) < 0.15
+    ) {
+      return;
+    }
+
     let rafId = 0;
     let lastTime = performance.now();
+
+    const shortestAngleToZero = (deg: number) => {
+      let a = ((deg + 180) % 360 + 360) % 360 - 180;
+      if (a < -180) a += 360;
+      return a;
+    };
 
     const tickSpin = (now: number) => {
       const dtSec = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000));
       lastTime = now;
       const st = idleSpinRef.current;
-      st.elapsedSec += dtSec;
 
-      switch (expWheelSpinMode) {
-        case 'both_cw':
-          st.outer = (st.outer + 42 * dtSec) % 360;
-          st.inner = (st.inner + 88 * dtSec) % 360;
-          break;
-        case 'both_ccw':
-          st.outer = (st.outer - 42 * dtSec + 360) % 360;
-          st.inner = (st.inner - 88 * dtSec + 360) % 360;
-          break;
-        case 'outer_cw_inner_ccw':
-          st.outer = (st.outer + 46 * dtSec) % 360;
-          st.inner = (st.inner - 76 * dtSec + 360) % 360;
-          break;
-        case 'pendulum_gyro':
-          st.outer = Math.sin(st.elapsedSec * 2.15) * 34;
-          st.inner = (st.inner + 102 * dtSec) % 360;
-          break;
-        case 'turbo_counter':
-          st.outer = (st.outer - 34 * dtSec + 360) % 360;
-          st.inner = (st.inner + 195 * dtSec) % 360;
-          break;
-        case 'outer_ccw_inner_cw':
-        default:
-          st.outer = (st.outer - 46 * dtSec + 360) % 360;
-          st.inner = (st.inner + 76 * dtSec) % 360;
-          break;
+      if (spinActiveRef.current) {
+        st.elapsedSec += dtSec;
+        const speedMul = expWheelSpinTrigger === 'press' ? 1.45 : 1;
+
+        switch (expWheelSpinMode) {
+          case 'both_cw':
+            st.outer = (st.outer + 42 * speedMul * dtSec) % 360;
+            st.inner = (st.inner + 88 * speedMul * dtSec) % 360;
+            break;
+          case 'both_ccw':
+            st.outer = (st.outer - 42 * speedMul * dtSec + 360) % 360;
+            st.inner = (st.inner - 88 * speedMul * dtSec + 360) % 360;
+            break;
+          case 'outer_cw_inner_ccw':
+            st.outer = (st.outer + 46 * speedMul * dtSec) % 360;
+            st.inner = (st.inner - 76 * speedMul * dtSec + 360) % 360;
+            break;
+          case 'pendulum_gyro':
+            st.outer = Math.sin(st.elapsedSec * 2.15 * speedMul) * 34;
+            st.inner = (st.inner + 102 * speedMul * dtSec) % 360;
+            break;
+          case 'turbo_counter':
+            st.outer = (st.outer - 34 * speedMul * dtSec + 360) % 360;
+            st.inner = (st.inner + 195 * speedMul * dtSec) % 360;
+            break;
+          case 'outer_ccw_inner_cw':
+          default:
+            st.outer = (st.outer - 46 * speedMul * dtSec + 360) % 360;
+            st.inner = (st.inner + 76 * speedMul * dtSec) % 360;
+            break;
+        }
+
+        setIdleOuterDeg(st.outer);
+        setIdleInnerDeg(st.inner);
+        rafId = window.requestAnimationFrame(tickSpin);
+      } else {
+        // Smoothly glide back to upright 0° when released in 'press' trigger mode
+        const remOuter = shortestAngleToZero(st.outer);
+        const remInner = shortestAngleToZero(st.inner);
+        const decay = Math.exp(-9.5 * dtSec);
+        st.outer = remOuter * decay;
+        st.inner = remInner * decay;
+
+        if (Math.abs(st.outer) < 0.25 && Math.abs(st.inner) < 0.25) {
+          st.outer = 0;
+          st.inner = 0;
+          st.elapsedSec = 0;
+          setIdleOuterDeg(0);
+          setIdleInnerDeg(0);
+          return;
+        }
+        setIdleOuterDeg(st.outer);
+        setIdleInnerDeg(st.inner);
+        rafId = window.requestAnimationFrame(tickSpin);
       }
-
-      setIdleOuterDeg(st.outer);
-      setIdleInnerDeg(st.inner);
-      rafId = window.requestAnimationFrame(tickSpin);
     };
 
     rafId = window.requestAnimationFrame(tickSpin);
     return () => {
       if (rafId) window.cancelAnimationFrame(rafId);
     };
-  }, [expWheelSpinEnabled, expWheelSpinMode, hidden]);
+  }, [expWheelSpinEnabled, expWheelSpinMode, expWheelSpinTrigger, spinActiveNow, hidden]);
 
   useEffect(() => {
     if (!expWheelBurnEffect) return;
@@ -2292,8 +2340,8 @@ export const WheelFab: React.FC<{
             } ${isDragging ? 'cursor-grabbing shadow-2xl' : 'cursor-grab'}`
           }
         >
-          {/* Subtle orbiting specular rim on circular shapes when full-body spin is active so outer rotation is clearly visible */}
-          {expWheelSpinEnabled && isCircularShape && (
+          {/* Subtle orbiting specular rim on circular shapes when full-body spin is actively turning */}
+          {expWheelSpinEnabled && isCircularShape && (spinActiveNow || Math.abs(idleOuterDeg) > 0.3) && (
             <svg
               aria-hidden="true"
               className="pointer-events-none absolute inset-0 h-full w-full"

@@ -21,6 +21,7 @@ interface ArmadilloReelDockProps {
   activeTab: VideoEditorTab;
   isInspectorOpen: boolean;
   previewHeightVh: number;
+  foldProgress: number;
   isResizingPreview: boolean;
   hasActiveWatermark: boolean;
   timecodeText?: string;
@@ -156,7 +157,8 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
   isTr,
   activeTab,
   isInspectorOpen,
-  previewHeightVh,
+  previewHeightVh: _previewHeightVh,
+  foldProgress,
   isResizingPreview,
   hasActiveWatermark,
   timecodeText,
@@ -181,45 +183,13 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // Binary threshold roll-up (matches VideoEditor's >=65vh expanded wheel mode):
-  // Below 65vh, ALL 8 dock buttons stay 100% flat, aligned, and clickable — NEVER stuck half-curled in mid-air!
-  // Crossing >=65vh smoothly triggers a complete 0 -> 1 Armadillo roll into the corner wheel (and 1 -> 0 when shrinking back).
-  const shouldRoll = previewHeightVh >= 65;
-  const [fold, setFold] = useState<number>(() => (shouldRoll ? 1 : 0));
-  const foldRef = useRef<number>(fold);
-
-  useEffect(() => {
-    const target = shouldRoll ? 1 : 0;
-    const startVal = foldRef.current;
-    if (Math.abs(target - startVal) < 0.001) {
-      foldRef.current = target;
-      setFold(target);
-      return;
-    }
-    const duration = 310;
-    const startTime = performance.now();
-    let rafId = 0;
-
-    const tick = (now: number) => {
-      const p = Math.min(1, (now - startTime) / duration);
-      const eased = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
-      const next = startVal + (target - startVal) * eased;
-      foldRef.current = next;
-      setFold(next);
-      if (p < 1) {
-        rafId = window.requestAnimationFrame(tick);
-      }
-    };
-
-    rafId = window.requestAnimationFrame(tick);
-    return () => {
-      if (rafId) window.cancelAnimationFrame(rafId);
-    };
-  }, [shouldRoll]);
-
+  // Direct 1:1 parallel fold driven by timeline track-bar overlap beneath the dock:
+  // foldProgress === 0 while all timeline track bars remain above the bottom buttons (100% flat & clickable).
+  // As the track bars slide underneath the dock, foldProgress advances 0 -> 1 in lockstep with the slide!
+  const fold = Math.max(0, Math.min(1, foldProgress));
   const easeFold = smoothstep(fold);
-  const isFlat = !shouldRoll && fold <= 0.02;
-  const isRolled = shouldRoll && fold >= 0.92;
+  const isFlat = fold <= 0.015;
+  const isRolled = fold >= 0.96;
 
   // Draggable corner FAB state when rolled up
   const [fabDragPos, setFabDragPos] = useState<{x: number; y: number} | null>(null);

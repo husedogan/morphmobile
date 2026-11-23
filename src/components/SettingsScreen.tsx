@@ -57,6 +57,7 @@ import {
   WheelIconStylePref,
   WheelSidePref,
   WheelSpinModePref,
+  WheelSpinTriggerPref,
   clampVideoEditorSizing,
   formatBytes,
 } from '../data/models';
@@ -1347,7 +1348,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       <button
                         key={id}
                         type="button"
-                        onClick={() => onChangePrefs((p) => ({...p, wheelIconStyle: id}))}
+                        onClick={() => onChangePrefs((p) => ({...p, wheelIconStyle: id, expWheelShape: null}))}
                         className={`flex flex-col items-center justify-center gap-1 rounded-xl border py-2 text-[10px] font-semibold transition-colors ${
                           active
                             ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--ink)]'
@@ -2288,8 +2289,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     prefs.expSpinningGear ||
                     prefs.expWheelBurnEffect ||
                     (prefs.expWheelBurnStyle && prefs.expWheelBurnStyle !== 'classic_fire') ||
+                    Boolean(prefs.expWheelShape) ||
                     prefs.expWheelSpinEnabled ||
                     (prefs.expWheelSpinMode && prefs.expWheelSpinMode !== 'outer_ccw_inner_cw') ||
+                    (prefs.expWheelSpinTrigger && prefs.expWheelSpinTrigger !== 'always') ||
                     (prefs.wheelIconStyle && EXP_WHEEL_SHAPES.some((s) => s.id === prefs.wheelIconStyle)) ||
                     prefs.expArmadilloReel === false ||
                     prefs.expVideoExtraTimecodes ||
@@ -2314,8 +2317,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                           expSpinningGear: false,
                           expWheelBurnEffect: false,
                           expWheelBurnStyle: 'classic_fire',
+                          expWheelShape: null,
                           expWheelSpinEnabled: false,
                           expWheelSpinMode: 'outer_ccw_inner_cw',
+                          expWheelSpinTrigger: 'always',
                           wheelIconStyle: EXP_WHEEL_SHAPES.some((s) => s.id === p.wheelIconStyle)
                             ? 'wheel'
                             : p.wheelIconStyle,
@@ -2354,8 +2359,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
               <p className="text-xs leading-relaxed text-[var(--muted)]">
                 {lang === 'tr'
-                  ? 'Varsayılan olarak sadeleştirilmiş görsel efektleri ve eski arayüz davranışlarını istediğin zaman buradan geri açabilirsin.'
-                  : 'Re-enable retired visual effects and classic UI behaviors anytime. All toggles default to OFF.'}
+                  ? 'Sadeleştirilmiş görsel efektleri ve eski arayüz ayarlarını buradan istediğin zaman açabilirsin.'
+                  : 'Re-enable retired visual effects and classic UI behaviors anytime from here.'}
               </p>
             </div>
 
@@ -2808,8 +2813,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               {(() => {
                 const burnEnabled = Boolean(prefs.expWheelBurnEffect);
                 const activeBurnStyle: WheelBurnStylePref = prefs.expWheelBurnStyle ?? 'classic_fire';
-                const activeWheelStyle: WheelIconStylePref = prefs.wheelIconStyle ?? 'wheel';
-                const isCustomExpShape = EXP_WHEEL_SHAPES.some((s) => s.id === activeWheelStyle);
+                const activeExpShape: WheelIconStylePref | null =
+                  prefs.expWheelShape ??
+                  (prefs.wheelIconStyle && EXP_WHEEL_SHAPES.some((s) => s.id === prefs.wheelIconStyle)
+                    ? prefs.wheelIconStyle
+                    : null);
+                const isCustomExpShape = burnEnabled && Boolean(activeExpShape);
 
                 const renderShapeGlyph = (shapeId: WheelIconStylePref) => {
                   switch (shapeId) {
@@ -2874,7 +2883,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 return (
                   <div
                     className={`rounded-2xl border p-3.5 transition-colors ${
-                      burnEnabled || isCustomExpShape
+                      burnEnabled
                         ? 'border-[var(--accent)]/55 bg-[var(--accent)]/[0.06]'
                         : 'border-[var(--line)] bg-[var(--inset)]'
                     }`}
@@ -2884,10 +2893,17 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       role="switch"
                       aria-checked={burnEnabled}
                       onClick={() =>
-                        onChangePrefs((p) => ({
-                          ...p,
-                          expWheelBurnEffect: !p.expWheelBurnEffect,
-                        }))
+                        onChangePrefs((p) => {
+                          const nextOn = !p.expWheelBurnEffect;
+                          return {
+                            ...p,
+                            expWheelBurnEffect: nextOn,
+                            wheelIconStyle:
+                              !nextOn && EXP_WHEEL_SHAPES.some((s) => s.id === p.wheelIconStyle)
+                                ? 'wheel'
+                                : p.wheelIconStyle,
+                          };
+                        })
                       }
                       className="flex w-full items-center justify-between gap-3 text-left"
                     >
@@ -2899,8 +2915,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                         </p>
                         <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
                           {lang === 'tr'
-                            ? 'Hızlı Çark düğmesine uzun basıldığında veya üzerinde beklendiğinde 30 saniyede seçtiğin efektle yanıp dağılmasını sağlar; alttan 6 yeni çark tasarımı ve 12 farklı yanma stili seçebilirsin.'
-                            : 'Triggers a 30-second heat & disintegration effect on hold/hover, plus 6 non-circular wheel silhouettes and 12 distinct burn styles.'}
+                            ? 'Açıkken seçtiğin özel çark tasarımını ve 30 sn yanma efektini uygular; kapatıldığında Görünüm sekmesindeki çark simgesine geri döner.'
+                            : 'Applies your selected custom wheel shape and 30s burn effect; turning OFF restores your normal Appearance wheel icon.'}
                         </p>
                       </div>
                       <span className="morph-switch shrink-0" data-checked={burnEnabled ? 'true' : 'false'}>
@@ -2917,17 +2933,29 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                         {isCustomExpShape && (
                           <button
                             type="button"
-                            onClick={() => onChangePrefs((p) => ({...p, wheelIconStyle: 'wheel'}))}
+                            onClick={() =>
+                              onChangePrefs((p) => ({
+                                ...p,
+                                expWheelShape: null,
+                                wheelIconStyle: EXP_WHEEL_SHAPES.some((s) => s.id === p.wheelIconStyle)
+                                  ? 'wheel'
+                                  : p.wheelIconStyle,
+                              }))
+                            }
                             className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2 py-0.5 text-[10px] font-semibold text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--ink)]"
                           >
-                            {lang === 'tr' ? 'Klasiğe Dön' : 'Reset Classic'}
+                            {lang === 'tr' ? 'Görünüm Ayarına Dön' : 'Use Appearance Icon'}
                           </button>
                         )}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      <div
+                        className={`grid grid-cols-2 gap-2 sm:grid-cols-3 transition-opacity ${
+                          burnEnabled ? 'opacity-100' : 'opacity-75'
+                        }`}
+                      >
                         {EXP_WHEEL_SHAPES.map((shape) => {
-                          const selected = activeWheelStyle === shape.id;
+                          const selected = activeExpShape === shape.id && burnEnabled;
                           return (
                             <button
                               key={shape.id}
@@ -2935,7 +2963,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                               onClick={() =>
                                 onChangePrefs((p) => ({
                                   ...p,
-                                  wheelIconStyle: shape.id,
+                                  expWheelBurnEffect: true,
+                                  expWheelShape: shape.id,
                                 }))
                               }
                               className={`flex items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition-all active:scale-[0.98] ${
@@ -3036,10 +3065,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 );
               })()}
 
-              {/* Separate Experimental Feature: Full-Body & Dual-Layer Continuous Quick Wheel Spin (Collapsible Details) */}
+              {/* Separate Experimental Feature: Full-Body & Dual-Layer Quick Wheel Spin (Collapsible Details + Always/Press Trigger) */}
               {(() => {
                 const spinEnabled = Boolean(prefs.expWheelSpinEnabled);
                 const activeSpinMode: WheelSpinModePref = prefs.expWheelSpinMode ?? 'outer_ccw_inner_cw';
+                const activeSpinTrigger: WheelSpinTriggerPref = prefs.expWheelSpinTrigger ?? 'always';
                 const activeSpinMeta =
                   WHEEL_SPIN_MODES.find((m) => m.id === activeSpinMode) ?? WHEEL_SPIN_MODES[1];
 
@@ -3124,13 +3154,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-[var(--ink)]">
                           {lang === 'tr'
-                            ? 'Hızlı Çark Çift Katmanlı Sürekli Dönüş'
-                            : 'Quick Wheel Dual-Layer Continuous Spin'}
+                            ? 'Hızlı Çark Çift Katmanlı Dönüş'
+                            : 'Quick Wheel Dual-Layer Spin'}
                         </p>
                         <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
                           {lang === 'tr'
-                            ? 'Seçili çark şeklinin dış gövdesini ve iç simgesini ayrı yönlerde (ör. dışı sola içi sağa veya ikisi de sağa) sürekli döndürür.'
-                            : 'Continuously rotates the Quick Wheel outer silhouette and inner icon independently across 6 motion modes.'}
+                            ? 'Seçili çarkın dış gövdesini ve iç simgesini ayrı yönlerde her zaman ya da sadece basılı tutunca döndürür.'
+                            : 'Rotates the Quick Wheel outer shell and inner icon independently, always or only while pressed/hovered.'}
                         </p>
                       </div>
                       <span className="morph-switch shrink-0" data-checked={spinEnabled ? 'true' : 'false'}>
@@ -3150,7 +3180,15 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                           {lang === 'tr' ? 'Dönüş Detayları' : 'Rotation Details'}
                         </span>
                         <span className="truncate text-[10.5px] font-medium text-[var(--accent-text)]">
-                          · {lang === 'tr' ? activeSpinMeta.titleTr : activeSpinMeta.titleEn}
+                          · {lang === 'tr' ? activeSpinMeta.titleTr : activeSpinMeta.titleEn} (
+                          {activeSpinTrigger === 'press'
+                            ? lang === 'tr'
+                              ? 'Basınca'
+                              : 'On Press'
+                            : lang === 'tr'
+                              ? 'Her Zaman'
+                              : 'Always'}
+                          )
                         </span>
                       </div>
                       <ChevronDown
@@ -3161,52 +3199,95 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     </button>
 
                     {expSpinDetailsOpen && (
-                      <div
-                        className={`mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-3 transition-opacity ${
-                          spinEnabled ? 'opacity-100' : 'opacity-80'
-                        }`}
-                      >
-                        {WHEEL_SPIN_MODES.map((modeItem) => {
-                          const selected = activeSpinMode === modeItem.id;
-                          return (
-                            <button
-                              key={modeItem.id}
-                              type="button"
-                              onClick={() =>
-                                onChangePrefs((p) => ({
-                                  ...p,
-                                  expWheelSpinEnabled: true,
-                                  expWheelSpinMode: modeItem.id,
-                                }))
-                              }
-                              className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition-all active:scale-[0.98] ${
-                                selected && spinEnabled
-                                  ? 'border-[var(--accent)] bg-[var(--accent)]/14 text-[var(--ink)]'
-                                  : selected
-                                    ? 'border-[var(--accent)]/50 bg-[var(--surface)] text-[var(--ink)]'
-                                    : 'border-[var(--line)] bg-[var(--surface)]/70 text-[var(--muted)] hover:border-[var(--accent)]/45 hover:text-[var(--ink)]'
-                              }`}
-                            >
-                              <span
-                                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
-                                  selected && spinEnabled
-                                    ? 'bg-[var(--accent)] text-white'
-                                    : 'bg-[var(--inset)] text-[var(--accent-text)]'
+                      <div className="mt-2.5 space-y-2.5">
+                        {/* Always vs Press/Hover Trigger Selector */}
+                        <div className="grid grid-cols-2 gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--surface)]/75 p-1">
+                          {(
+                            [
+                              {
+                                id: 'always' as const,
+                                labelTr: 'Her Zaman Dönsün',
+                                labelEn: 'Always Spin',
+                              },
+                              {
+                                id: 'press' as const,
+                                labelTr: 'Üzerine Basınca',
+                                labelEn: 'On Press / Hover',
+                              },
+                            ] as const
+                          ).map((trig) => {
+                            const active = activeSpinTrigger === trig.id;
+                            return (
+                              <button
+                                key={trig.id}
+                                type="button"
+                                onClick={() =>
+                                  onChangePrefs((p) => ({
+                                    ...p,
+                                    expWheelSpinEnabled: true,
+                                    expWheelSpinTrigger: trig.id,
+                                  }))
+                                }
+                                className={`min-h-[34px] rounded-lg px-2 text-[11px] font-bold transition-colors ${
+                                  active
+                                    ? 'bg-[var(--accent)] text-white shadow-sm'
+                                    : 'text-[var(--muted)] hover:text-[var(--ink)]'
                                 }`}
                               >
-                                {renderSpinGlyph(modeItem.id)}
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-[10.5px] font-bold leading-tight text-[var(--ink)]">
-                                  {lang === 'tr' ? modeItem.titleTr : modeItem.titleEn}
-                                </p>
-                                <p className="mt-0.5 text-[9.5px] leading-tight text-[var(--muted)]">
-                                  {lang === 'tr' ? modeItem.descTr : modeItem.descEn}
-                                </p>
-                              </div>
-                            </button>
-                          );
-                        })}
+                                {lang === 'tr' ? trig.labelTr : trig.labelEn}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* 6 Dual-Layer Spin Choreographies */}
+                        <div
+                          className={`grid grid-cols-2 gap-2 sm:grid-cols-3 transition-opacity ${
+                            spinEnabled ? 'opacity-100' : 'opacity-80'
+                          }`}
+                        >
+                          {WHEEL_SPIN_MODES.map((modeItem) => {
+                            const selected = activeSpinMode === modeItem.id;
+                            return (
+                              <button
+                                key={modeItem.id}
+                                type="button"
+                                onClick={() =>
+                                  onChangePrefs((p) => ({
+                                    ...p,
+                                    expWheelSpinEnabled: true,
+                                    expWheelSpinMode: modeItem.id,
+                                  }))
+                                }
+                                className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 text-left transition-all active:scale-[0.98] ${
+                                  selected && spinEnabled
+                                    ? 'border-[var(--accent)] bg-[var(--accent)]/14 text-[var(--ink)]'
+                                    : selected
+                                      ? 'border-[var(--accent)]/50 bg-[var(--surface)] text-[var(--ink)]'
+                                      : 'border-[var(--line)] bg-[var(--surface)]/70 text-[var(--muted)] hover:border-[var(--accent)]/45 hover:text-[var(--ink)]'
+                                }`}
+                              >
+                                <span
+                                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+                                    selected && spinEnabled
+                                      ? 'bg-[var(--accent)] text-white'
+                                      : 'bg-[var(--inset)] text-[var(--accent-text)]'
+                                  }`}
+                                >
+                                  {renderSpinGlyph(modeItem.id)}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-[10.5px] font-bold leading-tight text-[var(--ink)]">
+                                    {lang === 'tr' ? modeItem.titleTr : modeItem.titleEn}
+                                  </p>
+                                  <p className="mt-0.5 text-[9.5px] leading-tight text-[var(--muted)]">
+                                    {lang === 'tr' ? modeItem.descTr : modeItem.descEn}
+                                  </p>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
                   </div>

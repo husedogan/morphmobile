@@ -701,9 +701,36 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const [isBusyPackage, setIsBusyPackage] = useState(false);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
 
-  // Near-fullscreen expanded preview finishes the Armadillo roll-up ONLY when Experimental Armadillo Reel is active
+  // Dynamically measured previewHeightVh thresholds where the timeline track bars (Klip/Ses/Metin)
+  // first touch the bottom tool dock (rollStartVh) and finish sliding under it into Cinema Wheel (wheelEndVh).
+  const [armadilloFoldRange, setArmadilloFoldRange] = useState<{rollStartVh: number; wheelEndVh: number}>({
+    rollStartVh: 53,
+    wheelEndVh: 67,
+  });
+  const armadilloFoldRangeRef = useRef(armadilloFoldRange);
+  armadilloFoldRangeRef.current = armadilloFoldRange;
+  const previewSnapRafRef = useRef<number | null>(null);
+  const previewHeightVhRef = useRef<number>(previewHeightVh);
+  previewHeightVhRef.current = previewHeightVh;
+
   const isExpandedWheelMode =
-    effectiveArmadilloReel && isPortraitMode && !isFullscreenPreview && previewHeightVh >= 65;
+    effectiveArmadilloReel &&
+    isPortraitMode &&
+    !isFullscreenPreview &&
+    previewHeightVh >= armadilloFoldRange.wheelEndVh - 0.15;
+
+  const armadilloFold =
+    !effectiveArmadilloReel || !isPortraitMode || isFullscreenPreview || (isInspectorOpen && !isExpandedWheelMode)
+      ? 0
+      : Math.max(
+          0,
+          Math.min(
+            1,
+            (previewHeightVh - armadilloFoldRange.rollStartVh) /
+              Math.max(4, armadilloFoldRange.wheelEndVh - armadilloFoldRange.rollStartVh)
+          )
+        );
+
   const prevExpandedWheelRef = useRef<boolean>(false);
 
   useEffect(() => {
@@ -714,6 +741,56 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     }
     prevExpandedWheelRef.current = isExpandedWheelMode;
   }, [isExpandedWheelMode]);
+
+  useEffect(() => {
+    return () => {
+      if (previewSnapRafRef.current) window.cancelAnimationFrame(previewSnapRafRef.current);
+    };
+  }, []);
+
+  // Keep exact pixel-accurate track-bottom -> dock-top overlap thresholds updated whenever
+  // viewport size or track stack changes (only measured when normal timeline is mounted & inspector closed).
+  useEffect(() => {
+    if (!effectiveArmadilloReel || !isPortraitMode || isFullscreenPreview || isExpandedWheelMode || isInspectorOpen) {
+      return;
+    }
+    const measure = () => {
+      const scroller = timelineScrollRef.current;
+      const trackEl = timelineTrackRef.current;
+      if (!scroller || !trackEl || typeof window === 'undefined') return;
+      const viewportH = Math.max(360, window.innerHeight);
+      const visibleH = scroller.clientHeight;
+      if (visibleH <= 0) return;
+      // Exclude the bottom pb-11 (44px) spacer below the last track so we measure the actual Klip/Ses/Metin bars
+      const rawTracksH = Math.max(88, trackEl.scrollHeight - 40);
+      // Cap baseline protected stack so projects with 6+ scrollable tracks still stay flat at normal preview heights
+      const protectedTracksH = Math.min(rawTracksH, 168);
+      const slackPx = visibleH - protectedTracksH;
+      const currentVh = previewHeightVhRef.current;
+      const nextRollStart = Math.max(42, Math.min(72, currentVh + (slackPx / viewportH) * 100));
+      const rollSpanPx = Math.max(88, Math.min(132, protectedTracksH - 20));
+      const nextWheelEnd = Math.min(80, Math.max(nextRollStart + 8, nextRollStart + (rollSpanPx / viewportH) * 100));
+      setArmadilloFoldRange((prev) =>
+        Math.abs(prev.rollStartVh - nextRollStart) < 0.7 && Math.abs(prev.wheelEndVh - nextWheelEnd) < 0.7
+          ? prev
+          : {rollStartVh: Number(nextRollStart.toFixed(1)), wheelEndVh: Number(nextWheelEnd.toFixed(1))}
+      );
+    };
+
+    const rafId = window.requestAnimationFrame(measure);
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(measure);
+      if (timelineScrollRef.current) ro.observe(timelineScrollRef.current);
+      if (timelineTrackRef.current) ro.observe(timelineTrackRef.current);
+    }
+    window.addEventListener('resize', measure);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      ro?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [effectiveArmadilloReel, isPortraitMode, isFullscreenPreview, isExpandedWheelMode, isInspectorOpen]);
 
   const previewThumbSrc = useMemo(() => {
     if (filterPreviewMode === 'video' && thumbnails.length > 0) {
@@ -1926,27 +2003,76 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     );
   };
 
+  const animatePreviewHeightTo = useCallback((targetVh: number) => {
+    if (previewSnapRafRef.current) {
+      window.cancelAnimationFrame(previewSnapRafRef.current);
+      previewSnapRafRef.current = null;
+    }
+    const startVal = previewHeightVhRef.current;
+    if (Math.abs(targetVh - startVal) < 0.2) {
+      setPreviewHeightVh(targetVh);
+      return;
+    }
+    const duration = 200;
+    const startTime = performance.now();
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - startTime) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      const next = Number((startVal + (targetVh - startVal) * eased).toFixed(1));
+      setPreviewHeightVh(next);
+      if (p < 1) {
+        previewSnapRafRef.current = window.requestAnimationFrame(tick);
+      } else {
+        previewSnapRafRef.current = null;
+      }
+    };
+    previewSnapRafRef.current = window.requestAnimationFrame(tick);
+  }, []);
+
   const startPreviewResize = (e: React.PointerEvent) => {
     e.preventDefault();
+    if (previewSnapRafRef.current) {
+      window.cancelAnimationFrame(previewSnapRafRef.current);
+      previewSnapRafRef.current = null;
+    }
     const startY = e.clientY;
-    const startVh = previewHeightVh;
+    const startVh = previewHeightVhRef.current;
+    let latestVh = startVh;
     setIsResizingPreview(true);
     const onMove = (ev: PointerEvent) => {
       const deltaVh = ((ev.clientY - startY) / Math.max(320, window.innerHeight)) * 100;
-      const nextVh = Math.min(82, Math.max(22, Math.round(startVh + deltaVh)));
-      setPreviewHeightVh(nextVh);
+      latestVh = Math.min(82, Math.max(22, Number((startVh + deltaVh).toFixed(1))));
+      setPreviewHeightVh(latestVh);
     };
     const onUp = () => {
       setIsResizingPreview(false);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+
+      // If released while partially curling in the overlap zone, settle cleanly either into
+      // full Cinema Wheel (>=42% curled) or back to the crisp flat boundary just above the track bars (<42%).
+      if (effectiveArmadilloReel && isPortraitMode && !isFullscreenPreview) {
+        const {rollStartVh, wheelEndVh} = armadilloFoldRangeRef.current;
+        if (latestVh > rollStartVh + 0.3 && latestVh < wheelEndVh - 0.15) {
+          const ratio = (latestVh - rollStartVh) / Math.max(4, wheelEndVh - rollStartVh);
+          const snapTarget =
+            ratio >= 0.42
+              ? Math.min(82, Number((wheelEndVh + 1.2).toFixed(1)))
+              : Math.max(22, Number((rollStartVh - 0.4).toFixed(1)));
+          animatePreviewHeightTo(snapTarget);
+        }
+      }
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
   };
 
   const cyclePreviewHeight = () => {
-    setPreviewHeightVh((prev) => (prev < 34 ? 46 : prev < 64 ? 74 : 28));
+    const {wheelEndVh} = armadilloFoldRangeRef.current;
+    const expandedTarget = Math.min(80, Math.max(72, Math.ceil(wheelEndVh + 4)));
+    setPreviewHeightVh((prev) => (prev < 34 ? 46 : prev < wheelEndVh - 1 ? expandedTarget : 28));
   };
 
   const handleNormalDelete = () => {
@@ -7358,6 +7484,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       isInspectorOpen={isInspectorOpen}
       isExpandedWheelMode={isExpandedWheelMode}
       expArmadilloReel={effectiveArmadilloReel}
+      armadilloFoldProgress={armadilloFold}
       isFullscreenPreview={isFullscreenPreview}
       previewHeightVh={previewHeightVh}
       isResizingPreview={isResizingPreview}
@@ -7727,6 +7854,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
               activeTab={activeTab}
               isInspectorOpen={isInspectorOpen}
               previewHeightVh={previewHeightVh}
+              foldProgress={armadilloFold}
               isResizingPreview={isResizingPreview}
               hasActiveWatermark={hasActiveWatermark}
               timecodeText={formatSmpteTimecode(playhead, project.fps)}

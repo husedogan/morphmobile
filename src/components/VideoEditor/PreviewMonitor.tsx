@@ -50,6 +50,7 @@ interface PreviewMonitorProps {
   isInspectorOpen?: boolean;
   isExpandedWheelMode?: boolean;
   expArmadilloReel?: boolean;
+  armadilloFoldProgress?: number;
   isFullscreenPreview: boolean;
   previewHeightVh: number;
   isResizingPreview: boolean;
@@ -121,6 +122,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
   isInspectorOpen = false,
   isExpandedWheelMode = false,
   expArmadilloReel = false,
+  armadilloFoldProgress = 0,
   isFullscreenPreview,
   previewHeightVh,
   isResizingPreview,
@@ -1028,19 +1030,20 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
               : tr('Önizleme yüksekliğini ayarlamak için sürükleyin', 'Drag to resize preview height')
           }
           className={`group flex h-5 shrink-0 cursor-ns-resize touch-none items-center justify-center gap-2 border-b border-white/[0.05] transition-colors ${
-            expArmadilloReel && previewHeightVh >= 50
+            expArmadilloReel && (armadilloFoldProgress > 0.015 || isExpandedWheelMode)
               ? 'bg-[#F43F5E]/12 hover:bg-[#F43F5E]/18'
               : 'bg-[#0B0B0E] hover:bg-white/[0.05]'
           }`}
         >
           <span
             className={`h-[3px] w-11 rounded-full transition-colors ${
-              (expArmadilloReel && previewHeightVh >= 50) || isResizingPreview
+              (expArmadilloReel && (armadilloFoldProgress > 0.015 || isExpandedWheelMode)) ||
+              isResizingPreview
                 ? 'bg-[#F43F5E]'
                 : 'bg-white/25 group-hover:bg-[#FB7185]'
             }`}
           />
-          {expArmadilloReel && previewHeightVh >= 50 && (
+          {expArmadilloReel && (armadilloFoldProgress > 0.015 || isExpandedWheelMode) && (
             <span className="text-[10px] font-bold tracking-wide text-[#FB7185]">
               {isExpandedWheelMode
                 ? tr('Sinema Çarkı · Yukarı çek', 'Cinema Wheel · Drag up')

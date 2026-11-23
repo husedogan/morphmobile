@@ -68,6 +68,7 @@ import {
   ALL_WHEEL_ACTIONS_CATALOG,
   DEFAULT_MAIN_WHEEL_ITEMS,
   DEFAULT_WHEEL_CONFIG,
+  EXP_WHEEL_SHAPES,
   ExportItem,
   JobState,
   MAX_WHEEL_SLICES,
@@ -2244,11 +2245,18 @@ export default function App() {
           <WheelFab
             hidden={wheelKind !== null}
             side={prefs.wheelSide ?? 'right'}
-            iconStyle={prefs.wheelIconStyle ?? 'wheel'}
+            iconStyle={
+              prefs.expWheelBurnEffect && prefs.expWheelShape
+                ? prefs.expWheelShape
+                : prefs.wheelIconStyle && !EXP_WHEEL_SHAPES.some((s) => s.id === prefs.wheelIconStyle)
+                  ? prefs.wheelIconStyle
+                  : 'wheel'
+            }
             expWheelBurnEffect={Boolean(prefs.expWheelBurnEffect)}
             burnStyle={prefs.expWheelBurnStyle ?? 'classic_fire'}
             expWheelSpinEnabled={Boolean(prefs.expWheelSpinEnabled)}
             expWheelSpinMode={prefs.expWheelSpinMode ?? 'outer_ccw_inner_cw'}
+            expWheelSpinTrigger={prefs.expWheelSpinTrigger ?? 'always'}
             onChangeSide={(wheelSide) => setPrefs((p) => ({...p, wheelSide}))}
             onHoverChange={(hover) => {
               if (!hover || window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
