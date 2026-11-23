@@ -82,15 +82,42 @@ export interface MorphEnginesPlugin {
     processId: string;
   }): Promise<NativeYtDlpDownloadResult>;
   cancelYtDlp(options: {processId: string}): Promise<{cancelled: boolean}>;
+  checkDownloadedApk(options: {
+    fileName: string;
+    expectedSize?: number;
+    filePath?: string;
+  }): Promise<{
+    exists: boolean;
+    filePath?: string;
+    fileName: string;
+    size?: number;
+    uri?: string;
+  }>;
+  installCachedApk(options: {
+    fileName: string;
+    expectedSize?: number;
+    filePath?: string;
+  }): Promise<{
+    found: boolean;
+    filePath?: string;
+    fileName: string;
+    size?: number;
+    uri?: string;
+    installerLaunched: boolean;
+  }>;
   downloadAndInstallApk(options: {
     url: string;
     fileName: string;
+    expectedSize?: number;
+    filePath?: string;
+    forceRedownload?: boolean;
   }): Promise<{
     filePath: string;
     fileName: string;
     size: number;
     uri: string;
     installerLaunched: boolean;
+    alreadyDownloaded?: boolean;
   }>;
   addListener(
     eventName: 'ytdlpProgress',

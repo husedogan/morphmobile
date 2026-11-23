@@ -25,6 +25,18 @@ if (fs.existsSync(resDirEarly)) {
 </network-security-config>
 `;
   fs.writeFileSync(path.join(xmlResDir, 'network_security_config.xml'), networkSecXml, 'utf8');
+
+  // Ensure FileProvider covers app-private external files, cache, internal files, and external storage
+  // so in-app APK updates work reliably on Android 7 through Android 16 (Scoped Storage).
+  const filePathsXml = `<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-path name="my_images" path="." />
+    <external-files-path name="morph_external_files" path="." />
+    <cache-path name="my_cache_images" path="." />
+    <files-path name="morph_files" path="." />
+</paths>
+`;
+  fs.writeFileSync(path.join(xmlResDir, 'file_paths.xml'), filePathsXml, 'utf8');
 }
 
 // 1b. Patch AndroidManifest.xml with hardened network/backup flags, extractNativeLibs (required for Python/yt-dlp .so), and scoped permissions

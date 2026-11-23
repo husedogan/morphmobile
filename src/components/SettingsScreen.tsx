@@ -115,6 +115,7 @@ interface SettingsScreenProps {
   updateInfo: GithubUpdateInfo | null;
   checkingUpdate: boolean;
   updateDownload?: UpdateDownloadProgress | null;
+  apkReadyOnDevice?: boolean;
   initialCategory?: SettingsCategory;
   onChangePrefs: (updater: (prev: Prefs) => Prefs) => void;
   onTestServer: () => void;
@@ -135,6 +136,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   updateInfo,
   checkingUpdate,
   updateDownload = null,
+  apkReadyOnDevice = false,
   initialCategory = 'appearance',
   onChangePrefs,
   onTestServer,
@@ -3440,7 +3442,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 {updateInfo?.hasUpdate ? (
                 (() => {
                   const apkDownloaded =
-                    updateDownload?.phase === 'done' || isUpdateApkDownloaded(updateInfo);
+                    apkReadyOnDevice ||
+                    updateDownload?.phase === 'done' ||
+                    isUpdateApkDownloaded(updateInfo);
                   return (
                     <button
                       type="button"
@@ -3457,7 +3461,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       )}
                       <span>
                         {updateDownload?.active
-                          ? `${t('DownloadingUpdate', lang)} (%${updateDownload.percent})`
+                          ? updateDownload.phase === 'installing'
+                            ? lang === 'tr'
+                              ? 'Kurulum açılıyor…'
+                              : 'Opening installer…'
+                            : `${t('DownloadingUpdate', lang)} (%${updateDownload.percent})`
                           : apkDownloaded
                             ? `${t('InstallUpdate', lang)}${updateInfo.releaseTag ? ` (${updateInfo.releaseTag})` : ''}`
                             : `${t('DownloadUpdate', lang)}${updateInfo.releaseTag ? ` (${updateInfo.releaseTag})` : ''}`}
@@ -3561,7 +3569,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               <div className="grid grid-cols-2 gap-2.5">
                 {(() => {
                   const apkDownloaded =
-                    updateDownload?.phase === 'done' || isUpdateApkDownloaded(updateInfo);
+                    apkReadyOnDevice ||
+                    updateDownload?.phase === 'done' ||
+                    isUpdateApkDownloaded(updateInfo);
                   const isRateLimitedOrNoApk =
                     updateInfo?.errorType === 'rate_limit' || (!updateInfo?.apkDownloadUrl && Boolean(updateInfo?.error));
                   if (isRateLimitedOrNoApk && !apkDownloaded) {
@@ -3583,7 +3593,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     <button
                       type="button"
                       onClick={onApplyUpdate}
-                      disabled={!isOnline || Boolean(updateDownload?.active)}
+                      disabled={(!isOnline && !apkDownloaded) || Boolean(updateDownload?.active)}
                       className="flex h-12 min-w-0 items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-semibold text-[var(--ink)] whitespace-nowrap transition-colors hover:border-[var(--accent)] disabled:opacity-60"
                     >
                       {updateDownload?.active ? (
@@ -3595,7 +3605,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       )}
                       <span className="truncate">
                         {updateDownload?.active
-                          ? `%${updateDownload.percent}`
+                          ? updateDownload.phase === 'installing'
+                            ? lang === 'tr'
+                              ? 'Açılıyor…'
+                              : 'Opening…'
+                            : `%${updateDownload.percent}`
                           : apkDownloaded
                             ? t('InstallDownloadedApk', lang)
                             : t('DownloadApk', lang)}

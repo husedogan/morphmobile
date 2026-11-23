@@ -93,6 +93,8 @@ import {
   applyPwaUpdateIfWaiting,
   checkGithubUpdates,
   downloadMorphApkInApp,
+  isUpdateApkDownloaded,
+  syncDownloadedApkStatus,
 } from './engine/githubUpdater';
 import {
   clearAllExports,
@@ -224,6 +226,8 @@ export default function App() {
   const [updateInfo, setUpdateInfo] = useState<GithubUpdateInfo | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateDownload, setUpdateDownload] = useState<UpdateDownloadProgress | null>(null);
+  const [apkReadyOnDevice, setApkReadyOnDevice] = useState<boolean>(false);
+  const updateDownloadBusyRef = useRef<boolean>(false);
 
   const abortRef = useRef<AbortController | null>(null);
   const activeServerJobIdRef = useRef<string | null>(null);
@@ -304,12 +308,50 @@ export default function App() {
     };
     refreshLibrary();
     const unsub = subscribeLibraryChanges(refreshLibrary);
-    checkGithubUpdates().then(setUpdateInfo).catch(() => {});
+    checkGithubUpdates()
+      .then((info) => {
+        setUpdateInfo(info);
+        if (info.hasUpdate) {
+          syncDownloadedApkStatus(info)
+            .then(setApkReadyOnDevice)
+            .catch(() => {});
+        } else {
+          setApkReadyOnDevice(false);
+        }
+      })
+      .catch(() => {});
     if (isNativeApp()) {
       ensureStoragePermission(true).catch(() => {});
     }
     return unsub;
   }, [replaceLibrarySafely]);
+
+  // Re-verify cached APK on disk whenever returning to the app (e.g. after deferring Android's system installer)
+  useEffect(() => {
+    if (!updateInfo?.hasUpdate) {
+      setApkReadyOnDevice(false);
+      return;
+    }
+    let cancelled = false;
+    const verify = () => {
+      syncDownloadedApkStatus(updateInfo)
+        .then((ready) => {
+          if (!cancelled) setApkReadyOnDevice(ready);
+        })
+        .catch(() => {});
+    };
+    verify();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') verify();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', verify);
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', verify);
+    };
+  }, [updateInfo]);
 
   useEffect(() => {
     if (tab === 'library') {
@@ -507,13 +549,20 @@ export default function App() {
 
   const triggerUpdateDownload = useCallback(
     async (info: GithubUpdateInfo | null) => {
-      if (updateDownload?.active) return;
-      const reloaded = await applyPwaUpdateIfWaiting();
-      if (reloaded) return;
+      if (updateDownloadBusyRef.current || updateDownload?.active) return;
+      updateDownloadBusyRef.current = true;
       try {
+        const reloaded = await applyPwaUpdateIfWaiting();
+        if (reloaded) return;
         const res = await downloadMorphApkInApp(info, (state) => {
           setUpdateDownload(state);
         });
+        if (info?.hasUpdate) {
+          const verified = await syncDownloadedApkStatus(info).catch(() =>
+            Boolean(res.alreadyCached || isUpdateApkDownloaded(info))
+          );
+          setApkReadyOnDevice(verified);
+        }
         if (res.message) {
           showToast(res.message);
         }
@@ -537,9 +586,11 @@ export default function App() {
           message: msg,
         });
         showToast(msg);
+      } finally {
+        updateDownloadBusyRef.current = false;
       }
     },
-    [showToast, updateDownload?.active]
+    [lang, showToast, updateDownload?.active]
   );
 
   const handleCheckUpdate = useCallback(async () => {
@@ -550,10 +601,19 @@ export default function App() {
       if (info.error) {
         showToast(info.error);
       } else if (info.hasUpdate) {
+        const alreadyOnDevice = await syncDownloadedApkStatus(info).catch(() =>
+          isUpdateApkDownloaded(info)
+        );
+        setApkReadyOnDevice(alreadyOnDevice);
         const tagSuffix = info.releaseTag ? ` (${info.releaseTag})` : '';
-        showToast(`${t('DownloadingUpdate', lang)}${tagSuffix}`);
+        showToast(
+          alreadyOnDevice
+            ? `${t('InstallUpdate', lang)}${tagSuffix}`
+            : `${t('DownloadingUpdate', lang)}${tagSuffix}`
+        );
         await triggerUpdateDownload(info);
       } else {
+        setApkReadyOnDevice(false);
         showToast(t('UpToDate', lang));
       }
     } finally {
@@ -2192,6 +2252,7 @@ export default function App() {
             updateInfo={updateInfo}
             checkingUpdate={checkingUpdate}
             updateDownload={updateDownload}
+            apkReadyOnDevice={apkReadyOnDevice}
             initialCategory={settingsCategory}
             libraryCount={library.length}
             libraryBytes={library.reduce((sum, item) => sum + item.size, 0)}
@@ -2212,6 +2273,7 @@ export default function App() {
             serverReady={serverReady}
             updateInfo={updateInfo}
             checkingUpdate={checkingUpdate}
+            apkReadyOnDevice={apkReadyOnDevice}
             showIntegratedEngines={Boolean(prefs.showIntegratedEngines)}
             activeEngineAction={prefs.lastEngineAction ?? 'update'}
             activeEngineSegment={prefs.lastEngineSegment ?? null}
@@ -2521,8 +2583,16 @@ export default function App() {
                   onClick={handleApplyUpdate}
                   className="flex min-h-[46px] min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl border border-[var(--accent)]/40 bg-[var(--accent)]/15 px-3.5 py-2 text-center text-xs font-semibold leading-tight text-[var(--ink)] hover:border-[var(--accent)]"
                 >
-                  <Download className="h-4 w-4 shrink-0 text-[var(--accent)]" />
-                  <span>{t('DownloadUpdate', lang)}</span>
+                  {apkReadyOnDevice || isUpdateApkDownloaded(updateInfo) ? (
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-[var(--accent)]" />
+                  ) : (
+                    <Download className="h-4 w-4 shrink-0 text-[var(--accent)]" />
+                  )}
+                  <span>
+                    {apkReadyOnDevice || isUpdateApkDownloaded(updateInfo)
+                      ? t('InstallUpdate', lang)
+                      : t('DownloadUpdate', lang)}
+                  </span>
                 </button>
               ) : (
                 <button

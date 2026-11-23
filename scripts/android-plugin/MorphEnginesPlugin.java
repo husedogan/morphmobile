@@ -931,10 +931,242 @@ public class MorphEnginesPlugin extends Plugin {
         call.resolve(ret);
     }
 
+    private static File getApkUpdateDir(Context appCtx) {
+        File extDownloads = appCtx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+        File dir = extDownloads != null
+            ? new File(extDownloads, "morph-updates")
+            : new File(appCtx.getCacheDir(), "morph-updates");
+        if (!dir.exists() && !dir.mkdirs()) {
+            dir = new File(appCtx.getCacheDir(), "morph-updates");
+            if (!dir.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                dir.mkdirs();
+            }
+        }
+        return dir;
+    }
+
+    private static boolean isValidApkFile(File f, long expectedSize) {
+        if (f == null || !f.exists() || !f.isFile() || !f.canRead()) return false;
+        long len = f.length();
+        if (len < 1_000_000L) return false;
+        if (expectedSize > 1_000_000L && len < (long) (expectedSize * 0.98)) return false;
+        // Verify ZIP/APK magic header (PK\x03\x04) so HTML error pages or partial blobs are never mistaken for APKs
+        try (InputStream in = new FileInputStream(f)) {
+            byte[] sig = new byte[4];
+            if (in.read(sig) != 4) return false;
+            return sig[0] == 0x50 && sig[1] == 0x4B && sig[2] == 0x03 && sig[3] == 0x04;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private static File findExistingValidApk(Context appCtx, String cleanName, long expectedSize, String hintPath) {
+        List<File> candidates = new ArrayList<>();
+        if (hintPath != null && !hintPath.trim().isEmpty()) {
+            File hinted = new File(hintPath.trim());
+            if (cleanName.equals(hinted.getName())) {
+                candidates.add(hinted);
+            }
+        }
+        candidates.add(new File(getApkUpdateDir(appCtx), cleanName));
+        candidates.add(new File(new File(appCtx.getCacheDir(), "morph-updates"), cleanName));
+        File extFiles = appCtx.getExternalFilesDir(null);
+        if (extFiles != null) {
+            candidates.add(new File(new File(extFiles, "Morph"), cleanName));
+        }
+        candidates.add(new File(
+            new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "Morph"),
+            cleanName
+        ));
+        candidates.add(new File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+            cleanName
+        ));
+
+        for (File candidate : candidates) {
+            if (isValidApkFile(candidate, expectedSize)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private static void cleanupOlderCachedApks(File updateDir, String keepName) {
+        if (updateDir == null || !updateDir.exists()) return;
+        File[] files = updateDir.listFiles();
+        if (files == null) return;
+        for (File f : files) {
+            if (f == null || !f.isFile()) continue;
+            String n = f.getName();
+            if (n.equals(keepName)) continue;
+            if (n.endsWith(".apk") || n.endsWith(".part")) {
+                //noinspection ResultOfMethodCallIgnored
+                f.delete();
+            }
+        }
+    }
+
+    private File ensureFileProviderReadableApk(Context appCtx, File candidate, String cleanName) {
+        try {
+            androidx.core.content.FileProvider.getUriForFile(
+                appCtx,
+                appCtx.getPackageName() + ".fileprovider",
+                candidate
+            );
+            return candidate;
+        } catch (Exception ignored) {
+            // If candidate lives in a folder not covered by FileProvider, copy it locally (zero network) into morph-updates
+            try {
+                File safeDest = new File(getApkUpdateDir(appCtx), cleanName);
+                if (!candidate.getAbsolutePath().equals(safeDest.getAbsolutePath())) {
+                    if (safeDest.exists()) {
+                        //noinspection ResultOfMethodCallIgnored
+                        safeDest.delete();
+                    }
+                    try (InputStream in = new FileInputStream(candidate);
+                         OutputStream out = new FileOutputStream(safeDest)) {
+                        byte[] buf = new byte[64 * 1024];
+                        int len;
+                        while ((len = in.read(buf)) > 0) {
+                            out.write(buf, 0, len);
+                        }
+                    }
+                }
+                return safeDest;
+            } catch (Exception ignoredCopy) {
+                return candidate;
+            }
+        }
+    }
+
+    private boolean launchApkInstaller(Context appCtx, File apkFile, String cleanName) {
+        File readableApk = ensureFileProviderReadableApk(appCtx, apkFile, cleanName);
+        Uri contentUri;
+        try {
+            contentUri = androidx.core.content.FileProvider.getUriForFile(
+                appCtx,
+                appCtx.getPackageName() + ".fileprovider",
+                readableApk
+            );
+        } catch (Exception ignored) {
+            return false;
+        }
+
+        android.app.Activity activity = getActivity();
+        Context launchCtx = (activity != null && !activity.isFinishing()) ? activity : appCtx;
+
+        try {
+            android.content.Intent installIntent = new android.content.Intent(android.content.Intent.ACTION_VIEW);
+            installIntent.setDataAndType(contentUri, "application/vnd.android.package-archive");
+            installIntent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            installIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            if (launchCtx == appCtx) {
+                installIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+            }
+            launchCtx.startActivity(installIntent);
+            return true;
+        } catch (Exception ignoredView) {
+            try {
+                android.content.Intent fallbackIntent = new android.content.Intent(android.content.Intent.ACTION_INSTALL_PACKAGE);
+                fallbackIntent.setData(contentUri);
+                fallbackIntent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                if (launchCtx == appCtx) {
+                    fallbackIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                }
+                launchCtx.startActivity(fallbackIntent);
+                return true;
+            } catch (Exception ignoredInstall) {
+                try {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O
+                        && !appCtx.getPackageManager().canRequestPackageInstalls()) {
+                        android.content.Intent permIntent = new android.content.Intent(
+                            android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                            Uri.parse("package:" + appCtx.getPackageName())
+                        );
+                        permIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                        appCtx.startActivity(permIntent);
+                    }
+                } catch (Exception ignoredPerm) {}
+                return false;
+            }
+        }
+    }
+
+    private static long extractLongArg(PluginCall call, String key, long defaultVal) {
+        try {
+            Object raw = call.getData() != null ? call.getData().opt(key) : null;
+            if (raw instanceof Number) {
+                return ((Number) raw).longValue();
+            }
+            if (raw instanceof String && !((String) raw).trim().isEmpty()) {
+                return Long.parseLong(((String) raw).trim());
+            }
+        } catch (Exception ignored) {}
+        return defaultVal;
+    }
+
+    @PluginMethod
+    public void checkDownloadedApk(PluginCall call) {
+        final String rawName = call.getString("fileName", "Morph-update.apk");
+        final long expectedSize = extractLongArg(call, "expectedSize", 0L);
+        final String hintPath = call.getString("filePath", "");
+        final Context appCtx = getContext().getApplicationContext();
+
+        executor.execute(() -> {
+            String cleanName = sanitizeFileName(rawName.endsWith(".apk") ? rawName : (rawName + ".apk"));
+            File existing = findExistingValidApk(appCtx, cleanName, expectedSize, hintPath);
+            JSObject ret = new JSObject();
+            if (existing != null) {
+                ret.put("exists", true);
+                ret.put("filePath", existing.getAbsolutePath());
+                ret.put("fileName", existing.getName());
+                ret.put("size", existing.length());
+                ret.put("uri", Uri.fromFile(existing).toString());
+            } else {
+                ret.put("exists", false);
+                ret.put("fileName", cleanName);
+            }
+            call.resolve(ret);
+        });
+    }
+
+    @PluginMethod
+    public void installCachedApk(PluginCall call) {
+        final String rawName = call.getString("fileName", "Morph-update.apk");
+        final long expectedSize = extractLongArg(call, "expectedSize", 0L);
+        final String hintPath = call.getString("filePath", "");
+        final Context appCtx = getContext().getApplicationContext();
+
+        executor.execute(() -> {
+            String cleanName = sanitizeFileName(rawName.endsWith(".apk") ? rawName : (rawName + ".apk"));
+            File existing = findExistingValidApk(appCtx, cleanName, expectedSize, hintPath);
+            JSObject ret = new JSObject();
+            if (existing == null) {
+                ret.put("found", false);
+                ret.put("installerLaunched", false);
+                ret.put("fileName", cleanName);
+                call.resolve(ret);
+                return;
+            }
+
+            boolean installerLaunched = launchApkInstaller(appCtx, existing, cleanName);
+            ret.put("found", true);
+            ret.put("filePath", existing.getAbsolutePath());
+            ret.put("fileName", existing.getName());
+            ret.put("size", existing.length());
+            ret.put("uri", Uri.fromFile(existing).toString());
+            ret.put("installerLaunched", installerLaunched);
+            call.resolve(ret);
+        });
+    }
+
     @PluginMethod
     public void downloadAndInstallApk(PluginCall call) {
         final String rawUrl = call.getString("url", "");
         final String rawName = call.getString("fileName", "Morph-update.apk");
+        final long expectedSize = extractLongArg(call, "expectedSize", 0L);
+        final String hintPath = call.getString("filePath", "");
         if (rawUrl == null || rawUrl.trim().isEmpty()) {
             call.reject("Geçerli bir APK indirme bağlantısı bulunamadı.");
             return;
@@ -948,46 +1180,37 @@ public class MorphEnginesPlugin extends Plugin {
         executor.execute(() -> {
             File tempFile = null;
             try {
-                File docsMorph = getPublicMorphDir(appCtx);
                 String cleanName = sanitizeFileName(rawName.endsWith(".apk") ? rawName : (rawName + ".apk"));
-                tempFile = new File(docsMorph, cleanName + ".part");
-                File finalDest = new File(docsMorph, cleanName);
                 boolean forceRedownload = Boolean.TRUE.equals(call.getBoolean("forceRedownload", false));
 
-                if (!forceRedownload && finalDest.exists() && finalDest.length() > 1_000_000L) {
-                    JSObject doneEv = new JSObject();
-                    doneEv.put("progress", 100.0);
-                    doneEv.put("downloadedBytes", finalDest.length());
-                    doneEv.put("totalBytes", finalDest.length());
-                    notifyListeners("apkProgress", doneEv);
+                // 1. Reuse any already-downloaded valid APK on disk immediately (ZERO network traffic!)
+                if (!forceRedownload) {
+                    File existing = findExistingValidApk(appCtx, cleanName, expectedSize, hintPath);
+                    if (existing != null) {
+                        JSObject doneEv = new JSObject();
+                        doneEv.put("progress", 100.0);
+                        doneEv.put("downloadedBytes", existing.length());
+                        doneEv.put("totalBytes", existing.length());
+                        notifyListeners("apkProgress", doneEv);
 
-                    boolean installerLaunched = false;
-                    try {
-                        Uri contentUri = androidx.core.content.FileProvider.getUriForFile(
-                            appCtx,
-                            appCtx.getPackageName() + ".fileprovider",
-                            finalDest
-                        );
-                        android.content.Intent installIntent = new android.content.Intent(android.content.Intent.ACTION_VIEW);
-                        installIntent.setDataAndType(contentUri, "application/vnd.android.package-archive");
-                        installIntent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                        installIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
-                        appCtx.startActivity(installIntent);
-                        installerLaunched = true;
-                    } catch (Exception ignored) {
-                        installerLaunched = false;
+                        boolean installerLaunched = launchApkInstaller(appCtx, existing, cleanName);
+
+                        JSObject ret = new JSObject();
+                        ret.put("filePath", existing.getAbsolutePath());
+                        ret.put("fileName", existing.getName());
+                        ret.put("size", existing.length());
+                        ret.put("uri", Uri.fromFile(existing).toString());
+                        ret.put("installerLaunched", installerLaunched);
+                        ret.put("alreadyDownloaded", true);
+                        call.resolve(ret);
+                        return;
                     }
-
-                    JSObject ret = new JSObject();
-                    ret.put("filePath", finalDest.getAbsolutePath());
-                    ret.put("fileName", finalDest.getName());
-                    ret.put("size", finalDest.length());
-                    ret.put("uri", Uri.fromFile(finalDest).toString());
-                    ret.put("installerLaunched", installerLaunched);
-                    ret.put("alreadyDownloaded", true);
-                    call.resolve(ret);
-                    return;
                 }
+
+                // 2. Download directly into app-private morph-updates dir (100% writable on Android 7–16 Scoped Storage)
+                File updateDir = getApkUpdateDir(appCtx);
+                tempFile = new File(updateDir, cleanName + ".part");
+                File finalDest = new File(updateDir, cleanName);
 
                 String currentUrl = targetUrl;
                 HttpURLConnection conn = null;
@@ -1051,11 +1274,16 @@ public class MorphEnginesPlugin extends Plugin {
                     conn.disconnect();
                 }
 
+                if (!isValidApkFile(tempFile, totalBytes > 1_000_000L ? totalBytes : expectedSize)) {
+                    throw new IOException("İndirilen APK dosyası eksik veya geçersiz.");
+                }
+
                 if (finalDest.exists()) {
                     //noinspection ResultOfMethodCallIgnored
                     finalDest.delete();
                 }
                 moveOrCopyFile(tempFile, finalDest);
+                cleanupOlderCachedApks(updateDir, finalDest.getName());
 
                 JSObject doneEv = new JSObject();
                 doneEv.put("progress", 100.0);
@@ -1063,22 +1291,7 @@ public class MorphEnginesPlugin extends Plugin {
                 doneEv.put("totalBytes", finalDest.length());
                 notifyListeners("apkProgress", doneEv);
 
-                boolean installerLaunched = false;
-                try {
-                    Uri contentUri = androidx.core.content.FileProvider.getUriForFile(
-                        appCtx,
-                        appCtx.getPackageName() + ".fileprovider",
-                        finalDest
-                    );
-                    android.content.Intent installIntent = new android.content.Intent(android.content.Intent.ACTION_VIEW);
-                    installIntent.setDataAndType(contentUri, "application/vnd.android.package-archive");
-                    installIntent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    installIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
-                    appCtx.startActivity(installIntent);
-                    installerLaunched = true;
-                } catch (Exception ignored) {
-                    installerLaunched = false;
-                }
+                boolean installerLaunched = launchApkInstaller(appCtx, finalDest, cleanName);
 
                 JSObject ret = new JSObject();
                 ret.put("filePath", finalDest.getAbsolutePath());
@@ -1086,6 +1299,7 @@ public class MorphEnginesPlugin extends Plugin {
                 ret.put("size", finalDest.length());
                 ret.put("uri", Uri.fromFile(finalDest).toString());
                 ret.put("installerLaunched", installerLaunched);
+                ret.put("alreadyDownloaded", false);
                 call.resolve(ret);
             } catch (Exception e) {
                 if (tempFile != null && tempFile.exists()) {

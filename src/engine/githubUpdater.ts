@@ -1,4 +1,4 @@
-import {Directory} from '@capacitor/filesystem';
+import {Directory, Filesystem} from '@capacitor/filesystem';
 import {Share} from '@capacitor/share';
 import {MorphEnginesNative} from './morphEnginesBridge';
 import {ensureStoragePermission, isNativeApp, triggerWebDownload, writeBlobToNativeChunked} from './nativeBridge';
@@ -247,8 +247,17 @@ export async function applyPwaUpdateIfWaiting(): Promise<boolean> {
 }
 
 const DOWNLOADED_APK_KEY = 'morph_downloaded_apk_meta_v1';
+const WEB_APK_CACHE_NAME = 'morph-apk-cache-v1';
 const downloadedApkBlobs = new Map<string, Blob>();
-const downloadedApkUris = new Map<string, {uri: string; size: number}>();
+const downloadedApkUris = new Map<string, {uri: string; filePath?: string; size: number}>();
+
+interface StoredDownloadedApkMeta {
+  fileName: string;
+  size: number;
+  uri?: string;
+  filePath?: string;
+  ts: number;
+}
 
 function getTargetApkFileName(info?: GithubUpdateInfo | null): string {
   const tag = info?.releaseTag || `v${APP_VERSION}`;
@@ -256,16 +265,105 @@ function getTargetApkFileName(info?: GithubUpdateInfo | null): string {
   return `Morph-${normalizedTag}.apk`;
 }
 
-function markApkAsDownloaded(fileName: string, size: number, uri?: string, blob?: Blob): void {
+function readStoredApkMeta(fileName: string): StoredDownloadedApkMeta | null {
+  try {
+    const raw = localStorage.getItem(DOWNLOADED_APK_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredDownloadedApkMeta>;
+    if (parsed.fileName === fileName && (parsed.size || 0) > 0) {
+      return {
+        fileName: parsed.fileName,
+        size: parsed.size || 0,
+        uri: parsed.uri || '',
+        filePath: parsed.filePath || '',
+        ts: parsed.ts || 0,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function clearStoredApkMeta(fileName?: string): void {
+  if (fileName) {
+    downloadedApkBlobs.delete(fileName);
+    downloadedApkUris.delete(fileName);
+  }
+  try {
+    if (!fileName) {
+      localStorage.removeItem(DOWNLOADED_APK_KEY);
+    } else {
+      const existing = readStoredApkMeta(fileName);
+      if (existing) localStorage.removeItem(DOWNLOADED_APK_KEY);
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+function markApkAsDownloaded(
+  fileName: string,
+  size: number,
+  uri?: string,
+  blob?: Blob,
+  filePath?: string
+): void {
   if (blob) downloadedApkBlobs.set(fileName, blob);
-  if (uri) downloadedApkUris.set(fileName, {uri, size});
+  if (uri || filePath) {
+    downloadedApkUris.set(fileName, {uri: uri || '', filePath, size});
+  }
   try {
     localStorage.setItem(
       DOWNLOADED_APK_KEY,
-      JSON.stringify({fileName, size, uri: uri || '', ts: Date.now()})
+      JSON.stringify({fileName, size, uri: uri || '', filePath: filePath || '', ts: Date.now()})
     );
   } catch {
     // Ignore storage error
+  }
+}
+
+async function saveWebApkBlobToCache(fileName: string, blob: Blob): Promise<void> {
+  if (typeof caches === 'undefined') return;
+  try {
+    const cache = await caches.open(WEB_APK_CACHE_NAME);
+    // Clean older cached APK versions to keep browser storage tidy
+    const keys = await cache.keys();
+    await Promise.all(
+      keys
+        .filter((req) => !req.url.endsWith(`/morph-apk/${encodeURIComponent(fileName)}`))
+        .map((req) => cache.delete(req))
+    );
+    await cache.put(
+      `/__morph_cache__/morph-apk/${encodeURIComponent(fileName)}`,
+      new Response(blob, {
+        headers: {
+          'Content-Type': 'application/vnd.android.package-archive',
+          'Content-Length': String(blob.size),
+        },
+      })
+    );
+  } catch {
+    // Cache API unavailable or quota exceeded — RAM map still holds current session blob
+  }
+}
+
+async function loadWebApkBlobFromCache(fileName: string): Promise<Blob | null> {
+  const mem = downloadedApkBlobs.get(fileName);
+  if (mem && mem.size > 0) return mem;
+  if (typeof caches === 'undefined') return null;
+  try {
+    const cache = await caches.open(WEB_APK_CACHE_NAME);
+    const res = await cache.match(`/__morph_cache__/morph-apk/${encodeURIComponent(fileName)}`);
+    if (!res) return null;
+    const blob = await res.blob();
+    if (blob && blob.size > 0) {
+      downloadedApkBlobs.set(fileName, blob);
+      return blob;
+    }
+    return null;
+  } catch {
+    return null;
   }
 }
 
@@ -274,20 +372,78 @@ export function isUpdateApkDownloaded(info?: GithubUpdateInfo | null): boolean {
   if (downloadedApkBlobs.has(fileName) || downloadedApkUris.has(fileName)) {
     return true;
   }
-  try {
-    const raw = localStorage.getItem(DOWNLOADED_APK_KEY);
-    if (!raw) return false;
-    const parsed = JSON.parse(raw) as {fileName?: string; size?: number};
-    return parsed.fileName === fileName && (parsed.size || 0) > 0;
-  } catch {
-    return false;
+  return Boolean(readStoredApkMeta(fileName));
+}
+
+/**
+ * Verifies against real device storage (Android disk / Web Cache API) whether the target
+ * update APK is genuinely ready to install with ZERO re-download, syncing localStorage.
+ */
+export async function syncDownloadedApkStatus(info?: GithubUpdateInfo | null): Promise<boolean> {
+  if (!info?.hasUpdate) return false;
+  const fileName = getTargetApkFileName(info);
+  const expectedSize = info.apkSizeBytes ?? 0;
+  const stored = readStoredApkMeta(fileName);
+
+  if (isNativeApp()) {
+    try {
+      const check = await MorphEnginesNative.checkDownloadedApk({
+        fileName,
+        expectedSize: expectedSize || undefined,
+        filePath: stored?.filePath || undefined,
+      });
+      if (check?.exists) {
+        markApkAsDownloaded(
+          check.fileName || fileName,
+          check.size || expectedSize || 15_000_000,
+          check.uri,
+          undefined,
+          check.filePath
+        );
+        return true;
+      }
+      clearStoredApkMeta(fileName);
+      return false;
+    } catch {
+      // Older native APK build without checkDownloadedApk -> fall back to Capacitor Filesystem check
+      try {
+        const stat = await Filesystem.stat({
+          path: `Morph/${fileName}`,
+          directory: Directory.Documents,
+        });
+        if (stat && stat.size > 1_000_000) {
+          markApkAsDownloaded(fileName, stat.size, stat.uri);
+          return true;
+        }
+      } catch {
+        // Not in Documents/Morph
+      }
+      return Boolean(stored?.uri || stored?.filePath || downloadedApkUris.has(fileName));
+    }
   }
+
+  // Web / PWA: verify real Blob exists in RAM or Cache API
+  const cachedBlob = await loadWebApkBlobFromCache(fileName);
+  if (cachedBlob && cachedBlob.size > 0) {
+    markApkAsDownloaded(fileName, cachedBlob.size, undefined, cachedBlob);
+    return true;
+  }
+  if (stored) {
+    clearStoredApkMeta(fileName);
+  }
+  return false;
 }
 
 export async function downloadMorphApkInApp(
   existingInfo?: GithubUpdateInfo | null,
   onProgress?: (state: UpdateDownloadProgress) => void
-): Promise<{ok: boolean; fileName: string; installerLaunched?: boolean; message: string}> {
+): Promise<{
+  ok: boolean;
+  fileName: string;
+  installerLaunched?: boolean;
+  alreadyCached?: boolean;
+  message: string;
+}> {
   let info = existingInfo;
   if (!info?.apkDownloadUrl) {
     info = await checkGithubUpdates();
@@ -301,71 +457,114 @@ export async function downloadMorphApkInApp(
       `https://github.com/${GITHUB_REPO}/releases/download/${normalizedTag}/${fileName}`
   );
   const expectedSize = info?.apkSizeBytes ?? 0;
-  const alreadyCached = isUpdateApkDownloaded(info);
+  const storedMeta = readStoredApkMeta(fileName);
+  const memNative = downloadedApkUris.get(fileName);
+  const hintPath = memNative?.filePath || storedMeta?.filePath || undefined;
+  const hintUri = memNative?.uri || storedMeta?.uri || undefined;
 
-  // If already downloaded in memory (Web/PWA) or URI cache (Legacy Native), install/trigger immediately without re-downloading!
-  if (alreadyCached && !isNativeApp() && downloadedApkBlobs.has(fileName)) {
-    const cachedBlob = downloadedApkBlobs.get(fileName)!;
-    triggerWebDownload(cachedBlob, fileName);
-    onProgress?.({
-      active: false,
-      percent: 100,
-      downloadedBytes: cachedBlob.size,
-      totalBytes: cachedBlob.size,
-      fileName,
-      phase: 'done',
-    });
-    return {
-      ok: true,
-      fileName,
-      installerLaunched: true,
-      message: `${fileName} zaten indirildi, kurulum paketi açılıyor.`,
-    };
+  // 0. Web / PWA: check RAM + persistent Cache API first -> ZERO network re-download!
+  if (!isNativeApp()) {
+    const cachedBlob = await loadWebApkBlobFromCache(fileName);
+    if (cachedBlob && cachedBlob.size > 0) {
+      triggerWebDownload(cachedBlob, fileName);
+      markApkAsDownloaded(fileName, cachedBlob.size, undefined, cachedBlob);
+      onProgress?.({
+        active: false,
+        percent: 100,
+        downloadedBytes: cachedBlob.size,
+        totalBytes: cachedBlob.size,
+        fileName,
+        phase: 'done',
+      });
+      return {
+        ok: true,
+        fileName,
+        installerLaunched: true,
+        alreadyCached: true,
+        message: `${fileName} zaten indirilmişti, tekrar indirilmeden açılıyor.`,
+      };
+    }
   }
 
-  if (!alreadyCached) {
-    onProgress?.({
-      active: true,
-      percent: 5,
-      downloadedBytes: 0,
-      totalBytes: expectedSize,
-      fileName,
-      phase: 'downloading',
-    });
-  } else {
-    onProgress?.({
-      active: true,
-      percent: 99,
-      downloadedBytes: expectedSize,
-      totalBytes: expectedSize,
-      fileName,
-      phase: 'installing',
-    });
-  }
-
-  // 1. Native Android APK: stream directly to Documents/Morph (or reuse existing file if already downloaded) and trigger system APK installer in-app
+  // 1. Native Android: ALWAYS try zero-network cached installer FIRST before touching the network!
   if (isNativeApp()) {
+    let nativeInstallCachedSupported = true;
+    try {
+      const cachedRes = await MorphEnginesNative.installCachedApk({
+        fileName,
+        expectedSize: expectedSize || undefined,
+        filePath: hintPath,
+      });
+      if (cachedRes?.found) {
+        const cachedSize = cachedRes.size || expectedSize || 15_000_000;
+        markApkAsDownloaded(
+          cachedRes.fileName || fileName,
+          cachedSize,
+          cachedRes.uri,
+          undefined,
+          cachedRes.filePath
+        );
+        onProgress?.({
+          active: false,
+          percent: 100,
+          downloadedBytes: cachedSize,
+          totalBytes: cachedSize,
+          fileName: cachedRes.fileName || fileName,
+          phase: 'done',
+        });
+        return {
+          ok: true,
+          fileName: cachedRes.fileName || fileName,
+          installerLaunched: cachedRes.installerLaunched,
+          alreadyCached: true,
+          message: cachedRes.installerLaunched
+            ? `${cachedRes.fileName || fileName} cihazda hazır, tekrar indirilmeden kurulum ekranı açılıyor.`
+            : `${cachedRes.fileName || fileName} cihazda hazır. Kurulum izni gerekiyorsa Ayarlar > Bilinmeyen uygulamaları yükle seçeneğini açıp tekrar dene.`,
+        };
+      }
+      // File genuinely not on device disk -> clear any stale localStorage flag before fresh download
+      clearStoredApkMeta(fileName);
+    } catch {
+      // Older native APK build that doesn't yet expose installCachedApk
+      nativeInstallCachedSupported = false;
+    }
+
+    const alreadyCachedHint = !nativeInstallCachedSupported && isUpdateApkDownloaded(info);
+    onProgress?.({
+      active: true,
+      percent: alreadyCachedHint ? 99 : 5,
+      downloadedBytes: alreadyCachedHint ? expectedSize : 0,
+      totalBytes: expectedSize,
+      fileName,
+      phase: alreadyCachedHint ? 'installing' : 'downloading',
+    });
+
     await ensureStoragePermission(true);
     let handle: {remove: () => Promise<void>} | null = null;
     try {
       handle = await MorphEnginesNative.addListener('apkProgress', (ev) => {
+        const pct = Math.max(5, Math.min(99, Math.round(ev.progress || 0)));
         onProgress?.({
           active: true,
-          percent: Math.max(5, Math.min(99, Math.round(ev.progress || 0))),
+          percent: pct,
           downloadedBytes: ev.downloadedBytes || 0,
           totalBytes: ev.totalBytes || expectedSize,
           fileName,
-          phase: ev.progress >= 99 ? 'installing' : 'downloading',
+          phase: pct >= 99 ? 'installing' : 'downloading',
         });
       });
 
       const res = await MorphEnginesNative.downloadAndInstallApk({
         url: apkUrl,
         fileName,
+        expectedSize: expectedSize || undefined,
+        filePath: hintPath,
+        forceRedownload: false,
       });
 
       const finalSize = res.size || expectedSize || 15_000_000;
-      markApkAsDownloaded(res.fileName || fileName, finalSize, res.uri);
+      const reused = Boolean(res.alreadyDownloaded);
+      markApkAsDownloaded(res.fileName || fileName, finalSize, res.uri, undefined, res.filePath);
 
       onProgress?.({
         active: false,
@@ -380,26 +579,43 @@ export async function downloadMorphApkInApp(
         ok: true,
         fileName: res.fileName || fileName,
         installerLaunched: res.installerLaunched,
-        message: alreadyCached
-          ? `${res.fileName || fileName} hazır, kurulum ekranı açılıyor.`
+        alreadyCached: reused,
+        message: reused
+          ? `${res.fileName || fileName} cihazda hazır, tekrar indirilmeden kurulum ekranı açılıyor.`
           : res.installerLaunched
             ? `${res.fileName || fileName} indirildi, kurulum ekranı açılıyor.`
             : `${res.fileName || fileName} indirildi. Kurmak için "Güncellemeyi Kur" butonuna dokun.`,
       };
     } catch {
-      // Fallback for older native builds: check cached URI first before re-downloading
-      const cachedNative = downloadedApkUris.get(fileName);
-      if (cachedNative?.uri) {
+      // Fallback for older native builds: ALWAYS check persisted URI & Documents/Morph BEFORE re-downloading!
+      let reusableUri = hintUri || '';
+      let reusableSize = memNative?.size || storedMeta?.size || expectedSize || 15_000_000;
+      if (!reusableUri) {
         try {
-          await Share.share({title: fileName, files: [cachedNative.uri]});
+          const stat = await Filesystem.stat({
+            path: `Morph/${fileName}`,
+            directory: Directory.Documents,
+          });
+          if (stat && stat.size > 1_000_000 && stat.uri) {
+            reusableUri = stat.uri;
+            reusableSize = stat.size;
+          }
+        } catch {
+          // Not present in Documents/Morph
+        }
+      }
+      if (reusableUri) {
+        markApkAsDownloaded(fileName, reusableSize, reusableUri, undefined, hintPath);
+        try {
+          await Share.share({title: fileName, files: [reusableUri]});
         } catch {
           // Ignore share dismissal
         }
         onProgress?.({
           active: false,
           percent: 100,
-          downloadedBytes: cachedNative.size,
-          totalBytes: cachedNative.size,
+          downloadedBytes: reusableSize,
+          totalBytes: reusableSize,
           fileName,
           phase: 'done',
         });
@@ -407,7 +623,8 @@ export async function downloadMorphApkInApp(
           ok: true,
           fileName,
           installerLaunched: true,
-          message: `${fileName} hazır, kurulum ekranı açılıyor.`,
+          alreadyCached: true,
+          message: `${fileName} cihazda hazır, tekrar indirilmeden kurulum paylaşımı açılıyor.`,
         };
       }
     } finally {
@@ -415,6 +632,15 @@ export async function downloadMorphApkInApp(
         await handle.remove().catch(() => {});
       }
     }
+  } else {
+    onProgress?.({
+      active: true,
+      percent: 5,
+      downloadedBytes: 0,
+      totalBytes: expectedSize,
+      fileName,
+      phase: 'downloading',
+    });
   }
 
   // 2. Web / PWA or Legacy Native Fallback: stream inside the app with live byte/percentage progress
@@ -474,6 +700,7 @@ export async function downloadMorphApkInApp(
         }
       } else {
         markApkAsDownloaded(fileName, blob.size, undefined, blob);
+        await saveWebApkBlobToCache(fileName, blob);
         triggerWebDownload(blob, fileName);
       }
 
@@ -498,7 +725,8 @@ export async function downloadMorphApkInApp(
     // Fallback to direct in-page attachment download if running on static hosting without /api/download-stream
   }
 
-  // 3. Static PWA fallback: trigger direct GitHub Release attachment download in the same page (no new tab)
+  // 3. Static Web Fallback (no in-app stream backend): trigger browser download directly,
+  // and do NOT falsely mark localStorage as an in-app cached installer (since JS cannot launch browser Downloads).
   const a = document.createElement('a');
   a.href = apkUrl;
   a.download = fileName;
@@ -507,7 +735,7 @@ export async function downloadMorphApkInApp(
   a.click();
   a.remove();
 
-  markApkAsDownloaded(fileName, expectedSize || 15_000_000);
+  clearStoredApkMeta(fileName);
 
   onProgress?.({
     active: false,
@@ -521,7 +749,7 @@ export async function downloadMorphApkInApp(
   return {
     ok: true,
     fileName,
-    message: `${fileName} indirildi.`,
+    message: `${fileName} tarayıcı İndirilenler klasörüne indiriliyor. İndirme bitince bildirimden veya Dosyalar’dan dokunup kurabilirsin.`,
   };
 }
 

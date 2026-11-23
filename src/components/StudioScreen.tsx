@@ -3,6 +3,7 @@ import {
   ArrowDown,
   ArrowLeftRight,
   ArrowUp,
+  Check,
   ChevronRight,
   Cpu,
   Download,
@@ -19,7 +20,7 @@ import {
 } from 'lucide-react';
 import {Lang, t} from '../data/i18n';
 import {PickedFile, formatBytes} from '../data/models';
-import {GithubUpdateInfo} from '../engine/githubUpdater';
+import {GithubUpdateInfo, isUpdateApkDownloaded} from '../engine/githubUpdater';
 import {FileThumb} from './FileThumb';
 
 interface StudioScreenProps {
@@ -29,6 +30,7 @@ interface StudioScreenProps {
   serverReady: boolean;
   updateInfo?: GithubUpdateInfo | null;
   checkingUpdate?: boolean;
+  apkReadyOnDevice?: boolean;
   showIntegratedEngines?: boolean;
   activeEngineAction?: 'update' | 'manage';
   activeEngineSegment?: 'ffmpeg' | 'office' | 'link' | null;
@@ -55,6 +57,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   serverReady,
   updateInfo = null,
   checkingUpdate = false,
+  apkReadyOnDevice = false,
   showIntegratedEngines = false,
   activeEngineAction = 'update',
   activeEngineSegment = null,
@@ -388,8 +391,11 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
           {(updateInfo?.hasUpdate || onCheckUpdate) && (() => {
             const isExpanded = activeAction === 'update';
             const hasUpdate = Boolean(updateInfo?.hasUpdate);
+            const apkDownloaded = hasUpdate && (apkReadyOnDevice || isUpdateApkDownloaded(updateInfo));
             const label = hasUpdate
-              ? t('DownloadUpdate', lang)
+              ? apkDownloaded
+                ? t('InstallUpdate', lang)
+                : t('DownloadUpdate', lang)
               : checkingUpdate
                 ? t('CheckingUpdates', lang)
                 : t('CheckUpdates', lang);
@@ -421,7 +427,11 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
                 }`}
               >
                 {hasUpdate ? (
-                  <Download className="h-4 w-4 shrink-0" />
+                  apkDownloaded ? (
+                    <Check className="h-4 w-4 shrink-0" />
+                  ) : (
+                    <Download className="h-4 w-4 shrink-0" />
+                  )
                 ) : (
                   <RefreshCw
                     className={`h-4 w-4 shrink-0 transition-colors duration-200 ${
