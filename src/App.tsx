@@ -43,6 +43,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import {ExperimentalFxLayer} from './components/ExperimentalFxLayer';
 import {FileActionsModal} from './components/FileActionsModal';
 import {JobOverlay} from './components/JobOverlay';
 import {LibraryScreen} from './components/LibraryScreen';
@@ -2064,6 +2065,12 @@ export default function App() {
         }}
       />
 
+      <ExperimentalFxLayer
+        auroraEnabled={Boolean(prefs.expAmbientAurora)}
+        touchRippleEnabled={Boolean(prefs.expTouchRipple)}
+        uiSoundsEnabled={Boolean(prefs.expUiSounds)}
+      />
+
       {/* Compact 3-Zone Top Bar with Android/iOS Safe-Area Top Inset */}
       <header className="morph-app-header sticky top-0 z-30 border-b border-[var(--line)]/70 bg-[var(--paper)]/92 pt-safe backdrop-blur-md">
         <div className="mx-auto flex h-13 max-w-6xl items-center justify-between gap-8 px-4 sm:px-6">
@@ -2170,7 +2177,7 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <main className="pb-safe">
+      <main className="relative z-10 pb-safe">
         {job.status === 'done' ? (
           <ResultView
             key={`result-${lang}-${job.result.items[0]?.id ?? 'done'}`}
@@ -2319,6 +2326,7 @@ export default function App() {
             expWheelSpinEnabled={Boolean(prefs.expWheelSpinEnabled)}
             expWheelSpinMode={prefs.expWheelSpinMode ?? 'outer_ccw_inner_cw'}
             expWheelSpinTrigger={prefs.expWheelSpinTrigger ?? 'always'}
+            expWheelShockwave={Boolean(prefs.expWheelShockwave)}
             onChangeSide={(wheelSide) => setPrefs((p) => ({...p, wheelSide}))}
             onHoverChange={(hover) => {
               if (!hover || window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {

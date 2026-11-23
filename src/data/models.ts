@@ -431,6 +431,14 @@ export interface Prefs {
   expAltLauncherShowDesc?: boolean;
   /** Label text size inside Experimental Tool Launcher */
   expAltLauncherTextSize?: ExpLauncherTextSize;
+  /** Experimental: Living theme-tinted aurora background glow */
+  expAmbientAurora?: boolean;
+  /** Experimental: Accent ripple & spark burst on tap/click */
+  expTouchRipple?: boolean;
+  /** Experimental: Synthesized mechanical micro-sounds on UI clicks/switches */
+  expUiSounds?: boolean;
+  /** Experimental: Expanding accent shockwave ring & bounce on Quick Wheel tap/snap */
+  expWheelShockwave?: boolean;
 }
 
 export interface VideoEditorSizingPrefs {

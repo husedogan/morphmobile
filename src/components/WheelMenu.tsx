@@ -1293,6 +1293,7 @@ export const WheelFab: React.FC<{
   expWheelSpinEnabled?: boolean;
   expWheelSpinMode?: WheelSpinModePref;
   expWheelSpinTrigger?: WheelSpinTriggerPref;
+  expWheelShockwave?: boolean;
   onChangeSide?: (side: WheelSidePref) => void;
   onHoverChange?: (hover: boolean) => void;
   cloud?: React.ReactNode;
@@ -1310,6 +1311,7 @@ export const WheelFab: React.FC<{
   expWheelSpinEnabled = false,
   expWheelSpinMode = 'outer_ccw_inner_cw',
   expWheelSpinTrigger = 'always',
+  expWheelShockwave = false,
   onChangeSide,
   onHoverChange,
   cloud,
@@ -1329,6 +1331,17 @@ export const WheelFab: React.FC<{
   const [isDragging, setIsDragging] = useState(false);
   const [isSnapping, setIsSnapping] = useState(false);
   const [previewSide, setPreviewSide] = useState<WheelSidePref>(side);
+  const [shockwaves, setShockwaves] = useState<number[]>([]);
+  const shockIdRef = useRef(1);
+
+  const emitShockwave = () => {
+    if (!expWheelShockwave) return;
+    const id = shockIdRef.current++;
+    setShockwaves((prev) => [...prev.slice(-3), id]);
+    window.setTimeout(() => {
+      setShockwaves((prev) => prev.filter((item) => item !== id));
+    }, 560);
+  };
 
   // Overheat sequence on press-and-hold (mobile & desktop) OR mouse hover:
   // 0-15s fire gear -> 15-30s burning & charring -> 30s turn into ash
@@ -1743,6 +1756,7 @@ export const WheelFab: React.FC<{
     }
 
     setIsPressing(true);
+    emitShockwave();
     onHoverChange?.(false);
 
     const rect = wrapper.getBoundingClientRect();
@@ -1821,6 +1835,7 @@ export const WheelFab: React.FC<{
           setIsSnapping(false);
           setDragPos(null);
           snapTimerRef.current = null;
+          emitShockwave();
         }, 260);
         return;
       }
@@ -2599,6 +2614,20 @@ export const WheelFab: React.FC<{
         } ${hidden ? 'pointer-events-none invisible opacity-0' : ''}`}
       >
         {!isDragging && !isPressing && heat < 0.08 && phase === 'idle' && cloud}
+        {/* Experimental expanding accent shockwave ring on press & corner snap */}
+        {expWheelShockwave &&
+          shockwaves.map((id) => (
+            <span
+              key={id}
+              aria-hidden="true"
+              className="morph-wheel-shockwave-ring pointer-events-none absolute left-1/2 top-1/2 z-0 block h-[58px] w-[58px] rounded-full"
+              style={{
+                border: '2.5px solid var(--accent)',
+                boxShadow:
+                  '0 0 18px color-mix(in srgb, var(--accent) 65%, transparent), inset 0 0 12px color-mix(in srgb, var(--accent-end) 40%, transparent)',
+              }}
+            />
+          ))}
         {/* Shape-contoured glowing heat aura + perimeter flames rotated in lockstep with outer shell */}
         {renderShapeHeatAura()}
         {renderBurnCorona()}

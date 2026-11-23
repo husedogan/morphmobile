@@ -150,15 +150,22 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onShowToast,
 }) => {
   const lang: Lang = prefs.lang;
-  const [category, setCategory] = useState<SettingsCategory>(initialCategory);
+  const [category, setCategory] = useState<SettingsCategory>(() => {
+    if (initialCategory !== 'experimental') return initialCategory;
+    try {
+      const visible =
+        typeof window !== 'undefined' &&
+        (window.sessionStorage.getItem('morph_exp_tab_visible_v1') === '1' ||
+          window.sessionStorage.getItem('morph_exp_unlocked_v1') === '1');
+      return visible ? 'experimental' : 'appearance';
+    } catch {
+      return 'appearance';
+    }
+  });
   const [showAllThemes, setShowAllThemes] = useState<boolean>(false);
   const [savedProjectCount, setSavedProjectCount] = useState<number>(0);
   const [clearingProjects, setClearingProjects] = useState(false);
   const [storageEstimate, setStorageEstimate] = useState<{usage: number; quota: number} | null>(null);
-
-  useEffect(() => {
-    setCategory(initialCategory);
-  }, [initialCategory]);
 
   useEffect(() => {
     if (category !== 'about') return;
@@ -227,8 +234,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [diagExpanded, setDiagExpanded] = useState(false);
   const [serverExpanded, setServerExpanded] = useState(false);
 
-  // Experimental tab password gate (session-scoped)
+  // Experimental tab visibility (hidden by default; revealed via 7 taps on Permissions shield icon) + password gate (session-scoped)
   const EXP_UNLOCK_KEY = 'morph_exp_unlocked_v1';
+  const EXP_TAB_VISIBLE_KEY = 'morph_exp_tab_visible_v1';
   const [expUnlocked, setExpUnlocked] = useState<boolean>(() => {
     try {
       return typeof window !== 'undefined' && window.sessionStorage.getItem(EXP_UNLOCK_KEY) === '1';
@@ -236,10 +244,61 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       return false;
     }
   });
+  const [expTabVisible, setExpTabVisible] = useState<boolean>(() => {
+    try {
+      return (
+        typeof window !== 'undefined' &&
+        (window.sessionStorage.getItem(EXP_TAB_VISIBLE_KEY) === '1' ||
+          window.sessionStorage.getItem(EXP_UNLOCK_KEY) === '1')
+      );
+    } catch {
+      return false;
+    }
+  });
+  const expTabVisibleRef = useRef(expTabVisible);
+  expTabVisibleRef.current = expTabVisible;
+
+  useEffect(() => {
+    if (initialCategory === 'experimental' && !expTabVisibleRef.current) {
+      setCategory('appearance');
+    } else {
+      setCategory(initialCategory);
+    }
+  }, [initialCategory]);
+
+  const permShieldTapCountRef = useRef(0);
+  const permShieldLastTapRef = useRef(0);
   const [expPassInput, setExpPassInput] = useState('');
   const [expPassVisible, setExpPassVisible] = useState(false);
   const [expPassError, setExpPassError] = useState(false);
   const [expSpinDetailsOpen, setExpSpinDetailsOpen] = useState(false);
+
+  const handlePermShieldTap = () => {
+    const now = Date.now();
+    if (now - permShieldLastTapRef.current > 2500) {
+      permShieldTapCountRef.current = 0;
+    }
+    permShieldLastTapRef.current = now;
+    permShieldTapCountRef.current += 1;
+
+    if (permShieldTapCountRef.current >= 7) {
+      permShieldTapCountRef.current = 0;
+      if (!expTabVisible) {
+        setExpTabVisible(true);
+        try {
+          window.sessionStorage.setItem(EXP_TAB_VISIBLE_KEY, '1');
+        } catch {
+          // Ignore storage restrictions
+        }
+        setCategory('experimental');
+        onShowToast?.(
+          lang === 'tr' ? 'Deneysel sekmesi açıldı.' : 'Experimental tab revealed.'
+        );
+      } else {
+        setCategory('experimental');
+      }
+    }
+  };
 
   const verifyExpPassphrase = (raw: string): boolean => {
     const s = raw.trim().replace(/İ/g, 'i').toLowerCase().replace(/ı/g, 'i');
@@ -257,10 +316,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     e.preventDefault();
     if (verifyExpPassphrase(expPassInput)) {
       setExpUnlocked(true);
+      setExpTabVisible(true);
       setExpPassInput('');
       setExpPassError(false);
       try {
         window.sessionStorage.setItem(EXP_UNLOCK_KEY, '1');
+        window.sessionStorage.setItem(EXP_TAB_VISIBLE_KEY, '1');
       } catch {
         // Ignore storage restrictions
       }
@@ -274,14 +335,19 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
   const handleExpLock = () => {
     setExpUnlocked(false);
+    setExpTabVisible(false);
     setExpPassInput('');
     setExpPassError(false);
+    setCategory('permissions');
     try {
       window.sessionStorage.removeItem(EXP_UNLOCK_KEY);
+      window.sessionStorage.removeItem(EXP_TAB_VISIBLE_KEY);
     } catch {
       // Ignore storage restrictions
     }
-    onShowToast?.(lang === 'tr' ? 'Deneysel sekmesi kilitlendi.' : 'Experimental tab locked.');
+    onShowToast?.(
+      lang === 'tr' ? 'Deneysel sekmesi kilitlendi ve gizlendi.' : 'Experimental tab locked and hidden.'
+    );
   };
 
   // 15-second Developer Cloud Easter Egg
@@ -496,7 +562,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     {id: 'appearance', label: t('SetCatAppearance', lang), Icon: Palette},
     {id: 'downloads', label: t('SetCatDownloads', lang), Icon: Download},
     {id: 'permissions', label: t('SetCatPermissions', lang), Icon: ShieldCheck},
-    {id: 'experimental', label: lang === 'tr' ? 'Deneysel' : 'Experimental', Icon: FlaskConical},
+    ...(expTabVisible
+      ? [{id: 'experimental' as const, label: lang === 'tr' ? 'Deneysel' : 'Experimental', Icon: FlaskConical}]
+      : []),
     {id: 'about', label: t('SetCatAbout', lang), Icon: Smartphone},
   ];
 
@@ -2098,9 +2166,15 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={handlePermShieldTap}
+                  aria-label={t('PermissionsSection', lang)}
+                  className="flex h-9 w-9 shrink-0 cursor-default items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)] focus:outline-none"
+                >
                   <ShieldCheck className="h-5 w-5" />
-                </div>
+                </button>
                 <div>
                   <h2 className="text-base font-bold leading-tight text-[var(--ink)]">
                     {t('PermissionsSection', lang)}
@@ -2190,8 +2264,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </div>
       )}
 
-      {/* CATEGORY 4: EXPERIMENTAL & CLASSIC REVERSIBLE FEATURES (PASSWORD-LOCKED) */}
-      {category === 'experimental' && !expUnlocked && (
+      {/* CATEGORY 4: EXPERIMENTAL & CLASSIC REVERSIBLE FEATURES (HIDDEN UNTIL 7-TAP + PASSWORD-LOCKED) */}
+      {category === 'experimental' && expTabVisible && !expUnlocked && (
         <div className="mt-5">
           <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-6">
             <div className="mx-auto flex max-w-sm flex-col items-center text-center">
@@ -2265,7 +2339,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </div>
       )}
 
-      {category === 'experimental' && expUnlocked && (
+      {category === 'experimental' && expTabVisible && expUnlocked && (
         <div className="mt-5 space-y-4">
           <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
             <div className="space-y-2.5">
@@ -2301,7 +2375,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     prefs.expDualRingWheel ||
                     prefs.expWheelCenterHoldCustomize ||
                     prefs.expTouchTooltips ||
-                    prefs.expLegacySliders) && (
+                    prefs.expLegacySliders ||
+                    prefs.expAmbientAurora ||
+                    prefs.expTouchRipple ||
+                    prefs.expUiSounds ||
+                    prefs.expWheelShockwave) && (
                     <button
                       type="button"
                       onClick={() => {
@@ -2332,6 +2410,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                           expWheelCenterHoldCustomize: false,
                           expTouchTooltips: false,
                           expLegacySliders: false,
+                          expAmbientAurora: false,
+                          expTouchRipple: false,
+                          expUiSounds: false,
+                          expWheelShockwave: false,
                         }));
                         onShowToast?.(
                           lang === 'tr'
@@ -3299,6 +3381,46 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
               {(
                 [
+                  {
+                    key: 'expAmbientAurora' as const,
+                    defaultOn: false,
+                    titleTr: 'Canlı Ortam Işığı (Aurora)',
+                    titleEn: 'Living Ambient Aurora Glow',
+                    descTr:
+                      'Arka planda seçili Morph temanın renkleriyle yavaşça nefes alıp süzülen yumuşak ortam ışığı katmanı ekler.',
+                    descEn:
+                      'Adds a gentle, slow-drifting ambient glow in the background tinted dynamically to your active Morph theme.',
+                  },
+                  {
+                    key: 'expTouchRipple' as const,
+                    defaultOn: false,
+                    titleTr: 'Dokunma Parıltı Dalgası',
+                    titleEn: 'Touch & Click Accent Ripples',
+                    descTr:
+                      'Ekrana her dokunduğunda veya tıkladığında parmağının ucunda tema renkli halka ve kıvılcım dalgası yayılır.',
+                    descEn:
+                      'Spawns a crisp theme-colored ripple ring and micro-spark burst at every tap or click position.',
+                  },
+                  {
+                    key: 'expUiSounds' as const,
+                    defaultOn: false,
+                    titleTr: 'Mekanik Arayüz Sesleri',
+                    titleEn: 'Tactile UI Micro-Sounds',
+                    descTr:
+                      'Düğmelere, sekmelere ve anahtarlara dokunduğunda hafif, mekanik ve tamamen çevrimdışı dokunsal ses geri bildirimi verir.',
+                    descEn:
+                      'Synthesizes subtle, crisp mechanical clicks and switch tones on taps with zero external audio files.',
+                  },
+                  {
+                    key: 'expWheelShockwave' as const,
+                    defaultOn: false,
+                    titleTr: 'Hızlı Çark Şok Dalgası',
+                    titleEn: 'Quick Wheel Shockwave Pulse',
+                    descTr:
+                      'Hızlı Çark düğmesine bastığında veya köşeye bıraktığında etrafında tema renkli genişleyen şok dalgası oluşturur.',
+                    descEn:
+                      'Emits an expanding theme-accented shockwave pulse ring around the Quick Wheel on press and corner snap.',
+                  },
                   {
                     key: 'expArmadilloReel' as const,
                     defaultOn: true,
