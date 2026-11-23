@@ -2247,6 +2247,8 @@ export default function App() {
             iconStyle={prefs.wheelIconStyle ?? 'wheel'}
             expWheelBurnEffect={Boolean(prefs.expWheelBurnEffect)}
             burnStyle={prefs.expWheelBurnStyle ?? 'classic_fire'}
+            expWheelSpinEnabled={Boolean(prefs.expWheelSpinEnabled)}
+            expWheelSpinMode={prefs.expWheelSpinMode ?? 'outer_ccw_inner_cw'}
             onChangeSide={(wheelSide) => setPrefs((p) => ({...p, wheelSide}))}
             onHoverChange={(hover) => {
               if (!hover || window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {

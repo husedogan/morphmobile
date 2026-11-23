@@ -197,7 +197,8 @@ export type WheelIconStylePref =
   | 'diamond'
   | 'pill_dock'
   | 'octa_shield'
-  | 'blade_hex';
+  | 'blade_hex'
+  | 'star_prism';
 
 export type WheelBurnStylePref =
   | 'classic_fire'
@@ -210,7 +211,8 @@ export type WheelBurnStylePref =
   | 'crimson_magma'
   | 'lightning_arc'
   | 'sakura_ember'
-  | 'rainbow_prism';
+  | 'rainbow_prism'
+  | 'obsidian_eclipse';
 
 export interface WheelShapeMeta {
   id: WheelIconStylePref;
@@ -225,36 +227,104 @@ export const EXP_WHEEL_SHAPES: readonly WheelShapeMeta[] = [
     id: 'squircle',
     titleTr: 'Karemsi',
     titleEn: 'Squircle',
-    descTr: 'Yuvarlatılmış kare blok & 4 köşe odak',
-    descEn: 'Architectural rounded square tile',
+    descTr: 'Yuvarlatılmış kare',
+    descEn: 'Rounded square',
   },
   {
     id: 'diamond',
     titleTr: 'Elmas',
     titleEn: 'Diamond',
-    descTr: '45° baklava kesim & prizma çekirdek',
-    descEn: '45° faceted diamond chassis',
+    descTr: '45° prizma kesim',
+    descEn: '45° prism cut',
   },
   {
     id: 'pill_dock',
     titleTr: 'Kapsül',
     titleEn: 'Capsule',
-    descTr: 'Yatay kapsül bar & ikili yörünge',
-    descEn: 'Sleek horizontal pill dock bar',
+    descTr: 'Yatay kapsül bar',
+    descEn: 'Horizontal pill',
   },
   {
     id: 'octa_shield',
     titleTr: 'Sekizgen',
     titleEn: 'Octagon',
-    descTr: 'Pahlı sekizgen kalkan & radar ağı',
-    descEn: 'Beveled 8-sided tactical shield',
+    descTr: '8 köşeli kalkan',
+    descEn: '8-sided shield',
   },
   {
     id: 'blade_hex',
     titleTr: 'Altıgen',
     titleEn: 'Cyber Hex',
-    descTr: 'Keskin altıgen gövde & türbin bıçak',
-    descEn: 'Sharp flat-top hexagon turbine',
+    descTr: '6 köşeli türbin',
+    descEn: '6-sided turbine',
+  },
+  {
+    id: 'star_prism',
+    titleTr: 'Yıldız',
+    titleEn: 'Star Prism',
+    descTr: '4 köşeli yıldız',
+    descEn: '4-point star',
+  },
+] as const;
+
+export type WheelSpinModePref =
+  | 'both_cw'
+  | 'outer_ccw_inner_cw'
+  | 'outer_cw_inner_ccw'
+  | 'both_ccw'
+  | 'pendulum_gyro'
+  | 'turbo_counter';
+
+export interface WheelSpinModeMeta {
+  id: WheelSpinModePref;
+  titleTr: string;
+  titleEn: string;
+  descTr: string;
+  descEn: string;
+}
+
+export const WHEEL_SPIN_MODES: readonly WheelSpinModeMeta[] = [
+  {
+    id: 'both_cw',
+    titleTr: 'İkisi de Sağa',
+    titleEn: 'Both Clockwise',
+    descTr: 'Dış ve iç sağa',
+    descEn: 'Outer & inner CW',
+  },
+  {
+    id: 'outer_ccw_inner_cw',
+    titleTr: 'Dışı Sola, İçi Sağa',
+    titleEn: 'Outer CCW, Inner CW',
+    descTr: 'Ters jiroskop',
+    descEn: 'Counter gyro',
+  },
+  {
+    id: 'outer_cw_inner_ccw',
+    titleTr: 'Dışı Sağa, İçi Sola',
+    titleEn: 'Outer CW, Inner CCW',
+    descTr: 'Çapraz dönüş',
+    descEn: 'Cross counter',
+  },
+  {
+    id: 'both_ccw',
+    titleTr: 'İkisi de Sola',
+    titleEn: 'Both Counter-CW',
+    descTr: 'Dış ve iç sola',
+    descEn: 'Outer & inner CCW',
+  },
+  {
+    id: 'pendulum_gyro',
+    titleTr: 'Sarkaç & Çark',
+    titleEn: 'Pendulum & Core',
+    descTr: 'Dış salınır, iç döner',
+    descEn: 'Swinging shell',
+  },
+  {
+    id: 'turbo_counter',
+    titleTr: 'Çift Hız Ters',
+    titleEn: 'Turbo Counter',
+    descTr: 'İç 2× hızlı, dış ters',
+    descEn: '2x core, reverse shell',
   },
 ] as const;
 
@@ -278,6 +348,7 @@ export const WHEEL_BURN_STYLES: readonly WheelBurnStyleMeta[] = [
   {id: 'lightning_arc', titleTr: 'Şimşek Arkı', titleEn: 'Lightning Arc', accent: '#FDE047', secondary: '#38BDF8'},
   {id: 'sakura_ember', titleTr: 'Kızıl Kıvılcım', titleEn: 'Sakura Ember', accent: '#FB7185', secondary: '#EC4899'},
   {id: 'rainbow_prism', titleTr: 'Prizma Süpernova', titleEn: 'Prism Nova', accent: '#C084FC', secondary: '#2DD4BF'},
+  {id: 'obsidian_eclipse', titleTr: 'Kara Tutulma', titleEn: 'Obsidian Eclipse', accent: '#F8FAFC', secondary: '#F59E0B'},
 ] as const;
 
 export type ExpLauncherStyle =
@@ -325,6 +396,10 @@ export interface Prefs {
   expWheelBurnEffect?: boolean;
   /** Active visual preset for the 30-second Quick Wheel burn/disintegration effect */
   expWheelBurnStyle?: WheelBurnStylePref;
+  /** Separate experimental toggle: continuously rotate the Quick Wheel button shell & inner icon */
+  expWheelSpinEnabled?: boolean;
+  /** Active dual-layer rotation choreography for Quick Wheel */
+  expWheelSpinMode?: WheelSpinModePref;
   /** Defaults to true (Armadillo Reel ON); set false to use flat StudioDock in portrait */
   expArmadilloReel?: boolean;
   /** Optional extra timecode badges in Video Editor experimental bars & wheel top strip (wheel center timecode always stays ON) */

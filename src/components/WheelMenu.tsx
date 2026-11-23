@@ -6,6 +6,7 @@ import {
   WheelBurnStylePref,
   WheelIconStylePref,
   WheelSidePref,
+  WheelSpinModePref,
 } from '../data/models';
 
 export interface WheelActionItem {
@@ -1218,6 +1219,34 @@ const BURN_THEMES: Record<WheelBurnStylePref, BurnThemeConfig> = {
     particleShape: 'shard',
     isRainbow: true,
   },
+  obsidian_eclipse: {
+    gradWarmStart: '#3F3F46',
+    gradHotStart: '#09090B',
+    gradWarmEnd: '#F59E0B',
+    gradHotEnd: '#18181B',
+    charDarkA: '#09090B',
+    charDarkB: '#030305',
+    glowRgb1: '248, 250, 252',
+    glowRgb2: '245, 158, 11',
+    auraInner: 'rgba(255,255,255,0.92)',
+    auraMid: 'rgba(245,158,11,0.68)',
+    auraOuter: 'rgba(24,24,27,0)',
+    iconHotTone: '#FFFFFF',
+    iconCharMid: '#E4E4E7',
+    iconCharEnd: '#52525B',
+    sparkStart: '#FFFFFF',
+    sparkMid: '#FDE68A',
+    sparkEnd: '#F59E0B',
+    sparkGlow: '0 0 11px rgba(255, 255, 255, 0.96)',
+    ashMid: '#52525B',
+    ashEnd: '#18181B',
+    burstShades: ['#FFFFFF', '#FDE68A', '#F59E0B', '#3F3F46', '#18181B'],
+    burstHotAccent: '#FFFFFF',
+    coronaFillA: '#F8FAFC',
+    coronaFillB: '#F59E0B',
+    coronaKind: 'solar',
+    particleShape: 'shard',
+  },
 };
 
 function createAshBurst(cx: number, cy: number, startId: number, theme: BurnThemeConfig): AshFlake[] {
@@ -1260,6 +1289,8 @@ export const WheelFab: React.FC<{
   iconStyle?: WheelIconStylePref;
   expWheelBurnEffect?: boolean;
   burnStyle?: WheelBurnStylePref;
+  expWheelSpinEnabled?: boolean;
+  expWheelSpinMode?: WheelSpinModePref;
   onChangeSide?: (side: WheelSidePref) => void;
   onHoverChange?: (hover: boolean) => void;
   cloud?: React.ReactNode;
@@ -1274,6 +1305,8 @@ export const WheelFab: React.FC<{
   iconStyle = 'wheel',
   expWheelBurnEffect = false,
   burnStyle = 'classic_fire',
+  expWheelSpinEnabled = false,
+  expWheelSpinMode = 'outer_ccw_inner_cw',
   onChangeSide,
   onHoverChange,
   cloud,
@@ -1302,12 +1335,15 @@ export const WheelFab: React.FC<{
   const [heat, setHeat] = useState(0);
   const [burnLevel, setBurnLevel] = useState(0);
   const [spinDeg, setSpinDeg] = useState(0);
+  const [idleOuterDeg, setIdleOuterDeg] = useState(0);
+  const [idleInnerDeg, setIdleInnerDeg] = useState(0);
   const [embers, setEmbers] = useState<BurnEmber[]>([]);
   const [ashFlakes, setAshFlakes] = useState<AshFlake[]>([]);
   const [ashProgress, setAshProgress] = useState(0);
 
   const hoverMsRef = useRef(0);
   const spinDegRef = useRef(0);
+  const idleSpinRef = useRef({outer: 0, inner: 0, elapsedSec: 0});
   const heatingActiveRef = useRef(false);
   const phaseRef = useRef<WheelPhase>('idle');
   const vibrated15Ref = useRef(false);
@@ -1355,6 +1391,74 @@ export const WheelFab: React.FC<{
       if (snapTimerRef.current) window.clearTimeout(snapTimerRef.current);
     };
   }, []);
+
+  // Independent continuous dual-layer rotation loop (outer button shell + inner icon artwork)
+  useEffect(() => {
+    if (!expWheelSpinEnabled || hidden) {
+      idleSpinRef.current = {outer: 0, inner: 0, elapsedSec: 0};
+      setIdleOuterDeg(0);
+      setIdleInnerDeg(0);
+      return;
+    }
+
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      (document.documentElement.classList.contains('reduce-motion') ||
+        window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+    if (prefersReducedMotion) {
+      idleSpinRef.current = {outer: 0, inner: 0, elapsedSec: 0};
+      setIdleOuterDeg(0);
+      setIdleInnerDeg(0);
+      return;
+    }
+
+    let rafId = 0;
+    let lastTime = performance.now();
+
+    const tickSpin = (now: number) => {
+      const dtSec = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000));
+      lastTime = now;
+      const st = idleSpinRef.current;
+      st.elapsedSec += dtSec;
+
+      switch (expWheelSpinMode) {
+        case 'both_cw':
+          st.outer = (st.outer + 42 * dtSec) % 360;
+          st.inner = (st.inner + 88 * dtSec) % 360;
+          break;
+        case 'both_ccw':
+          st.outer = (st.outer - 42 * dtSec + 360) % 360;
+          st.inner = (st.inner - 88 * dtSec + 360) % 360;
+          break;
+        case 'outer_cw_inner_ccw':
+          st.outer = (st.outer + 46 * dtSec) % 360;
+          st.inner = (st.inner - 76 * dtSec + 360) % 360;
+          break;
+        case 'pendulum_gyro':
+          st.outer = Math.sin(st.elapsedSec * 2.15) * 34;
+          st.inner = (st.inner + 102 * dtSec) % 360;
+          break;
+        case 'turbo_counter':
+          st.outer = (st.outer - 34 * dtSec + 360) % 360;
+          st.inner = (st.inner + 195 * dtSec) % 360;
+          break;
+        case 'outer_ccw_inner_cw':
+        default:
+          st.outer = (st.outer - 46 * dtSec + 360) % 360;
+          st.inner = (st.inner + 76 * dtSec) % 360;
+          break;
+      }
+
+      setIdleOuterDeg(st.outer);
+      setIdleInnerDeg(st.inner);
+      rafId = window.requestAnimationFrame(tickSpin);
+    };
+
+    rafId = window.requestAnimationFrame(tickSpin);
+    return () => {
+      if (rafId) window.cancelAnimationFrame(rafId);
+    };
+  }, [expWheelSpinEnabled, expWheelSpinMode, hidden]);
 
   useEffect(() => {
     if (!expWheelBurnEffect) return;
@@ -1755,7 +1859,14 @@ export const WheelFab: React.FC<{
         heat > 0.72 ? burnTheme.gradHotEnd : burnTheme.gradWarmEnd
       } ${Math.round(emberRatio * 100)}%, var(--accent-end))`;
 
-  // Shape geometry for both classic circular & 5 new non-circular designs
+  // Shape geometry for both classic circular & 6 new non-circular designs
+  const isCircularShape =
+    iconStyle === 'wheel' ||
+    iconStyle === 'morph' ||
+    iconStyle === 'gear' ||
+    iconStyle === 'compass' ||
+    iconStyle === 'hex';
+
   const shapeShellClass =
     iconStyle === 'squircle'
       ? 'h-14 w-14 rounded-[18px]'
@@ -1767,27 +1878,36 @@ export const WheelFab: React.FC<{
             ? 'h-[58px] w-[58px] rounded-none'
             : iconStyle === 'blade_hex'
               ? 'h-[54px] w-[60px] rounded-none'
-              : 'h-14 w-14 rounded-full';
+              : iconStyle === 'star_prism'
+                ? 'h-[62px] w-[62px] rounded-none'
+                : 'h-14 w-14 rounded-full';
 
   const shapeClipPath: string | undefined =
     iconStyle === 'octa_shield'
       ? 'polygon(29% 2%, 71% 2%, 98% 29%, 98% 71%, 71% 98%, 29% 98%, 2% 71%, 2% 29%)'
       : iconStyle === 'blade_hex'
         ? 'polygon(25% 4%, 75% 4%, 99% 50%, 75% 96%, 25% 96%, 1% 50%)'
-        : undefined;
+        : iconStyle === 'star_prism'
+          ? 'polygon(50% 2%, 67% 33%, 98% 50%, 67% 67%, 50% 98%, 33% 67%, 2% 50%, 33% 33%)'
+          : undefined;
 
+  const baseOuterRot = (iconStyle === 'diamond' ? 45 : 0) + (expWheelSpinEnabled ? idleOuterDeg : 0);
+  const effectiveBtnScale =
+    phase === 'ash'
+      ? ashBtnScale
+      : isDragging
+        ? 1.1
+        : isBlazing || isPressing
+          ? 1.05
+          : 1;
   const baseButtonTransform =
-    iconStyle === 'diamond'
-      ? phase === 'ash'
-        ? `rotate(45deg) scale(${ashBtnScale.toFixed(3)})`
-        : isDragging
-          ? 'rotate(45deg) scale(1.1)'
-          : isBlazing || isPressing
-            ? 'rotate(45deg) scale(1.05)'
-            : 'rotate(45deg)'
-      : phase === 'ash'
-        ? `scale(${ashBtnScale.toFixed(3)})`
-        : undefined;
+    baseOuterRot !== 0 || effectiveBtnScale !== 1
+      ? `rotate(${baseOuterRot.toFixed(1)}deg) scale(${effectiveBtnScale.toFixed(3)})`
+      : undefined;
+
+  // World-space inner rotation = burn spinDeg + idleInnerDeg; subtract outer shell rotation so inner & outer spin independently!
+  const worldInnerDeg = spinDeg + (expWheelSpinEnabled ? idleInnerDeg : 0);
+  const localInnerDeg = worldInnerDeg - baseOuterRot;
 
   const fireStyle: React.CSSProperties | undefined =
     heat > 0.04 && (phase === 'idle' || ashProgress < 0.7)
@@ -2167,19 +2287,33 @@ export const WheelFab: React.FC<{
           }}
           className={
             className ??
-            `morph-accent-btn no-touch-callout relative flex ${shapeShellClass} touch-none select-none items-center justify-center border border-white/20 shadow-xl transition-transform duration-150 ${
-              iconStyle === 'diamond'
-                ? isDragging
-                  ? 'cursor-grabbing shadow-2xl'
-                  : 'cursor-grab'
-                : isDragging
-                  ? 'scale-110 cursor-grabbing shadow-2xl'
-                  : isBlazing || isPressing
-                    ? 'scale-105 cursor-grab'
-                    : 'cursor-grab'
-            }`
+            `morph-accent-btn no-touch-callout relative flex ${shapeShellClass} touch-none select-none items-center justify-center border border-white/20 shadow-xl ${
+              expWheelSpinEnabled ? '' : 'transition-transform duration-150'
+            } ${isDragging ? 'cursor-grabbing shadow-2xl' : 'cursor-grab'}`
           }
         >
+          {/* Subtle orbiting specular rim on circular shapes when full-body spin is active so outer rotation is clearly visible */}
+          {expWheelSpinEnabled && isCircularShape && (
+            <svg
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 h-full w-full"
+              viewBox="0 0 56 56"
+              fill="none"
+            >
+              <circle
+                cx="28"
+                cy="28"
+                r="25"
+                stroke="white"
+                strokeOpacity="0.45"
+                strokeWidth="2"
+                strokeDasharray="16 24"
+                strokeLinecap="round"
+              />
+              <circle cx="28" cy="3" r="2.2" fill="white" fillOpacity="0.88" />
+              <circle cx="28" cy="53" r="1.6" fill="white" fillOpacity="0.55" />
+            </svg>
+          )}
           <svg
             className={`pointer-events-none relative z-10 ${
               iconStyle === 'pill_dock' ? 'h-6 w-12' : 'h-7 w-7'
@@ -2190,7 +2324,7 @@ export const WheelFab: React.FC<{
               transform:
                 iconStyle === 'pill_dock'
                   ? `scale(${(1 + toothReveal * 0.08).toFixed(3)})`
-                  : `rotate(${(iconStyle === 'diamond' ? spinDeg - 45 : spinDeg).toFixed(1)}deg) scale(${(
+                  : `rotate(${localInnerDeg.toFixed(1)}deg) scale(${(
                       1 + toothReveal * 0.08
                     ).toFixed(3)})`,
             }}
@@ -2314,7 +2448,7 @@ export const WheelFab: React.FC<{
             )}
             {iconStyle === 'pill_dock' && (
               <>
-                <g transform={`rotate(${spinDeg.toFixed(1)} 14 12)`}>
+                <g transform={`rotate(${(expWheelSpinEnabled ? localInnerDeg : spinDeg).toFixed(1)} 14 12)`}>
                   <circle cx="14" cy="12" r="6.8" stroke={wheelTone} strokeWidth="2" strokeDasharray="7 3.5" strokeLinecap="round" />
                   <circle cx="14" cy="12" r="2.2" fill={wheelTone} />
                 </g>
@@ -2350,6 +2484,19 @@ export const WheelFab: React.FC<{
                   />
                 ))}
                 <circle cx="14" cy="14" r={2.6 + toothReveal * 0.5} fill={wheelTone} />
+              </>
+            )}
+            {iconStyle === 'star_prism' && (
+              <>
+                <path
+                  d="M14 4 L16.9 11.1 L24 14 L16.9 16.9 L14 24 L11.1 16.9 L4 14 L11.1 11.1 Z"
+                  stroke={wheelTone}
+                  strokeWidth="1.9"
+                  strokeLinejoin="round"
+                  fill={wheelTone}
+                  fillOpacity="0.22"
+                />
+                <circle cx="14" cy="14" r={2.7 + toothReveal * 0.5} fill={wheelTone} />
               </>
             )}
           </svg>
