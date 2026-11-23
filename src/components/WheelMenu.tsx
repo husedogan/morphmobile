@@ -1627,6 +1627,11 @@ export const WheelFab: React.FC<{
             setEmbers([]);
             setAshFlakes([...fx.activeAsh]);
             setAshProgress(0);
+            hoverMsRef.current = 0;
+            setHeat(0);
+            setBurnLevel(0);
+            spinDegRef.current = 0;
+            setSpinDeg(0);
             setIsDragging(false);
             setIsSnapping(false);
             setDragPos(null);
@@ -1655,17 +1660,6 @@ export const WheelFab: React.FC<{
       if (phaseRef.current === 'ash') {
         fx.elapsed += dt;
         const t = Math.min(1, fx.elapsed / ASH_DURATION_MS);
-
-        if (t < 0.45) {
-          const decel = Math.pow(1 - t / 0.45, 2);
-          spinDegRef.current = (spinDegRef.current + 1200 * decel * dtSec) % 360;
-          setSpinDeg(spinDegRef.current);
-        } else if (t >= 0.7) {
-          spinDegRef.current = 0;
-          setSpinDeg(0);
-          setHeat(0);
-          setBurnLevel(0);
-        }
 
         fx.activeAsh = fx.activeAsh
           .map((f) => {
@@ -1871,26 +1865,19 @@ export const WheelFab: React.FC<{
 
   let ashBtnOpacity = 1;
   let ashBtnScale = 1;
-  let ashCharFilter =
+  const ashCharFilter =
     phase === 'idle' && charLevel > 0.01
       ? `grayscale(${(charLevel * 0.92).toFixed(2)}) brightness(${(1 - charLevel * 0.56).toFixed(2)})`
       : '';
   if (phase === 'ash') {
-    if (ashProgress < 0.28) {
-      const ct = ashProgress / 0.28;
-      ashBtnOpacity = Math.max(0, 1 - Math.pow(ct, 1.3));
-      ashBtnScale = 1 - ct * 0.16;
-      ashCharFilter = `grayscale(${(0.92 + ct * 0.08).toFixed(2)}) brightness(${(
-        0.44 - ct * 0.22
-      ).toFixed(2)})`;
-    } else if (ashProgress < 0.72) {
+    if (ashProgress < 0.72) {
       ashBtnOpacity = 0;
-      ashBtnScale = 0.84;
+      ashBtnScale = 0.86;
     } else {
       const rt = (ashProgress - 0.72) / 0.28;
       const easeOut = 1 - Math.pow(1 - rt, 2);
       ashBtnOpacity = easeOut;
-      ashBtnScale = 0.9 + easeOut * 0.1;
+      ashBtnScale = 0.88 + easeOut * 0.12;
     }
   }
 
@@ -1958,7 +1945,7 @@ export const WheelFab: React.FC<{
   const localInnerDeg = worldInnerDeg - baseOuterRot;
 
   const fireStyle: React.CSSProperties | undefined =
-    heat > 0.04 && (phase === 'idle' || ashProgress < 0.7)
+    phase === 'idle' && heat > 0.04
       ? {
           backgroundImage: `linear-gradient(135deg, color-mix(in srgb, ${burnTheme.charDarkA} ${Math.round(
             charLevel * 92
@@ -1969,9 +1956,8 @@ export const WheelFab: React.FC<{
             charLevel > 0.25
               ? `rgba(161, 161, 170, ${(0.45 - charLevel * 0.2).toFixed(2)})`
               : `rgba(${burnTheme.glowRgb1}, ${(0.35 + emberRatio * 0.58).toFixed(2)})`,
-          boxShadow:
-            phase === 'ash' || shapeClipPath
-              ? 'none'
+          boxShadow: shapeClipPath
+            ? 'none'
               : `0 0 ${Math.round((14 + emberRatio * 28 + burnLevel * 14) * glowFade)}px rgba(${burnTheme.glowRgb1}, ${(
                   (emberRatio * 0.85 + burnLevel * 0.12) *
                   glowFade
