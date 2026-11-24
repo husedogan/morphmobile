@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {ChevronRight, LucideIcon, SlidersHorizontal} from 'lucide-react';
+import {LucideIcon, SlidersHorizontal} from 'lucide-react';
 import {Lang} from '../data/i18n';
 import {
   MAX_WHEEL_SLICES,
@@ -22,7 +22,6 @@ interface WheelMenuProps {
   title?: string;
   actions: WheelActionItem[];
   lang: Lang;
-  expDualRingWheel?: boolean;
   expWheelCenterHoldCustomize?: boolean;
   onDismiss: () => void;
   onSelect: (id: string) => void;
@@ -77,8 +76,8 @@ interface WheelGeometry {
   containerWidthClass: string;
 }
 
-function getWheelGeometry(count: number, allowDualRing = false): WheelGeometry {
-  if (allowDualRing && count >= 8) {
+function getWheelGeometry(count: number): WheelGeometry {
+  if (count > 8) {
     const size = 384;
     const outerCount = Math.min(9, Math.ceil(count * 0.6));
     const innerCount = Math.max(1, count - outerCount);
@@ -240,7 +239,6 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
   title,
   actions,
   lang,
-  expDualRingWheel = false,
   expWheelCenterHoldCustomize = false,
   onDismiss,
   onSelect,
@@ -250,7 +248,6 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
   const [activeIndex, setActiveIndex] = useState<number>(-1);
   const [holdProgress, setHoldProgress] = useState<number>(0);
   const [orbitDeg, setOrbitDeg] = useState<number>(0);
-  const [pageIdx, setPageIdx] = useState<number>(0);
 
   const wheelRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<number>(-1);
@@ -260,16 +257,7 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
   const completedHoldRef = useRef<boolean>(false);
 
   const cappedActions = actions.slice(0, MAX_WHEEL_SLICES);
-  const SINGLE_RING_PAGE_SIZE = 8;
-  const usePagination = !expDualRingWheel && cappedActions.length > SINGLE_RING_PAGE_SIZE;
-  const totalPages = usePagination ? Math.ceil(cappedActions.length / SINGLE_RING_PAGE_SIZE) : 1;
-  const safePageIdx = Math.min(pageIdx, Math.max(0, totalPages - 1));
-  const pageActions = usePagination
-    ? cappedActions.slice(
-        safePageIdx * SINGLE_RING_PAGE_SIZE,
-        (safePageIdx + 1) * SINGLE_RING_PAGE_SIZE
-      )
-    : cappedActions;
+  const pageActions = cappedActions;
 
   useEffect(() => {
     if (!open) return;
@@ -305,7 +293,6 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
     if (!open) {
       setActiveIndex(-1);
       activeRef.current = -1;
-      setPageIdx(0);
       stopHoldAnimation(true);
     }
   }, [open, stopHoldAnimation]);
@@ -317,7 +304,7 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
   }, [stopHoldAnimation]);
 
   const count = pageActions.length;
-  const geo = getWheelGeometry(Math.max(1, count), expDualRingWheel);
+  const geo = getWheelGeometry(Math.max(1, count));
 
   const startCenterHold = useCallback(() => {
     if (!expWheelCenterHoldCustomize || !onOpenCustomize || holdingCenterRef.current || completedHoldRef.current) return;
@@ -564,7 +551,7 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
         className="pointer-events-none absolute inset-0 bg-black/55"
       />
 
-      {(title || canTopCustomize || usePagination) && (
+      {(title || canTopCustomize) && (
         <div
           className="relative z-10 flex max-w-[94vw] flex-wrap items-center justify-center gap-2"
           onClick={(e) => e.stopPropagation()}
@@ -574,24 +561,6 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
             <div className="flex items-center gap-2 truncate rounded-full border border-[var(--line)] bg-[var(--surface)]/95 px-4 py-1.5 text-xs font-bold tracking-wide text-[var(--ink)] shadow-lg whitespace-nowrap">
               <span>{title}</span>
             </div>
-          )}
-          {usePagination && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setActiveIndex(-1);
-                activeRef.current = -1;
-                setPageIdx((p) => (p + 1) % totalPages);
-              }}
-              className="flex min-h-[34px] items-center gap-1 rounded-full border border-[var(--accent)]/50 bg-[var(--surface)]/95 px-3 py-1 text-xs font-bold text-[var(--ink)] shadow-lg transition-colors hover:border-[var(--accent)] whitespace-nowrap"
-            >
-              <span className="font-mono-num text-[var(--accent-text)]">
-                {safePageIdx + 1}/{totalPages}
-              </span>
-              <span>{lang === 'tr' ? 'Diğerleri' : 'More'}</span>
-              <ChevronRight className="h-3.5 w-3.5 text-[var(--accent-text)]" />
-            </button>
           )}
           {canTopCustomize && (
             <button

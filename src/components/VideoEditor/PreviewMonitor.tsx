@@ -267,7 +267,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
         !isFullscreenPreview && isPortraitMode
           ? isInspectorOpen && !isExpandedWheelMode
             ? {height: 'clamp(146px, 24dvh, 215px)', minHeight: '146px', maxHeight: '215px'}
-            : {height: `${previewHeightVh}dvh`, minHeight: '170px', maxHeight: '82dvh'}
+            : {height: `${previewHeightVh}dvh`, minHeight: '170px', maxHeight: '85dvh'}
           : undefined
       }
       className={`flex flex-col bg-[#08080A] ${

@@ -2372,12 +2372,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     (prefs.wheelIconStyle && EXP_WHEEL_SHAPES.some((s) => s.id === prefs.wheelIconStyle)) ||
                     prefs.expArmadilloReel === false ||
                     prefs.expVideoExtraTimecodes ||
-                    prefs.expDualRingWheel ||
                     prefs.expWheelCenterHoldCustomize ||
                     prefs.expTouchTooltips ||
                     prefs.expLegacySliders ||
                     prefs.expAmbientAurora ||
-                    prefs.expTouchRipple ||
+                    prefs.expCommandPalette ||
                     prefs.expUiSounds ||
                     prefs.expWheelShockwave) && (
                     <button
@@ -2406,12 +2405,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                             : p.wheelIconStyle,
                           expArmadilloReel: true,
                           expVideoExtraTimecodes: false,
-                          expDualRingWheel: false,
                           expWheelCenterHoldCustomize: false,
                           expTouchTooltips: false,
                           expLegacySliders: false,
                           expAmbientAurora: false,
-                          expTouchRipple: false,
+                          expCommandPalette: false,
                           expUiSounds: false,
                           expWheelShockwave: false,
                         }));
@@ -3392,14 +3390,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       'Adds a gentle, slow-drifting ambient glow in the background tinted dynamically to your active Morph theme.',
                   },
                   {
-                    key: 'expTouchRipple' as const,
+                    key: 'expCommandPalette' as const,
                     defaultOn: false,
-                    titleTr: 'Dokunma Parıltı Dalgası',
-                    titleEn: 'Touch & Click Accent Ripples',
+                    titleTr: 'Hızlı Komut & Araç Arama',
+                    titleEn: 'Quick Command & Tool Search',
                     descTr:
-                      'Ekrana her dokunduğunda veya tıkladığında parmağının ucunda tema renkli halka ve kıvılcım dalgası yayılır.',
+                      'Üst çubuğa anlık arama butonu (ve Ctrl+K kısayolu) ekler; tüm Morph araçlarına, video düzenleyiciye ve ayarlara tek dokunuşla ulaşırsın.',
                     descEn:
-                      'Spawns a crisp theme-colored ripple ring and micro-spark burst at every tap or click position.',
+                      'Adds a top-bar instant search button (and Ctrl+K shortcut) to jump directly to any Morph tool, video editor, or app action.',
                   },
                   {
                     key: 'expUiSounds' as const,
@@ -3458,16 +3456,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     titleEn: 'Continuously Spinning Settings Gear',
                     descTr: 'Üst çubuktaki Ayarlar ikonunu sürekli döndürür.',
                     descEn: 'Keeps the top-bar Settings gear continuously rotating.',
-                  },
-                  {
-                    key: 'expDualRingWheel' as const,
-                    defaultOn: false,
-                    titleTr: 'Hızlı Çark Çift Halka Modu (8+ Araç)',
-                    titleEn: 'Quick Wheel Dual-Ring Mode (8+ Tools)',
-                    descTr:
-                      '8’den fazla araç olduğunda sayfalama yerine iç ve dış çift halkalı klasik radyal çarkı gösterir.',
-                    descEn:
-                      'Uses concentric inner + outer rings instead of paginated 8-slice rings when more than 8 actions are present.',
                   },
                   {
                     key: 'expWheelCenterHoldCustomize' as const,

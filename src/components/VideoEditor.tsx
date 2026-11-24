@@ -704,14 +704,16 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   // Dynamically measured previewHeightVh thresholds where the timeline track bars (Klip/Ses/Metin)
   // first touch the bottom tool dock (rollStartVh) and finish sliding under it into Cinema Wheel (wheelEndVh).
   const [armadilloFoldRange, setArmadilloFoldRange] = useState<{rollStartVh: number; wheelEndVh: number}>({
-    rollStartVh: 53,
-    wheelEndVh: 67,
+    rollStartVh: 62,
+    wheelEndVh: 75,
   });
   const armadilloFoldRangeRef = useRef(armadilloFoldRange);
   armadilloFoldRangeRef.current = armadilloFoldRange;
   const previewSnapRafRef = useRef<number | null>(null);
   const previewHeightVhRef = useRef<number>(previewHeightVh);
   previewHeightVhRef.current = previewHeightVh;
+  const isResizingPreviewRef = useRef<boolean>(isResizingPreview);
+  isResizingPreviewRef.current = isResizingPreview;
 
   const isExpandedWheelMode =
     effectiveArmadilloReel &&
@@ -730,6 +732,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
               Math.max(4, armadilloFoldRange.wheelEndVh - armadilloFoldRange.rollStartVh)
           )
         );
+  const armadilloFoldRef = useRef<number>(armadilloFold);
+  armadilloFoldRef.current = armadilloFold;
 
   const prevExpandedWheelRef = useRef<boolean>(false);
 
@@ -748,36 +752,55 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     };
   }, []);
 
-  // Keep exact pixel-accurate track-bottom -> dock-top overlap thresholds updated whenever
-  // viewport size or track stack changes (only measured when normal timeline is mounted & inspector closed).
+  // Keep exact pixel-accurate track-bottom -> dock-top overlap thresholds updated ONLY while the dock is
+  // completely flat and settled (never mid-drag or mid-fold, avoiding ResizeObserver spacer-shrink feedback loops).
   useEffect(() => {
     if (!effectiveArmadilloReel || !isPortraitMode || isFullscreenPreview || isExpandedWheelMode || isInspectorOpen) {
       return;
     }
     const measure = () => {
+      if (
+        isResizingPreviewRef.current ||
+        armadilloFoldRef.current > 0.005 ||
+        previewSnapRafRef.current !== null
+      ) {
+        return;
+      }
       const scroller = timelineScrollRef.current;
       const trackEl = timelineTrackRef.current;
       if (!scroller || !trackEl || typeof window === 'undefined') return;
-      const viewportH = Math.max(360, window.innerHeight);
-      const visibleH = scroller.clientHeight;
-      if (visibleH <= 0) return;
-      // Exclude the bottom pb-11 (44px) spacer below the last track so we measure the actual Klip/Ses/Metin bars
-      const rawTracksH = Math.max(88, trackEl.scrollHeight - 40);
-      // Cap baseline protected stack so projects with 6+ scrollable tracks still stay flat at normal preview heights
-      const protectedTracksH = Math.min(rawTracksH, 168);
-      const slackPx = visibleH - protectedTracksH;
+      const viewportH = Math.max(
+        360,
+        window.visualViewport?.height || document.documentElement.clientHeight || window.innerHeight
+      );
+      const scrollerRect = scroller.getBoundingClientRect();
+      if (scrollerRect.height <= 0) return;
+
+      const marker = trackEl.querySelector<HTMLElement>('[data-armadillo-tracks-end="true"]');
+      const rawTracksH = marker
+        ? Math.max(76, marker.getBoundingClientRect().bottom - scrollerRect.top + scroller.scrollTop)
+        : Math.max(88, trackEl.scrollHeight - 44);
+      // Protect up to ~200px of primary tracks so huge 6+ track projects stay flat at normal preview height
+      const protectedTracksH = Math.min(rawTracksH, 200);
+      const slackPx = scrollerRect.height - protectedTracksH;
       const currentVh = previewHeightVhRef.current;
-      const nextRollStart = Math.max(42, Math.min(72, currentVh + (slackPx / viewportH) * 100));
-      const rollSpanPx = Math.max(88, Math.min(132, protectedTracksH - 20));
-      const nextWheelEnd = Math.min(80, Math.max(nextRollStart + 8, nextRollStart + (rollSpanPx / viewportH) * 100));
+
+      const nextRollStart = Math.max(40, Math.min(76, currentVh + (slackPx / viewportH) * 100));
+      const rollSpanPx = Math.max(78, Math.min(126, protectedTracksH * 0.78));
+      const nextWheelEnd = Math.min(
+        84,
+        Math.max(nextRollStart + 6.5, nextRollStart + (rollSpanPx / viewportH) * 100)
+      );
       setArmadilloFoldRange((prev) =>
-        Math.abs(prev.rollStartVh - nextRollStart) < 0.7 && Math.abs(prev.wheelEndVh - nextWheelEnd) < 0.7
+        Math.abs(prev.rollStartVh - nextRollStart) < 0.5 && Math.abs(prev.wheelEndVh - nextWheelEnd) < 0.5
           ? prev
           : {rollStartVh: Number(nextRollStart.toFixed(1)), wheelEndVh: Number(nextWheelEnd.toFixed(1))}
       );
     };
 
     const rafId = window.requestAnimationFrame(measure);
+    // Re-measure right after PreviewMonitor's 150ms height transition settles when inspector closes
+    const settleTimer = window.setTimeout(measure, 190);
     let ro: ResizeObserver | null = null;
     if (typeof ResizeObserver !== 'undefined') {
       ro = new ResizeObserver(measure);
@@ -787,6 +810,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     window.addEventListener('resize', measure);
     return () => {
       window.cancelAnimationFrame(rafId);
+      window.clearTimeout(settleTimer);
       ro?.disconnect();
       window.removeEventListener('resize', measure);
     };
@@ -2041,7 +2065,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     setIsResizingPreview(true);
     const onMove = (ev: PointerEvent) => {
       const deltaVh = ((ev.clientY - startY) / Math.max(320, window.innerHeight)) * 100;
-      latestVh = Math.min(82, Math.max(22, Number((startVh + deltaVh).toFixed(1))));
+      latestVh = Math.min(85, Math.max(22, Number((startVh + deltaVh).toFixed(1))));
       setPreviewHeightVh(latestVh);
     };
     const onUp = () => {
@@ -2058,7 +2082,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
           const ratio = (latestVh - rollStartVh) / Math.max(4, wheelEndVh - rollStartVh);
           const snapTarget =
             ratio >= 0.42
-              ? Math.min(82, Number((wheelEndVh + 1.2).toFixed(1)))
+              ? Math.min(85, Number((wheelEndVh + 1.0).toFixed(1)))
               : Math.max(22, Number((rollStartVh - 0.4).toFixed(1)));
           animatePreviewHeightTo(snapTarget);
         }
@@ -2071,7 +2095,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
 
   const cyclePreviewHeight = () => {
     const {wheelEndVh} = armadilloFoldRangeRef.current;
-    const expandedTarget = Math.min(80, Math.max(72, Math.ceil(wheelEndVh + 4)));
+    const expandedTarget = Math.min(85, Math.max(74, Math.ceil(wheelEndVh + 1.5)));
     setPreviewHeightVh((prev) => (prev < 34 ? 46 : prev < wheelEndVh - 1 ? expandedTarget : 28));
   };
 

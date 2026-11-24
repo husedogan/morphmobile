@@ -35,6 +35,7 @@ import {
   RotateCw,
   ScanLine,
   Scissors,
+  Search,
   Settings,
   Share2,
   SlidersHorizontal,
@@ -43,6 +44,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import {CommandPaletteItem, CommandPaletteModal} from './components/CommandPaletteModal';
 import {ExperimentalFxLayer} from './components/ExperimentalFxLayer';
 import {FileActionsModal} from './components/FileActionsModal';
 import {JobOverlay} from './components/JobOverlay';
@@ -401,8 +403,26 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [previewTarget, showMainWheelCustomize, customizeModal.open, showManageTools, showFileActions, wheelKind]);
 
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+
+  useEffect(() => {
+    if (!prefs.expCommandPalette) {
+      setShowCommandPalette(false);
+      return;
+    }
+    const onCmdKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setShowCommandPalette((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onCmdKey);
+    return () => window.removeEventListener('keydown', onCmdKey);
+  }, [prefs.expCommandPalette]);
+
   const hasDimmedOverlay =
     wheelKind !== null ||
+    showCommandPalette ||
     showFileActions ||
     showManageTools ||
     customizeModal.open ||
@@ -2067,7 +2087,6 @@ export default function App() {
 
       <ExperimentalFxLayer
         auroraEnabled={Boolean(prefs.expAmbientAurora)}
-        touchRippleEnabled={Boolean(prefs.expTouchRipple)}
         uiSoundsEnabled={Boolean(prefs.expUiSounds)}
       />
 
@@ -2122,16 +2141,28 @@ export default function App() {
             })}
           </nav>
 
-          {/* Zone 3: Settings Gear (static by default; spins only if Experimental toggle enabled) */}
-          <div
-            className="relative flex items-center shrink-0"
-            onMouseEnter={() => {
-              if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
-                setShowGearCloud(true);
-              }
-            }}
-            onMouseLeave={() => setShowGearCloud(false)}
-          >
+          {/* Zone 3: Optional Command Search + Settings Gear */}
+          <div className="flex items-center gap-2 shrink-0">
+            {prefs.expCommandPalette && (
+              <button
+                type="button"
+                onClick={() => setShowCommandPalette(true)}
+                aria-label={lang === 'tr' ? 'Hızlı Komut ve Araç Ara' : 'Quick Command Search'}
+                title={lang === 'tr' ? 'Hızlı Ara (Ctrl+K)' : 'Quick Search (Ctrl+K)'}
+                className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
+              >
+                <Search className="h-4.5 w-4.5" />
+              </button>
+            )}
+            <div
+              className="relative flex items-center shrink-0"
+              onMouseEnter={() => {
+                if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
+                  setShowGearCloud(true);
+                }
+              }}
+              onMouseLeave={() => setShowGearCloud(false)}
+            >
             <button
               type="button"
               onClick={() => {
@@ -2172,6 +2203,7 @@ export default function App() {
                 {t('GearCloudTip', lang)}
               </div>
             )}
+            </div>
           </div>
         </div>
       </header>
@@ -2423,7 +2455,6 @@ export default function App() {
               title={wheelTitle}
               actions={wheelActions}
               lang={lang}
-              expDualRingWheel={Boolean(prefs.expDualRingWheel)}
               expWheelCenterHoldCustomize={Boolean(prefs.expWheelCenterHoldCustomize)}
               onDismiss={() => setWheelKind(null)}
               onSelect={handleWheelSelect}
@@ -2740,6 +2771,159 @@ export default function App() {
           </div>
         );
       })()}
+
+      {/* Experimental Spotlight-Style Command & Tool Search Palette */}
+      {prefs.expCommandPalette && (
+        <CommandPaletteModal
+          open={showCommandPalette}
+          lang={lang}
+          onClose={() => setShowCommandPalette(false)}
+          items={(() => {
+            const isTr = lang === 'tr';
+            const tr = (a: string, b: string) => (isTr ? a : b);
+            const list: CommandPaletteItem[] = [
+              {
+                id: 'nav:video_studio',
+                title: tr('Video Düzenleyici', 'Video Editor'),
+                subtitle: tr('Çok kanallı kurgu, kesme, metin, ses ve dışa aktarım', 'Multi-track timeline, trim, text, audio & export'),
+                category: tr('Medya', 'Media'),
+                keywords: 'video editor kurgu kes kirp montaj timeline',
+                icon: Film,
+                onRun: () => {
+                  const videoStudioDef = SERVER_TOOLS.find((s) => s.id === 'video_studio') ?? null;
+                  if (videoStudioDef) {
+                    setJob({status: 'idle'});
+                    openToolMode('tools', {serverTool: videoStudioDef});
+                  }
+                },
+              },
+              {
+                id: 'nav:web_download',
+                title: tr('Bağlantıdan Medya İndirici', 'Link Media Downloader'),
+                subtitle: tr('YouTube, Instagram, X, TikTok ve bağlantılardan indir', 'Download from YouTube, Instagram, X, TikTok & URLs'),
+                category: tr('İndir', 'Download'),
+                keywords: 'indir download youtube instagram tiktok link url mp4 mp3',
+                icon: Download,
+                onRun: () => {
+                  setJob({status: 'idle'});
+                  openToolMode('web');
+                },
+              },
+              {
+                id: 'nav:convert',
+                title: tr('Dosya Dönüştürücü', 'File Converter'),
+                subtitle: tr('Görsel, PDF, ses, video ve belge formatı dönüştür', 'Convert image, PDF, audio, video & document formats'),
+                category: tr('Dönüştür', 'Convert'),
+                keywords: 'convert donustur jpg png webp pdf mp3 mp4 docx',
+                icon: RefreshCw,
+                onRun: () => {
+                  setJob({status: 'idle'});
+                  openToolMode('convert');
+                },
+              },
+              {
+                id: 'nav:quick_wheel',
+                title: tr('Hızlı Çarkı Aç', 'Open Quick Wheel'),
+                subtitle: tr('Ana radyal araç menüsünü açar', 'Opens the main radial tool menu'),
+                category: tr('Uygulama', 'App'),
+                keywords: 'cark wheel menu araclar',
+                icon: Sparkles,
+                onRun: () => setWheelKind('main'),
+              },
+              {
+                id: 'nav:toggle_theme',
+                title: isDark ? tr('Açık Temaya Geç', 'Switch to Light Theme') : tr('Koyu Temaya Geç', 'Switch to Dark Theme'),
+                subtitle: tr('Gündüz / gece görünümünü anında değiştirir', 'Instantly switches between light and dark mode'),
+                category: tr('Uygulama', 'App'),
+                keywords: 'tema theme dark light koyu acik gece gunduz',
+                icon: Contrast,
+                onRun: () =>
+                  setPrefs((p) => ({
+                    ...p,
+                    theme: isDark ? 'light' : 'dark',
+                  })),
+              },
+              {
+                id: 'nav:studio',
+                title: t('Studio', lang),
+                subtitle: tr('Ana çalışma alanına git', 'Go to main Studio workspace'),
+                category: tr('Uygulama', 'App'),
+                keywords: 'ana ekran home studio studyo',
+                icon: LayoutGrid,
+                onRun: () => {
+                  setJob({status: 'idle'});
+                  resetNavigationFlow();
+                  setTab('studio');
+                },
+              },
+              {
+                id: 'nav:library',
+                title: t('Library', lang),
+                subtitle: tr('Kaydedilen ve işlenen dosyalarını gör', 'View saved and processed files'),
+                category: tr('Uygulama', 'App'),
+                keywords: 'kitaplik library dosyalar gecmis',
+                icon: Package,
+                onRun: () => {
+                  setJob({status: 'idle'});
+                  resetNavigationFlow();
+                  setTab('library');
+                },
+              },
+              {
+                id: 'nav:settings',
+                title: t('Settings', lang),
+                subtitle: tr('Tema, çark, indirme motoru ve uygulama ayarları', 'Theme, wheel, download engine & app preferences'),
+                category: tr('Uygulama', 'App'),
+                keywords: 'ayarlar settings tema izinler guncelleme',
+                icon: Settings,
+                onRun: () => {
+                  setJob({status: 'idle'});
+                  resetNavigationFlow();
+                  setSettingsCategory('appearance');
+                  setTab('settings');
+                },
+              },
+            ];
+
+            for (const def of Object.values(ALL_TOOLS)) {
+              list.push({
+                id: `tool:${def.id}`,
+                title: t(def.titleKey, lang),
+                subtitle: t(def.descKey, lang),
+                category: tr('Araç', 'Tool'),
+                keywords: def.id.replace(/_/g, ' '),
+                icon: wheelIconForLocalTool(def.id),
+                onRun: () => {
+                  setJob({status: 'idle'});
+                  openToolMode('tools', {tool: def.id});
+                },
+              });
+            }
+
+            for (const srv of SERVER_TOOLS) {
+              if (srv.id === 'video_studio') continue;
+              list.push({
+                id: `srv:${srv.id}`,
+                title: isTr ? srv.titleTr : srv.titleEn,
+                subtitle: isTr ? srv.descTr : srv.descEn,
+                category: tr('Medya', 'Media'),
+                keywords: `${srv.id} ${srv.titleTr} ${srv.titleEn}`,
+                icon: srv.id.startsWith('video')
+                  ? Film
+                  : srv.id.startsWith('audio')
+                    ? Music
+                    : FileText,
+                onRun: () => {
+                  setJob({status: 'idle'});
+                  openToolMode('tools', {serverTool: srv});
+                },
+              });
+            }
+
+            return list;
+          })()}
+        />
+      )}
     </div>
   );
 }

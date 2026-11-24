@@ -12,7 +12,7 @@ const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 
 export default defineConfig(() => {
   return {
     define: {
-      __MORPH_VERSION__: JSON.stringify(pkg.version || '1.1.41'),
+      __MORPH_VERSION__: JSON.stringify(pkg.version || '1.1.43'),
     },
     plugins: [
       react(),

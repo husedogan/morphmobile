@@ -2492,6 +2492,13 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             </div>
           )}
 
+          {/* Zero-height marker at exact bottom pixel of the lowest timeline track row for 1:1 parallel Armadillo fold */}
+          <div
+            data-armadillo-tracks-end="true"
+            aria-hidden="true"
+            className="pointer-events-none -mt-1.5 h-0 w-full shrink-0"
+          />
+
           {/* MAGNETIC SNAP GUIDE LINE */}
           {snapGuideTime !== null && (
             <div

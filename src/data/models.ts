@@ -410,7 +410,6 @@ export interface Prefs {
   expArmadilloReel?: boolean;
   /** Optional extra timecode badges in Video Editor experimental bars & wheel top strip (wheel center timecode always stays ON) */
   expVideoExtraTimecodes?: boolean;
-  expDualRingWheel?: boolean;
   expWheelCenterHoldCustomize?: boolean;
   expTouchTooltips?: boolean;
   expLegacySliders?: boolean;
@@ -433,8 +432,8 @@ export interface Prefs {
   expAltLauncherTextSize?: ExpLauncherTextSize;
   /** Experimental: Living theme-tinted aurora background glow */
   expAmbientAurora?: boolean;
-  /** Experimental: Accent ripple & spark burst on tap/click */
-  expTouchRipple?: boolean;
+  /** Experimental: Spotlight-style instant command & tool search palette (Header button + Ctrl+K) */
+  expCommandPalette?: boolean;
   /** Experimental: Synthesized mechanical micro-sounds on UI clicks/switches */
   expUiSounds?: boolean;
   /** Experimental: Expanding accent shockwave ring & bounce on Quick Wheel tap/snap */
