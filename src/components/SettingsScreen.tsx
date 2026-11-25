@@ -265,10 +265,18 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   useEffect(() => {
     if (initialCategory === 'experimental' && !expTabVisibleRef.current) {
       setCategory('appearance');
+    } else if (initialCategory === 'pro' && prefs.simpleMode) {
+      setCategory('appearance');
     } else {
       setCategory(initialCategory);
     }
-  }, [initialCategory]);
+  }, [initialCategory, prefs.simpleMode]);
+
+  useEffect(() => {
+    if (prefs.simpleMode && category === 'pro') {
+      setCategory('appearance');
+    }
+  }, [prefs.simpleMode, category]);
 
   const permShieldTapCountRef = useRef(0);
   const permShieldLastTapRef = useRef(0);
@@ -558,13 +566,17 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     },
   ];
 
+  const simpleMode = Boolean(prefs.simpleMode);
+
   const categories: Array<{
     id: SettingsCategory;
     label: string;
     Icon: React.FC<{className?: string}>;
   }> = [
     {id: 'appearance', label: t('SetCatAppearance', lang), Icon: Palette},
-    {id: 'pro', label: lang === 'tr' ? 'Pro Modüller' : 'Pro Modules', Icon: Layers},
+    ...(!simpleMode
+      ? [{id: 'pro' as const, label: lang === 'tr' ? 'Pro Modüller' : 'Pro Modules', Icon: Layers}]
+      : []),
     {id: 'downloads', label: t('SetCatDownloads', lang), Icon: Download},
     {id: 'permissions', label: t('SetCatPermissions', lang), Icon: ShieldCheck},
     ...(expTabVisible
@@ -611,6 +623,152 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     : lang === 'tr'
       ? 'Koyu temaya geç'
       : 'Switch to dark theme';
+
+  if (simpleMode) {
+    return (
+      <div className="mx-auto w-full max-w-lg px-4 pb-28 pt-5 sm:px-6 lg:pb-12 lg:pt-8">
+        <h1 className="text-2xl font-extrabold tracking-tight text-[var(--ink)] sm:text-3xl">
+          {t('Settings', lang)}
+        </h1>
+
+        <div className="mt-5 space-y-3.5">
+          {/* 1. Basit Mod Toggle */}
+          <section className="rounded-3xl border border-[var(--accent)]/55 bg-[var(--accent)]/10 p-4.5">
+            <button
+              type="button"
+              onClick={() => {
+                onChangePrefs((p) => ({...p, simpleMode: false}));
+                onShowToast?.(
+                  lang === 'tr'
+                    ? 'Basit Mod kapatıldı — tüm özellikler geri geldi.'
+                    : 'Simple Mode off — all features restored.'
+                );
+              }}
+              aria-pressed={true}
+              className="flex w-full items-center justify-between gap-3 text-left"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-extrabold text-[var(--ink)]">
+                  {lang === 'tr' ? 'Basit Mod' : 'Simple Mode'}
+                </p>
+                <p className="mt-0.5 text-xs text-[var(--muted)]">
+                  {lang === 'tr'
+                    ? 'Açık · Kapattığında tüm Pro araçlar ve ayarların geri gelir.'
+                    : 'On · Turn off anytime to restore all Pro tools & settings.'}
+                </p>
+              </div>
+              <span className="morph-switch shrink-0" data-checked="true">
+                <span className="morph-switch-thumb" />
+              </span>
+            </button>
+          </section>
+
+          {/* 2. Theme (3 simple buttons) */}
+          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4.5">
+            <p className="text-sm font-bold text-[var(--ink)]">
+              {lang === 'tr' ? 'Tema' : 'Theme'}
+            </p>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {(
+                [
+                  {id: 'system' as const, tr: 'Sistem', en: 'System'},
+                  {id: 'light' as const, tr: 'Açık', en: 'Light'},
+                  {id: 'dark' as const, tr: 'Koyu', en: 'Dark'},
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => onChangePrefs((p) => ({...p, theme: opt.id}))}
+                  className={`min-h-[44px] rounded-2xl border text-xs font-bold transition-colors ${
+                    prefs.theme === opt.id
+                      ? 'border-[var(--accent)] bg-[var(--accent)]/18 text-[var(--ink)]'
+                      : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
+                  }`}
+                >
+                  {lang === 'tr' ? opt.tr : opt.en}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {/* 3. Language */}
+          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4.5">
+            <p className="text-sm font-bold text-[var(--ink)]">{t('Language', lang)}</p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {(
+                [
+                  ['tr', 'Türkçe'],
+                  ['en', 'English'],
+                ] as const
+              ).map(([code, label]) => (
+                <button
+                  key={code}
+                  type="button"
+                  onClick={() => onChangePrefs((p) => ({...p, lang: code}))}
+                  className={`min-h-[44px] rounded-2xl border text-xs font-bold transition-colors ${
+                    prefs.lang === code
+                      ? 'border-[var(--accent)] bg-[var(--accent)]/18 text-[var(--ink)]'
+                      : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {/* 4. Storage & Update */}
+          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4.5 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-bold text-[var(--ink)]">Morph</p>
+                <p className="font-mono-num text-xs text-[var(--muted)]">
+                  v{APP_VERSION} · {libraryCount} {lang === 'tr' ? 'dosya' : 'files'}
+                  {libraryBytes > 0 ? ` (${formatBytes(libraryBytes)})` : ''}
+                </p>
+              </div>
+              {updateInfo?.hasUpdate ? (
+                <button
+                  type="button"
+                  onClick={onApplyUpdate}
+                  className="morph-accent-btn min-h-[40px] rounded-xl px-3.5 text-xs font-bold"
+                >
+                  {apkReadyOnDevice || isUpdateApkDownloaded(updateInfo)
+                    ? t('InstallUpdate', lang)
+                    : t('DownloadUpdate', lang)}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={checkingUpdate}
+                  onClick={onCheckUpdate}
+                  className="flex min-h-[40px] items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3.5 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)] disabled:opacity-60"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${checkingUpdate ? 'animate-spin' : ''}`} />
+                  <span>{lang === 'tr' ? 'Güncelleme' : 'Updates'}</span>
+                </button>
+              )}
+            </div>
+
+            {libraryCount > 0 && onClearLibrary && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClearLibrary();
+                  onShowToast?.(lang === 'tr' ? 'Kitaplık temizlendi.' : 'Library cleared.');
+                }}
+                className="flex min-h-[42px] w-full items-center justify-center gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--inset)] text-xs font-bold text-[var(--danger)] hover:border-[var(--danger)]"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>{t('ClearLibrary', lang)}</span>
+              </button>
+            )}
+          </section>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 pb-28 pt-5 sm:px-6 lg:pb-12 lg:pt-8">
@@ -670,6 +828,66 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       {/* CATEGORY 1: APPEARANCE, THEMES, INTERFACE CONTROLS & RADIAL WHEELS */}
       {category === 'appearance' && (
         <div className="mt-5 space-y-5">
+          {/* Basit Mod (Simple Mode) 1-Tap Switch Card */}
+          <section
+            className={`rounded-3xl border p-4.5 transition-colors ${
+              simpleMode
+                ? 'border-[var(--accent)]/60 bg-[var(--accent)]/10'
+                : 'border-[var(--line)] bg-[var(--surface)]'
+            }`}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                const next = !simpleMode;
+                onChangePrefs((p) => ({...p, simpleMode: next}));
+                onShowToast?.(
+                  next
+                    ? lang === 'tr'
+                      ? 'Basit Mod açıldı — arayüz sadeleştirildi.'
+                      : 'Simple Mode enabled — clean interface active.'
+                    : lang === 'tr'
+                      ? 'Basit Mod kapatıldı — tüm Pro araçlar ve ayarların geri geldi.'
+                      : 'Simple Mode off — all Pro tools and preferences restored.'
+                );
+              }}
+              aria-pressed={simpleMode}
+              className="flex w-full items-center justify-between gap-3.5 text-left"
+            >
+              <div className="flex min-w-0 items-start gap-3">
+                <div
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border ${
+                    simpleMode
+                      ? 'border-[var(--accent)]/50 bg-[var(--accent)] text-white'
+                      : 'border-[var(--line)] bg-[var(--inset)] text-[var(--accent-text)]'
+                  }`}
+                >
+                  <Sparkles className="h-4.5 w-4.5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-sm font-extrabold text-[var(--ink)]">
+                      {lang === 'tr' ? 'Basit Mod (Sade Arayüz)' : 'Simple Mode (Clean UI)'}
+                    </h2>
+                    {simpleMode && (
+                      <span className="rounded-md bg-[var(--accent)]/20 px-1.5 py-0.5 text-[10px] font-bold text-[var(--accent-text)]">
+                        {lang === 'tr' ? 'Aktif' : 'Active'}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
+                    {lang === 'tr'
+                      ? 'Ekran çok dolu geliyorsa Pro çubukları, kısayol şeritleri, gelişmiş indirme sekmeleri ve klasör etiketlerini gizler. Kapattığında tüm ayarların aynen geri gelir.'
+                      : 'Hides Pro tool strips, pinned bars, advanced downloader tabs, and extra panels for a calm workspace. Turning it off restores all your Pro preferences.'}
+                  </p>
+                </div>
+              </div>
+              <span className="morph-switch shrink-0" data-checked={simpleMode ? 'true' : 'false'}>
+                <span className="morph-switch-thumb" />
+              </span>
+            </button>
+          </section>
+
           {/* Instant Recovery Card in Appearance when the Home Quick Wheel is turned OFF */}
           {prefs.showQuickWheel === false && (
             <section className="flex flex-col gap-3 rounded-3xl border border-[var(--accent)]/45 bg-[var(--accent)]/10 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -873,6 +1091,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </section>
 
           {/* Interface Scale, Corner Radius, Wheel Corner & Interaction Preferences */}
+          {!simpleMode && (
           <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
             <div className="flex items-center gap-2.5">
               <SlidersHorizontal className="h-5 w-5 text-[var(--accent)]" />
@@ -1317,8 +1536,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               );
             })()}
           </section>
+          )}
 
           {/* Dedicated Quick Wheel Visibility, Customization, Position & Icon Design Card */}
+          {!simpleMode && (
           <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex items-start gap-3">
@@ -1567,8 +1788,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               </div>
             </div>
           </section>
+          )}
 
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <div className={`grid grid-cols-1 gap-5 ${!simpleMode && onOpenWheelCustomize ? 'sm:grid-cols-2' : ''}`}>
             {/* Language Card */}
             <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
               <h2 className="text-base font-bold text-[var(--ink)]">{t('Language', lang)}</h2>
@@ -1596,7 +1818,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </section>
 
             {/* Radial Wheel Customization Card */}
-            {onOpenWheelCustomize && (
+            {!simpleMode && onOpenWheelCustomize && (
               <section className="flex flex-col justify-between rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
                 <div>
                   <div className="flex items-center justify-between gap-2">

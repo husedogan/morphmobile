@@ -24,6 +24,7 @@ import {
   Plus,
   Radar,
   Scissors,
+  Settings,
   Shield,
   SlidersHorizontal,
   Square,
@@ -102,11 +103,19 @@ export const LinkDownloaderPro: React.FC<LinkDownloaderProProps> = ({
   prefs,
   initialUrl = '',
   onChangePrefs,
+  onOpenSettings,
   onBack,
   onRun,
 }) => {
   const isTr = lang === 'tr';
+  const simpleMode = Boolean(prefs?.simpleMode);
   const [activeTab, setActiveTab] = useState<DownloaderTab>('single');
+
+  useEffect(() => {
+    if (simpleMode && activeTab !== 'single') {
+      setActiveTab('single');
+    }
+  }, [simpleMode, activeTab]);
 
   // Single Download State
   const [url, setUrl] = useState(initialUrl);
@@ -143,7 +152,6 @@ export const LinkDownloaderPro: React.FC<LinkDownloaderProProps> = ({
   const [embedChapters, setEmbedChapters] = useState<boolean>(() => prefs?.proDlEmbedMetadata !== false);
   const [embedMetadata, setEmbedMetadata] = useState<boolean>(() => prefs?.proDlEmbedMetadata !== false);
   const [cookieText, setCookieText] = useState(() => loadSavedCookieProfile());
-  const [postAction, setPostAction] = useState<'none' | 'video_editor' | 'audio_studio'>('none');
 
   // History
   const [history, setHistory] = useState<DownloadHistoryEntry[]>(() => loadDownloadHistory());
@@ -264,7 +272,6 @@ export const LinkDownloaderPro: React.FC<LinkDownloaderProProps> = ({
     if (embedChapters) opts.embedChapters = '1';
     if (embedMetadata) opts.embedMetadata = '1';
     if (cookieText.trim()) opts.cookies = cookieText.trim();
-    if (postAction !== 'none') opts.postAction = postAction;
     return opts;
   };
 
@@ -285,7 +292,9 @@ export const LinkDownloaderPro: React.FC<LinkDownloaderProProps> = ({
     }
     if (cookieText.trim()) saveCookieProfile(cookieText);
     const opts = buildDownloadOptions();
-    if (overridePostAction) opts.postAction = overridePostAction;
+    if (overridePostAction && overridePostAction !== 'none') {
+      opts.postAction = overridePostAction;
+    }
     onRun(clean, opts);
   };
 
@@ -369,6 +378,97 @@ export const LinkDownloaderPro: React.FC<LinkDownloaderProProps> = ({
     }
   };
 
+  if (simpleMode) {
+    const simpleFmt: 'video' | 'audio' = format === 'audio' ? 'audio' : 'video';
+    return (
+      <div className="mx-auto w-full max-w-lg px-4 pb-28 pt-5 sm:px-6 lg:pb-12">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onBack}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] hover:border-[var(--accent)]"
+            aria-label={t('Back', lang)}
+          >
+            <ArrowLeft className="h-4.5 w-4.5" />
+          </button>
+          <h2 className="truncate text-lg font-extrabold text-[var(--ink)]">
+            {isTr ? 'Bağlantıdan İndir' : 'Download from Link'}
+          </h2>
+        </div>
+
+        <div className="mt-5 space-y-4 rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
+          <div>
+            <label className="text-xs font-bold text-[var(--muted)]">
+              {isTr ? 'Bağlantı' : 'Link'}
+            </label>
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                type="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://..."
+                className="min-h-[48px] min-w-0 flex-1 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3.5 text-sm text-[var(--ink)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={handlePasteSingle}
+                className="flex h-[48px] shrink-0 items-center gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3.5 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)]"
+              >
+                <Clipboard className="h-4 w-4 text-[var(--accent-text)]" />
+                <span>{isTr ? 'Yapıştır' : 'Paste'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5">
+            <button
+              type="button"
+              onClick={() => setFormat('video')}
+              className={`flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border text-sm font-bold transition-colors ${
+                simpleFmt === 'video'
+                  ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--ink)]'
+                  : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
+              }`}
+            >
+              <Film className="h-4 w-4 text-[var(--accent-text)]" />
+              <span>{isTr ? 'Video' : 'Video'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormat('audio')}
+              className={`flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border text-sm font-bold transition-colors ${
+                simpleFmt === 'audio'
+                  ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--ink)]'
+                  : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
+              }`}
+            >
+              <Music className="h-4 w-4 text-[var(--accent-text)]" />
+              <span>{isTr ? 'Ses (MP3)' : 'Audio (MP3)'}</span>
+            </button>
+          </div>
+
+          <button
+            type="button"
+            disabled={!url.trim()}
+            onClick={() => {
+              const clean = url.trim();
+              if (!clean) return;
+              onRun(clean, {
+                format: simpleFmt,
+                quality: simpleFmt === 'audio' ? 'mp3_320' : '1080p',
+                engine: activeEngine,
+              });
+            }}
+            className="morph-accent-btn flex min-h-[54px] w-full items-center justify-center gap-2 rounded-2xl text-sm font-extrabold shadow-sm disabled:opacity-45"
+          >
+            <Download className="h-4.5 w-4.5" />
+            <span>{isTr ? 'İndir' : 'Download'}</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-2xl px-4 pb-28 pt-5 sm:px-6 lg:pb-12">
       {/* Header */}
@@ -391,49 +491,66 @@ export const LinkDownloaderPro: React.FC<LinkDownloaderProProps> = ({
               : 'Preview · Trim · SponsorBlock · Queue · Stream Sniffer'}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowHistory((v) => !v)}
-          className={`flex h-10 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition-colors ${
-            showHistory
-              ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
-              : 'border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] hover:border-[var(--accent)]'
-          }`}
-        >
-          <History className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">{isTr ? 'Geçmiş' : 'History'}</span>
-          {history.length > 0 && <span className="font-mono-num text-[10px] opacity-80">({history.length})</span>}
-        </button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {!simpleMode && (
+            <button
+              type="button"
+              onClick={() => setShowHistory((v) => !v)}
+              className={`flex h-10 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition-colors ${
+                showHistory
+                  ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
+                  : 'border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] hover:border-[var(--accent)]'
+              }`}
+            >
+              <History className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{isTr ? 'Geçmiş' : 'History'}</span>
+              {history.length > 0 && <span className="font-mono-num text-[10px] opacity-80">({history.length})</span>}
+            </button>
+          )}
+          {onOpenSettings && (
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              aria-label={t('Settings', lang)}
+              title={isTr ? 'İndirme Ayarları' : 'Download Settings'}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--ink)]"
+            >
+              <Settings className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Mode Tabs */}
-      <div className="mt-4 grid grid-cols-3 gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-1">
-        {(
-          [
-            {id: 'single' as const, icon: Download, tr: 'Tekli İndir', en: 'Single'},
-            {id: 'queue' as const, icon: ListVideo, tr: `Kuyruk (${queue.length})`, en: `Queue (${queue.length})`},
-            {id: 'sniffer' as const, icon: Radar, tr: 'Akış Avcısı', en: 'Sniffer'},
-          ] as const
-        ).map((tab) => {
-          const Icon = tab.icon;
-          const active = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-bold transition-all ${
-                active
-                  ? 'morph-accent-btn shadow-sm'
-                  : 'text-[var(--muted)] hover:text-[var(--ink)]'
-              }`}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              <span className="truncate">{isTr ? tab.tr : tab.en}</span>
-            </button>
-          );
-        })}
-      </div>
+      {!simpleMode && (
+        <div className="mt-4 grid grid-cols-3 gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-1">
+          {(
+            [
+              {id: 'single' as const, icon: Download, tr: 'Tekli İndir', en: 'Single'},
+              {id: 'queue' as const, icon: ListVideo, tr: `Kuyruk (${queue.length})`, en: `Queue (${queue.length})`},
+              {id: 'sniffer' as const, icon: Radar, tr: 'Akış Avcısı', en: 'Sniffer'},
+            ] as const
+          ).map((tab) => {
+            const Icon = tab.icon;
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-bold transition-all ${
+                  active
+                    ? 'morph-accent-btn shadow-sm'
+                    : 'text-[var(--muted)] hover:text-[var(--ink)]'
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span className="truncate">{isTr ? tab.tr : tab.en}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Collapsible History Drawer */}
       {showHistory && (
@@ -619,7 +736,7 @@ export const LinkDownloaderPro: React.FC<LinkDownloaderProProps> = ({
             )}
 
             {/* Quick Engine Picker + Parallel Range Accelerator & Auto-Category Strip */}
-            {onChangePrefs && (
+            {!simpleMode && onChangePrefs && (
               <div className="mt-3.5 space-y-2 pt-1">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-[11px] font-semibold text-[var(--muted)] mr-1">
@@ -720,6 +837,7 @@ export const LinkDownloaderPro: React.FC<LinkDownloaderProProps> = ({
           </div>
 
           {/* Trim Before Download + SponsorBlock Card */}
+          {!simpleMode && (
           <div className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4 space-y-3">
             {/* Trim Range */}
             <div className="flex items-center justify-between gap-3">
@@ -936,6 +1054,7 @@ export const LinkDownloaderPro: React.FC<LinkDownloaderProProps> = ({
               )}
             </div>
           </div>
+          )}
 
           {/* Primary Download + Chain Actions */}
           <div className="space-y-2">
@@ -953,32 +1072,28 @@ export const LinkDownloaderPro: React.FC<LinkDownloaderProProps> = ({
               </span>
             </button>
 
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                disabled={!url.trim()}
-                onClick={() => {
-                  setPostAction('video_editor');
-                  triggerSingleDownload('video_editor');
-                }}
-                className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)] disabled:opacity-40"
-              >
-                <Wand2 className="h-3.5 w-3.5 text-[var(--accent-text)]" />
-                <span>{isTr ? 'İndir → Video Editör' : 'Download → Video Editor'}</span>
-              </button>
-              <button
-                type="button"
-                disabled={!url.trim()}
-                onClick={() => {
-                  setPostAction('audio_studio');
-                  triggerSingleDownload('audio_studio');
-                }}
-                className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)] disabled:opacity-40"
-              >
-                <Music className="h-3.5 w-3.5 text-emerald-400" />
-                <span>{isTr ? 'İndir → Ses Stüdyosu' : 'Download → Audio Studio'}</span>
-              </button>
-            </div>
+            {!simpleMode && (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={!url.trim()}
+                  onClick={() => triggerSingleDownload('video_editor')}
+                  className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)] disabled:opacity-40"
+                >
+                  <Wand2 className="h-3.5 w-3.5 text-[var(--accent-text)]" />
+                  <span>{isTr ? 'İndir → Video Editör' : 'Download → Video Editor'}</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={!url.trim()}
+                  onClick={() => triggerSingleDownload('audio_studio')}
+                  className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)] disabled:opacity-40"
+                >
+                  <Music className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>{isTr ? 'İndir → Ses Stüdyosu' : 'Download → Audio Studio'}</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

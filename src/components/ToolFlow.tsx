@@ -562,7 +562,9 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<ToolCategory>('all');
   const [localShowLabels, setLocalShowLabels] = useState(Boolean(prefs?.showToolLabels));
-  const showToolLabels = onChangePrefs ? Boolean(prefs?.showToolLabels) : localShowLabels;
+  const [simpleShowAllTools, setSimpleShowAllTools] = useState(false);
+  const simpleMode = Boolean(prefs?.simpleMode);
+  const showToolLabels = simpleMode ? true : onChangePrefs ? Boolean(prefs?.showToolLabels) : localShowLabels;
   const toggleToolLabels = useCallback(() => {
     if (onChangePrefs) {
       onChangePrefs((p) => ({...p, showToolLabels: !p.showToolLabels}));
@@ -752,9 +754,9 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
           lang={lang}
           initialTab={initVeTab}
           initialPreset={initVePreset}
-          expArmadilloReel={prefs?.expArmadilloReel !== false}
-          expVideoExtraTimecodes={Boolean(prefs?.expVideoExtraTimecodes)}
-          expAltLauncher={Boolean(prefs?.expAltLauncher) && prefs?.expAltLauncherForVideo !== false}
+          expArmadilloReel={!simpleMode && prefs?.expArmadilloReel !== false}
+          expVideoExtraTimecodes={!simpleMode && Boolean(prefs?.expVideoExtraTimecodes)}
+          expAltLauncher={!simpleMode && Boolean(prefs?.expAltLauncher) && prefs?.expAltLauncherForVideo !== false}
           expAltLauncherStyle={prefs?.expAltLauncherStyle ?? 'cascade_sheet'}
           expAltLauncherLabelsEnabled={prefs?.expAltLauncherLabelsEnabled}
           expAltLauncherLabelMode={prefs?.expAltLauncherLabelMode ?? 'wrap'}
@@ -858,7 +860,7 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
         lang={lang}
         onBack={onBack}
         rightAction={
-          mode === 'tools' ? (
+          mode === 'tools' && !simpleMode ? (
             <button
               type="button"
               onClick={toggleToolLabels}
@@ -949,7 +951,7 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
         </div>
       ) : (
         <div className="mt-5 space-y-5">
-          {totalToolsCount >= 5 && (
+          {!simpleMode && totalToolsCount >= 5 && (
             <div className="space-y-3">
               <div className="relative flex items-center">
                 <Search className="pointer-events-none absolute left-3.5 h-4 w-4 text-[var(--muted)]" />
@@ -996,127 +998,182 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
             </div>
           )}
 
-          {filteredLocalTools.length === 0 && filteredServerTools.length === 0 && (
-            <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-4 text-center text-xs text-[var(--muted)]">
-              {t('NoMatchingTools', lang)}
-            </div>
-          )}
+          {(() => {
+            const CORE_LOCAL = new Set<ToolId>([
+              'COMPRESS',
+              'CROP',
+              'FILTERS',
+              'SCAN_DOC',
+              'PDF_CREATE',
+              'PDF_MERGE',
+              'PDF_SPLIT',
+              'PDF_REMOVE_PAGES',
+              'PDF_TO_IMAGES',
+              'ZIP_CREATE',
+              'ZIP_EXTRACT',
+            ]);
+            const CORE_SERVER = new Set<string>([
+              'video_studio',
+              'video_compress',
+              'video_extract_audio',
+              'video_trim',
+              'audio_trim',
+              'audio_convert',
+              'audio_normalize',
+              'office_to_pdf',
+              'pdf_to_docx',
+            ]);
+            const visibleLocal =
+              simpleMode && !simpleShowAllTools
+                ? filteredLocalTools.filter((tool) => CORE_LOCAL.has(tool.id))
+                : filteredLocalTools;
+            const visibleServer =
+              simpleMode && !simpleShowAllTools
+                ? filteredServerTools.filter((tool) => CORE_SERVER.has(tool.id))
+                : filteredServerTools;
+            const hiddenCount =
+              filteredLocalTools.length + filteredServerTools.length - (visibleLocal.length + visibleServer.length);
 
-          {filteredLocalTools.length > 0 && (
-            <div>
-              {showToolLabels && (
-                <p className="mb-2.5 text-xs font-semibold text-[var(--muted)]">
-                  {t('ToolsForSelection', lang)}
-                </p>
-              )}
-              {showToolLabels ? (
-                <div className="divide-y divide-[var(--line)] rounded-3xl border border-[var(--line)] bg-[var(--surface)]">
-                  {filteredLocalTools.map((tool: ToolDef) => {
-                    const Icon = iconForTool(tool.id);
-                    return (
-                      <button
-                        key={tool.id}
-                        type="button"
-                        onClick={() => setSelectedTool(tool.id)}
-                        className="flex min-h-[66px] w-full items-center gap-3.5 px-4 py-3 text-left transition-colors hover:bg-[var(--inset)]/60 first:rounded-t-3xl last:rounded-b-3xl"
-                      >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
-                          <Icon className="h-5 w-5" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-bold text-[var(--ink)]">{t(tool.titleKey, lang)}</p>
-                          <p className="truncate text-xs text-[var(--muted)]">{t(tool.descKey, lang)}</p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
-                  {filteredLocalTools.map((tool: ToolDef) => {
-                    const Icon = iconForTool(tool.id);
-                    return (
-                      <button
-                        key={tool.id}
-                        type="button"
-                        onClick={() => setSelectedTool(tool.id)}
-                        title={`${t(tool.titleKey, lang)} — ${t(tool.descKey, lang)}`}
-                        className="flex min-h-[86px] flex-col items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-2 py-3 text-center transition-all hover:border-[var(--accent)]/60 hover:bg-[var(--inset)]/50 active:scale-[0.97]"
-                      >
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent)]/12 text-[var(--accent)]">
-                          <Icon className="h-5 w-5" />
-                        </div>
-                        <span className="line-clamp-2 text-[11px] font-bold leading-tight text-[var(--ink)]">
-                          {t(tool.titleKey, lang)}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+            return (
+              <>
+                {visibleLocal.length === 0 && visibleServer.length === 0 && (
+                  <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-4 text-center text-xs text-[var(--muted)]">
+                    {t('NoMatchingTools', lang)}
+                  </div>
+                )}
 
-          {filteredServerTools.length > 0 && (
-            <div>
-              {showToolLabels && (
-                <p className="mb-2.5 text-xs font-semibold text-[var(--muted)]">
-                  {t('ServerTools', lang)}
-                </p>
-              )}
-              {showToolLabels ? (
-                <div className="divide-y divide-[var(--line)] rounded-3xl border border-[var(--line)] bg-[var(--surface)]">
-                  {filteredServerTools.map((tool) => {
-                    const ToolIcon = iconForServerTool(tool.id);
-                    return (
-                      <button
-                        key={tool.id}
-                        type="button"
-                        onClick={() => setSelectedServerTool(tool)}
-                        className="flex min-h-[66px] w-full items-center gap-3.5 px-4 py-3 text-left transition-colors hover:bg-[var(--inset)]/60 first:rounded-t-3xl last:rounded-b-3xl"
-                      >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
-                          <ToolIcon className="h-5 w-5" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-bold text-[var(--ink)]">
-                            {lang === 'tr' ? tool.titleTr : tool.titleEn}
-                          </p>
-                          <p className="truncate text-xs text-[var(--muted)]">
-                            {lang === 'tr' ? tool.descTr : tool.descEn}
-                          </p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
-                  {filteredServerTools.map((tool) => {
-                    const ToolIcon = iconForServerTool(tool.id);
-                    const fullTitle = lang === 'tr' ? tool.titleTr : tool.titleEn;
-                    const compactTitle = fullTitle.replace(/\s*\([^)]*\)/g, '').trim();
-                    return (
-                      <button
-                        key={tool.id}
-                        type="button"
-                        onClick={() => setSelectedServerTool(tool)}
-                        title={`${fullTitle} — ${lang === 'tr' ? tool.descTr : tool.descEn}`}
-                        className="flex min-h-[86px] flex-col items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-2 py-3 text-center transition-all hover:border-[var(--accent)]/60 hover:bg-[var(--inset)]/50 active:scale-[0.97]"
-                      >
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent)]/12 text-[var(--accent)]">
-                          <ToolIcon className="h-5 w-5" />
-                        </div>
-                        <span className="line-clamp-2 text-[11px] font-bold leading-tight text-[var(--ink)]">
-                          {compactTitle}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+                {visibleLocal.length > 0 && (
+                  <div>
+                    {showToolLabels && !simpleMode && (
+                      <p className="mb-2.5 text-xs font-semibold text-[var(--muted)]">
+                        {t('ToolsForSelection', lang)}
+                      </p>
+                    )}
+                    {showToolLabels ? (
+                      <div className="divide-y divide-[var(--line)] rounded-3xl border border-[var(--line)] bg-[var(--surface)]">
+                        {visibleLocal.map((tool: ToolDef) => {
+                          const Icon = iconForTool(tool.id);
+                          return (
+                            <button
+                              key={tool.id}
+                              type="button"
+                              onClick={() => setSelectedTool(tool.id)}
+                              className="flex min-h-[60px] w-full items-center gap-3.5 px-4 py-3 text-left transition-colors hover:bg-[var(--inset)]/60 first:rounded-t-3xl last:rounded-b-3xl"
+                            >
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
+                                <Icon className="h-5 w-5" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-bold text-[var(--ink)]">{t(tool.titleKey, lang)}</p>
+                                {!simpleMode && (
+                                  <p className="truncate text-xs text-[var(--muted)]">{t(tool.descKey, lang)}</p>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
+                        {visibleLocal.map((tool: ToolDef) => {
+                          const Icon = iconForTool(tool.id);
+                          return (
+                            <button
+                              key={tool.id}
+                              type="button"
+                              onClick={() => setSelectedTool(tool.id)}
+                              title={`${t(tool.titleKey, lang)} — ${t(tool.descKey, lang)}`}
+                              className="flex min-h-[86px] flex-col items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-2 py-3 text-center transition-all hover:border-[var(--accent)]/60 hover:bg-[var(--inset)]/50 active:scale-[0.97]"
+                            >
+                              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent)]/12 text-[var(--accent)]">
+                                <Icon className="h-5 w-5" />
+                              </div>
+                              <span className="line-clamp-2 text-[11px] font-bold leading-tight text-[var(--ink)]">
+                                {t(tool.titleKey, lang)}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {visibleServer.length > 0 && (
+                  <div>
+                    {showToolLabels && !simpleMode && (
+                      <p className="mb-2.5 text-xs font-semibold text-[var(--muted)]">
+                        {t('ServerTools', lang)}
+                      </p>
+                    )}
+                    {showToolLabels ? (
+                      <div className="divide-y divide-[var(--line)] rounded-3xl border border-[var(--line)] bg-[var(--surface)]">
+                        {visibleServer.map((tool) => {
+                          const ToolIcon = iconForServerTool(tool.id);
+                          return (
+                            <button
+                              key={tool.id}
+                              type="button"
+                              onClick={() => setSelectedServerTool(tool)}
+                              className="flex min-h-[60px] w-full items-center gap-3.5 px-4 py-3 text-left transition-colors hover:bg-[var(--inset)]/60 first:rounded-t-3xl last:rounded-b-3xl"
+                            >
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
+                                <ToolIcon className="h-5 w-5" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-bold text-[var(--ink)]">
+                                  {lang === 'tr' ? tool.titleTr : tool.titleEn}
+                                </p>
+                                {!simpleMode && (
+                                  <p className="truncate text-xs text-[var(--muted)]">
+                                    {lang === 'tr' ? tool.descTr : tool.descEn}
+                                  </p>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
+                        {visibleServer.map((tool) => {
+                          const ToolIcon = iconForServerTool(tool.id);
+                          const fullTitle = lang === 'tr' ? tool.titleTr : tool.titleEn;
+                          const compactTitle = fullTitle.replace(/\s*\([^)]*\)/g, '').trim();
+                          return (
+                            <button
+                              key={tool.id}
+                              type="button"
+                              onClick={() => setSelectedServerTool(tool)}
+                              title={`${fullTitle} — ${lang === 'tr' ? tool.descTr : tool.descEn}`}
+                              className="flex min-h-[86px] flex-col items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-2 py-3 text-center transition-all hover:border-[var(--accent)]/60 hover:bg-[var(--inset)]/50 active:scale-[0.97]"
+                            >
+                              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent)]/12 text-[var(--accent)]">
+                                <ToolIcon className="h-5 w-5" />
+                              </div>
+                              <span className="line-clamp-2 text-[11px] font-bold leading-tight text-[var(--ink)]">
+                                {compactTitle}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {simpleMode && hiddenCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSimpleShowAllTools(true)}
+                    className="flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-[var(--line)] bg-[var(--surface)] text-xs font-bold text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]"
+                  >
+                    {lang === 'tr' ? `Diğer ${hiddenCount} aracı da göster` : `Show ${hiddenCount} more tools`}
+                  </button>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
     </div>

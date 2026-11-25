@@ -837,19 +837,24 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                 )}
               </div>
 
-              {/* Password Lock Tag */}
+              {/* Document Protection Metadata Tag */}
               <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
                 <label className="flex items-center gap-1.5 text-xs font-bold text-[var(--ink)]">
                   <Lock className="h-3.5 w-3.5 text-amber-400" />
-                  {isTr ? 'Belge Koruma Parolası (isteğe bağlı)' : 'Document Protection Password (optional)'}
+                  {isTr ? 'Belge Koruma Etiketi / Notu (Metadata)' : 'Document Protection Tag (Metadata)'}
                 </label>
                 <input
-                  type="password"
+                  type="text"
                   value={lockPassword}
                   onChange={(e) => setLockPassword(e.target.value)}
-                  placeholder={isTr ? 'Koruma parolası girin...' : 'Enter protection password...'}
+                  placeholder={isTr ? 'Örn: Gizli — Sadece Dahili Kullanım' : 'e.g. Confidential — Internal Use Only'}
                   className="mt-2 w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--ink)]"
                 />
+                <p className="mt-1.5 text-[10px] leading-snug text-[var(--muted)]">
+                  {isTr
+                    ? 'Not: Tarayıcı içi PDF motoru belge üstverisine koruma etiketi ekler; gerçek AES şifreleme yapmaz.'
+                    : 'Note: In-browser PDF engine writes a protection metadata tag; it does not apply AES encryption.'}
+                </p>
               </div>
 
               <button

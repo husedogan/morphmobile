@@ -380,11 +380,48 @@ export default function App() {
     setToolMode(null);
   }, []);
 
+  const [showTerminal, setShowTerminal] = useState(false);
+  const [audioStudioModal, setAudioStudioModal] = useState<{
+    open: boolean;
+    tab: AudioStudioTab;
+    file: File | null;
+  }>({open: false, tab: 'waveform', file: null});
+  const [imageProModal, setImageProModal] = useState<{
+    open: boolean;
+    tab: ImageProTab;
+    file: File | null;
+  }>({open: false, tab: 'compare', file: null});
+  const [pdfArchiveModal, setPdfArchiveModal] = useState<{
+    open: boolean;
+    tab: PdfArchiveTab;
+  }>({open: false, tab: 'pdf_organize'});
+  const [initialLinkUrl, setInitialLinkUrl] = useState('');
+  const [clipboardUrlBanner, setClipboardUrlBanner] = useState<string | null>(null);
+  const lastDismissedClipUrlRef = useRef<string>('');
+  const [pinnedTools, setPinnedTools] = useState<QuickToolEntry[]>(() => loadPinnedTools());
+  const [recentTools, setRecentTools] = useState<QuickToolEntry[]>(() => loadRecentTools());
+
+  const recordRecentTool = useCallback((entry: QuickToolEntry) => {
+    setRecentTools(pushRecentTool(entry));
+  }, []);
+
   // Global Escape key closes top-most overlay/modal (U-9)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (previewTarget) {
+      if (showTerminal) {
+        e.preventDefault();
+        setShowTerminal(false);
+      } else if (audioStudioModal.open) {
+        e.preventDefault();
+        setAudioStudioModal((p) => ({...p, open: false}));
+      } else if (imageProModal.open) {
+        e.preventDefault();
+        setImageProModal((p) => ({...p, open: false}));
+      } else if (pdfArchiveModal.open) {
+        e.preventDefault();
+        setPdfArchiveModal((p) => ({...p, open: false}));
+      } else if (previewTarget) {
         e.preventDefault();
         const shouldRevoke = !previewTarget.previewUrl;
         setPreviewTarget(null);
@@ -412,41 +449,31 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [previewTarget, showMainWheelCustomize, customizeModal.open, showManageTools, showFileActions, wheelKind]);
+  }, [
+    showTerminal,
+    audioStudioModal.open,
+    imageProModal.open,
+    pdfArchiveModal.open,
+    previewTarget,
+    showMainWheelCustomize,
+    customizeModal.open,
+    showManageTools,
+    showFileActions,
+    wheelKind,
+  ]);
 
-  const [showTerminal, setShowTerminal] = useState(false);
-  const [audioStudioModal, setAudioStudioModal] = useState<{
-    open: boolean;
-    tab: AudioStudioTab;
-    file: File | null;
-  }>({open: false, tab: 'waveform', file: null});
-  const [imageProModal, setImageProModal] = useState<{
-    open: boolean;
-    tab: ImageProTab;
-    file: File | null;
-  }>({open: false, tab: 'compare', file: null});
-  const [pdfArchiveModal, setPdfArchiveModal] = useState<{
-    open: boolean;
-    tab: PdfArchiveTab;
-  }>({open: false, tab: 'pdf_organize'});
-  const [initialLinkUrl, setInitialLinkUrl] = useState('');
-  const [clipboardUrlBanner, setClipboardUrlBanner] = useState<string | null>(null);
-  const lastDismissedClipUrlRef = useRef<string>('');
-  const [pinnedTools, setPinnedTools] = useState<QuickToolEntry[]>(() => loadPinnedTools());
-  const [recentTools, setRecentTools] = useState<QuickToolEntry[]>(() => loadRecentTools());
-
-  const recordRecentTool = useCallback((entry: QuickToolEntry) => {
-    setRecentTools(pushRecentTool(entry));
-  }, []);
-
-  const showClipboardBannerRef = useRef<boolean>(prefs.proShowClipboardBanner !== false);
-  showClipboardBannerRef.current = prefs.proShowClipboardBanner !== false;
+  const isSimpleMode = Boolean(prefs.simpleMode);
+  const showClipboardBannerRef = useRef<boolean>(!isSimpleMode && prefs.proShowClipboardBanner !== false);
+  showClipboardBannerRef.current = !isSimpleMode && prefs.proShowClipboardBanner !== false;
 
   useEffect(() => {
-    if (prefs.proShowClipboardBanner === false) {
+    if (isSimpleMode || prefs.proShowClipboardBanner === false) {
       setClipboardUrlBanner(null);
     }
-  }, [prefs.proShowClipboardBanner]);
+    if (isSimpleMode) {
+      setWheelKind(null);
+    }
+  }, [isSimpleMode, prefs.proShowClipboardBanner]);
 
   // Item 8: Web Share Target (?url= / ?text=) & Smart Clipboard URL Detection
   useEffect(() => {
@@ -528,6 +555,10 @@ export default function App() {
     (toolMode ? 1 : 0) +
     (job.status === 'done' || job.status === 'failed' ? 1 : 0) +
     (wheelKind ? 1 : 0) +
+    (showTerminal ? 1 : 0) +
+    (audioStudioModal.open ? 1 : 0) +
+    (imageProModal.open ? 1 : 0) +
+    (pdfArchiveModal.open ? 1 : 0) +
     (showFileActions ? 1 : 0) +
     (showManageTools ? 1 : 0) +
     (customizeModal.open ? 1 : 0) +
@@ -554,6 +585,22 @@ export default function App() {
   useEffect(() => {
     const onPopState = () => {
       pushedHistoryDepthRef.current = Math.max(0, pushedHistoryDepthRef.current - 1);
+      if (showTerminal) {
+        setShowTerminal(false);
+        return;
+      }
+      if (audioStudioModal.open) {
+        setAudioStudioModal((p) => ({...p, open: false}));
+        return;
+      }
+      if (imageProModal.open) {
+        setImageProModal((p) => ({...p, open: false}));
+        return;
+      }
+      if (pdfArchiveModal.open) {
+        setPdfArchiveModal((p) => ({...p, open: false}));
+        return;
+      }
       if (previewTarget) {
         const shouldRevoke = !previewTarget.previewUrl;
         setPreviewTarget(null);
@@ -599,6 +646,10 @@ export default function App() {
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, [
+    showTerminal,
+    audioStudioModal.open,
+    imageProModal.open,
+    pdfArchiveModal.open,
     previewTarget,
     showMainWheelCustomize,
     customizeModal.open,
@@ -1038,6 +1089,25 @@ export default function App() {
           return;
         }
 
+        const mappedQuality: Prefs['preferredVideoQuality'] =
+          options.quality === '2160p'
+            ? 'best'
+            : options.quality === '1080p60' || options.quality === '1080p'
+              ? '1080p'
+              : options.quality === '720p'
+                ? '720p'
+                : options.quality === '480p'
+                  ? '480p'
+                  : options.quality === '360p'
+                    ? '360p'
+                    : prefs.preferredVideoQuality;
+
+        const effectivePrefs: Prefs = {
+          ...prefs,
+          ...(options.engine ? {downloadEngine: options.engine as Prefs['downloadEngine']} : {}),
+          ...(mappedQuality ? {preferredVideoQuality: mappedQuality} : {}),
+        };
+
         const item = await downloadBuiltInLink(
           url,
           options.format || 'video',
@@ -1048,9 +1118,7 @@ export default function App() {
             }
           },
           ctrl.signal,
-          options.engine
-            ? {...prefs, downloadEngine: options.engine as Prefs['downloadEngine']}
-            : prefs
+          effectivePrefs
         );
         await saveExportItems([item]);
         prependLibraryItems([item]);
@@ -2395,7 +2463,7 @@ export default function App() {
 
           {/* Zone 3: Optional Morph Terminal + Settings Gear */}
           <div className="flex items-center gap-2 shrink-0">
-            {prefs.expTerminal && (
+            {prefs.expTerminal && !isSimpleMode && (
               <button
                 type="button"
                 onClick={() => setShowTerminal(true)}
@@ -2481,7 +2549,7 @@ export default function App() {
               setTab('studio');
             }}
             onChainToStudio={
-              prefs.proShowResultChainBar !== false
+              !isSimpleMode && prefs.proShowResultChainBar !== false
                 ? (target) => {
                     handleChainExportItems(job.result.items, target ?? 'studio');
                   }
@@ -2538,8 +2606,9 @@ export default function App() {
           <LibraryScreen
             items={library}
             lang={lang}
-            showStorageSummary={prefs.proLibShowStorageSummary !== false}
-            showFoldersBar={prefs.proLibShowFoldersBar !== false}
+            simpleMode={isSimpleMode}
+            showStorageSummary={!isSimpleMode && prefs.proLibShowStorageSummary !== false}
+            showFoldersBar={!isSimpleMode && prefs.proLibShowFoldersBar !== false}
             onDownload={handleSaveOrDownload}
             onShare={handleShareItem}
             onDelete={handleDeleteExport}
@@ -2571,7 +2640,7 @@ export default function App() {
         ) : (
           <>
             {/* Item 8: Smart Clipboard Media URL Banner */}
-            {prefs.proShowClipboardBanner !== false && clipboardUrlBanner && (
+            {!isSimpleMode && prefs.proShowClipboardBanner !== false && clipboardUrlBanner && (
               <div className="mx-auto mt-3 flex w-full max-w-4xl items-center gap-2.5 px-4 sm:px-6">
                 <div className="flex w-full items-center gap-2.5 rounded-2xl border border-[var(--accent)]/45 bg-[var(--surface)] px-3.5 py-2.5 shadow-sm">
                   <Download className="h-4 w-4 shrink-0 text-[var(--accent-text)]" />
@@ -2612,11 +2681,12 @@ export default function App() {
               files={files}
               exportCount={library.length}
               lang={lang}
+              simpleMode={isSimpleMode}
               serverReady={serverReady}
               updateInfo={updateInfo}
               checkingUpdate={checkingUpdate}
               apkReadyOnDevice={apkReadyOnDevice}
-              showIntegratedEngines={Boolean(prefs.showIntegratedEngines)}
+              showIntegratedEngines={!isSimpleMode && Boolean(prefs.showIntegratedEngines)}
               activeEngineAction={prefs.lastEngineAction ?? 'update'}
               activeEngineSegment={prefs.lastEngineSegment ?? null}
               onChangeEngineAction={(action) =>
@@ -2629,9 +2699,9 @@ export default function App() {
               onRemoveFile={removeFile}
               onMoveFile={moveFile}
               onClearFiles={clearFiles}
-              onOpenConvert={() => setWheelKind('convert')}
-              onOpenTools={() => setWheelKind('tools')}
-              onOpenFileActions={() => setWheelKind('actions')}
+              onOpenConvert={() => (isSimpleMode ? openToolMode('convert') : setWheelKind('convert'))}
+              onOpenTools={() => (isSimpleMode ? openToolMode('tools') : setWheelKind('tools'))}
+              onOpenFileActions={() => (isSimpleMode ? setShowFileActions(true) : setWheelKind('actions'))}
               onOpenManageTools={() => setShowManageTools(true)}
               onCheckUpdate={handleCheckUpdate}
               onApplyUpdate={handleApplyUpdate}
@@ -2641,10 +2711,10 @@ export default function App() {
               recentTools={recentTools}
               onQuickLaunchTool={handleQuickLaunchTool}
               onOpenProSuite={handleOpenProSuite}
-              showSuitesBar={prefs.proShowStudioSuitesBar !== false}
+              showSuitesBar={!isSimpleMode && prefs.proShowStudioSuitesBar !== false}
               suitesOrder={prefs.proSuitesOrder}
               hiddenSuites={prefs.proHiddenSuites}
-              showPinnedStrip={prefs.proShowPinnedRecentStrip !== false}
+              showPinnedStrip={!isSimpleMode && prefs.proShowPinnedRecentStrip !== false}
               onHideSuitesBar={() => {
                 setPrefs((p) => ({...p, proShowStudioSuitesBar: false}));
                 showToast(
@@ -2666,8 +2736,9 @@ export default function App() {
         )}
       </main>
 
-      {/* Draggable Corner-Snapping Radial Wheel Menu FAB — ALWAYS preserved (including 30s flame & ash burn effect) */}
-      {prefs.showQuickWheel !== false &&
+      {/* Draggable Corner-Snapping Radial Wheel Menu FAB — hidden cleanly in Simple Mode */}
+      {!isSimpleMode &&
+        prefs.showQuickWheel !== false &&
         !toolMode &&
         job.status === 'idle' &&
         tab !== 'settings' && (
@@ -2732,18 +2803,22 @@ export default function App() {
           />
         )}
 
-      {/* Mobile Bottom Navigation Bar — shown strictly on mobile when Quick Wheel is disabled */}
-      {prefs.showQuickWheel === false && !toolMode && job.status === 'idle' && (
+      {/* Mobile Bottom Navigation Bar — shown on mobile when Quick Wheel is disabled OR in Simple Mode */}
+      {(isSimpleMode || prefs.showQuickWheel === false) && !toolMode && job.status === 'idle' && (
         <nav
           aria-label={lang === 'tr' ? 'Alt gezinme' : 'Bottom navigation'}
           className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t border-[var(--line)] bg-[var(--surface)]/95 px-3 pt-1.5 pb-[calc(var(--morph-safe-bottom)+0.5rem)] backdrop-blur-md md:hidden"
         >
-          {(
-            [
-              {id: 'studio' as Tab, label: t('Studio', lang), Icon: LayoutGrid},
-              {id: 'library' as Tab, label: t('Library', lang), Icon: Grid},
-              {id: 'settings' as Tab, label: t('Settings', lang), Icon: Settings},
-            ] as const
+          {(isSimpleMode
+            ? ([
+                {id: 'studio' as Tab, label: t('Studio', lang), Icon: LayoutGrid},
+                {id: 'library' as Tab, label: t('Library', lang), Icon: Grid},
+              ] as const)
+            : ([
+                {id: 'studio' as Tab, label: t('Studio', lang), Icon: LayoutGrid},
+                {id: 'library' as Tab, label: t('Library', lang), Icon: Grid},
+                {id: 'settings' as Tab, label: t('Settings', lang), Icon: Settings},
+              ] as const)
           ).map(({id, label, Icon}) => {
             const active = tab === id;
             return (
@@ -2751,7 +2826,9 @@ export default function App() {
                 key={id}
                 type="button"
                 onClick={() => setTab(id)}
-                className={`flex min-h-[44px] min-w-[78px] flex-col items-center justify-center gap-0.5 rounded-2xl px-3 py-1 text-[11px] font-semibold transition-colors ${
+                className={`flex min-h-[44px] flex-col items-center justify-center gap-0.5 rounded-2xl px-4 py-1 text-[11px] font-semibold transition-colors ${
+                  isSimpleMode ? 'min-w-[116px]' : 'min-w-[78px]'
+                } ${
                   active
                     ? 'bg-[var(--accent)]/15 text-[var(--accent-text)]'
                     : 'text-[var(--muted)] hover:text-[var(--ink)]'
@@ -2765,8 +2842,8 @@ export default function App() {
         </nav>
       )}
 
-      {/* Classic Radial WheelMenu (untouched) & Experimental Cascading Launcher routed independently by scope */}
-      {(() => {
+      {/* Classic Radial WheelMenu (untouched) & Experimental Cascading Launcher — completely disabled in Simple Mode */}
+      {!isSimpleMode && (() => {
         const useExpForCurrent = Boolean(
           prefs.expAltLauncher &&
             (wheelKind === 'main'

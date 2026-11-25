@@ -35,6 +35,7 @@ interface StudioScreenProps {
   files: PickedFile[];
   exportCount: number;
   lang: Lang;
+  simpleMode?: boolean;
   serverReady: boolean;
   updateInfo?: GithubUpdateInfo | null;
   checkingUpdate?: boolean;
@@ -72,6 +73,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   files,
   exportCount,
   lang,
+  simpleMode = false,
   serverReady,
   updateInfo = null,
   checkingUpdate = false,
@@ -150,6 +152,178 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
       onAddFiles(e.dataTransfer.files);
     }
   };
+
+  if (simpleMode) {
+    return (
+      <div className="mx-auto w-full max-w-lg px-4 pb-28 pt-7 sm:px-6 lg:pb-12 lg:pt-12">
+        <input
+          ref={docInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files?.length) onAddFiles(e.target.files);
+            e.target.value = '';
+          }}
+        />
+        <input
+          ref={mediaInputRef}
+          type="file"
+          multiple
+          accept="image/*,video/*,audio/*"
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files?.length) onAddFiles(e.target.files);
+            e.target.value = '';
+          }}
+        />
+
+        <h1 className="text-2xl font-extrabold tracking-tight text-[var(--ink)] sm:text-3xl">
+          {files.length === 0
+            ? lang === 'tr'
+              ? 'Ne yapmak istersin?'
+              : 'What would you like to do?'
+            : `${files.length} ${t('FilesReady', lang)}`}
+        </h1>
+
+        <div className="mt-5 space-y-3.5">
+          {/* Primary Simple Card: Pick / Process Files */}
+          <section
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={`w-full rounded-3xl border bg-[var(--surface)] p-5 transition-colors ${
+              dragging ? 'border-[var(--accent)] ring-2 ring-[var(--accent)]/30' : 'border-[var(--line)]'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-base font-bold text-[var(--ink)]">
+                {files.length === 0
+                  ? lang === 'tr'
+                    ? 'Dosya Dönüştür & Düzenle'
+                    : 'Convert & Edit Files'
+                  : lang === 'tr'
+                    ? 'Seçili Dosyalar'
+                    : 'Selected Files'}
+              </p>
+              {files.length > 0 && (
+                <button
+                  type="button"
+                  onClick={onClearFiles}
+                  className="text-xs font-semibold text-[var(--danger)] hover:underline"
+                >
+                  {t('Clear', lang)}
+                </button>
+              )}
+            </div>
+
+            {files.length === 0 && (
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                {lang === 'tr' ? 'Fotoğraf, PDF, video, ses veya belge seç.' : 'Choose photos, PDFs, videos, audio, or docs.'}
+              </p>
+            )}
+
+            <div className="mt-4 flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => docInputRef.current?.click()}
+                className="morph-accent-btn flex min-h-[54px] flex-1 items-center justify-center gap-2 rounded-2xl px-5 text-sm font-bold shadow-sm transition-transform active:scale-[0.98]"
+              >
+                <Plus className="h-5 w-5 shrink-0" />
+                <span>{files.length === 0 ? t('ChooseFiles', lang) : t('AddFiles', lang)}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => mediaInputRef.current?.click()}
+                title={lang === 'tr' ? 'Galeri' : t('Photos', lang)}
+                aria-label={lang === 'tr' ? 'Galeri' : t('Photos', lang)}
+                className="flex h-[54px] w-[54px] shrink-0 items-center justify-center rounded-2xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent-text)] transition-colors hover:border-[var(--accent)]"
+              >
+                <ImageIcon className="h-5 w-5" />
+              </button>
+            </div>
+
+            {files.length > 0 && (
+              <>
+                <div className="mt-4 max-h-60 divide-y divide-[var(--line)] overflow-y-auto rounded-2xl border border-[var(--line)] bg-[var(--inset)]/60">
+                  {files.map((file) => (
+                    <div key={file.id} className="flex items-center gap-3 px-3 py-2.5">
+                      <FileThumb previewUrl={file.previewUrl} kind={file.kind} alt={file.name} sizeClass="h-10 w-10" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-[var(--ink)]">{file.name}</p>
+                        <p className="font-mono-num text-xs text-[var(--muted)]">{formatBytes(file.size)}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onRemoveFile(file.id)}
+                        aria-label={t('Remove', lang)}
+                        className="flex h-9 w-9 items-center justify-center rounded-xl text-[var(--muted)] hover:bg-[var(--danger)]/12 hover:text-[var(--danger)]"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={onOpenConvert}
+                    className="morph-accent-btn flex min-h-[50px] items-center justify-center gap-2 rounded-2xl px-4 text-sm font-bold shadow-sm transition-transform active:scale-[0.98]"
+                  >
+                    <ArrowLeftRight className="h-4.5 w-4.5" />
+                    <span>{t('Convert', lang)}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onOpenTools}
+                    className="flex min-h-[50px] items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-4 text-sm font-bold text-[var(--ink)] transition-colors hover:border-[var(--accent)] active:scale-[0.98]"
+                  >
+                    <SlidersHorizontal className="h-4.5 w-4.5 text-[var(--accent-text)]" />
+                    <span>{t('Tools', lang)}</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+
+          {/* Secondary Simple Card: Download from Link */}
+          <button
+            type="button"
+            onClick={onOpenLinkDownload}
+            className="flex min-h-[70px] w-full items-center gap-3.5 rounded-3xl border border-[var(--line)] bg-[var(--surface)] px-5 py-4 text-left transition-colors hover:border-[var(--accent)]"
+          >
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--accent)]/12 text-[var(--accent-text)]">
+              <Download className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-[var(--ink)]">{t('DownloadLink', lang)}</p>
+              <p className="text-xs text-[var(--muted)]">
+                {lang === 'tr' ? 'Bağlantı yapıştır, video veya ses indir' : 'Paste a link to save video or audio'}
+              </p>
+            </div>
+            <ChevronRight className="h-5 w-5 shrink-0 text-[var(--muted)]" />
+          </button>
+
+          {/* Library Shortcut (only when files exist) */}
+          {exportCount > 0 && (
+            <button
+              type="button"
+              onClick={onOpenLibrary}
+              className="flex min-h-[56px] w-full items-center gap-3 rounded-3xl border border-[var(--line)] bg-[var(--surface)] px-5 py-3.5 text-left transition-colors hover:border-[var(--accent)]"
+            >
+              <FolderOpen className="h-5 w-5 shrink-0 text-[var(--accent-text)]" />
+              <span className="flex-1 text-sm font-bold text-[var(--ink)]">
+                {t('Library', lang)} ({exportCount})
+              </span>
+              <ChevronRight className="h-5 w-5 shrink-0 text-[var(--muted)]" />
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 pb-28 pt-5 sm:px-6 lg:pb-12 lg:pt-8">

@@ -367,6 +367,8 @@ export interface Prefs {
   theme: 'system' | 'dark' | 'light';
   preset: string;
   lang: 'tr' | 'en';
+  /** Reversible simplified interface mode — hides advanced/Pro strips without erasing user Pro settings */
+  simpleMode?: boolean;
   serverUrl: string;
   serverToken: string;
   showQuickWheel?: boolean;

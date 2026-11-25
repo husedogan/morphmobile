@@ -40,6 +40,7 @@ import {FileThumb} from './FileThumb';
 interface LibraryScreenProps {
   items: ExportItem[];
   lang: Lang;
+  simpleMode?: boolean;
   showStorageSummary?: boolean;
   showFoldersBar?: boolean;
   onDownload: (item: ExportItem) => void;
@@ -55,6 +56,7 @@ type SortKind = 'newest' | 'oldest' | 'largest' | 'smallest';
 export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   items,
   lang,
+  simpleMode = false,
   showStorageSummary = true,
   showFoldersBar = true,
   onDownload,
@@ -81,7 +83,18 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   useEffect(() => {
     setFolders(loadLibraryFolders());
     setItemTags(loadLibraryItemTags());
-  }, [showFoldersBar, items.length]);
+    if (!showFoldersBar || simpleMode) {
+      setActiveFolder('all');
+      setAddingFolder(false);
+    }
+    if (simpleMode) {
+      setFilter('all');
+      setSearchQuery('');
+      setSortBy('newest');
+      setSelectMode(false);
+      setSelectedIds([]);
+    }
+  }, [showFoldersBar, simpleMode, items.length]);
 
   const storage = useMemo(() => computeLibraryStorage(items), [items]);
 
@@ -240,13 +253,13 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
     : null;
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 pb-28 pt-5 sm:px-6 lg:pb-12 lg:pt-8">
+    <div className={`mx-auto w-full px-4 pb-28 pt-5 sm:px-6 lg:pb-12 lg:pt-8 ${simpleMode ? 'max-w-2xl' : 'max-w-5xl'}`}>
       <div className="flex items-center justify-between gap-2.5">
         <div className="min-w-0">
           <h1 className="truncate text-2xl font-extrabold tracking-tight text-[var(--ink)] sm:text-3xl">
             {t('Library', lang)}
           </h1>
-          {items.length > 0 && (
+          {!simpleMode && items.length > 0 && (
             <p className="mt-0.5 truncate text-xs text-[var(--muted)] sm:text-sm">
               {`${t('HistoryLabel', lang)} · ${items.length} ${t('HistoryRecords', lang)}`}
             </p>
@@ -255,23 +268,25 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
 
         {items.length > 0 && (
           <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setSelectMode((v) => {
-                  if (v) setSelectedIds([]);
-                  return !v;
-                });
-              }}
-              className={`flex min-h-[42px] shrink-0 items-center gap-1.5 rounded-xl border px-3.5 text-xs font-semibold whitespace-nowrap transition-colors ${
-                selectMode
-                  ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
-                  : 'border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] hover:border-[var(--accent)]'
-              }`}
-            >
-              <CheckSquare className="h-3.5 w-3.5 shrink-0" />
-              <span>{selectMode ? t('Cancel', lang) : lang === 'tr' ? 'Seç' : 'Select'}</span>
-            </button>
+            {!simpleMode && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectMode((v) => {
+                    if (v) setSelectedIds([]);
+                    return !v;
+                  });
+                }}
+                className={`flex min-h-[42px] shrink-0 items-center gap-1.5 rounded-xl border px-3.5 text-xs font-semibold whitespace-nowrap transition-colors ${
+                  selectMode
+                    ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
+                    : 'border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] hover:border-[var(--accent)]'
+                }`}
+              >
+                <CheckSquare className="h-3.5 w-3.5 shrink-0" />
+                <span>{selectMode ? t('Cancel', lang) : lang === 'tr' ? 'Seç' : 'Select'}</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setConfirmClear(true)}
@@ -285,7 +300,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
       </div>
 
       {/* Visual Storage Breakdown & 1-Tap Cleanup + Project Folders Strip (Item 25) */}
-      {items.length > 0 && (showStorageSummary || showFoldersBar) && (
+      {!simpleMode && items.length > 0 && (showStorageSummary || showFoldersBar) && (
         <div className="mt-4 space-y-2.5">
           {showStorageSummary && (
           <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-3.5">
@@ -440,7 +455,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
       )}
 
       {/* Filter Tabs + Search + Sort Bar */}
-      {items.length > 0 && (
+      {!simpleMode && items.length > 0 && (
         <div className="mt-3 space-y-2.5">
           <div className="no-scrollbar flex w-full flex-nowrap items-center gap-1 overflow-x-auto rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-1.5 sm:inline-flex sm:w-auto sm:gap-1.5">
             {filterTabs.map(({id, label, Icon}) => {
@@ -622,7 +637,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <p className="truncate text-sm font-semibold text-[var(--ink)]">{item.name}</p>
-                      {itemTags[item.id] && (() => {
+                      {showFoldersBar && itemTags[item.id] && (() => {
                         const fld = folders.find((f) => f.id === itemTags[item.id]);
                         if (!fld) return null;
                         return (
@@ -652,19 +667,21 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                   </div>
                   {!selectMode && (
                     <div className="flex shrink-0 items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const curId = itemTags[item.id];
-                          const idx = curId ? folders.findIndex((f) => f.id === curId) : -1;
-                          const nextFolder = idx + 1 < folders.length ? folders[idx + 1] : null;
-                          setItemTags(setLibraryItemFolder(item.id, nextFolder ? nextFolder.id : null));
-                        }}
-                        title={lang === 'tr' ? 'Klasör / Etiket Değiştir' : 'Assign Folder Tag'}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl text-[var(--muted)] transition-colors hover:bg-[var(--inset)] hover:text-[var(--accent-text)]"
-                      >
-                        <Tag className="h-3.5 w-3.5" />
-                      </button>
+                      {showFoldersBar && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const curId = itemTags[item.id];
+                            const idx = curId ? folders.findIndex((f) => f.id === curId) : -1;
+                            const nextFolder = idx + 1 < folders.length ? folders[idx + 1] : null;
+                            setItemTags(setLibraryItemFolder(item.id, nextFolder ? nextFolder.id : null));
+                          }}
+                          title={lang === 'tr' ? 'Klasör / Etiket Değiştir' : 'Assign Folder Tag'}
+                          className="flex h-9 w-9 items-center justify-center rounded-xl text-[var(--muted)] transition-colors hover:bg-[var(--inset)] hover:text-[var(--accent-text)]"
+                        >
+                          <Tag className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                       {canPreview && (
                         <button
                           type="button"
@@ -712,10 +729,12 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
         )}
       </div>
 
-      <p className="mt-4 flex items-center gap-1.5 text-[11px] text-[var(--muted)] sm:text-xs">
-        <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-        <span className="truncate">{t('OriginalSafeNote', lang)}</span>
-      </p>
+      {!simpleMode && (
+        <p className="mt-4 flex items-center gap-1.5 text-[11px] text-[var(--muted)] sm:text-xs">
+          <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+          <span className="truncate">{t('OriginalSafeNote', lang)}</span>
+        </p>
+      )}
 
       {/* Confirm Clear Bottom Sheet on Mobile / Dialog on Desktop */}
       {confirmClear && (
