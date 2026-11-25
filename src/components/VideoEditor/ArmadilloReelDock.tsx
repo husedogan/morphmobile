@@ -29,6 +29,7 @@ interface ArmadilloReelDockProps {
   wheelOpen: boolean;
   wheelSide: WheelSidePref;
   hideFab: boolean;
+  extraBottomOffsetPx?: number;
   onSetWheelOpen: (open: boolean) => void;
   onChangeWheelSide: (side: WheelSidePref) => void;
   onSelectTab: (tab: VideoEditorTab) => void;
@@ -56,6 +57,13 @@ const EDITOR_TOOL_SLICES: EditorToolSlice[] = [
 function polarToXY(cx: number, cy: number, r: number, angleDeg: number) {
   const rad = (angleDeg * Math.PI) / 180;
   return {x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad)};
+}
+
+function describeArcPath(cx: number, cy: number, r: number, startDeg: number, endDeg: number): string {
+  const p1 = polarToXY(cx, cy, r, startDeg);
+  const p2 = polarToXY(cx, cy, r, endDeg);
+  const largeArc = endDeg - startDeg > 180 ? 1 : 0;
+  return `M ${p1.x.toFixed(2)} ${p1.y.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
 }
 
 function describeSectorPath(
@@ -97,61 +105,87 @@ function hapticPulse(ms = 12) {
 }
 
 /**
- * Cinema Film-Reel Emblem rotating smoothly inside the rolling Armadillo hub
+ * Rolling Armadillo Cinema Wheel Emblem:
+ * - Outer 8 armored segments light up one by one in each tool's accent color as the wheel rolls up that button!
+ * - Inner cinema film-reel rotates physically with zero slip!
  */
-const CinemaReelGlyph: React.FC<{spinDeg: number}> = ({spinDeg}) => {
+const ArmadilloWheelGlyph: React.FC<{
+  spinDeg: number;
+  collectedMask: boolean[];
+}> = ({spinDeg, collectedMask}) => {
   return (
     <svg
-      viewBox="0 0 44 44"
-      className="pointer-events-none h-9 w-9"
+      viewBox="0 0 58 58"
+      className="pointer-events-none h-[58px] w-[58px]"
       style={{transform: `rotate(${spinDeg.toFixed(1)}deg)`}}
     >
+      {/* Outer armored shell background */}
+      <circle cx="29" cy="29" r="27" fill="#0E0E13" stroke="rgba(255,255,255,0.12)" strokeWidth="1.2" />
+
+      {/* 8 Color-Coded Armadillo Armor Segments around the outer rim */}
+      {EDITOR_TOOL_SLICES.map((slice, idx) => {
+        const startDeg = -90 + idx * 45 + 4;
+        const endDeg = -90 + (idx + 1) * 45 - 4;
+        const collected = collectedMask[idx];
+        return (
+          <path
+            key={slice.id}
+            d={describeArcPath(29, 29, 24.4, startDeg, endDeg)}
+            fill="none"
+            stroke={slice.accent}
+            strokeWidth={collected ? '3.1' : '1.4'}
+            strokeLinecap="round"
+            strokeOpacity={collected ? '0.96' : '0.18'}
+          />
+        );
+      })}
+
+      {/* Inner Cinema Film-Reel core */}
       <circle
-        cx="22"
-        cy="22"
-        r="18.5"
-        fill="none"
-        stroke="#F43F5E"
-        strokeWidth="1.6"
-        strokeDasharray="3.2 2.6"
-        strokeOpacity="0.92"
-      />
-      <circle
-        cx="22"
-        cy="22"
-        r="14.2"
-        fill="#111114"
-        stroke="rgba(255,255,255,0.18)"
+        cx="29"
+        cy="29"
+        r="19.2"
+        fill="#13131A"
+        stroke="rgba(244,63,94,0.45)"
         strokeWidth="1.1"
       />
+      <circle
+        cx="29"
+        cy="29"
+        r="15.8"
+        fill="none"
+        stroke="rgba(255,255,255,0.16)"
+        strokeWidth="1.1"
+        strokeDasharray="2.5 3.1"
+      />
       {[0, 60, 120, 180, 240, 300].map((deg) => {
-        const pt = polarToXY(22, 22, 8.8, deg);
+        const pt = polarToXY(29, 29, 9.8, deg);
         return (
           <circle
             key={deg}
             cx={pt.x}
             cy={pt.y}
-            r="2.65"
-            fill={deg % 120 === 0 ? '#F43F5E' : '#242429'}
+            r="3.1"
+            fill={deg % 120 === 0 ? '#F43F5E' : '#24242D'}
             stroke="#FB7185"
-            strokeOpacity={deg % 120 === 0 ? '0.98' : '0.45'}
+            strokeOpacity={deg % 120 === 0 ? '0.95' : '0.35'}
             strokeWidth="0.9"
           />
         );
       })}
-      <circle cx="22" cy="22" r="3.5" fill="#F43F5E" />
-      <circle cx="22" cy="22" r="1.45" fill="#0B0B0D" />
+      <circle cx="29" cy="29" r="4" fill="#F43F5E" />
+      <circle cx="29" cy="29" r="1.6" fill="#0B0B0E" />
     </svg>
   );
 };
 
 /**
- * Seamless Zero-Jump Armadillo Roll-Up Morph Dock + Video Editor Cinema Radial Wheel:
- * - Single persistent bottom stage — ZERO mount/unmount pop between flat bar and corner FAB!
- * - Tail-to-head polar armadillo curling: as previewHeightVh grows 46 -> 65,
- *   the 8 armored tool plates lift in a physical curved wave from the tail edge and orbit/tuck
- *   directly into the spinning golden Cinema Reel core!
- * - Dragging preview back up smoothly unrolls the plates back into the flat horizontal dock.
+ * True No-Slip Rolling Armadillo Dock + Cinema Radial Wheel:
+ * - As foldProgress goes 0 -> 1, a circular Cinema Reel forms at the tail edge and physically ROLLS
+ *   across the bottom bar (exact distance/radius rotation!), eating the flat bar from underneath and
+ *   wrapping each tool plate cleanly up around its circular rim one by one until all 8 armor segments lock in.
+ * - Ahead of the rolling wheel, remaining buttons stay 100% flat & undisturbed.
+ * - Behind the rolling wheel, the space is completely clean — zero awkward box collisions or crooked labels!
  */
 export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
   isTr,
@@ -166,30 +200,44 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
   wheelOpen,
   wheelSide,
   hideFab,
+  extraBottomOffsetPx = 0,
   onSetWheelOpen,
   onChangeWheelSide,
   onSelectTab,
 }) => {
   const tr = (t: string, e: string) => (isTr ? t : e);
 
-  // Measure viewport width cleanly for exact polar curling math
+  // Measure the actual portrait editor container width via ResizeObserver
+  const spacerRef = useRef<HTMLDivElement | null>(null);
   const [stageWidth, setStageWidth] = useState<number>(() =>
     typeof window !== 'undefined' ? window.innerWidth : 390
   );
 
   useEffect(() => {
-    const onResize = () => setStageWidth(window.innerWidth);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    const el = spacerRef.current;
+    const updateWidth = () => {
+      const measured = el?.clientWidth || el?.parentElement?.clientWidth || window.innerWidth;
+      if (measured > 0) setStageWidth(measured);
+    };
+    updateWidth();
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && el) {
+      ro = new ResizeObserver(updateWidth);
+      ro.observe(el);
+      if (el.parentElement) ro.observe(el.parentElement);
+    }
+    window.addEventListener('resize', updateWidth);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('resize', updateWidth);
+    };
   }, []);
 
-  // Direct 1:1 parallel fold driven by timeline track-bar overlap beneath the dock:
-  // foldProgress === 0 while all timeline track bars remain above the bottom buttons (100% flat & clickable).
-  // As the track bars slide underneath the dock, foldProgress advances 0 -> 1 in lockstep with the slide!
   const fold = Math.max(0, Math.min(1, foldProgress));
   const easeFold = smoothstep(fold);
   const isFlat = fold <= 0.015;
-  const isRolled = fold >= 0.96;
+  const isRolled = fold >= 0.95;
 
   // Draggable corner FAB state when rolled up
   const [fabDragPos, setFabDragPos] = useState<{x: number; y: number} | null>(null);
@@ -216,18 +264,92 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
     [activeTab]
   );
 
-  // Target wheel center X along the bottom strip
-  const wheelCx =
+  // Geometry constants
+  const dockHeight = 58;
+  const fabSize = 58;
+  const R = fabSize / 2; // 29px
+  const sideMargin = 16;
+  const plateW = Math.max(36, (stageWidth - 12) / EDITOR_TOOL_SLICES.length);
+
+  // Resting target center X of the finished wheel
+  const targetCx =
     wheelSide === 'left'
-      ? 45
+      ? sideMargin + R
       : wheelSide === 'center'
         ? stageWidth / 2
-        : stageWidth - 45;
-  const dockHeight = 56;
-  const plateW = Math.max(40, (stageWidth - 8) / 8);
+        : Math.max(R + sideMargin, stageWidth - sideMargin - R);
 
-  // Spin the reel continuously as the armadillo rolls up (360° roll-in!)
-  const hubSpinDeg = fabSpinDeg + easeFold * 360 * (wheelSide === 'left' ? -1 : 1);
+  // Rolling kinematics:
+  // - For 'right': wheel forms at left tail (x = R) and rolls right -> targetCx
+  // - For 'left': wheel forms at right tail (x = W - R) and rolls left -> targetCx
+  // - For 'center': wheel emerges at center while both left & right ribbon halves reel inward simultaneously
+  const wheelEmergence = smoothstep(fold / 0.16);
+  const rollTravelT = smoothstep((fold - 0.1) / 0.84);
+
+  const startCx =
+    wheelSide === 'left'
+      ? stageWidth - R
+      : wheelSide === 'center'
+        ? stageWidth / 2
+        : R;
+  const rollDir = wheelSide === 'left' ? -1 : 1;
+
+  const wheelCx = wheelSide === 'center' ? targetCx : lerp(startCx, targetCx, rollTravelT);
+
+  // Exact no-slip wheel rotation (angle = arcLength / radius)
+  const travelDistPx =
+    wheelSide === 'center'
+      ? rollTravelT * (stageWidth / 2 - R)
+      : Math.abs(wheelCx - startCx);
+  const rollSpinDeg =
+    fabSpinDeg +
+    (travelDistPx / R) * (180 / Math.PI) * rollDir +
+    wheelEmergence * 24 * rollDir;
+
+  // Lift the finished circular wheel gently off the bottom edge in the final settle phase
+  const settleLiftPx = Math.round(smoothstep((fold - 0.72) / 0.28) * 14);
+  const hideWholeOverlay = isRolled && hideFab;
+
+  // Remaining flat bar backing bounds (disappears cleanly right under the rolling wheel!)
+  const leftClipPx =
+    wheelSide === 'right'
+      ? lerp(0, wheelCx, Math.min(1, fold / 0.12))
+      : wheelSide === 'center'
+        ? lerp(0, targetCx - R * 0.6, rollTravelT)
+        : 0;
+  const rightClipPx =
+    wheelSide === 'left'
+      ? lerp(0, stageWidth - wheelCx, Math.min(1, fold / 0.12))
+      : wheelSide === 'center'
+        ? lerp(0, stageWidth - (targetCx + R * 0.6), rollTravelT)
+        : 0;
+  const remainingBarWidth = Math.max(0, stageWidth - leftClipPx - rightClipPx);
+  const remainingBarOpacity = fold >= 0.94 ? 0 : Math.max(0, 1 - smoothstep((fold - 0.84) / 0.1));
+
+  // Precompute each tool plate's wrap progress onto the rolling wheel rim
+  const plateGate = isFlat ? 0 : smoothstep(fold / 0.14);
+  const plateStates = EDITOR_TOOL_SLICES.map((tab, idx) => {
+    const flatCx = 6 + (idx + 0.5) * plateW;
+
+    if (wheelSide === 'center') {
+      // Symmetrical dual-tail reel-in toward center
+      const sideDir = flatCx <= targetCx ? 1 : -1;
+      const distFromEdge = sideDir === 1 ? flatCx : stageWidth - flatCx;
+      const waveEdgePx = lerp(-12, stageWidth / 2 + 24, rollTravelT);
+      const delta = waveEdgePx - distFromEdge;
+      const rawU = Math.max(0, Math.min(1, (delta + 32) / 62));
+      return {tab, idx, flatCx, dir: sideDir, u: rawU * plateGate};
+    }
+
+    // Single-wheel carpet-roll: plate lifts cleanly RIGHT BEFORE the wheel's 29px front edge touches it
+    // so icons/labels NEVER peek from behind the rolling wheel!
+    const delta = (wheelCx - flatCx) * rollDir;
+    const rawU = Math.max(0, Math.min(1, (delta + 34) / 62));
+    return {tab, idx, flatCx, dir: rollDir, u: rawU * plateGate};
+  });
+
+  // Which of the 8 armor segments on the wheel rim have been collected so far
+  const collectedMask = plateStates.map((p) => isRolled || p.u >= 0.58);
 
   // Corner drag handler for the rolled-up Cinema Reel FAB
   const handleFabPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -254,17 +376,17 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
       if (ev.pointerId !== pointerId) return;
       const dx = ev.clientX - startX;
       const dy = ev.clientY - startY;
-      if (!dragged && Math.hypot(dx, dy) > 12) {
+      if (!dragged && Math.hypot(dx, dy) > 10) {
         dragged = true;
         suppressFabClickRef.current = true;
         setIsFabDragging(true);
       }
       if (dragged) {
-        const nx = Math.max(8, Math.min(window.innerWidth - 68, originX + dx));
-        const ny = Math.max(60, Math.min(window.innerHeight - 68, originY + dy));
+        const nx = Math.max(8, Math.min(window.innerWidth - fabSize - 8, originX + dx));
+        const ny = Math.max(60, Math.min(window.innerHeight - fabSize - 12, originY + dy));
         setFabDragPos({x: nx, y: ny});
-        setFabSpinDeg((d) => d + dx * 0.14);
-        const cx = nx + 29;
+        setFabSpinDeg((d) => d + dx * 0.2);
+        const cx = nx + R;
         const relX = cx / Math.max(1, window.innerWidth);
         latestSide = relX < 0.34 ? 'left' : relX > 0.66 ? 'right' : 'center';
         setPreviewSnapSide(latestSide);
@@ -306,51 +428,42 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
     return Math.floor(normalized / 45) % EDITOR_TOOL_SLICES.length;
   }, []);
 
-  // Rolling tail-retraction clip for the flat dock background strip
-  const railLeftClipPct =
-    wheelSide === 'right'
-      ? easeFold * 92
-      : wheelSide === 'center'
-        ? easeFold * 46
-        : 0;
-  const railRightClipPct =
-    wheelSide === 'left'
-      ? easeFold * 92
-      : wheelSide === 'center'
-        ? easeFold * 46
-        : 0;
-
-  const smoothTransition = isResizingPreview
+  const stageTransition = isResizingPreview
     ? 'none'
-    : 'transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease, height 240ms cubic-bezier(0.22, 1, 0.36, 1), clip-path 260ms cubic-bezier(0.22, 1, 0.36, 1)';
+    : 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease, left 220ms cubic-bezier(0.22, 1, 0.36, 1), width 220ms cubic-bezier(0.22, 1, 0.36, 1)';
 
-  // Smooth vertical lift as the bar curls up into a floating corner wheel
-  const bottomLiftPx = Math.round(easeFold * 14);
-  const hubT = smoothstep((fold - 0.14) / 0.78);
-  const hideWholeOverlay = isRolled && hideFab;
+  // Center Y of the rolling wheel inside the stage box (sits flush on the bottom rail)
+  const wheelCy = dockHeight - R;
+
+  // Collapse spacer right as the roll begins so the timeline fills cleanly underneath and the space behind the rolling wheel is truly transparent
+  const spacerKeep = 1 - smoothstep(fold / 0.12);
 
   return (
     <>
-      {/* Layout Spacer so the flat dock never overlaps the timeline when unfolded, and smoothly collapses to 0 as it curls into a floating wheel! */}
+      {/* Layout Spacer: holds exact dock height while flat, collapses smoothly as dock rolls into corner wheel */}
       <div
+        ref={spacerRef}
         aria-hidden="true"
         style={{
-          height: `${Math.round((1 - easeFold) * dockHeight)}px`,
-          transition: isResizingPreview ? 'none' : 'height 240ms cubic-bezier(0.22, 1, 0.36, 1)',
+          height: `calc(${Math.round(spacerKeep * dockHeight)}px + var(--morph-safe-bottom, 0px))`,
+          transition: isResizingPreview ? 'none' : 'height 220ms cubic-bezier(0.22, 1, 0.36, 1)',
         }}
-        className="pb-safe shrink-0"
+        className="w-full shrink-0 bg-transparent"
       />
 
       {/* Corner Snap Zone Guides while dragging the rolled Cinema Reel FAB */}
       {isRolled && isFabDragging && (
-        <div className="pointer-events-none fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+14px)] z-[55] flex items-center justify-between">
+        <div
+          style={{bottom: 'calc(var(--morph-safe-bottom, 0px) + 14px)'}}
+          className="pointer-events-none absolute inset-x-4 z-[55] flex items-center justify-between"
+        >
           {(['left', 'center', 'right'] as WheelSidePref[]).map((s) => (
             <div
               key={s}
               className={`flex h-14 w-14 items-center justify-center rounded-full border-2 border-dashed transition-all ${
                 previewSnapSide === s
                   ? 'scale-110 border-[#F43F5E] bg-[#F43F5E]/20'
-                  : 'border-white/25 bg-black/35'
+                  : 'border-white/25 bg-black/45'
               }`}
             >
               <Film className="h-4 w-4 text-[#FB7185]" />
@@ -359,64 +472,55 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
         </div>
       )}
 
-      {/* UNIFIED PERSISTENT ARMADILLO MORPH STAGE (ZERO MOUNT/UNMOUNT JUMP!) */}
+      {/* UNIFIED ROLLING ARMADILLO STAGE (anchored inside VideoEditor portrait container) */}
       <div
         style={{
-          bottom: `calc(env(safe-area-inset-bottom) + ${bottomLiftPx}px)`,
+          bottom: `calc(var(--morph-safe-bottom, 0px) + ${settleLiftPx + extraBottomOffsetPx}px)`,
           height: `${dockHeight}px`,
-          transition: isResizingPreview ? 'none' : 'bottom 240ms cubic-bezier(0.22, 1, 0.36, 1)',
+          transition: isResizingPreview ? 'none' : 'bottom 220ms cubic-bezier(0.22, 1, 0.36, 1)',
         }}
-        className={`pointer-events-none fixed inset-x-0 z-[54] select-none transition-opacity duration-150 ${
+        className={`pointer-events-none absolute inset-x-0 z-[54] select-none transition-opacity duration-200 ${
           hideWholeOverlay ? 'invisible opacity-0' : 'opacity-100'
         }`}
       >
-        {/* Retracting Dock Backing Plate (curls inward from the tail edge toward the rolling Cinema Wheel) */}
-        {fold < 0.96 && (
+        {/* REMAINING UNROLLED FLAT BAR BACKING — Ends cleanly underneath the rolling wheel's contact tangent */}
+        {remainingBarOpacity > 0.01 && remainingBarWidth > 2 && (
           <div
             style={{
-              clipPath: `inset(0 ${railRightClipPct.toFixed(1)}% 0 ${railLeftClipPct.toFixed(1)}% round ${Math.round(easeFold * 28)}px)`,
-              opacity: Math.max(0, 1 - Math.max(0, fold - 0.68) * 3.2),
-              transition: smoothTransition,
+              left: `${leftClipPx.toFixed(1)}px`,
+              width: `${remainingBarWidth.toFixed(1)}px`,
+              opacity: remainingBarOpacity,
+              borderTopLeftRadius: wheelSide === 'right' || wheelSide === 'center' ? `${Math.round(easeFold * 16)}px` : '0px',
+              borderTopRightRadius: wheelSide === 'left' || wheelSide === 'center' ? `${Math.round(easeFold * 16)}px` : '0px',
+              transition: stageTransition,
             }}
-            className="pointer-events-none absolute inset-0 border-t border-white/[0.08] bg-gradient-to-b from-[#141418] to-[#0A0A0D]"
+            className={`absolute inset-y-0 border-t border-white/[0.09] bg-gradient-to-b from-[#14141A] to-[#0A0A0D] ${
+              isFlat ? 'pointer-events-auto' : 'pointer-events-none'
+            }`}
           />
         )}
 
-        {/* 8 ARMORED ARMADILLO TOOL PLATES — Physically curl in a tail-to-head wave & orbit into the wheel! */}
-        {fold < 0.98 &&
-          EDITOR_TOOL_SLICES.map((tab, idx) => {
+        {/* 8 TOOL SEGMENTS — Stay 100% flat until the rolling wheel reaches them, then wrap smoothly around its rim! */}
+        {fold < 0.96 &&
+          plateStates.map(({tab, flatCx, dir, u}) => {
+            if (u >= 0.99) return null;
             const Icon = tab.icon;
             const isHighlighted = activeTab === tab.id && isInspectorOpen;
-
-            // Flat center position of this plate
-            const flatCx = 4 + (idx + 0.5) * plateW;
-
-            // Distance rank from the rolling wheel head: 0 = farthest tail plate (curls FIRST!), 7 = anchor plate (curls LAST!)
-            const distFromHead = Math.abs(flatCx - wheelCx);
-            const maxDist = Math.max(1, stageWidth - 60);
-            const tailPriority = Math.min(1, distFromHead / maxDist); // 1 at tail, 0 at wheel head
-
-            // Staggered armadillo wave progress for this individual plate
-            const plateT = smoothstep((fold * 1.42 - (1 - tailPriority) * 0.34) / 1.08);
-            const curlDir = flatCx <= wheelCx ? 1 : -1;
-
-            // Target orbital position tucked right around the Cinema Reel's perimeter
-            const orbitAngleDeg = -90 + idx * 45 + easeFold * 240 * curlDir;
-            const orbitRadius = lerp(30, 14, plateT);
-            const orbitPt = polarToXY(wheelCx, dockHeight / 2, orbitRadius, orbitAngleDeg);
-
-            // Curved upward armadillo roll arc (lifts like rolling armor scales instead of sliding flat!)
-            const arcLiftY = -Math.sin(plateT * Math.PI) * (16 + tailPriority * 26);
-
-            const curX = lerp(flatCx, orbitPt.x, plateT);
-            const curY = lerp(dockHeight / 2, orbitPt.y, plateT) + arcLiftY;
-            const curScale = lerp(1, 0.36, plateT);
-            const curRotate = curlDir * plateT * (140 + tailPriority * 160);
-            const plateOpacity =
-              plateT < 0.72 ? 1 : Math.max(0, 1 - (plateT - 0.72) / 0.28);
-
             const isHoveredDock = isFlat && hoveredDockTab === tab.id;
             const isTinted = isHighlighted || isHoveredDock;
+
+            // Smooth kinematic blend from flat dock slot -> circular wheel perimeter wrap
+            const wrapEase = smoothstep(u);
+            const rimAngleDeg = 90 + dir * wrapEase * 170; // 90° bottom contact -> back -> top of rolling wheel
+            const rimPt = polarToXY(wheelCx, wheelCy, R - 4, rimAngleDeg);
+
+            const posBlend = smoothstep(u / 0.34);
+            const curX = lerp(flatCx, rimPt.x, posBlend);
+            const curY = lerp(dockHeight / 2, rimPt.y, posBlend);
+            const curRotate = dir * wrapEase * 170;
+            const curScale = lerp(1, 0.42, wrapEase);
+            const labelOpacity = Math.max(0, 1 - u * 4.2);
+            const itemOpacity = u < 0.56 ? 1 : Math.max(0, 1 - (u - 0.56) / 0.4);
 
             return (
               <button
@@ -433,56 +537,37 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
                   top: 0,
                   width: `${(plateW - 2).toFixed(1)}px`,
                   height: '46px',
-                  opacity: plateOpacity,
+                  opacity: itemOpacity,
                   transform: `translate3d(${(curX - (plateW - 2) / 2).toFixed(1)}px, ${(curY - 23).toFixed(1)}px, 0) rotate(${curRotate.toFixed(1)}deg) scale(${curScale.toFixed(3)})`,
-                  borderRadius: `${Math.round(8 + plateT * 14)}px`,
+                  borderRadius: '11px',
                   borderColor:
-                    plateT > 0.08
-                      ? `${tab.accent}${Math.round(35 + plateT * 45)
-                          .toString(16)
-                          .padStart(2, '0')}`
-                      : isHighlighted
-                        ? `${tab.accent}66`
-                        : isHoveredDock
-                          ? `${tab.accent}4D`
-                          : 'transparent',
+                    isFlat && isHighlighted
+                      ? `${tab.accent}66`
+                      : isFlat && isHoveredDock
+                        ? `${tab.accent}4D`
+                        : 'transparent',
                   backgroundColor:
-                    plateT > 0.08
-                      ? 'rgba(20, 20, 24, 0.96)'
-                      : isHighlighted
-                        ? `${tab.accent}24`
-                        : isHoveredDock
-                          ? `${tab.accent}18`
-                          : 'transparent',
-                  boxShadow:
-                    plateT > 0.1
-                      ? `0 6px 14px rgba(0,0,0,0.55), inset 0 1px 0 ${tab.accent}55`
-                      : undefined,
+                    isFlat && isHighlighted
+                      ? `${tab.accent}24`
+                      : isFlat && isHoveredDock
+                        ? `${tab.accent}18`
+                        : 'transparent',
                   color: isTinted ? tab.accent : undefined,
-                  transition: smoothTransition,
+                  transition: isResizingPreview
+                    ? 'none'
+                    : 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 160ms ease, background-color 150ms ease, border-color 150ms ease',
                 }}
-                className={`group absolute flex flex-col items-center justify-center gap-1 border px-0.5 py-1 text-[10px] font-semibold ${
+                className={`group absolute z-[2] flex flex-col items-center justify-center gap-1 border px-0.5 py-1 text-[10px] font-semibold ${
                   isFlat ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none'
-                } ${isTinted ? '' : 'text-white/65'}`}
+                } ${isTinted ? '' : 'text-white/70'}`}
               >
-                {/* Armored color-coded ridge stripe visible as the plate curls */}
-                {plateT > 0.06 && (
-                  <span
-                    style={{backgroundColor: tab.accent, opacity: Math.min(1, plateT * 1.5)}}
-                    className="pointer-events-none absolute inset-x-2 top-0.5 h-[2px] rounded-full"
-                  />
-                )}
                 <Icon
-                  className="h-[17px] w-[17px] transition-transform group-active:scale-90"
-                  style={
-                    isTinted || plateT > 0.12
-                      ? {color: tab.accent}
-                      : undefined
-                  }
+                  className="h-[17px] w-[17px] shrink-0 transition-transform group-active:scale-90"
+                  style={isTinted || u > 0.08 ? {color: tab.accent} : undefined}
                 />
                 <span
                   style={{
-                    opacity: Math.max(0, 1 - plateT * 2.2),
+                    opacity: labelOpacity,
                     color: isTinted ? tab.accent : undefined,
                   }}
                   className="max-w-full truncate leading-none"
@@ -496,8 +581,8 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
             );
           })}
 
-        {/* PERSISTENT ROLLING CINEMA REEL HUB (Emerges smoothly from the curling plates & locks as draggable FAB!) */}
-        {fold > 0.08 && (
+        {/* THE ROLLING ARMADILLO CINEMA WHEEL — Rolls across the bar and locks cleanly as the draggable FAB! */}
+        {fold > 0.015 && (
           <button
             type="button"
             onContextMenu={(e) => e.preventDefault()}
@@ -518,26 +603,26 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
                   }
                 : {
                     position: 'absolute',
-                    left: `${(wheelCx - 29).toFixed(1)}px`,
-                    top: `${(dockHeight / 2 - 29).toFixed(1)}px`,
-                    opacity: Math.min(1, hubT * 1.15),
-                    transform: `scale(${lerp(0.32, 1, hubT).toFixed(3)})`,
+                    left: `${(wheelCx - R).toFixed(1)}px`,
+                    top: `${(wheelCy - R).toFixed(1)}px`,
+                    opacity: wheelEmergence,
+                    transform: `scale(${lerp(0.45, 1, wheelEmergence).toFixed(3)})`,
                     transition: isResizingPreview
                       ? 'none'
-                      : 'transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease, left 240ms cubic-bezier(0.22, 1, 0.36, 1)',
+                      : 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease, left 220ms cubic-bezier(0.22, 1, 0.36, 1)',
                   }
             }
-            className={`group flex h-[58px] w-[58px] touch-none items-center justify-center rounded-full border-2 border-[#F43F5E]/80 bg-gradient-to-br from-[#202026] via-[#121216] to-[#08080A] shadow-[0_12px_32px_rgba(0,0,0,0.85),0_0_22px_rgba(244,63,94,0.32)] ${
-              isRolled
+            className={`group z-[5] flex h-[58px] w-[58px] touch-none items-center justify-center rounded-full bg-[#101016] shadow-[0_10px_28px_rgba(0,0,0,0.85),0_0_20px_rgba(244,63,94,0.28)] ${
+              isRolled && !hideWholeOverlay
                 ? isFabDragging
                   ? 'pointer-events-auto cursor-grabbing'
                   : 'pointer-events-auto cursor-grab active:scale-95'
                 : 'pointer-events-none'
             }`}
           >
-            {/* Outer studio film-ring halo */}
-            <span className="pointer-events-none absolute -inset-1 rounded-full border border-[#F43F5E]/25" />
-            <CinemaReelGlyph spinDeg={hubSpinDeg} />
+            {/* Outer subtle cinema halo */}
+            <span className="pointer-events-none absolute -inset-1 rounded-full border border-[#F43F5E]/30" />
+            <ArmadilloWheelGlyph spinDeg={rollSpinDeg} collectedMask={collectedMask} />
             {/* Active tool indicator dot */}
             <span
               style={{

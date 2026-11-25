@@ -410,6 +410,10 @@ export interface Prefs {
   expWheelSpinTrigger?: WheelSpinTriggerPref;
   /** Defaults to true (Armadillo Reel ON); set false to use flat StudioDock in portrait */
   expArmadilloReel?: boolean;
+  /** Defaults to true: auto-hide the rolled Cinema Wheel when preview is dragged to full height */
+  expArmadilloHideOnFullPreview?: boolean;
+  /** Defaults to true: auto-hide the rolled Cinema Wheel while video is playing, show again on pause */
+  expArmadilloHideOnPlay?: boolean;
   /** Optional extra timecode badges in Video Editor experimental bars & wheel top strip (wheel center timecode always stays ON) */
   expVideoExtraTimecodes?: boolean;
   expWheelCenterHoldCustomize?: boolean;
@@ -550,7 +554,7 @@ export const SERVER_TOOLS: ServerToolDef[] = [
     titleTr: 'Video Düzenleyici',
     titleEn: 'Video Editor',
     descTr: 'Çok katmanlı zaman çizelgesi, ses dalga formu, renk filtresi, metin katmanı, bulanık arka plan, hız, ters & bumerang.',
-    descEn: 'Pro NLE timeline with audio waveform, color grading, text captions, blur pad, trim, split, speed & boomerang.',
+    descEn: 'Multi-track NLE timeline with audio waveform, color grading, text captions, blur pad, trim, split, speed & boomerang.',
     kinds: ['video'],
     formats: ['mp4', 'mov', 'webm', 'mkv', 'gif'],
     fields: [],

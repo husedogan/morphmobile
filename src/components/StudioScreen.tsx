@@ -382,8 +382,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
           {id: ProSuiteId; icon: React.FC<{className?: string}>; tr: string; en: string; color: string}
         > = {
           audio_studio: {id: 'audio_studio', icon: Music, tr: 'Ses Stüdyosu', en: 'Audio Studio', color: 'text-emerald-400'},
-          image_pro: {id: 'image_pro', icon: Sparkles, tr: 'Görsel Kıyasla & KB', en: 'Image Pro', color: 'text-sky-400'},
-          pdf_organize: {id: 'pdf_organize', icon: FileText, tr: 'PDF Sayfa & İmza', en: 'PDF Pro', color: 'text-amber-400'},
+          image_pro: {id: 'image_pro', icon: Sparkles, tr: 'Görsel Kıyasla & KB', en: 'Image Studio', color: 'text-sky-400'},
+          pdf_organize: {id: 'pdf_organize', icon: FileText, tr: 'PDF Sayfa & İmza', en: 'PDF Studio', color: 'text-amber-400'},
           archive: {id: 'archive', icon: FolderArchive, tr: 'Arşiv Gezgini', en: 'ZIP Explorer', color: 'text-violet-400'},
           pipeline: {id: 'pipeline', icon: Workflow, tr: 'Tarif Zinciri', en: 'Pipelines', color: 'text-rose-400'},
         };
@@ -425,8 +425,8 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
                   <button
                     type="button"
                     onClick={onHideSuitesBar}
-                    title={lang === 'tr' ? 'Pro araç çubuğunu gizle' : 'Hide Pro tools bar'}
-                    aria-label={lang === 'tr' ? 'Pro araç çubuğunu gizle' : 'Hide Pro tools bar'}
+                    title={lang === 'tr' ? 'Stüdyo araç çubuğunu gizle' : 'Hide studio tools bar'}
+                    aria-label={lang === 'tr' ? 'Stüdyo araç çubuğunu gizle' : 'Hide studio tools bar'}
                     className="flex h-[38px] w-[34px] shrink-0 items-center justify-center rounded-2xl border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--ink)]"
                   >
                     <EyeOff className="h-3.5 w-3.5" />

@@ -500,7 +500,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
             </div>
             <div className="min-w-0">
               <h2 className="truncate text-base font-extrabold text-[var(--ink)]">
-                {isTr ? 'PDF, Arşiv & Otomasyon Pro' : 'PDF, Archive & Pipelines Pro'}
+                {isTr ? 'PDF, Arşiv & Otomasyon' : 'PDF, Archive & Pipelines'}
               </h2>
               <p className="truncate text-[11px] text-[var(--muted)]">
                 {isTr
@@ -816,22 +816,66 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                   </button>
                 </div>
                 {redactEnabled && (
-                  <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-                    <label className="text-[10px] text-[var(--muted)]">
-                      Sol X: %{redactX}
-                      <input type="range" min={0} max={90} value={redactX} onChange={(e) => setRedactX(Number(e.target.value))} className="w-full accent-rose-500" />
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <label className="block text-[10px] text-[var(--muted)]">
+                      <span className="flex items-center justify-between">
+                        <span>Sol X</span>
+                        <span className="font-mono-num font-bold text-[var(--accent-text)]">%{redactX}</span>
+                      </span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={90}
+                        value={redactX}
+                        onChange={(e) => setRedactX(Number(e.target.value))}
+                        style={{'--slider-pct': `${(redactX / 90) * 100}%`} as React.CSSProperties}
+                        className="morph-slider mt-1.5"
+                      />
                     </label>
-                    <label className="text-[10px] text-[var(--muted)]">
-                      Alt Y: %{redactY}
-                      <input type="range" min={0} max={94} value={redactY} onChange={(e) => setRedactY(Number(e.target.value))} className="w-full accent-rose-500" />
+                    <label className="block text-[10px] text-[var(--muted)]">
+                      <span className="flex items-center justify-between">
+                        <span>Alt Y</span>
+                        <span className="font-mono-num font-bold text-[var(--accent-text)]">%{redactY}</span>
+                      </span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={94}
+                        value={redactY}
+                        onChange={(e) => setRedactY(Number(e.target.value))}
+                        style={{'--slider-pct': `${(redactY / 94) * 100}%`} as React.CSSProperties}
+                        className="morph-slider mt-1.5"
+                      />
                     </label>
-                    <label className="text-[10px] text-[var(--muted)]">
-                      Genişlik: %{redactW}
-                      <input type="range" min={5} max={95} value={redactW} onChange={(e) => setRedactW(Number(e.target.value))} className="w-full accent-rose-500" />
+                    <label className="block text-[10px] text-[var(--muted)]">
+                      <span className="flex items-center justify-between">
+                        <span>Genişlik</span>
+                        <span className="font-mono-num font-bold text-[var(--accent-text)]">%{redactW}</span>
+                      </span>
+                      <input
+                        type="range"
+                        min={5}
+                        max={95}
+                        value={redactW}
+                        onChange={(e) => setRedactW(Number(e.target.value))}
+                        style={{'--slider-pct': `${((redactW - 5) / 90) * 100}%`} as React.CSSProperties}
+                        className="morph-slider mt-1.5"
+                      />
                     </label>
-                    <label className="text-[10px] text-[var(--muted)]">
-                      Yükseklik: %{redactH}
-                      <input type="range" min={2} max={40} value={redactH} onChange={(e) => setRedactH(Number(e.target.value))} className="w-full accent-rose-500" />
+                    <label className="block text-[10px] text-[var(--muted)]">
+                      <span className="flex items-center justify-between">
+                        <span>Yükseklik</span>
+                        <span className="font-mono-num font-bold text-[var(--accent-text)]">%{redactH}</span>
+                      </span>
+                      <input
+                        type="range"
+                        min={2}
+                        max={40}
+                        value={redactH}
+                        onChange={(e) => setRedactH(Number(e.target.value))}
+                        style={{'--slider-pct': `${((redactH - 2) / 38) * 100}%`} as React.CSSProperties}
+                        className="morph-slider mt-1.5"
+                      />
                     </label>
                   </div>
                 )}

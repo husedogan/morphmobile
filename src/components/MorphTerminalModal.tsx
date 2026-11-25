@@ -183,13 +183,13 @@ export const MorphTerminalModal: React.FC<MorphTerminalModalProps> = ({
       case 'help':
       case '?': {
         pushLines([
-          {kind: 'accent', text: isTr ? 'Kullanılabilir Morph Shell Pro Komutları:' : 'Available Morph Shell Pro Commands:'},
+          {kind: 'accent', text: isTr ? 'Kullanılabilir Morph Komut Satırı Komutları:' : 'Available Morph Shell Commands:'},
           {kind: 'out', text: '  neofetch / ls / tools [filtre] / open <hedef|id>'},
           {kind: 'out', text: '  dl / yt-dlp [-a|-t] [-q 1080p] [--trim 0:10-0:45] [--sb] [--sub tr] [--edit] <url>'},
           {kind: 'out', text: '  sniff <url>              — ' + (isTr ? 'Sayfadaki gömülü .m3u8/.mp4/.mp3 akışlarını tara' : 'Sniff embedded media streams on page')},
           {kind: 'out', text: '  queue [list|add <url>|clear] | history — ' + (isTr ? 'İndirme kuyruğu & geçmiş' : 'Download queue & history')},
-          {kind: 'out', text: '  audio [waveform|eq|silence|id3] — ' + (isTr ? 'Ses Stüdyosu Pro aç' : 'Open Audio Studio Pro')},
-          {kind: 'out', text: '  image [compare|kb|bg|ico]       — ' + (isTr ? 'Görsel Stüdyo Pro aç' : 'Open Image Studio Pro')},
+          {kind: 'out', text: '  audio [waveform|eq|silence|id3] — ' + (isTr ? 'Ses Stüdyosu aç' : 'Open Audio Studio')},
+          {kind: 'out', text: '  image [compare|kb|bg|ico]       — ' + (isTr ? 'Görsel Stüdyosu aç' : 'Open Image Studio')},
           {kind: 'out', text: '  palette / compress <kb>         — ' + (isTr ? 'Görsel renk paleti çıkar / hedef KB sıkıştır' : 'Extract HEX palette / target KB compress')},
           {kind: 'out', text: '  pdf [organize|sign]             — ' + (isTr ? 'PDF Sayfa Yöneticisi veya İmza/Sansür' : 'PDF Visual Organizer or Sign/Redact')},
           {kind: 'out', text: '  zip [ls|explore]                — ' + (isTr ? 'ZIP içeriğini listele veya Arşiv Gezgini aç' : 'List ZIP contents or open Archive Explorer')},

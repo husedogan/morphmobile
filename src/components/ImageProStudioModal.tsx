@@ -304,7 +304,7 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
             </div>
             <div className="min-w-0">
               <h2 className="truncate text-base font-extrabold text-[var(--ink)]">
-                {isTr ? 'Görsel Stüdyo Pro' : 'Image Studio Pro'}
+                {isTr ? 'Görsel Stüdyosu' : 'Image Studio'}
               </h2>
               <p className="truncate text-[11px] text-[var(--muted)]">
                 {file ? `${file.name} · ${formatBytes(file.size)}` : isTr ? 'Bir görsel seçin' : 'Pick an image'}
@@ -409,9 +409,9 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
                       </div>
                     </div>
                     <div>
-                      <label className="block text-[11px] font-bold text-[var(--muted)]">
-                        {isTr ? 'Kalite:' : 'Quality:'}{' '}
-                        <span className="font-mono-num text-[var(--ink)]">%{cmpQuality}</span>
+                      <label className="flex items-center justify-between text-[11px] font-bold text-[var(--muted)]">
+                        <span>{isTr ? 'Kalite' : 'Quality'}</span>
+                        <span className="font-mono-num text-[var(--accent-text)]">%{cmpQuality}</span>
                       </label>
                       <input
                         type="range"
@@ -419,7 +419,8 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
                         max={100}
                         value={cmpQuality}
                         onChange={(e) => setCmpQuality(Number(e.target.value))}
-                        className="mt-2 w-full accent-[var(--accent)]"
+                        style={{'--slider-pct': `${((cmpQuality - 15) / 85) * 100}%`} as React.CSSProperties}
+                        className="morph-slider mt-2"
                       />
                       <div className="mt-1.5 flex items-center gap-1.5">
                         <span className="text-[10px] text-[var(--muted)]">{isTr ? 'Maks Genişlik:' : 'Max W:'}</span>
@@ -592,27 +593,35 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <label className="text-[11px] text-[var(--muted)]">
-                        {isTr ? 'Tolerans:' : 'Tolerance:'} <span className="font-mono-num font-bold text-[var(--ink)]">{bgTol}</span>
+                    <div className="grid grid-cols-2 gap-3.5">
+                      <label className="block text-[11px] text-[var(--muted)]">
+                        <span className="flex items-center justify-between">
+                          <span>{isTr ? 'Tolerans' : 'Tolerance'}</span>
+                          <span className="font-mono-num font-bold text-[var(--accent-text)]">{bgTol}</span>
+                        </span>
                         <input
                           type="range"
                           min={8}
                           max={85}
                           value={bgTol}
                           onChange={(e) => setBgTol(Number(e.target.value))}
-                          className="mt-1 w-full accent-[var(--accent)]"
+                          style={{'--slider-pct': `${((bgTol - 8) / 77) * 100}%`} as React.CSSProperties}
+                          className="morph-slider mt-2"
                         />
                       </label>
-                      <label className="text-[11px] text-[var(--muted)]">
-                        {isTr ? 'Yumuşatma:' : 'Feather:'} <span className="font-mono-num font-bold text-[var(--ink)]">{bgFeather}</span>
+                      <label className="block text-[11px] text-[var(--muted)]">
+                        <span className="flex items-center justify-between">
+                          <span>{isTr ? 'Yumuşatma' : 'Feather'}</span>
+                          <span className="font-mono-num font-bold text-[var(--accent-text)]">{bgFeather}</span>
+                        </span>
                         <input
                           type="range"
                           min={2}
                           max={40}
                           value={bgFeather}
                           onChange={(e) => setBgFeather(Number(e.target.value))}
-                          className="mt-1 w-full accent-[var(--accent)]"
+                          style={{'--slider-pct': `${((bgFeather - 2) / 38) * 100}%`} as React.CSSProperties}
+                          className="morph-slider mt-2"
                         />
                       </label>
                     </div>

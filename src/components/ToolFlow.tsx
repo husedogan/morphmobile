@@ -754,7 +754,9 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
           lang={lang}
           initialTab={initVeTab}
           initialPreset={initVePreset}
-          expArmadilloReel={!simpleMode && prefs?.expArmadilloReel !== false}
+          expArmadilloReel={prefs?.expArmadilloReel !== false}
+          expArmadilloHideOnFullPreview={prefs?.expArmadilloHideOnFullPreview !== false}
+          expArmadilloHideOnPlay={prefs?.expArmadilloHideOnPlay !== false}
           expVideoExtraTimecodes={!simpleMode && Boolean(prefs?.expVideoExtraTimecodes)}
           expAltLauncher={!simpleMode && Boolean(prefs?.expAltLauncher) && prefs?.expAltLauncherForVideo !== false}
           expAltLauncherStyle={prefs?.expAltLauncherStyle ?? 'cascade_sheet'}
@@ -1333,7 +1335,10 @@ const SliderField: React.FC<{
       max={max}
       value={value}
       onChange={(e) => onChange(Number(e.target.value))}
-      className="h-2 w-full cursor-pointer accent-[var(--accent)]"
+      style={{
+        '--slider-pct': `${max > min ? ((value - min) / (max - min)) * 100 : 0}%`,
+      } as React.CSSProperties}
+      className="morph-slider"
     />
   </div>
 );

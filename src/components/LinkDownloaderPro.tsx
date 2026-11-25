@@ -483,7 +483,7 @@ export const LinkDownloaderPro: React.FC<LinkDownloaderProProps> = ({
         </button>
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-lg font-extrabold text-[var(--ink)]">
-            {isTr ? 'Bağlantı İndirici Pro' : 'Link Downloader Pro'}
+            {isTr ? 'Bağlantı İndirici' : 'Link Downloader'}
           </h2>
           <p className="truncate text-xs text-[var(--muted)]">
             {isTr

@@ -27,6 +27,7 @@ import {
   clipTimelineDuration,
   formatSecondsShort,
   getClipTrackIndex,
+  isClipPipOverlay,
 } from '../../engine/videoTimelineEngine';
 import {formatBytes} from '../../data/models';
 
@@ -78,6 +79,7 @@ interface ClipQuickActionPopupProps {
   onDuplicate: () => void;
   onToggleMute: () => void;
   onToggleLayer: () => void;
+  onTogglePipMode?: () => void;
   onOpenFx: () => void;
   onOpenTransition: () => void;
   onDeleteKeepGap: () => void;
@@ -98,6 +100,7 @@ export const ClipQuickActionPopup: React.FC<ClipQuickActionPopupProps> = ({
   onDuplicate,
   onToggleMute,
   onToggleLayer,
+  onTogglePipMode,
   onOpenFx,
   onOpenTransition,
   onDeleteKeepGap,
@@ -105,7 +108,9 @@ export const ClipQuickActionPopup: React.FC<ClipQuickActionPopupProps> = ({
 }) => {
   if (!open || !clip) return null;
   const tr = (t: string, e: string) => (isTr ? t : e);
-  const isV2 = getClipTrackIndex(clip) >= 1;
+  const trackIdx = getClipTrackIndex(clip);
+  const isV2 = trackIdx >= 1;
+  const isPip = isClipPipOverlay(clip);
 
   return (
     <div
@@ -126,7 +131,7 @@ export const ClipQuickActionPopup: React.FC<ClipQuickActionPopupProps> = ({
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
               <h3 className="truncate text-xs font-extrabold text-white">
-                {clip.label} {isV2 ? '· V2 PiP' : '· V1'}
+                {clip.label} {isV2 ? `· V${trackIdx + 1}${isPip ? ' PiP' : ''}` : '· V1'}
               </h3>
               <p className="font-mono-num text-[10px] text-white/50">
                 {formatSecondsShort(clip.timelineStart)} →{' '}
@@ -195,9 +200,27 @@ export const ClipQuickActionPopup: React.FC<ClipQuickActionPopupProps> = ({
             }}
             className="flex min-h-[42px] items-center gap-2 rounded-xl border border-white/[0.09] bg-white/[0.04] px-3 py-2 text-left text-xs font-bold text-white/90 hover:bg-white/[0.09]"
           >
-            <ArrowUpDown className="h-4 w-4 shrink-0 text-[#C084FC]" />
-            <span>{isV2 ? tr('V1 Ana Katman', 'Move to V1') : tr('V2 PiP Yap', 'Move to V2')}</span>
+            <ArrowUpDown className="h-4 w-4 shrink-0 text-[#FB7185]" />
+            <span>{isV2 ? tr('V1 Ana Satıra Al', 'Move to V1') : tr('V2 Alt Satıra Al', 'Move to V2')}</span>
           </button>
+
+          {isV2 && onTogglePipMode && (
+            <button
+              type="button"
+              onClick={() => {
+                onTogglePipMode();
+                onClose();
+              }}
+              className="col-span-2 flex min-h-[40px] items-center justify-center gap-2 rounded-xl border border-[#A855F7]/35 bg-[#A855F7]/12 px-3 py-2 text-xs font-bold text-[#D8B4FE] hover:bg-[#A855F7]/20"
+            >
+              <Sparkles className="h-3.5 w-3.5 shrink-0" />
+              <span>
+                {isPip
+                  ? tr('Normal Tam Ekran Videoya Çevir', 'Switch to Normal Full Video')
+                  : tr('PiP (Küçük Pencere) Moduna Çevir', 'Switch to PiP Overlay Mode')}
+              </span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -630,7 +653,8 @@ export const TransitionPickerPopup: React.FC<TransitionPickerPopupProps> = ({
                     Number(e.target.value)
                   )
                 }
-                className="h-2 w-full cursor-pointer accent-[#F43F5E]"
+                style={{'--nle-pct': `${((currentDurationSec - 0.2) / 1.8) * 100}%`} as React.CSSProperties}
+                className="morph-nle-range"
               />
             </div>
           )}

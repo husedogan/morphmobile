@@ -273,7 +273,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 onClick={() => onChainToStudio('image_pro')}
                 className="rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 py-1.5 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)]"
               >
-                {lang === 'tr' ? 'Görsel Pro’da Aç' : 'Open Image Pro'}
+                {lang === 'tr' ? 'Görsel Stüdyosu’nda Aç' : 'Open in Image Studio'}
               </button>
             )}
             {result.items.some((i) => {
@@ -306,7 +306,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 onClick={() => onChainToStudio('pdf_pro')}
                 className="rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 py-1.5 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)]"
               >
-                {lang === 'tr' ? 'PDF / Arşiv Pro’da Aç' : 'Open PDF / ZIP Pro'}
+                {lang === 'tr' ? 'PDF & Arşiv’de Aç' : 'Open in PDF & Archive'}
               </button>
             )}
           </div>

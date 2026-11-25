@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Diamond,
+  Lock,
   Maximize2,
   Minimize2,
   Move,
@@ -12,6 +13,7 @@ import {
   Redo2,
   RotateCcw,
   Undo2,
+  Unlock,
   Volume2,
   VolumeX,
 } from 'lucide-react';
@@ -24,6 +26,7 @@ import {
   clipTimelineDuration,
   formatSmpteTimecode,
   getClipTrackIndex,
+  isClipPipOverlay,
 } from '../../engine/videoTimelineEngine';
 import {InterpolatedKeyframeState} from '../../engine/keyframeEngine';
 import {EvaluatedTransitionStyle} from '../../engine/previewEngine';
@@ -54,6 +57,12 @@ interface PreviewMonitorProps {
   isFullscreenPreview: boolean;
   previewHeightVh: number;
   isResizingPreview: boolean;
+  showFloorLock?: boolean;
+  floorLockUnlocked?: boolean;
+  floorLockBumpTick?: number;
+  onUnlockPreviewFloor?: () => void;
+  onLockPreviewFloor?: () => void;
+  onStartUnlockedResize?: (clientY: number) => void;
   compareOriginal: boolean;
   splitCompareEnabled: boolean;
   splitComparePct: number;
@@ -126,6 +135,12 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
   isFullscreenPreview,
   previewHeightVh,
   isResizingPreview,
+  showFloorLock = false,
+  floorLockUnlocked = false,
+  floorLockBumpTick = 0,
+  onUnlockPreviewFloor,
+  onLockPreviewFloor,
+  onStartUnlockedResize,
   compareOriginal,
   splitCompareEnabled,
   splitComparePct,
@@ -174,6 +189,92 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
   const tr = (t: string, e: string) => (isTr ? t : e);
   const safeTotalDur = Math.max(0.2, totalTimelineDur);
   const playheadPct = Math.min(100, Math.max(0, (playhead / safeTotalDur) * 100));
+
+  // 500ms (50 salise) press-and-hold state for unlocking the downward floor lock
+  const [isHoldingFloorLock, setIsHoldingFloorLock] = React.useState(false);
+  const [holdCancelBumpTick, setHoldCancelBumpTick] = React.useState(0);
+  const floorHoldCleanupRef = React.useRef<(() => void) | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      floorHoldCleanupRef.current?.();
+      floorHoldCleanupRef.current = null;
+    };
+  }, []);
+
+  const handleFloorLockPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+
+    // If already unlocked, tapping the unlocked badge re-locks immediately
+    if (floorLockUnlocked) {
+      e.preventDefault();
+      onLockPreviewFloor?.();
+      return;
+    }
+
+    e.preventDefault();
+    floorHoldCleanupRef.current?.();
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const pointerId = e.pointerId;
+    let latestY = startY;
+    let unlockedThisHold = false;
+    let handedOffToDrag = false;
+    let timerId: number | null = null;
+
+    setIsHoldingFloorLock(true);
+
+    const cleanup = () => {
+      if (timerId !== null) {
+        window.clearTimeout(timerId);
+        timerId = null;
+      }
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      setIsHoldingFloorLock(false);
+      if (floorHoldCleanupRef.current === cleanup) {
+        floorHoldCleanupRef.current = null;
+      }
+    };
+    floorHoldCleanupRef.current = cleanup;
+
+    const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      latestY = ev.clientY;
+      if (!unlockedThisHold) {
+        if (Math.hypot(ev.clientX - startX, ev.clientY - startY) > 22) {
+          setHoldCancelBumpTick((t) => t + 1);
+          cleanup();
+        }
+      } else if (!handedOffToDrag && ev.clientY - startY > 4) {
+        handedOffToDrag = true;
+        cleanup();
+        onStartUnlockedResize?.(latestY);
+      }
+    };
+
+    const onUp = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      if (!unlockedThisHold) {
+        setHoldCancelBumpTick((t) => t + 1);
+      }
+      cleanup();
+    };
+
+    timerId = window.setTimeout(() => {
+      timerId = null;
+      unlockedThisHold = true;
+      setIsHoldingFloorLock(false);
+      onUnlockPreviewFloor?.();
+    }, 500);
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  };
   const v1Clips = project.videoClips.filter((c) => getClipTrackIndex(c) === 0);
   const externalAudios = project.audioClips.filter((a) => a.kind !== 'original');
   const activeVisualFx = compareOriginal ? 'none' : project.vfx.visualFx ?? 'none';
@@ -797,8 +898,8 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
           </div>
         )}
 
-        {/* Minimal Floating Fullscreen Corner Trigger */}
-        <div className="absolute bottom-2 right-2.5 z-20">
+        {/* Minimal Floating Fullscreen Corner Trigger (moves to top-right in fullscreen so it never collides with Cinema Wheel) */}
+        <div className={`absolute right-2.5 z-20 ${isFullscreenPreview ? 'top-2.5' : 'bottom-2'}`}>
           <StudioTooltipBtn
             tooltip={
               isFullscreenPreview
@@ -866,7 +967,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
                 width: `${Math.max(2, (clipTimelineDuration(c) / safeTotalDur) * 100)}%`,
               }}
               className={`absolute inset-y-0 rounded-full ${
-                getClipTrackIndex(c) >= 1
+                isClipPipOverlay(c)
                   ? 'bg-[#A855F7]'
                   : selectedClip?.id === c.id
                     ? 'bg-[#F43F5E]'
@@ -1029,26 +1130,93 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
                 )
               : tr('Önizleme yüksekliğini ayarlamak için sürükleyin', 'Drag to resize preview height')
           }
-          className={`group flex h-5 shrink-0 cursor-ns-resize touch-none items-center justify-center gap-2 border-b border-white/[0.05] transition-colors ${
-            expArmadilloReel && (armadilloFoldProgress > 0.015 || isExpandedWheelMode)
-              ? 'bg-[#F43F5E]/12 hover:bg-[#F43F5E]/18'
-              : 'bg-[#0B0B0E] hover:bg-white/[0.05]'
+          className={`group relative flex h-7 shrink-0 cursor-ns-resize touch-none items-center justify-center gap-2 border-b border-white/[0.05] px-2 transition-colors ${
+            floorLockUnlocked
+              ? 'bg-[#10B981]/14 hover:bg-[#10B981]/20'
+              : expArmadilloReel && (armadilloFoldProgress > 0.015 || isExpandedWheelMode)
+                ? 'bg-[#F43F5E]/12 hover:bg-[#F43F5E]/18'
+                : 'bg-[#0B0B0E] hover:bg-white/[0.05]'
           }`}
         >
           <span
-            className={`h-[3px] w-11 rounded-full transition-colors ${
-              (expArmadilloReel && (armadilloFoldProgress > 0.015 || isExpandedWheelMode)) ||
-              isResizingPreview
-                ? 'bg-[#F43F5E]'
-                : 'bg-white/25 group-hover:bg-[#FB7185]'
+            className={`h-[3px] w-10 rounded-full transition-colors ${
+              floorLockUnlocked
+                ? 'bg-[#34D399]'
+                : (expArmadilloReel && (armadilloFoldProgress > 0.015 || isExpandedWheelMode)) ||
+                    isResizingPreview
+                  ? 'bg-[#F43F5E]'
+                  : 'bg-white/25 group-hover:bg-[#FB7185]'
             }`}
           />
           {expArmadilloReel && (armadilloFoldProgress > 0.015 || isExpandedWheelMode) && (
-            <span className="text-[10px] font-bold tracking-wide text-[#FB7185]">
+            <button
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onCyclePreviewHeight();
+              }}
+              className="rounded-md px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-[#FB7185] transition-colors hover:bg-[#F43F5E]/20"
+            >
               {isExpandedWheelMode
-                ? tr('Sinema Çarkı · Yukarı çek', 'Cinema Wheel · Drag up')
-                : tr('Çarka katlanıyor…', 'Rolling into wheel…')}
-            </span>
+                ? tr('Sinema Çarkı · Geri aç', 'Cinema Wheel · Unroll')
+                : tr('Çarka yuvarlanıyor…', 'Rolling into wheel…')}
+            </button>
+          )}
+          {(showFloorLock || floorLockUnlocked) && onUnlockPreviewFloor && (
+            <button
+              key={`floor-lock-${floorLockUnlocked ? 'open' : `${floorLockBumpTick}-${holdCancelBumpTick}`}`}
+              type="button"
+              onContextMenu={(e) => e.preventDefault()}
+              onPointerDown={handleFloorLockPointerDown}
+              onClick={(e) => e.stopPropagation()}
+              title={
+                floorLockUnlocked
+                  ? tr(
+                      'Aşağı kaydırma açık · Tekrar kilitlemek için dokun',
+                      'Downward drag unlocked · Tap to re-lock'
+                    )
+                  : tr(
+                      'Tam aşağı kaydırmayı açmak için 0.5 sn basılı tut',
+                      'Press and hold 0.5s to unlock full downward drag'
+                    )
+              }
+              aria-label={
+                floorLockUnlocked
+                  ? tr('Aşağı kaydırma açık', 'Downward drag unlocked')
+                  : tr('Kilidi açmak için 0.5 saniye basılı tut', 'Hold 0.5s to unlock downward drag')
+              }
+              className={`relative ml-0.5 flex h-5 touch-none items-center gap-1 overflow-hidden rounded-md border px-1.5 text-[9.5px] font-extrabold transition-colors ${
+                floorLockUnlocked
+                  ? 'border-[#34D399]/65 bg-[#10B981]/24 text-[#6EE7B7] shadow-[0_0_10px_rgba(16,185,129,0.35)]'
+                  : isHoldingFloorLock
+                    ? 'scale-[1.04] border-[#34D399]/75 bg-[#10B981]/14 text-white shadow-[0_0_10px_rgba(16,185,129,0.28)]'
+                    : `border-white/22 bg-white/[0.08] text-white/85 hover:border-[#FB7185]/60 hover:bg-[#F43F5E]/20 hover:text-white ${
+                        floorLockBumpTick > 0 || holdCancelBumpTick > 0 ? 'morph-floor-lock-bump' : ''
+                      }`
+              }`}
+            >
+              {isHoldingFloorLock && !floorLockUnlocked && (
+                <>
+                  <span
+                    aria-hidden="true"
+                    className="morph-floor-hold-bar pointer-events-none absolute inset-0 bg-[#10B981]/32"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="morph-floor-hold-bar pointer-events-none absolute inset-x-0 bottom-0 h-[2px] bg-[#34D399]"
+                  />
+                </>
+              )}
+              {floorLockUnlocked ? (
+                <>
+                  <Unlock className="relative z-10 h-3 w-3 shrink-0" />
+                  <span className="relative z-10">{tr('Açık', 'Open')}</span>
+                </>
+              ) : (
+                <Lock className="relative z-10 h-3 w-3 shrink-0" />
+              )}
+            </button>
           )}
         </div>
       )}

@@ -48,16 +48,30 @@ export const DEFAULT_PREFS: Prefs = {
   cobaltApiKey: '',
   quickEnginePicker: false,
   wheelConfig: DEFAULT_WHEEL_CONFIG,
+  proShowStudioSuitesBar: false,
+  proShowPinnedRecentStrip: false,
+  proShowResultChainBar: false,
+  proShowClipboardBanner: false,
 };
 
 export function loadPrefs(): Prefs {
   try {
     const raw = localStorage.getItem(PREFS_KEY);
     if (!raw) return DEFAULT_PREFS;
-    const parsed = JSON.parse(raw) as Partial<Prefs> & {enginesDefaultV2?: boolean};
+    const parsed = JSON.parse(raw) as Partial<Prefs> & {
+      enginesDefaultV2?: boolean;
+      studioLayoutDefaultOffV1?: boolean;
+    };
     const showIntegratedEngines = parsed.enginesDefaultV2
       ? Boolean(parsed.showIntegratedEngines)
       : false;
+    const studioMigrated = Boolean(parsed.studioLayoutDefaultOffV1);
+    const proShowStudioSuitesBar = studioMigrated ? Boolean(parsed.proShowStudioSuitesBar) : false;
+    const proShowPinnedRecentStrip = studioMigrated
+      ? Boolean(parsed.proShowPinnedRecentStrip)
+      : false;
+    const proShowResultChainBar = studioMigrated ? Boolean(parsed.proShowResultChainBar) : false;
+    const proShowClipboardBanner = studioMigrated ? Boolean(parsed.proShowClipboardBanner) : false;
     const mainWheelItems =
       Array.isArray(parsed.mainWheelItems) && parsed.mainWheelItems.length > 0
         ? parsed.mainWheelItems
@@ -68,6 +82,10 @@ export function loadPrefs(): Prefs {
       showQuickWheel: parsed.showQuickWheel !== false,
       mainWheelItems,
       showIntegratedEngines,
+      proShowStudioSuitesBar,
+      proShowPinnedRecentStrip,
+      proShowResultChainBar,
+      proShowClipboardBanner,
       wheelConfig: {
         ...DEFAULT_WHEEL_CONFIG,
         ...(parsed.wheelConfig ?? {}),
@@ -80,7 +98,10 @@ export function loadPrefs(): Prefs {
 
 export function savePrefs(prefs: Prefs): void {
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({...prefs, enginesDefaultV2: true}));
+    localStorage.setItem(
+      PREFS_KEY,
+      JSON.stringify({...prefs, enginesDefaultV2: true, studioLayoutDefaultOffV1: true})
+    );
   } catch {
     // Ignore quota errors
   }

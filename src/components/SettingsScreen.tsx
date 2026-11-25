@@ -21,11 +21,9 @@ import {
   Info,
   Layers,
   Lock,
-  Minus,
   Moon,
   Palette,
   Play,
-  Plus,
   RefreshCw,
   RotateCcw,
   Share2,
@@ -37,11 +35,11 @@ import {
   Trash2,
   Volume2,
   Wifi,
+  X,
 } from 'lucide-react';
 import {Lang, t} from '../data/i18n';
 import {
   CornerStylePref,
-  DEFAULT_VE_SIZING,
   DownloadEngineId,
   EXP_WHEEL_SHAPES,
   ExpLauncherLabelMode,
@@ -49,8 +47,6 @@ import {
   ExpLauncherTextSize,
   Prefs,
   UiScalePref,
-  VE_SIZING_BOUNDS,
-  VideoEditorSizingPrefs,
   VideoQualityPref,
   WHEEL_BURN_STYLES,
   WHEEL_SPIN_MODES,
@@ -59,7 +55,6 @@ import {
   WheelSidePref,
   WheelSpinModePref,
   WheelSpinTriggerPref,
-  clampVideoEditorSizing,
   formatBytes,
 } from '../data/models';
 import {
@@ -106,7 +101,12 @@ import {
 } from '../engine/nativeBridge';
 import {deleteNleProjectIdb, listNleProjectsIdb} from '../engine/projectStorage';
 import {PWAInstallButton} from './PWAInstallButton';
-import {SettingsProTab} from './SettingsProTab';
+import {
+  DEFAULT_PRO_SUITES_ORDER,
+  SettingsDownloadsExtra,
+  SettingsProTab,
+  SettingsStudioLayoutCard,
+} from './SettingsProTab';
 
 export type SettingsCategory = 'appearance' | 'pro' | 'downloads' | 'permissions' | 'experimental' | 'about';
 
@@ -250,17 +250,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   });
   const [expTabVisible, setExpTabVisible] = useState<boolean>(() => {
     try {
-      return (
-        typeof window !== 'undefined' &&
-        (window.sessionStorage.getItem(EXP_TAB_VISIBLE_KEY) === '1' ||
-          window.sessionStorage.getItem(EXP_UNLOCK_KEY) === '1')
-      );
+      return typeof window !== 'undefined' && window.sessionStorage.getItem(EXP_UNLOCK_KEY) === '1';
     } catch {
       return false;
     }
   });
-  const expTabVisibleRef = useRef(expTabVisible);
-  expTabVisibleRef.current = expTabVisible;
+  const expTabVisibleRef = useRef(expTabVisible && expUnlocked);
+  expTabVisibleRef.current = expTabVisible && expUnlocked;
 
   useEffect(() => {
     if (initialCategory === 'experimental' && !expTabVisibleRef.current) {
@@ -280,10 +276,31 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
   const permShieldTapCountRef = useRef(0);
   const permShieldLastTapRef = useRef(0);
+  const expGateInputRef = useRef<HTMLInputElement | null>(null);
+  const [expGateOpen, setExpGateOpen] = useState(false);
   const [expPassInput, setExpPassInput] = useState('');
   const [expPassVisible, setExpPassVisible] = useState(false);
   const [expPassError, setExpPassError] = useState(false);
   const [expSpinDetailsOpen, setExpSpinDetailsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!expGateOpen) return;
+    const focusTimer = window.setTimeout(() => {
+      expGateInputRef.current?.focus();
+    }, 40);
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') {
+        setExpGateOpen(false);
+        setExpPassInput('');
+        setExpPassError(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.clearTimeout(focusTimer);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [expGateOpen]);
 
   const handlePermShieldTap = () => {
     const now = Date.now();
@@ -295,19 +312,21 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
     if (permShieldTapCountRef.current >= 7) {
       permShieldTapCountRef.current = 0;
-      if (!expTabVisible) {
-        setExpTabVisible(true);
-        try {
-          window.sessionStorage.setItem(EXP_TAB_VISIBLE_KEY, '1');
-        } catch {
-          // Ignore storage restrictions
+      if (expUnlocked) {
+        if (!expTabVisible) {
+          setExpTabVisible(true);
+          try {
+            window.sessionStorage.setItem(EXP_TAB_VISIBLE_KEY, '1');
+          } catch {
+            // Ignore storage restrictions
+          }
         }
         setCategory('experimental');
-        onShowToast?.(
-          lang === 'tr' ? 'Deneysel sekmesi açıldı.' : 'Experimental tab revealed.'
-        );
       } else {
-        setCategory('experimental');
+        setExpPassInput('');
+        setExpPassError(false);
+        setExpPassVisible(false);
+        setExpGateOpen(true);
       }
     }
   };
@@ -329,8 +348,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     if (verifyExpPassphrase(expPassInput)) {
       setExpUnlocked(true);
       setExpTabVisible(true);
+      setExpGateOpen(false);
       setExpPassInput('');
       setExpPassError(false);
+      setCategory('experimental');
       try {
         window.sessionStorage.setItem(EXP_UNLOCK_KEY, '1');
         window.sessionStorage.setItem(EXP_TAB_VISIBLE_KEY, '1');
@@ -338,16 +359,26 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         // Ignore storage restrictions
       }
       onShowToast?.(
-        lang === 'tr' ? 'Deneysel sekmesinin kilidi açıldı.' : 'Experimental tab unlocked.'
+        lang === 'tr' ? 'Deneysel sekmesi açıldı.' : 'Experimental tab unlocked.'
       );
     } else {
       setExpPassError(true);
+      setExpUnlocked(false);
+      setExpTabVisible(false);
+      try {
+        window.sessionStorage.removeItem(EXP_UNLOCK_KEY);
+        window.sessionStorage.removeItem(EXP_TAB_VISIBLE_KEY);
+      } catch {
+        // Ignore storage restrictions
+      }
+      expGateInputRef.current?.focus();
     }
   };
 
   const handleExpLock = () => {
     setExpUnlocked(false);
     setExpTabVisible(false);
+    setExpGateOpen(false);
     setExpPassInput('');
     setExpPassError(false);
     setCategory('permissions');
@@ -575,11 +606,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   }> = [
     {id: 'appearance', label: t('SetCatAppearance', lang), Icon: Palette},
     ...(!simpleMode
-      ? [{id: 'pro' as const, label: lang === 'tr' ? 'Pro Modüller' : 'Pro Modules', Icon: Layers}]
+      ? [{id: 'pro' as const, label: lang === 'tr' ? 'Gelişmiş' : 'Advanced', Icon: Layers}]
       : []),
     {id: 'downloads', label: t('SetCatDownloads', lang), Icon: Download},
     {id: 'permissions', label: t('SetCatPermissions', lang), Icon: ShieldCheck},
-    ...(expTabVisible
+    ...(expUnlocked && expTabVisible
       ? [{id: 'experimental' as const, label: lang === 'tr' ? 'Deneysel' : 'Experimental', Icon: FlaskConical}]
       : []),
     {id: 'about', label: t('SetCatAbout', lang), Icon: Smartphone},
@@ -653,8 +684,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 </p>
                 <p className="mt-0.5 text-xs text-[var(--muted)]">
                   {lang === 'tr'
-                    ? 'Açık · Kapattığında tüm Pro araçlar ve ayarların geri gelir.'
-                    : 'On · Turn off anytime to restore all Pro tools & settings.'}
+                    ? 'Açık · Kapattığında tüm gelişmiş araçlar ve ayarların geri gelir.'
+                    : 'On · Turn off anytime to restore all advanced tools & settings.'}
                 </p>
               </div>
               <span className="morph-switch shrink-0" data-checked="true">
@@ -778,11 +809,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </h1>
       </div>
 
-      {/* 5-Category Expanding Icon Tab Bar — inactive tabs collapse to icons, active tab smoothly expands */}
+      {/* Expanding Icon Tab Bar — active tab always fits its full label cleanly on mobile */}
       <div
         role="tablist"
         aria-label={t('Settings', lang)}
-        className="mt-4 flex w-full items-center gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-1.5 sm:inline-flex sm:w-auto"
+        className="no-scrollbar mt-4 flex w-full items-center gap-1 overflow-x-auto rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-1.5 sm:inline-flex sm:w-auto sm:gap-1.5"
       >
         {categories.map(({id, label, Icon}) => {
           const active = category === id;
@@ -795,20 +826,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               aria-label={label}
               title={label}
               onClick={() => setCategory(id)}
-              className={`flex min-h-[44px] items-center justify-center overflow-hidden rounded-xl text-xs font-semibold whitespace-nowrap transition-[flex-grow,width,padding,background-color,color] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+              className={`flex min-h-[44px] items-center justify-center rounded-xl text-xs font-semibold whitespace-nowrap transition-colors duration-200 ${
                 active
-                  ? 'morph-accent-solid flex-1 gap-2 px-4 shadow-sm sm:flex-none sm:px-4'
-                  : 'w-11 shrink-0 px-0 text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)]'
+                  ? 'morph-accent-solid shrink-0 gap-1.5 px-3.5 shadow-sm sm:gap-2 sm:px-4'
+                  : 'min-w-[34px] flex-1 px-0 text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)] sm:w-11 sm:flex-none'
               }`}
             >
               <Icon className="h-4 w-4 shrink-0" />
-              <span
-                className={`inline-block overflow-hidden transition-[max-width,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-                  active ? 'max-w-[140px] opacity-100' : 'max-w-0 opacity-0'
-                }`}
-              >
-                {label}
-              </span>
+              {active && <span className="whitespace-nowrap">{label}</span>}
             </button>
           );
         })}
@@ -847,8 +872,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       ? 'Basit Mod açıldı — arayüz sadeleştirildi.'
                       : 'Simple Mode enabled — clean interface active.'
                     : lang === 'tr'
-                      ? 'Basit Mod kapatıldı — tüm Pro araçlar ve ayarların geri geldi.'
-                      : 'Simple Mode off — all Pro tools and preferences restored.'
+                      ? 'Basit Mod kapatıldı — tüm gelişmiş araçlar ve ayarların geri geldi.'
+                      : 'Simple Mode off — all advanced tools and preferences restored.'
                 );
               }}
               aria-pressed={simpleMode}
@@ -877,8 +902,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   </div>
                   <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
                     {lang === 'tr'
-                      ? 'Ekran çok dolu geliyorsa Pro çubukları, kısayol şeritleri, gelişmiş indirme sekmeleri ve klasör etiketlerini gizler. Kapattığında tüm ayarların aynen geri gelir.'
-                      : 'Hides Pro tool strips, pinned bars, advanced downloader tabs, and extra panels for a calm workspace. Turning it off restores all your Pro preferences.'}
+                      ? 'Ekran çok dolu geliyorsa stüdyo çubukları, kısayol şeritleri, gelişmiş indirme sekmeleri ve klasör etiketlerini gizler. Kapattığında tüm ayarların aynen geri gelir.'
+                      : 'Hides studio tool strips, pinned bars, advanced downloader tabs, and extra panels for a calm workspace. Turning it off restores all your preferences.'}
                   </p>
                 </div>
               </div>
@@ -886,6 +911,34 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 <span className="morph-switch-thumb" />
               </span>
             </button>
+          </section>
+
+          {/* Language Card — placed right near the top for instant access */}
+          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4.5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-sm font-extrabold text-[var(--ink)]">{t('Language', lang)}</h2>
+              <div className="flex w-full gap-2 sm:w-auto sm:min-w-[220px]">
+                {(
+                  [
+                    ['tr', 'Türkçe'],
+                    ['en', 'English'],
+                  ] as const
+                ).map(([code, label]) => (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => onChangePrefs((p) => ({...p, lang: code}))}
+                    className={`min-h-[42px] flex-1 rounded-2xl border px-3 text-xs font-bold transition-colors whitespace-nowrap ${
+                      prefs.lang === code
+                        ? 'border-[var(--accent)] bg-[var(--accent)]/18 text-[var(--ink)]'
+                        : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </section>
 
           {/* Instant Recovery Card in Appearance when the Home Quick Wheel is turned OFF */}
@@ -1296,62 +1349,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               </span>
             </button>
 
-            {/* Studio Pro Suites Bar Visibility Toggle (Home Screen) */}
-            <button
-              type="button"
-              onClick={() =>
-                onChangePrefs((p) => ({...p, proShowStudioSuitesBar: p.proShowStudioSuitesBar === false}))
-              }
-              className="mt-3 flex min-h-[64px] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
-            >
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-[var(--ink)]">
-                  {lang === 'tr'
-                    ? 'Ana Ekranda Pro Araç Çubuğunu Göster'
-                    : 'Show Pro Tools Bar on Home'}
-                </p>
-                <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
-                  {lang === 'tr'
-                    ? 'Ses Stüdyosu, Görsel Kıyasla, PDF, Arşiv ve Tarif Zinciri butonlarını ana ekranda göster veya gizle.'
-                    : 'Show or hide Audio Studio, Image Pro, PDF, ZIP and Pipeline pills on Studio.'}
-                </p>
-              </div>
-              <span
-                className="morph-switch"
-                data-checked={prefs.proShowStudioSuitesBar !== false ? 'true' : 'false'}
-              >
-                <span className="morph-switch-thumb" />
-              </span>
-            </button>
-
-            {/* Studio Pinned & Recent Shortcuts Strip Visibility Toggle (Home Screen) */}
-            <button
-              type="button"
-              onClick={() =>
-                onChangePrefs((p) => ({...p, proShowPinnedRecentStrip: p.proShowPinnedRecentStrip === false}))
-              }
-              className="mt-3 flex min-h-[64px] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
-            >
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-[var(--ink)]">
-                  {lang === 'tr'
-                    ? 'Sabitlenen & Son Araçlar Şeridini Göster'
-                    : 'Show Pinned & Recent Shortcuts Strip'}
-                </p>
-                <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
-                  {lang === 'tr'
-                    ? 'Ana ekrandaki iğneli hızlı kısayol (📌) satırını göster veya gizle.'
-                    : 'Show or hide the pinned quick-access shortcuts row on Studio.'}
-                </p>
-              </div>
-              <span
-                className="morph-switch"
-                data-checked={prefs.proShowPinnedRecentStrip !== false ? 'true' : 'false'}
-              >
-                <span className="morph-switch-thumb" />
-              </span>
-            </button>
-
             {/* Tool Labels & Descriptions Toggle (Icon-First vs Text Mode) */}
             <button
               type="button"
@@ -1376,165 +1373,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 <span className="morph-switch-thumb" />
               </span>
             </button>
-
-            {/* Video Editor Control Sizing (Safe-Bounded Customization) */}
-            {(() => {
-              const veSizing = clampVideoEditorSizing(prefs.videoEditorSizing);
-              const isCustomSizing =
-                veSizing.dockTabHeight !== DEFAULT_VE_SIZING.dockTabHeight ||
-                veSizing.controlBtnSize !== DEFAULT_VE_SIZING.controlBtnSize ||
-                veSizing.colorSwatchSize !== DEFAULT_VE_SIZING.colorSwatchSize ||
-                veSizing.watermarkGridHeight !== DEFAULT_VE_SIZING.watermarkGridHeight;
-              const patchSizing = (patch: Partial<VideoEditorSizingPrefs>) =>
-                onChangePrefs((p) => ({
-                  ...p,
-                  videoEditorSizing: {...p.videoEditorSizing, ...patch},
-                }));
-              return (
-                <div className="mt-4 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <p className="text-xs font-bold text-[var(--ink)]">
-                        {lang === 'tr' ? 'Video Düzenleyici Kontrol Boyutları' : 'Video Editor Control Sizes'}
-                      </p>
-                      <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
-                        {lang === 'tr'
-                          ? 'Alt stüdyo simgeleri, FPS/kapatma butonları, renk noktaları ve filigran ızgarasını düzeni bozmadan büyüt veya küçült.'
-                          : 'Resize bottom dock icons, buttons, color swatches, and watermark grid safely without breaking layout.'}
-                      </p>
-                    </div>
-                    {isCustomSizing && (
-                      <button
-                        type="button"
-                        onClick={() => patchSizing(DEFAULT_VE_SIZING)}
-                        className="flex min-h-[34px] items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-2.5 text-[11px] font-semibold text-[var(--ink)] hover:border-[var(--accent)]"
-                      >
-                        <RotateCcw className="h-3 w-3 text-[var(--accent-text)]" />
-                        <span>{lang === 'tr' ? 'Sıfırla' : 'Reset'}</span>
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Quick Size Presets */}
-                  <div className="mt-3 grid grid-cols-3 gap-1.5">
-                    {(
-                      [
-                        {
-                          id: 'compact',
-                          label: lang === 'tr' ? 'Kompakt' : 'Compact',
-                          vals: {dockTabHeight: 38, controlBtnSize: 30, colorSwatchSize: 26, watermarkGridHeight: 32},
-                        },
-                        {
-                          id: 'default',
-                          label: lang === 'tr' ? 'Varsayılan' : 'Default',
-                          vals: DEFAULT_VE_SIZING,
-                        },
-                        {
-                          id: 'large',
-                          label: lang === 'tr' ? 'Büyük' : 'Large',
-                          vals: {dockTabHeight: 52, controlBtnSize: 42, colorSwatchSize: 38, watermarkGridHeight: 46},
-                        },
-                      ] as const
-                    ).map((preset) => {
-                      const active =
-                        veSizing.dockTabHeight === preset.vals.dockTabHeight &&
-                        veSizing.controlBtnSize === preset.vals.controlBtnSize &&
-                        veSizing.colorSwatchSize === preset.vals.colorSwatchSize &&
-                        veSizing.watermarkGridHeight === preset.vals.watermarkGridHeight;
-                      return (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          onClick={() => patchSizing(preset.vals)}
-                          className={`min-h-[38px] rounded-xl border text-xs font-semibold transition-colors ${
-                            active
-                              ? 'border-[var(--accent)] bg-[var(--surface)] text-[var(--ink)] shadow-sm'
-                              : 'border-[var(--line)] bg-[var(--surface)]/60 text-[var(--muted)] hover:text-[var(--ink)]'
-                          }`}
-                        >
-                          {preset.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Per-element Safe Clamped Size Sliders */}
-                  <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                    {(
-                      [
-                        {
-                          key: 'dockTabHeight',
-                          labelTr: 'Alt Stüdyo Simgeleri',
-                          labelEn: 'Bottom Dock Icons',
-                        },
-                        {
-                          key: 'controlBtnSize',
-                          labelTr: 'Editör & Pencere Butonları',
-                          labelEn: 'Editor & Popup Buttons',
-                        },
-                        {
-                          key: 'colorSwatchSize',
-                          labelTr: 'Renk Seçim Noktaları',
-                          labelEn: 'Color Swatch Dots',
-                        },
-                        {
-                          key: 'watermarkGridHeight',
-                          labelTr: 'Filigran 9-Nokta Izgarası',
-                          labelEn: 'Watermark 9-Point Grid',
-                        },
-                      ] as const
-                    ).map(({key, labelTr, labelEn}) => {
-                      const b = VE_SIZING_BOUNDS[key];
-                      const cur = veSizing[key];
-                      return (
-                        <div
-                          key={key}
-                          className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-2.5"
-                        >
-                          <div className="flex items-center justify-between gap-2 text-[11px]">
-                            <span className="truncate font-semibold text-[var(--ink)]">
-                              {lang === 'tr' ? labelTr : labelEn}
-                            </span>
-                            <span className="font-mono-num shrink-0 font-bold text-[var(--accent-text)]">
-                              {cur}px
-                            </span>
-                          </div>
-                          <div className="mt-2 flex items-center gap-2">
-                            <button
-                              type="button"
-                              disabled={cur <= b.min}
-                              aria-label={`${labelTr} -`}
-                              onClick={() => patchSizing({[key]: Math.max(b.min, cur - b.step)})}
-                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] disabled:opacity-35"
-                            >
-                              <Minus className="h-3.5 w-3.5" />
-                            </button>
-                            <input
-                              type="range"
-                              min={b.min}
-                              max={b.max}
-                              step={b.step}
-                              value={cur}
-                              onChange={(e) => patchSizing({[key]: Number(e.target.value)})}
-                              className="morph-slider flex-1"
-                            />
-                            <button
-                              type="button"
-                              disabled={cur >= b.max}
-                              aria-label={`${labelTr} +`}
-                              onClick={() => patchSizing({[key]: Math.min(b.max, cur + b.step)})}
-                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] disabled:opacity-35"
-                            >
-                              <Plus className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })()}
           </section>
           )}
 
@@ -1787,45 +1625,16 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 </div>
               </div>
             </div>
-          </section>
-          )}
 
-          <div className={`grid grid-cols-1 gap-5 ${!simpleMode && onOpenWheelCustomize ? 'sm:grid-cols-2' : ''}`}>
-            {/* Language Card */}
-            <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
-              <h2 className="text-base font-bold text-[var(--ink)]">{t('Language', lang)}</h2>
-              <div className="mt-3 flex gap-2">
-                {(
-                  [
-                    ['tr', 'Türkçe'],
-                    ['en', 'English'],
-                  ] as const
-                ).map(([code, label]) => (
-                  <button
-                    key={code}
-                    type="button"
-                    onClick={() => onChangePrefs((p) => ({...p, lang: code}))}
-                    className={`min-h-[44px] flex-1 rounded-2xl border text-xs font-semibold transition-colors whitespace-nowrap ${
-                      prefs.lang === code
-                        ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
-                        : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            {/* Radial Wheel Customization Card */}
-            {!simpleMode && onOpenWheelCustomize && (
-              <section className="flex flex-col justify-between rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
-                <div>
-                  <div className="flex items-center justify-between gap-2">
-                    <h2 className="text-base font-bold text-[var(--ink)]">
+            {/* Unified Studio Radial Wheel Customization Row inside the same Wheel card */}
+            {onOpenWheelCustomize && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-xs font-bold text-[var(--ink)]">
                       {t('WheelCustomizeTitle', lang)}
-                    </h2>
-                    <span className="text-xs font-semibold text-[var(--accent)] whitespace-nowrap">
+                    </p>
+                    <span className="rounded-md bg-[var(--accent)]/15 px-1.5 py-0.5 text-[10px] font-bold text-[var(--accent-text)] whitespace-nowrap">
                       {prefs.wheelConfig?.mode === 'all'
                         ? t('WheelModeAll', lang)
                         : prefs.wheelConfig?.mode === 'pinned'
@@ -1833,229 +1642,29 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                           : t('WheelModeSmart', lang)}
                     </span>
                   </div>
-                  <p className="mt-1.5 text-xs leading-relaxed text-[var(--muted)]">
+                  <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
                     {t('WheelHoldHint', lang)}
                   </p>
                 </div>
-
                 <button
                   type="button"
                   onClick={onOpenWheelCustomize}
-                  className="morph-tonal-btn mt-4 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl px-4 text-xs font-semibold whitespace-nowrap transition-transform active:scale-[0.98]"
+                  className="morph-tonal-btn flex min-h-[40px] shrink-0 items-center justify-center gap-1.5 rounded-xl px-3.5 text-xs font-semibold whitespace-nowrap transition-transform active:scale-[0.98]"
                 >
                   <SlidersHorizontal className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
                   <span>{t('WheelCustomizeOpenBtn', lang)}</span>
                 </button>
-              </section>
+              </div>
             )}
-          </div>
+          </section>
+          )}
         </div>
       )}
 
-      {/* CATEGORY 2: SMART DOWNLOADS, ENGINES, COBALT & SERVER */}
+      {/* CATEGORY 2: DOWNLOAD ENGINES, QUALITY/SPEED, PARALLEL ACCEL, DEFAULTS, SERVER & DIAGNOSTICS */}
       {category === 'downloads' && (
         <div className="mt-5 space-y-5">
-          {/* Smart Download Preferences */}
-          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
-                  <Wifi className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold leading-tight text-[var(--ink)]">
-                    {t('DownloadPrefsSection', lang)}
-                  </h2>
-                  <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
-                    {t('DownloadPrefsDesc', lang)}
-                  </p>
-                </div>
-              </div>
-
-              <span className="text-xs font-semibold text-[var(--muted)] whitespace-nowrap">
-                {liveNetLabel}
-              </span>
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => onChangePrefs((p) => ({...p, downloadWifiOnly: !p.downloadWifiOnly}))}
-                className="flex min-h-[72px] items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
-              >
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-[var(--ink)]">{t('DownloadWifiOnly', lang)}</p>
-                  <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
-                    {t('DownloadWifiOnlyDesc', lang)}
-                  </p>
-                </div>
-                <span className="morph-switch" data-checked={wifiOnly ? 'true' : 'false'}>
-                  <span className="morph-switch-thumb" />
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() =>
-                  onChangePrefs((p) => ({...p, autoFallbackEngine: p.autoFallbackEngine === false}))
-                }
-                className="flex min-h-[72px] items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
-              >
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-[var(--ink)]">{t('AutoFallbackLabel', lang)}</p>
-                  <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
-                    {t('AutoFallbackDesc', lang)}
-                  </p>
-                </div>
-                <span className="morph-switch" data-checked={autoFallback ? 'true' : 'false'}>
-                  <span className="morph-switch-thumb" />
-                </span>
-              </button>
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-              {/* Mobile Data Size Limit Slider */}
-              {(() => {
-                const limitSteps = [50, 100, 150, 250, 500, 0] as const;
-                const foundIdx = limitSteps.indexOf(cellularLimitMb as (typeof limitSteps)[number]);
-                const idx = foundIdx >= 0 ? foundIdx : 2;
-                const pct = (idx / (limitSteps.length - 1)) * 100;
-                const valueLabel =
-                  cellularLimitMb === 0 ? t('Unlimited', lang) : `${cellularLimitMb} MB`;
-                return (
-                  <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
-                    <div className="mb-2.5 flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-[var(--ink)]">
-                        {t('CellularLimitLabel', lang)}
-                      </span>
-                      <span className="font-mono-num text-[11px] font-bold text-[var(--accent)]">
-                        {valueLabel}
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={limitSteps.length - 1}
-                      step={1}
-                      value={idx}
-                      aria-label={t('CellularLimitLabel', lang)}
-                      onChange={(e) =>
-                        onChangePrefs((p) => ({
-                          ...p,
-                          cellularLimitMb: limitSteps[Number(e.target.value)] ?? 150,
-                        }))
-                      }
-                      style={{
-                        background: `linear-gradient(90deg, var(--accent) 0%, var(--accent-end) ${pct}%, var(--surface) ${pct}%)`,
-                      }}
-                      className="morph-slider"
-                    />
-                    <div className="mt-2 flex items-center justify-between font-mono-num text-[10px] font-semibold text-[var(--muted)]">
-                      <span>50 MB</span>
-                      <span>150 MB</span>
-                      <span>500 MB</span>
-                      <span>{t('Unlimited', lang)}</span>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Preferred Video Quality Slider */}
-              {(() => {
-                const qualitySteps: readonly VideoQualityPref[] = [
-                  '360p',
-                  '480p',
-                  '720p',
-                  '1080p',
-                  'best',
-                ];
-                const idx = Math.max(0, qualitySteps.indexOf(preferredQuality));
-                const pct = (idx / (qualitySteps.length - 1)) * 100;
-                const qLabel =
-                  preferredQuality === 'best' ? t('QualityBest', lang) : preferredQuality;
-                return (
-                  <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
-                    <div className="mb-2.5 flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-[var(--ink)]">
-                        {t('PreferredQualityLabel', lang)}
-                      </span>
-                      <span className="font-mono-num text-[11px] font-bold text-[var(--accent)]">
-                        {qLabel}
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={qualitySteps.length - 1}
-                      step={1}
-                      value={idx}
-                      aria-label={t('PreferredQualityLabel', lang)}
-                      onChange={(e) =>
-                        onChangePrefs((p) => ({
-                          ...p,
-                          preferredVideoQuality: qualitySteps[Number(e.target.value)] ?? '720p',
-                        }))
-                      }
-                      style={{
-                        background: `linear-gradient(90deg, var(--accent) 0%, var(--accent-end) ${pct}%, var(--surface) ${pct}%)`,
-                      }}
-                      className="morph-slider"
-                    />
-                    <div className="mt-2 flex items-center justify-between font-mono-num text-[10px] font-semibold text-[var(--muted)]">
-                      <span>360p</span>
-                      <span>480p</span>
-                      <span>720p</span>
-                      <span>1080p</span>
-                      <span>{t('QualityBest', lang)}</span>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Multi-Fragment Acceleration Slider */}
-              {(() => {
-                const clamped = Math.min(8, Math.max(1, concurrentFragments));
-                const pct = ((clamped - 1) / 7) * 100;
-                return (
-                  <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
-                    <div className="mb-2.5 flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-[var(--ink)]">
-                        {t('ConcurrentFragmentsLabel', lang)}
-                      </span>
-                      <span className="font-mono-num text-[11px] font-bold text-[var(--accent)]">
-                        {clamped}×
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={1}
-                      max={8}
-                      step={1}
-                      value={clamped}
-                      aria-label={t('ConcurrentFragmentsLabel', lang)}
-                      onChange={(e) =>
-                        onChangePrefs((p) => ({
-                          ...p,
-                          concurrentFragments: Number(e.target.value) || 4,
-                        }))
-                      }
-                      style={{
-                        background: `linear-gradient(90deg, var(--accent) 0%, var(--accent-end) ${pct}%, var(--surface) ${pct}%)`,
-                      }}
-                      className="morph-slider"
-                    />
-                    <div className="mt-2 flex items-center justify-between font-mono-num text-[10px] font-semibold text-[var(--muted)]">
-                      <span>1×</span>
-                      <span>4×</span>
-                      <span>8×</span>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          </section>
-
-          {/* Selectable & Installable Download Engines */}
+          {/* 1. Selectable & Installable Download Engines */}
           <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex items-start gap-3">
@@ -2267,10 +1876,223 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 );
               })}
             </div>
-
           </section>
 
-          {/* Collapsible Optional Python Morph Server */}
+          {/* 2. Smart Download Preferences (Quality, Speed & Data Controls) */}
+          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
+                  <Wifi className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold leading-tight text-[var(--ink)]">
+                    {t('DownloadPrefsSection', lang)}
+                  </h2>
+                  <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
+                    {t('DownloadPrefsDesc', lang)}
+                  </p>
+                </div>
+              </div>
+
+              <span className="text-xs font-semibold text-[var(--muted)] whitespace-nowrap">
+                {liveNetLabel}
+              </span>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => onChangePrefs((p) => ({...p, downloadWifiOnly: !p.downloadWifiOnly}))}
+                className="flex min-h-[72px] items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
+              >
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-[var(--ink)]">{t('DownloadWifiOnly', lang)}</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
+                    {t('DownloadWifiOnlyDesc', lang)}
+                  </p>
+                </div>
+                <span className="morph-switch" data-checked={wifiOnly ? 'true' : 'false'}>
+                  <span className="morph-switch-thumb" />
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  onChangePrefs((p) => ({...p, autoFallbackEngine: p.autoFallbackEngine === false}))
+                }
+                className="flex min-h-[72px] items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
+              >
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-[var(--ink)]">{t('AutoFallbackLabel', lang)}</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
+                    {t('AutoFallbackDesc', lang)}
+                  </p>
+                </div>
+                <span className="morph-switch" data-checked={autoFallback ? 'true' : 'false'}>
+                  <span className="morph-switch-thumb" />
+                </span>
+              </button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+              {/* Mobile Data Size Limit Slider */}
+              {(() => {
+                const limitSteps = [50, 100, 150, 250, 500, 0] as const;
+                const foundIdx = limitSteps.indexOf(cellularLimitMb as (typeof limitSteps)[number]);
+                const idx = foundIdx >= 0 ? foundIdx : 2;
+                const pct = (idx / (limitSteps.length - 1)) * 100;
+                const valueLabel =
+                  cellularLimitMb === 0 ? t('Unlimited', lang) : `${cellularLimitMb} MB`;
+                return (
+                  <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
+                    <div className="mb-2.5 flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-[var(--ink)]">
+                        {t('CellularLimitLabel', lang)}
+                      </span>
+                      <span className="font-mono-num text-[11px] font-bold text-[var(--accent)]">
+                        {valueLabel}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={limitSteps.length - 1}
+                      step={1}
+                      value={idx}
+                      aria-label={t('CellularLimitLabel', lang)}
+                      onChange={(e) =>
+                        onChangePrefs((p) => ({
+                          ...p,
+                          cellularLimitMb: limitSteps[Number(e.target.value)] ?? 150,
+                        }))
+                      }
+                      style={{
+                        background: `linear-gradient(90deg, var(--accent) 0%, var(--accent-end) ${pct}%, var(--surface) ${pct}%)`,
+                      }}
+                      className="morph-slider"
+                    />
+                    <div className="mt-2 flex items-center justify-between font-mono-num text-[10px] font-semibold text-[var(--muted)]">
+                      <span>50 MB</span>
+                      <span>150 MB</span>
+                      <span>500 MB</span>
+                      <span>{t('Unlimited', lang)}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Preferred Video Quality Slider */}
+              {(() => {
+                const qualitySteps: readonly VideoQualityPref[] = [
+                  '360p',
+                  '480p',
+                  '720p',
+                  '1080p',
+                  'best',
+                ];
+                const idx = Math.max(0, qualitySteps.indexOf(preferredQuality));
+                const pct = (idx / (qualitySteps.length - 1)) * 100;
+                const qLabel =
+                  preferredQuality === 'best' ? t('QualityBest', lang) : preferredQuality;
+                return (
+                  <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
+                    <div className="mb-2.5 flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-[var(--ink)]">
+                        {t('PreferredQualityLabel', lang)}
+                      </span>
+                      <span className="font-mono-num text-[11px] font-bold text-[var(--accent)]">
+                        {qLabel}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={qualitySteps.length - 1}
+                      step={1}
+                      value={idx}
+                      aria-label={t('PreferredQualityLabel', lang)}
+                      onChange={(e) => {
+                        const q = qualitySteps[Number(e.target.value)] ?? '720p';
+                        const dlQ = q === 'best' ? '2160p' : q;
+                        onChangePrefs((p) => ({
+                          ...p,
+                          preferredVideoQuality: q,
+                          proDlDefaultQuality: dlQ,
+                        }));
+                      }}
+                      style={{
+                        background: `linear-gradient(90deg, var(--accent) 0%, var(--accent-end) ${pct}%, var(--surface) ${pct}%)`,
+                      }}
+                      className="morph-slider"
+                    />
+                    <div className="mt-2 flex items-center justify-between font-mono-num text-[10px] font-semibold text-[var(--muted)]">
+                      <span>360p</span>
+                      <span>480p</span>
+                      <span>720p</span>
+                      <span>1080p</span>
+                      <span>{t('QualityBest', lang)}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Multi-Fragment Acceleration Slider */}
+              {(() => {
+                const clamped = Math.min(8, Math.max(1, concurrentFragments));
+                const pct = ((clamped - 1) / 7) * 100;
+                return (
+                  <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
+                    <div className="mb-2.5 flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-[var(--ink)]">
+                        {t('ConcurrentFragmentsLabel', lang)}
+                      </span>
+                      <span className="font-mono-num text-[11px] font-bold text-[var(--accent)]">
+                        {clamped}×
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={1}
+                      max={8}
+                      step={1}
+                      value={clamped}
+                      aria-label={t('ConcurrentFragmentsLabel', lang)}
+                      onChange={(e) => {
+                        const n = Number(e.target.value) || 4;
+                        const conn: 2 | 4 | 6 | 8 = n <= 2 ? 2 : n <= 4 ? 4 : n <= 6 ? 6 : 8;
+                        onChangePrefs((p) => ({
+                          ...p,
+                          concurrentFragments: n,
+                          proDlRangeConnections: conn,
+                        }));
+                      }}
+                      style={{
+                        background: `linear-gradient(90deg, var(--accent) 0%, var(--accent-end) ${pct}%, var(--surface) ${pct}%)`,
+                      }}
+                      className="morph-slider"
+                    />
+                    <div className="mt-2 flex items-center justify-between font-mono-num text-[10px] font-semibold text-[var(--muted)]">
+                      <span>1×</span>
+                      <span>4×</span>
+                      <span>8×</span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </section>
+
+          {/* 3 & 4. Parallel HTTP Range Accelerator, Auto-Categorization & Link Downloader Defaults */}
+          <SettingsDownloadsExtra
+            prefs={prefs}
+            lang={lang}
+            onChangePrefs={onChangePrefs}
+            onShowToast={onShowToast}
+          />
+
+          {/* 5. Collapsible Optional Python Morph Server */}
           <section className="overflow-hidden rounded-3xl border border-[var(--line)] bg-[var(--surface)]">
             <button
               type="button"
@@ -2358,7 +2180,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             )}
           </section>
 
-          {/* Compact Single-Line Collapsible Diagnostic & Feedback Panel at Bottom */}
+          {/* 6. Compact Single-Line Collapsible Diagnostic & Feedback Panel at Bottom */}
           <section className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)]">
             <button
               type="button"
@@ -2665,6 +2487,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     (prefs.expWheelSpinTrigger && prefs.expWheelSpinTrigger !== 'always') ||
                     (prefs.wheelIconStyle && EXP_WHEEL_SHAPES.some((s) => s.id === prefs.wheelIconStyle)) ||
                     prefs.expArmadilloReel === false ||
+                    prefs.expArmadilloHideOnFullPreview === false ||
+                    prefs.expArmadilloHideOnPlay === false ||
                     prefs.expVideoExtraTimecodes ||
                     prefs.expWheelCenterHoldCustomize ||
                     prefs.expTouchTooltips ||
@@ -2672,7 +2496,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     prefs.expAmbientAurora ||
                     prefs.expTerminal ||
                     prefs.expUiSounds ||
-                    prefs.expWheelShockwave) && (
+                    prefs.expWheelShockwave ||
+                    prefs.proShowStudioSuitesBar ||
+                    prefs.proShowPinnedRecentStrip ||
+                    prefs.proShowResultChainBar ||
+                    prefs.proShowClipboardBanner ||
+                    (prefs.proHiddenSuites?.length ?? 0) > 0) && (
                     <button
                       type="button"
                       onClick={() => {
@@ -2698,6 +2527,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                             ? 'wheel'
                             : p.wheelIconStyle,
                           expArmadilloReel: true,
+                          expArmadilloHideOnFullPreview: true,
+                          expArmadilloHideOnPlay: true,
                           expVideoExtraTimecodes: false,
                           expWheelCenterHoldCustomize: false,
                           expTouchTooltips: false,
@@ -2706,6 +2537,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                           expTerminal: false,
                           expUiSounds: false,
                           expWheelShockwave: false,
+                          proShowStudioSuitesBar: false,
+                          proShowPinnedRecentStrip: false,
+                          proShowResultChainBar: false,
+                          proShowClipboardBanner: false,
+                          proSuitesOrder: DEFAULT_PRO_SUITES_ORDER,
+                          proHiddenSuites: [],
                         }));
                         onShowToast?.(
                           lang === 'tr'
@@ -3724,6 +3561,26 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       'Enabled by default. Turn off to use the flat bottom dock in portrait Video Editor instead of the 3D folding reel.',
                   },
                   {
+                    key: 'expArmadilloHideOnFullPreview' as const,
+                    defaultOn: true,
+                    titleTr: 'Tam Önizlemede Sinema Çarkını Gizle',
+                    titleEn: 'Hide Cinema Wheel in Full Preview',
+                    descTr:
+                      'Varsayılan olarak açıktır. Video önizlemeyi en alta kadar çekip tam görünüm açtığında köşedeki Sinema Çarkı otomatik kaybolur; yukarı çektiğinde geri gelir.',
+                    descEn:
+                      'Enabled by default. Automatically hides the corner Cinema Wheel when dragging preview all the way down, and brings it back when pulled up.',
+                  },
+                  {
+                    key: 'expArmadilloHideOnPlay' as const,
+                    defaultOn: true,
+                    titleTr: 'Video Oynatırken Sinema Çarkını Gizle',
+                    titleEn: 'Hide Cinema Wheel While Playing',
+                    descTr:
+                      'Varsayılan olarak açıktır. Video oynatılırken köşedeki Sinema Çarkı otomatik gizlenir, duraklattığında anında geri görünür.',
+                    descEn:
+                      'Enabled by default. Automatically hides the corner Cinema Wheel during video playback and restores it as soon as playback pauses.',
+                  },
+                  {
                     key: 'expVideoExtraTimecodes' as const,
                     defaultOn: false,
                     titleTr: 'Video Düzenleyici Ek Süre Göstergeleri',
@@ -3806,6 +3663,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               })}
             </div>
           </section>
+
+          <SettingsStudioLayoutCard
+            prefs={prefs}
+            lang={lang}
+            onChangePrefs={onChangePrefs}
+          />
         </div>
       )}
 
@@ -4301,6 +4164,118 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               >
                 <span>@ucanbizon</span>
               </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Compact Aesthetic Experimental Access Popup (triggered by 7 taps on Permissions shield) */}
+      {expGateOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="morph-exp-gate-title"
+          onClick={() => {
+            setExpGateOpen(false);
+            setExpPassInput('');
+            setExpPassError(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-md"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-[310px] overflow-hidden rounded-[26px] border border-[var(--line)] bg-[var(--surface)] p-5 shadow-[0_24px_64px_rgba(0,0,0,0.55)]"
+          >
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -top-14 left-1/2 h-28 w-44 -translate-x-1/2 rounded-full bg-[var(--accent)]/20 blur-2xl"
+            />
+
+            <button
+              type="button"
+              onClick={() => {
+                setExpGateOpen(false);
+                setExpPassInput('');
+                setExpPassError(false);
+              }}
+              aria-label={lang === 'tr' ? 'Kapat' : 'Close'}
+              className="absolute right-3.5 top-3.5 flex h-8 w-8 items-center justify-center rounded-xl text-[var(--muted)] transition-colors hover:bg-[var(--inset)] hover:text-[var(--ink)]"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="relative flex flex-col items-center text-center">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[var(--accent)]/35 bg-[var(--accent)]/12 text-[var(--accent)] shadow-sm">
+                <FlaskConical className="h-5 w-5" />
+              </div>
+
+              <h3
+                id="morph-exp-gate-title"
+                className="mt-3 text-[15px] font-bold tracking-tight text-[var(--ink)]"
+              >
+                {lang === 'tr' ? 'Deneysel Erişim' : 'Experimental Access'}
+              </h3>
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                {lang === 'tr'
+                  ? 'Sekmeyi açmak için gizli anahtarı gir.'
+                  : 'Enter the secret key to reveal the tab.'}
+              </p>
+
+              <form onSubmit={handleExpUnlockSubmit} className="mt-4 w-full space-y-2.5">
+                <div className="relative">
+                  <Lock
+                    aria-hidden="true"
+                    className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]"
+                  />
+                  <input
+                    ref={expGateInputRef}
+                    type={expPassVisible ? 'text' : 'password'}
+                    value={expPassInput}
+                    onChange={(e) => {
+                      setExpPassInput(e.target.value);
+                      if (expPassError) setExpPassError(false);
+                    }}
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder={lang === 'tr' ? 'Anahtar kelime' : 'Passphrase'}
+                    aria-label={lang === 'tr' ? 'Deneysel sekme şifresi' : 'Experimental tab password'}
+                    className={`h-11 w-full rounded-2xl border bg-[var(--inset)] pl-9 pr-10 text-sm font-semibold text-[var(--ink)] placeholder:text-[var(--muted)] focus:outline-none transition-colors ${
+                      expPassError
+                        ? 'border-red-500/80 focus:border-red-500'
+                        : 'border-[var(--line)] focus:border-[var(--accent)]'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setExpPassVisible((v) => !v)}
+                    aria-label={
+                      expPassVisible
+                        ? lang === 'tr'
+                          ? 'Şifreyi gizle'
+                          : 'Hide password'
+                        : lang === 'tr'
+                          ? 'Şifreyi göster'
+                          : 'Show password'
+                    }
+                    className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-xl text-[var(--muted)] transition-colors hover:text-[var(--ink)]"
+                  >
+                    {expPassVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+
+                {expPassError && (
+                  <p className="text-left text-[11px] font-semibold text-red-400">
+                    {lang === 'tr' ? 'Anahtar hatalı, tekrar dene.' : 'Incorrect key, try again.'}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  className="morph-accent-solid flex h-10 w-full items-center justify-center gap-1.5 rounded-2xl text-xs font-bold shadow-sm transition-transform active:scale-[0.98]"
+                >
+                  <span>{lang === 'tr' ? 'Aç' : 'Unlock'}</span>
+                </button>
+              </form>
             </div>
           </div>
         </div>

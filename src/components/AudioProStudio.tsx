@@ -367,7 +367,7 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
         silenceMinDurationSec: silenceMinSec,
         gain,
       });
-      onExportBlob(outBlob, `${stem}_studio.wav`, isTr ? 'Ses Stüdyosu Pro' : 'Audio Studio Pro');
+      onExportBlob(outBlob, `${stem}_studio.wav`, isTr ? 'Ses Stüdyosu' : 'Audio Studio');
       onClose();
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : 'Export error');
@@ -426,7 +426,7 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
             </div>
             <div className="min-w-0">
               <h2 className="truncate text-base font-extrabold text-[var(--ink)]">
-                {isTr ? 'Ses Stüdyosu Pro' : 'Audio Studio Pro'}
+                {isTr ? 'Ses Stüdyosu' : 'Audio Studio'}
               </h2>
               <p className="truncate text-[11px] text-[var(--muted)]">
                 {file ? `${file.name} · ${formatBytes(file.size)}` : isTr ? 'Bir ses dosyası seçin' : 'Pick an audio file'}
@@ -557,7 +557,10 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
                   <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 space-y-2.5">
                     <p className="text-xs font-bold text-[var(--ink)]">{isTr ? 'Fade-In / Fade-Out' : 'Fade Curves'}</p>
                     <label className="block text-[11px] text-[var(--muted)]">
-                      Fade In: <span className="font-mono-num font-bold text-[var(--ink)]">{fadeIn.toFixed(1)}s</span>
+                      <span className="flex items-center justify-between">
+                        <span>Fade In</span>
+                        <span className="font-mono-num font-bold text-[var(--accent-text)]">{fadeIn.toFixed(1)}s</span>
+                      </span>
                       <input
                         type="range"
                         min={0}
@@ -565,11 +568,15 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
                         step={0.2}
                         value={fadeIn}
                         onChange={(e) => setFadeIn(Number(e.target.value))}
-                        className="mt-1 w-full accent-[var(--accent)]"
+                        style={{'--slider-pct': `${(fadeIn / 8) * 100}%`} as React.CSSProperties}
+                        className="morph-slider mt-2"
                       />
                     </label>
                     <label className="block text-[11px] text-[var(--muted)]">
-                      Fade Out: <span className="font-mono-num font-bold text-[var(--ink)]">{fadeOut.toFixed(1)}s</span>
+                      <span className="flex items-center justify-between">
+                        <span>Fade Out</span>
+                        <span className="font-mono-num font-bold text-[var(--accent-text)]">{fadeOut.toFixed(1)}s</span>
+                      </span>
                       <input
                         type="range"
                         min={0}
@@ -577,7 +584,8 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
                         step={0.2}
                         value={fadeOut}
                         onChange={(e) => setFadeOut(Number(e.target.value))}
-                        className="mt-1 w-full accent-[var(--accent)]"
+                        style={{'--slider-pct': `${(fadeOut / 8) * 100}%`} as React.CSSProperties}
+                        className="morph-slider mt-2"
                       />
                     </label>
                   </div>
@@ -590,7 +598,7 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
                         onClick={() => setMuteEnabled((v) => !v)}
                         className={`rounded-lg border px-2 py-0.5 text-[10px] font-bold ${
                           muteEnabled
-                            ? 'border-amber-500/60 bg-amber-500/15 text-amber-400'
+                            ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
                             : 'border-[var(--line)] text-[var(--muted)]'
                         }`}
                       >
@@ -598,7 +606,7 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
                       </button>
                     </div>
                     {muteEnabled && (
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-2 gap-2.5">
                         <label className="text-[10px] text-[var(--muted)]">
                           Start: {fmtTime(muteStart)}
                           <input
@@ -608,7 +616,10 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
                             step={0.1}
                             value={muteStart}
                             onChange={(e) => setMuteStart(Math.min(Number(e.target.value), muteEnd))}
-                            className="w-full accent-amber-400"
+                            style={{
+                              '--slider-pct': `${buffer.duration > 0 ? (muteStart / buffer.duration) * 100 : 0}%`,
+                            } as React.CSSProperties}
+                            className="morph-slider mt-1.5"
                           />
                         </label>
                         <label className="text-[10px] text-[var(--muted)]">
@@ -620,13 +631,19 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
                             step={0.1}
                             value={muteEnd}
                             onChange={(e) => setMuteEnd(Math.max(Number(e.target.value), muteStart))}
-                            className="w-full accent-amber-400"
+                            style={{
+                              '--slider-pct': `${buffer.duration > 0 ? (muteEnd / buffer.duration) * 100 : 0}%`,
+                            } as React.CSSProperties}
+                            className="morph-slider mt-1.5"
                           />
                         </label>
                       </div>
                     )}
                     <label className="block text-[11px] text-[var(--muted)]">
-                      {isTr ? 'Ses Düzeyi:' : 'Gain:'} <span className="font-mono-num font-bold text-[var(--ink)]">{Math.round(gain * 100)}%</span>
+                      <span className="flex items-center justify-between">
+                        <span>{isTr ? 'Ses Düzeyi' : 'Gain'}</span>
+                        <span className="font-mono-num font-bold text-[var(--accent-text)]">{Math.round(gain * 100)}%</span>
+                      </span>
                       <input
                         type="range"
                         min={0.2}
@@ -634,7 +651,8 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
                         step={0.05}
                         value={gain}
                         onChange={(e) => setGain(Number(e.target.value))}
-                        className="mt-1 w-full accent-[var(--accent)]"
+                        style={{'--slider-pct': `${((gain - 0.2) / 2.2) * 100}%`} as React.CSSProperties}
+                        className="morph-slider mt-2"
                       />
                     </label>
                   </div>
@@ -676,8 +694,14 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
                             next[idx] = Number(e.target.value);
                             setEqBands(next);
                           }}
-                          className="h-20 w-4 cursor-pointer accent-[var(--accent)]"
-                          style={{writingMode: 'vertical-lr', direction: 'rtl'}}
+                          className="morph-slider-v"
+                          style={
+                            {
+                              writingMode: 'vertical-lr',
+                              direction: 'rtl',
+                              '--slider-pct': `${((eqBands[idx] + 12) / 24) * 100}%`,
+                            } as React.CSSProperties
+                          }
                         />
                         <span className="font-mono-num text-[9px] text-[var(--muted)]">
                           {freq >= 1000 ? `${freq / 1000}k` : freq}
@@ -689,8 +713,8 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
                   {/* Denoise + Compressor + Normalize */}
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
-                      <label className="block text-xs font-bold text-[var(--ink)]">
-                        {isTr ? 'Gürültü Azaltma (Denoise):' : 'Noise Reduction (Denoise):'}{' '}
+                      <label className="flex items-center justify-between text-xs font-bold text-[var(--ink)]">
+                        <span>{isTr ? 'Gürültü Azaltma (Denoise)' : 'Noise Reduction (Denoise)'}</span>
                         <span className="font-mono-num text-[var(--accent-text)]">%{denoiseStrength}</span>
                       </label>
                       <input
@@ -700,9 +724,10 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
                         step={5}
                         value={denoiseStrength}
                         onChange={(e) => setDenoiseStrength(Number(e.target.value))}
-                        className="mt-2 w-full accent-[var(--accent)]"
+                        style={{'--slider-pct': `${denoiseStrength}%`} as React.CSSProperties}
+                        className="morph-slider mt-2.5"
                       />
-                      <p className="mt-1 text-[10px] text-[var(--muted)]">
+                      <p className="mt-1.5 text-[10px] text-[var(--muted)]">
                         {isTr ? 'Dip gürültüsü, rüzgar uğultusu ve tıslama filtresi' : 'High-pass rumble + hiss shelf + soft noise gate'}
                       </p>
                     </div>
@@ -717,19 +742,23 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
                         }`}
                       >
                         <span>{isTr ? 'Dinamik Ses Kompresörü' : 'Dynamics Compressor'}</span>
-                        <Check className={`h-4 w-4 ${compressorEnabled ? 'opacity-100 text-[var(--accent-text)]' : 'opacity-20'}`} />
+                        <span className="morph-switch" data-checked={compressorEnabled ? 'true' : 'false'}>
+                          <span className="morph-switch-thumb" />
+                        </span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setNormalizeEnabled((v) => !v)}
                         className={`flex items-center justify-between rounded-xl border px-3 py-2 text-xs font-bold ${
                           normalizeEnabled
-                            ? 'border-emerald-500/60 bg-emerald-500/12 text-[var(--ink)]'
+                            ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--ink)]'
                             : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]'
                         }`}
                       >
                         <span>{isTr ? 'Ses Yüksekliğini Dengele (-1 dB)' : 'Peak Normalize (-1 dB)'}</span>
-                        <Check className={`h-4 w-4 ${normalizeEnabled ? 'opacity-100 text-emerald-400' : 'opacity-20'}`} />
+                        <span className="morph-switch" data-checked={normalizeEnabled ? 'true' : 'false'}>
+                          <span className="morph-switch-thumb" />
+                        </span>
                       </button>
                     </div>
                   </div>
@@ -760,10 +789,12 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
                       {removeSilence ? (isTr ? 'Aktif' : 'Active') : isTr ? 'Etkinleştir' : 'Enable'}
                     </button>
                   </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <label className="text-xs text-[var(--muted)]">
-                      {isTr ? 'Sessizlik Eşiği:' : 'Silence Threshold:'}{' '}
-                      <span className="font-mono-num font-bold text-[var(--ink)]">{silenceDb} dB</span>
+                  <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+                    <label className="block text-xs text-[var(--muted)]">
+                      <span className="flex items-center justify-between">
+                        <span>{isTr ? 'Sessizlik Eşiği' : 'Silence Threshold'}</span>
+                        <span className="font-mono-num font-bold text-[var(--accent-text)]">{silenceDb} dB</span>
+                      </span>
                       <input
                         type="range"
                         min={-55}
@@ -774,12 +805,15 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
                           setSilenceDb(Number(e.target.value));
                           setRemoveSilence(true);
                         }}
-                        className="mt-1.5 w-full accent-rose-500"
+                        style={{'--slider-pct': `${((silenceDb + 55) / 37) * 100}%`} as React.CSSProperties}
+                        className="morph-slider mt-2"
                       />
                     </label>
-                    <label className="text-xs text-[var(--muted)]">
-                      {isTr ? 'Min. Boşluk Süresi:' : 'Min Gap Duration:'}{' '}
-                      <span className="font-mono-num font-bold text-[var(--ink)]">{silenceMinSec.toFixed(2)}s</span>
+                    <label className="block text-xs text-[var(--muted)]">
+                      <span className="flex items-center justify-between">
+                        <span>{isTr ? 'Min. Boşluk Süresi' : 'Min Gap Duration'}</span>
+                        <span className="font-mono-num font-bold text-[var(--accent-text)]">{silenceMinSec.toFixed(2)}s</span>
+                      </span>
                       <input
                         type="range"
                         min={0.2}
@@ -790,7 +824,8 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
                           setSilenceMinSec(Number(e.target.value));
                           setRemoveSilence(true);
                         }}
-                        className="mt-1.5 w-full accent-rose-500"
+                        style={{'--slider-pct': `${((silenceMinSec - 0.2) / 1.8) * 100}%`} as React.CSSProperties}
+                        className="morph-slider mt-2"
                       />
                     </label>
                   </div>

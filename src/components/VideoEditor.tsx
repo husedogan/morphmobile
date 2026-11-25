@@ -92,6 +92,7 @@ import {
   estimateOutputFileSizeBytes,
   findAvailableAudioRow,
   findAvailableTextRow,
+  findMainVideoClipAtTime,
   findOverlayVideoClipAtTime,
   findVideoClipAtTime,
   formatSecondsShort,
@@ -100,11 +101,13 @@ import {
   getClipMediaId,
   getClipTrackIndex,
   insertFreezeFrameAtPlayhead,
+  isClipPipOverlay,
   loadSavedNleProjects,
   moveAudioClipOnTimeline,
   moveTextClipOnTimeline,
   moveVideoClip2D,
   parseSrtSubtitles,
+  setVideoClipLayerMode,
   snapToFrame,
   splitAudioClipAtPlayhead,
   splitTextClipAtPlayhead,
@@ -248,6 +251,8 @@ interface VideoEditorProps {
   initialTab?: VideoEditorTab;
   initialPreset?: Partial<VideoEditorState>;
   expArmadilloReel?: boolean;
+  expArmadilloHideOnFullPreview?: boolean;
+  expArmadilloHideOnPlay?: boolean;
   expVideoExtraTimecodes?: boolean;
   expAltLauncher?: boolean;
   expAltLauncherStyle?: ExpLauncherStyle;
@@ -533,6 +538,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   initialTab = 'trim',
   initialPreset,
   expArmadilloReel = true,
+  expArmadilloHideOnFullPreview = true,
+  expArmadilloHideOnPlay = true,
   expVideoExtraTimecodes = false,
   expAltLauncher = false,
   expAltLauncherStyle = 'cascade_sheet',
@@ -704,11 +711,18 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const [isBusyPackage, setIsBusyPackage] = useState(false);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
 
-  // Dynamically measured previewHeightVh thresholds where the timeline track bars (Klip/Ses/Metin)
-  // first touch the bottom tool dock (rollStartVh) and finish sliding under it into Cinema Wheel (wheelEndVh).
-  const [armadilloFoldRange, setArmadilloFoldRange] = useState<{rollStartVh: number; wheelEndVh: number}>({
-    rollStartVh: 62,
-    wheelEndVh: 75,
+  // Dynamically measured previewHeightVh thresholds:
+  // - rollStartVh: lowest track bar touches the flat bottom dock
+  // - wheelEndVh: dock finishes rolling into the Cinema Wheel
+  // - maxFitVh: exact preview height where ALL current track bars stay 100% unclipped (dynamic floor stop!)
+  const [armadilloFoldRange, setArmadilloFoldRange] = useState<{
+    rollStartVh: number;
+    wheelEndVh: number;
+    maxFitVh: number;
+  }>({
+    rollStartVh: 58,
+    wheelEndVh: 64.5,
+    maxFitVh: 66,
   });
   const armadilloFoldRangeRef = useRef(armadilloFoldRange);
   armadilloFoldRangeRef.current = armadilloFoldRange;
@@ -718,23 +732,49 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const isResizingPreviewRef = useRef<boolean>(isResizingPreview);
   isResizingPreviewRef.current = isResizingPreview;
 
+  // Dynamic track-fit floor lock: hold lock button for 500ms (50 salise) to unlock downward full-preview drag
+  const [floorLockVisible, setFloorLockVisible] = useState(false);
+  const [floorLockBumpTick, setFloorLockBumpTick] = useState(0);
+  const [floorUnlockActive, setFloorUnlockActive] = useState(false);
+  const floorUnlockActiveRef = useRef(false);
+  floorUnlockActiveRef.current = floorUnlockActive;
+
+  const handleUnlockPreviewFloor = useCallback(() => {
+    setFloorUnlockActive(true);
+    floorUnlockActiveRef.current = true;
+    if (
+      typeof document !== 'undefined' &&
+      document.documentElement.dataset.haptics !== 'off' &&
+      typeof navigator !== 'undefined' &&
+      'vibrate' in navigator
+    ) {
+      navigator.vibrate(14);
+    }
+  }, []);
+
+  const handleLockPreviewFloor = useCallback(() => {
+    setFloorUnlockActive(false);
+    floorUnlockActiveRef.current = false;
+  }, []);
+
   const isExpandedWheelMode =
     effectiveArmadilloReel &&
     isPortraitMode &&
-    !isFullscreenPreview &&
-    previewHeightVh >= armadilloFoldRange.wheelEndVh - 0.15;
+    (isFullscreenPreview || previewHeightVh >= armadilloFoldRange.wheelEndVh - 0.15);
 
   const armadilloFold =
-    !effectiveArmadilloReel || !isPortraitMode || isFullscreenPreview || (isInspectorOpen && !isExpandedWheelMode)
+    !effectiveArmadilloReel || !isPortraitMode || (isInspectorOpen && !isExpandedWheelMode)
       ? 0
-      : Math.max(
-          0,
-          Math.min(
-            1,
-            (previewHeightVh - armadilloFoldRange.rollStartVh) /
-              Math.max(4, armadilloFoldRange.wheelEndVh - armadilloFoldRange.rollStartVh)
-          )
-        );
+      : isFullscreenPreview
+        ? 1
+        : Math.max(
+            0,
+            Math.min(
+              1,
+              (previewHeightVh - armadilloFoldRange.rollStartVh) /
+                Math.max(4, armadilloFoldRange.wheelEndVh - armadilloFoldRange.rollStartVh)
+            )
+          );
   const armadilloFoldRef = useRef<number>(armadilloFold);
   armadilloFoldRef.current = armadilloFold;
 
@@ -755,18 +795,21 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     };
   }, []);
 
-  // Keep exact pixel-accurate track-bottom -> dock-top overlap thresholds updated ONLY while the dock is
-  // completely flat and settled (never mid-drag or mid-fold, avoiding ResizeObserver spacer-shrink feedback loops).
+  // Dynamically measure exact track-fit floor (maxFitVh) and Armadillo roll thresholds for ANY number of
+  // bars (2, 3, 4, 5+ tracks) whenever settled in flat OR rolled state (skipping mid-drag / mid-roll).
   useEffect(() => {
-    if (!effectiveArmadilloReel || !isPortraitMode || isFullscreenPreview || isExpandedWheelMode || isInspectorOpen) {
+    if (!isPortraitMode || isFullscreenPreview || isInspectorOpen) {
       return;
     }
     const measure = () => {
-      if (
-        isResizingPreviewRef.current ||
-        armadilloFoldRef.current > 0.005 ||
-        previewSnapRafRef.current !== null
-      ) {
+      if (isResizingPreviewRef.current || previewSnapRafRef.current !== null) {
+        return;
+      }
+      const foldNow = armadilloFoldRef.current;
+      // If somehow stranded mid-roll while idle (not dragging), settle cleanly instead of freezing half-rolled
+      if (effectiveArmadilloReel && foldNow > 0.005 && foldNow < 0.99) {
+        const {rollStartVh, maxFitVh} = armadilloFoldRangeRef.current;
+        animatePreviewHeightTo(foldNow >= 0.4 ? maxFitVh : Math.max(22, Number((rollStartVh - 0.6).toFixed(1))));
         return;
       }
       const scroller = timelineScrollRef.current;
@@ -783,22 +826,61 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       const rawTracksH = marker
         ? Math.max(76, marker.getBoundingClientRect().bottom - scrollerRect.top + scroller.scrollTop)
         : Math.max(88, trackEl.scrollHeight - 44);
-      // Protect up to ~200px of primary tracks so huge 6+ track projects stay flat at normal preview height
-      const protectedTracksH = Math.min(rawTracksH, 200);
-      const slackPx = scrollerRect.height - protectedTracksH;
+      // Protect up to ~44% of viewport height (comfortably fits 1–4 tracks unclipped while keeping 5+ track projects draggable!)
+      const desiredTracksH = Math.min(rawTracksH + 10, Math.round(viewportH * 0.44));
+      const slackPx = scrollerRect.height - desiredTracksH;
       const currentVh = previewHeightVhRef.current;
+      const dockVh = (58 / viewportH) * 100;
 
-      const nextRollStart = Math.max(40, Math.min(76, currentVh + (slackPx / viewportH) * 100));
-      const rollSpanPx = Math.max(78, Math.min(126, protectedTracksH * 0.78));
-      const nextWheelEnd = Math.min(
-        84,
-        Math.max(nextRollStart + 6.5, nextRollStart + (rollSpanPx / viewportH) * 100)
-      );
-      setArmadilloFoldRange((prev) =>
-        Math.abs(prev.rollStartVh - nextRollStart) < 0.5 && Math.abs(prev.wheelEndVh - nextWheelEnd) < 0.5
-          ? prev
-          : {rollStartVh: Number(nextRollStart.toFixed(1)), wheelEndVh: Number(nextWheelEnd.toFixed(1))}
-      );
+      let touchVh: number;
+      let exactFitVh: number;
+      if (effectiveArmadilloReel && foldNow >= 0.99) {
+        // Rolled up: 58px dock spacer is already 0px, so scrollerRect.height is full track space
+        exactFitVh = currentVh + (slackPx / viewportH) * 100;
+        touchVh = exactFitVh - dockVh;
+      } else if (effectiveArmadilloReel) {
+        // Flat: 58px dock spacer is active; rolling into Cinema Wheel frees 58px (dockVh)
+        touchVh = currentVh + (slackPx / viewportH) * 100;
+        exactFitVh = touchVh + dockVh;
+      } else {
+        // Flat StudioDock mode: dock stays 58px tall
+        touchVh = currentVh + (slackPx / viewportH) * 100;
+        exactFitVh = touchVh;
+      }
+
+      // While flat, NEVER let rollStart drop below currentVh + 0.8 (adding bars must never trigger an accidental half-roll!)
+      const minSafeRollStart =
+        effectiveArmadilloReel && foldNow <= 0.005 ? Math.max(45.5, currentVh + 0.8) : 45.5;
+      const nextRollStart = Math.max(minSafeRollStart, Math.min(72.5, Number((touchVh - 0.5).toFixed(1))));
+      const nextWheelEnd = Math.min(78.5, Number((nextRollStart + 6.5).toFixed(1)));
+      const nextMaxFit = effectiveArmadilloReel
+        ? Math.max(
+            Number((nextWheelEnd + 1.0).toFixed(1)),
+            Math.min(78.5, Number(exactFitVh.toFixed(1)))
+          )
+        : Math.max(44, Math.min(78.5, Number(exactFitVh.toFixed(1))));
+
+      const prevRange = armadilloFoldRangeRef.current;
+      const changed =
+        Math.abs(prevRange.rollStartVh - nextRollStart) >= 0.5 ||
+        Math.abs(prevRange.wheelEndVh - nextWheelEnd) >= 0.5 ||
+        Math.abs(prevRange.maxFitVh - nextMaxFit) >= 0.5;
+      if (changed) {
+        setArmadilloFoldRange({
+          rollStartVh: nextRollStart,
+          wheelEndVh: nextWheelEnd,
+          maxFitVh: nextMaxFit,
+        });
+        // If user added a new bar while sitting cleanly at the previous track-fit limit (not in full preview),
+        // gently raise the preview so the newly added bottom bar stays 100% unclipped (and still fully rolled)!
+        if (
+          nextMaxFit < prevRange.maxFitVh - 0.6 &&
+          currentVh > nextMaxFit + 0.5 &&
+          currentVh <= prevRange.maxFitVh + 1.5
+        ) {
+          setPreviewHeightVh(nextMaxFit);
+        }
+      }
     };
 
     const rafId = window.requestAnimationFrame(measure);
@@ -817,7 +899,16 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       ro?.disconnect();
       window.removeEventListener('resize', measure);
     };
-  }, [effectiveArmadilloReel, isPortraitMode, isFullscreenPreview, isExpandedWheelMode, isInspectorOpen]);
+  }, [
+    effectiveArmadilloReel,
+    isPortraitMode,
+    isFullscreenPreview,
+    isExpandedWheelMode,
+    isInspectorOpen,
+    extraTrackRows.audio,
+    extraTrackRows.text,
+    extraTrackRows.pip,
+  ]);
 
   const previewThumbSrc = useMemo(() => {
     if (filterPreviewMode === 'video' && thumbnails.length > 0) {
@@ -1203,7 +1294,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   );
 
   const activeTimelineClip = useMemo(
-    () => findVideoClipAtTime(project.videoClips, playhead, 0),
+    () => findMainVideoClipAtTime(project.videoClips, playhead),
     [project.videoClips, playhead]
   );
 
@@ -1215,7 +1306,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const isInGap = useMemo(
     () =>
       !activeTimelineClip &&
-      project.videoClips.some((c) => getClipTrackIndex(c) === 0),
+      project.videoClips.some((c) => !isClipPipOverlay(c)),
     [activeTimelineClip, project.videoClips]
   );
 
@@ -1329,11 +1420,11 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     const nextTimelineTime = Math.max(0, currentClip.timelineStart + clipOffset);
 
     if (srcTime >= currentClip.sourceEnd - 0.035) {
-      const v1Sorted = project.videoClips
-        .filter((c) => getClipTrackIndex(c) === 0)
+      const mainSorted = project.videoClips
+        .filter((c) => !isClipPipOverlay(c))
         .sort((a, b) => a.timelineStart - b.timelineStart);
-      const curIdx = v1Sorted.findIndex((c) => c.id === currentClip.id);
-      const nextClip = curIdx >= 0 && curIdx + 1 < v1Sorted.length ? v1Sorted[curIdx + 1] : null;
+      const curIdx = mainSorted.findIndex((c) => c.id === currentClip.id);
+      const nextClip = curIdx >= 0 && curIdx + 1 < mainSorted.length ? mainSorted[curIdx + 1] : null;
       const currentEnd = clipTimelineEnd(currentClip);
 
       if (nextClip) {
@@ -1362,7 +1453,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       } else {
         v.pause();
         setIsPlaying(false);
-        const firstClip = v1Sorted[0];
+        const firstClip = mainSorted[0];
         if (firstClip) {
           setPlayhead(firstClip.timelineStart);
           if (getClipMediaId(firstClip) !== getClipMediaId(currentClip)) {
@@ -1391,7 +1482,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
           setIsPlaying(false);
           return 0;
         }
-        const entering = findVideoClipAtTime(project.videoClips, next, 0);
+        const entering = findMainVideoClipAtTime(project.videoClips, next);
         if (entering) {
           const v = videoRef.current;
           const mapped = timelineToSourceTime(project.videoClips, next, 0);
@@ -2056,20 +2147,55 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     previewSnapRafRef.current = window.requestAnimationFrame(tick);
   }, []);
 
-  const startPreviewResize = (e: React.PointerEvent) => {
-    e.preventDefault();
+  const startPreviewResizeFromY = (startY: number, forceUnlocked = false) => {
     if (previewSnapRafRef.current) {
       window.cancelAnimationFrame(previewSnapRafRef.current);
       previewSnapRafRef.current = null;
     }
-    const startY = e.clientY;
     const startVh = previewHeightVhRef.current;
+    const initialMaxFit = armadilloFoldRangeRef.current.maxFitVh;
+    // Allow dragging past track-fit floor ONLY if unlocked via 500ms hold OR already below floor
+    let allowPastFloor = forceUnlocked || floorUnlockActiveRef.current || startVh > initialMaxFit + 0.8;
+    let bumpedFloorThisDrag = false;
     let latestVh = startVh;
     setIsResizingPreview(true);
     const onMove = (ev: PointerEvent) => {
       const deltaVh = ((ev.clientY - startY) / Math.max(320, window.innerHeight)) * 100;
-      latestVh = Math.min(85, Math.max(22, Number((startVh + deltaVh).toFixed(1))));
-      setPreviewHeightVh(latestVh);
+      const rawTargetVh = Math.min(85, Math.max(22, Number((startVh + deltaVh).toFixed(1))));
+      const curMaxFit = armadilloFoldRangeRef.current.maxFitVh;
+
+      // Once user pulls back up above the track-fit limit, re-engage the floor lock automatically
+      if (allowPastFloor && rawTargetVh <= curMaxFit - 1.5) {
+        allowPastFloor = false;
+        if (floorUnlockActiveRef.current) {
+          setFloorUnlockActive(false);
+          floorUnlockActiveRef.current = false;
+        }
+      }
+
+      if (!allowPastFloor && rawTargetVh > curMaxFit) {
+        latestVh = curMaxFit;
+        setPreviewHeightVh(curMaxFit);
+        setFloorLockVisible(true);
+        if (!bumpedFloorThisDrag && rawTargetVh > curMaxFit + 0.6) {
+          bumpedFloorThisDrag = true;
+          setFloorLockBumpTick((t) => t + 1);
+          if (
+            typeof document !== 'undefined' &&
+            document.documentElement.dataset.haptics !== 'off' &&
+            typeof navigator !== 'undefined' &&
+            'vibrate' in navigator
+          ) {
+            navigator.vibrate(10);
+          }
+        }
+      } else {
+        latestVh = rawTargetVh;
+        setPreviewHeightVh(latestVh);
+        if (latestVh < curMaxFit - 2.5 || latestVh > curMaxFit + 2.5) {
+          setFloorLockVisible(false);
+        }
+      }
     };
     const onUp = () => {
       setIsResizingPreview(false);
@@ -2077,16 +2203,25 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
 
+      const {rollStartVh, wheelEndVh, maxFitVh} = armadilloFoldRangeRef.current;
+
+      // Once user settled past the floor (full-preview zone), hide the lock chip & clear active unlock state
+      // (dragging further while already below floor remains free, and dragging back up above maxFitVh re-arms lock!)
+      if (latestVh > maxFitVh + 1.2) {
+        setFloorUnlockActive(false);
+        floorUnlockActiveRef.current = false;
+        setFloorLockVisible(false);
+      }
+
       // If released while partially curling in the overlap zone, settle cleanly either into
-      // full Cinema Wheel (>=42% curled) or back to the crisp flat boundary just above the track bars (<42%).
+      // full Cinema Wheel (>=36% curled, capped at maxFitVh) or back to the crisp flat boundary (<36%).
       if (effectiveArmadilloReel && isPortraitMode && !isFullscreenPreview) {
-        const {rollStartVh, wheelEndVh} = armadilloFoldRangeRef.current;
-        if (latestVh > rollStartVh + 0.3 && latestVh < wheelEndVh - 0.15) {
+        if (latestVh > rollStartVh && latestVh < wheelEndVh) {
           const ratio = (latestVh - rollStartVh) / Math.max(4, wheelEndVh - rollStartVh);
           const snapTarget =
-            ratio >= 0.42
-              ? Math.min(85, Number((wheelEndVh + 1.0).toFixed(1)))
-              : Math.max(22, Number((rollStartVh - 0.4).toFixed(1)));
+            ratio >= 0.36
+              ? Math.min(maxFitVh, Number((wheelEndVh + 0.6).toFixed(1)))
+              : Math.max(22, Number((rollStartVh - 0.6).toFixed(1)));
           animatePreviewHeightTo(snapTarget);
         }
       }
@@ -2096,10 +2231,27 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     window.addEventListener('pointercancel', onUp);
   };
 
+  const startPreviewResize = (e: React.PointerEvent) => {
+    e.preventDefault();
+    startPreviewResizeFromY(e.clientY, false);
+  };
+
   const cyclePreviewHeight = () => {
-    const {wheelEndVh} = armadilloFoldRangeRef.current;
-    const expandedTarget = Math.min(85, Math.max(74, Math.ceil(wheelEndVh + 1.5)));
-    setPreviewHeightVh((prev) => (prev < 34 ? 46 : prev < wheelEndVh - 1 ? expandedTarget : 28));
+    const {rollStartVh, wheelEndVh, maxFitVh} = armadilloFoldRangeRef.current;
+    const expandedTarget = maxFitVh;
+    const cur = previewHeightVhRef.current;
+    setFloorUnlockActive(false);
+    floorUnlockActiveRef.current = false;
+    if (effectiveArmadilloReel && isPortraitMode && !isFullscreenPreview) {
+      const target =
+        cur >= wheelEndVh - 0.5
+          ? Math.min(46, Math.max(30, Number((rollStartVh - 2).toFixed(1))))
+          : expandedTarget;
+      setFloorLockVisible(false);
+      animatePreviewHeightTo(target);
+      return;
+    }
+    setPreviewHeightVh((prev) => (prev < 34 ? 46 : prev < maxFitVh - 1 ? expandedTarget : 28));
   };
 
   const handleNormalDelete = () => {
@@ -2681,6 +2833,10 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       if (curCount >= 6) return;
       const nextCount = curCount + 1;
       setExtraTrackRows((prev) => ({...prev, audio: Math.max(prev.audio + 1, nextCount - 1)}));
+      window.requestAnimationFrame(() => {
+        const sc = timelineScrollRef.current;
+        if (sc) sc.scrollTo({top: sc.scrollHeight, behavior: 'smooth'});
+      });
       notifyStatus(tr(`Yeni ses satırı (A${nextCount}) eklendi.`, `Added audio row (A${nextCount}).`));
       return;
     }
@@ -2703,6 +2859,10 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     if (curPipCount >= 4) return;
     const nextPipCount = curPipCount + 1;
     setExtraTrackRows((prev) => ({...prev, pip: Math.max(prev.pip + 1, nextPipCount)}));
+    window.requestAnimationFrame(() => {
+      const sc = timelineScrollRef.current;
+      if (sc) sc.scrollTo({top: 0, behavior: 'smooth'});
+    });
     notifyStatus(
       tr(`Yeni PiP satırı (V${nextPipCount + 1}) eklendi.`, `Added PiP row (V${nextPipCount + 1}).`)
     );
@@ -2846,7 +3006,12 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     }
 
     if (!selectedClip) return;
-    const res = toggleClipTrackLayer(project.videoClips, selectedClip.id, project.fps);
+    const res = toggleClipTrackLayer(
+      project.videoClips,
+      selectedClip.id,
+      project.fps,
+      Boolean(project.allowVideoLayerOverlap)
+    );
     if (!res.didMove) {
       notifyStatus(
         res.reason || tr('Bu klip katman değiştiremiyor.', 'Cannot switch track layer for this clip.')
@@ -2859,8 +3024,45 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     }));
     notifyStatus(
       res.movedToTrack === 1
-        ? tr('Klip üst PiP katmanına (V2) taşındı.', 'Moved clip to V2 Overlay / PiP track.')
-        : tr('Klip ana katmana (V1) taşındı.', 'Moved clip to V1 Main track.')
+        ? tr('Klip alt video satırına (V2) taşındı.', 'Moved clip to lower video row (V2).')
+        : tr('Klip ana video satırına (V1) taşındı.', 'Moved clip to main video row (V1).')
+    );
+  };
+
+  const handleSetClipLayerMode = (clipId: string, mode: 'video' | 'pip') => {
+    commitProject((prev) => ({
+      ...prev,
+      videoClips: setVideoClipLayerMode(
+        prev.videoClips,
+        clipId,
+        mode,
+        prev.fps,
+        Boolean(prev.allowVideoLayerOverlap)
+      ),
+    }));
+    notifyStatus(
+      mode === 'pip'
+        ? tr('Klip PiP (küçük pencere) moduna alındı.', 'Switched clip to PiP overlay mode.')
+        : tr('Klip normal tam ekran video moduna alındı.', 'Switched clip to normal full-frame video mode.')
+    );
+  };
+
+  const handleToggleAllowVideoLayerOverlap = () => {
+    const nextOverlap = !Boolean(project.allowVideoLayerOverlap);
+    commitProject((prev) => ({
+      ...prev,
+      allowVideoLayerOverlap: nextOverlap,
+    }));
+    notifyStatus(
+      nextOverlap
+        ? tr(
+            'Alt satırlardaki normal videolar artık zaman olarak üst üste binebilir.',
+            'Lower-row normal videos can now overlap in time.'
+          )
+        : tr(
+            'Çakışma engeli açık: Normal videolar (V1–V5) üst üste gelmez.',
+            'Overlap protection ON: Normal videos (V1–V5) will not overlap.'
+          )
     );
   };
 
@@ -3659,8 +3861,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         didMutate = true;
 
         if (mode === 'move-video' && targetId) {
-          // Dragging UP (-dy) moves V1 -> V2 -> V3...; dragging DOWN (+dy) moves back toward V1!
-          const rowDelta = Math.abs(dy) < 22 ? 0 : Math.round(-dy / 40);
+          // Dragging DOWN (+dy) moves V1 -> V2 -> V3... (below V1); dragging UP (-dy) moves back toward V1!
+          const rowDelta = Math.abs(dy) < 20 ? 0 : Math.round(dy / 38);
           const nextTrack = Math.max(0, Math.min(maxPipRowIndex, initRow + rowDelta));
           setActiveDragLaneHint({kind: 'video', row: nextTrack});
           setProject((prev) => ({
@@ -3671,7 +3873,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
               snappedStart,
               nextTrack,
               prev.fps,
-              freeTimelineMode
+              freeTimelineMode,
+              Boolean(prev.allowVideoLayerOverlap)
             ),
           }));
         } else if (mode === 'move-text' && targetId) {
@@ -5190,52 +5393,121 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                   />
                 </div>
 
-                {/* V2+ PiP Overlay Controls (when selected clip is on V2..V5) */}
-                {getClipTrackIndex(selectedClip) >= 1 && (
-                  <div className="rounded-lg border border-[#A855F7]/35 bg-[#A855F7]/10 p-2.5 space-y-2">
-                    <div className="flex items-center justify-between text-[11px] font-bold text-[#D8B4FE]">
-                      <span className="flex items-center gap-1.5">
-                        <PictureInPicture2 className="h-3.5 w-3.5" />
-                        {tr(
-                          `V${getClipTrackIndex(selectedClip) + 1} PiP Üst Katman Boyutu`,
-                          `V${getClipTrackIndex(selectedClip) + 1} PiP Overlay Size`
-                        )}
-                      </span>
-                      <span className="text-[10px] font-medium text-white/60">
-                        {tr('Konumu ekrandan sürükle', 'Drag on preview to move')}
-                      </span>
+                {/* Video Row Mode (Normal Full Video vs PiP Overlay) & Cross-Row Overlap Setting */}
+                <div className="space-y-2.5 rounded-lg border border-white/[0.09] bg-white/[0.03] p-2.5">
+                  {getClipTrackIndex(selectedClip) >= 1 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-white/85">
+                        <span className="flex items-center gap-1.5">
+                          <PictureInPicture2 className="h-3.5 w-3.5 text-[#FB7185]" />
+                          {tr(
+                            `V${getClipTrackIndex(selectedClip) + 1} Klip Görünüm Modu`,
+                            `V${getClipTrackIndex(selectedClip) + 1} Clip Display Mode`
+                          )}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleSetClipLayerMode(selectedClip.id, 'video')}
+                          className={`flex items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-[11px] font-bold transition-colors ${
+                            !isClipPipOverlay(selectedClip)
+                              ? 'border-[#FB7185]/60 bg-[#F43F5E]/20 text-white'
+                              : 'border-white/[0.08] bg-white/[0.03] text-white/60 hover:text-white'
+                          }`}
+                        >
+                          <Film className="h-3.5 w-3.5" />
+                          <span>{tr('Normal Video', 'Normal Video')}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSetClipLayerMode(selectedClip.id, 'pip')}
+                          className={`flex items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-[11px] font-bold transition-colors ${
+                            isClipPipOverlay(selectedClip)
+                              ? 'border-[#C084FC]/65 bg-[#A855F7]/22 text-[#E9D5FF]'
+                              : 'border-white/[0.08] bg-white/[0.03] text-white/60 hover:text-white'
+                          }`}
+                        >
+                          <PictureInPicture2 className="h-3.5 w-3.5" />
+                          <span>{tr('PiP (Küçük)', 'PiP Overlay')}</span>
+                        </button>
+                      </div>
+
+                      {isClipPipOverlay(selectedClip) && (
+                        <div className="space-y-1.5 rounded-lg border border-[#A855F7]/35 bg-[#A855F7]/10 p-2">
+                          <div className="flex items-center justify-between text-[10px] font-semibold text-[#D8B4FE]">
+                            <span>{tr('PiP Pencere Boyutu', 'PiP Window Size')}</span>
+                            <span className="text-white/55">
+                              {tr('Konumu ekrandan sürükle', 'Drag on preview to move')}
+                            </span>
+                          </div>
+                          <NleSlider
+                            label={tr('PiP Ölçeği', 'PiP Scale')}
+                            value={Math.round((selectedClip.pipRect?.w ?? DEFAULT_PIP_RECT.w) * 100)}
+                            min={18}
+                            max={100}
+                            step={2}
+                            defaultValue={36}
+                            valueText={`${Math.round((selectedClip.pipRect?.w ?? DEFAULT_PIP_RECT.w) * 100)}%`}
+                            onChange={(pct) => {
+                              const w = Number((pct / 100).toFixed(3));
+                              const h = w;
+                              commitProject((prev) => ({
+                                ...prev,
+                                videoClips: prev.videoClips.map((c) => {
+                                  if (c.id !== selectedClip.id) return c;
+                                  const cur = c.pipRect ?? DEFAULT_PIP_RECT;
+                                  return {
+                                    ...c,
+                                    pipRect: {
+                                      x: Math.min(cur.x, Math.max(0, 1 - w)),
+                                      y: Math.min(cur.y, Math.max(0, 1 - h)),
+                                      w,
+                                      h,
+                                    },
+                                  };
+                                }),
+                              }));
+                            }}
+                          />
+                        </div>
+                      )}
                     </div>
-                    <NleSlider
-                      label={tr('PiP Ölçeği', 'PiP Scale')}
-                      value={Math.round((selectedClip.pipRect?.w ?? DEFAULT_PIP_RECT.w) * 100)}
-                      min={18}
-                      max={100}
-                      step={2}
-                      defaultValue={36}
-                      valueText={`${Math.round((selectedClip.pipRect?.w ?? DEFAULT_PIP_RECT.w) * 100)}%`}
-                      onChange={(pct) => {
-                        const w = Number((pct / 100).toFixed(3));
-                        const h = w;
-                        commitProject((prev) => ({
-                          ...prev,
-                          videoClips: prev.videoClips.map((c) => {
-                            if (c.id !== selectedClip.id) return c;
-                            const cur = c.pipRect ?? DEFAULT_PIP_RECT;
-                            return {
-                              ...c,
-                              pipRect: {
-                                x: Math.min(cur.x, Math.max(0, 1 - w)),
-                                y: Math.min(cur.y, Math.max(0, 1 - h)),
-                                w,
-                                h,
-                              },
-                            };
-                          }),
-                        }));
-                      }}
-                    />
+                  )}
+
+                  {/* Cross-Row Non-Overlap Protection Setting (V1..V5 Normal Videos) */}
+                  <div className="flex items-center justify-between gap-2 pt-0.5">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-bold text-white/85">
+                        {tr('Alt Satır Video Çakışma Engeli', 'Prevent Cross-Row Video Overlap')}
+                      </p>
+                      <p className="text-[10px] leading-snug text-white/50">
+                        {project.allowVideoLayerOverlap
+                          ? tr(
+                              'Kapalı: Alt satıra alınan normal videolar üstteki videonun üstüne zaman olarak kayabilir.',
+                              'Off: Lower-row normal videos can overlap upper videos in time.'
+                            )
+                          : tr(
+                              'Açık: Alt satıra alınan normal videolar üsttekiyle çakışmaz (PiP her zaman üst üste binebilir).',
+                              'On: Lower-row normal videos stay non-overlapping (PiP can always overlap).'
+                            )}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleToggleAllowVideoLayerOverlap}
+                      className={`shrink-0 rounded-lg border px-2.5 py-1 text-[10px] font-extrabold transition-colors ${
+                        !project.allowVideoLayerOverlap
+                          ? 'border-[#34D399]/55 bg-[#10B981]/20 text-[#6EE7B7]'
+                          : 'border-white/15 bg-white/[0.05] text-white/65 hover:text-white'
+                      }`}
+                    >
+                      {!project.allowVideoLayerOverlap
+                        ? tr('Engel Açık', 'Protected')
+                        : tr('Üst Üste Açık', 'Allow Overlap')}
+                    </button>
                   </div>
-                )}
+                </div>
 
                 {/* Quick Smart Clip Actions */}
                 <div className="flex flex-wrap items-center gap-2 border-t border-[var(--line)] pt-2.5">
@@ -5256,8 +5528,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                     <ArrowUpDown className="h-3.5 w-3.5" />
                     <span>
                       {getClipTrackIndex(selectedClip) >= 1
-                        ? tr('Ana Katmana (V1) Al', 'Move to V1')
-                        : tr('Üst PiP Katmanına (V2) Al', 'Move to V2 PiP')}
+                        ? tr('Ana Satıra (V1) Al', 'Move to V1')
+                        : tr('Alt Satıra (V2) Al', 'Move to V2')}
                     </span>
                   </button>
 
@@ -7666,6 +7938,20 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       isFullscreenPreview={isFullscreenPreview}
       previewHeightVh={previewHeightVh}
       isResizingPreview={isResizingPreview}
+      showFloorLock={
+        isPortraitMode &&
+        !isFullscreenPreview &&
+        !isInspectorOpen &&
+        (!effectiveArmadilloReel || isExpandedWheelMode) &&
+        (floorLockVisible ||
+          (previewHeightVh >= armadilloFoldRange.maxFitVh - 0.6 &&
+            previewHeightVh <= armadilloFoldRange.maxFitVh + 0.8))
+      }
+      floorLockUnlocked={floorUnlockActive}
+      floorLockBumpTick={floorLockBumpTick}
+      onUnlockPreviewFloor={handleUnlockPreviewFloor}
+      onLockPreviewFloor={handleLockPreviewFloor}
+      onStartUnlockedResize={(clientY) => startPreviewResizeFromY(clientY, true)}
       compareOriginal={compareOriginal}
       splitCompareEnabled={splitCompareEnabled}
       splitComparePct={splitComparePct}
@@ -7964,6 +8250,11 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     setIsPlaying(true);
   };
 
+  const fullPreviewHideThresholdVh = Math.min(
+    83.5,
+    Math.max(78.5, armadilloFoldRange.maxFitVh + 4)
+  );
+
   const hideEditorWheelFab =
     wheelMenuOpen ||
     isInspectorOpen ||
@@ -7971,7 +8262,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     showExportConfirm ||
     showUnsavedExitDialog ||
     Boolean(itemPopup) ||
-    Boolean(seamTransition);
+    Boolean(seamTransition) ||
+    (!isFullscreenPreview && expArmadilloHideOnFullPreview && previewHeightVh >= fullPreviewHideThresholdVh) ||
+    (expArmadilloHideOnPlay && isPlaying);
 
   return (
     <div className="morph-studio-dark fixed inset-0 z-50 flex h-full w-full flex-col overflow-hidden bg-[#08080A] pl-[var(--morph-safe-left)] pr-[var(--morph-safe-right)] text-[var(--ink)] select-none">
@@ -8040,6 +8333,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
               wheelOpen={wheelMenuOpen}
               wheelSide={editorWheelSide}
               hideFab={hideEditorWheelFab}
+              extraBottomOffsetPx={isFullscreenPreview ? 66 : 0}
               onSetWheelOpen={setWheelMenuOpen}
               onChangeWheelSide={setEditorWheelSide}
               onSelectTab={(tab) => {
@@ -8351,6 +8645,15 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
           }));
         }}
         onToggleLayer={handleToggleSelectedClipLayer}
+        onTogglePipMode={
+          popupVideoClip && getClipTrackIndex(popupVideoClip) >= 1
+            ? () =>
+                handleSetClipLayerMode(
+                  popupVideoClip.id,
+                  isClipPipOverlay(popupVideoClip) ? 'video' : 'pip'
+                )
+            : undefined
+        }
         onOpenFx={() => {
           setActiveTab('fx');
           if (isPortraitMode) setIsInspectorOpen(true);

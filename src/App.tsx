@@ -463,11 +463,11 @@ export default function App() {
   ]);
 
   const isSimpleMode = Boolean(prefs.simpleMode);
-  const showClipboardBannerRef = useRef<boolean>(!isSimpleMode && prefs.proShowClipboardBanner !== false);
-  showClipboardBannerRef.current = !isSimpleMode && prefs.proShowClipboardBanner !== false;
+  const showClipboardBannerRef = useRef<boolean>(!isSimpleMode && Boolean(prefs.proShowClipboardBanner));
+  showClipboardBannerRef.current = !isSimpleMode && Boolean(prefs.proShowClipboardBanner);
 
   useEffect(() => {
-    if (isSimpleMode || prefs.proShowClipboardBanner === false) {
+    if (isSimpleMode || !prefs.proShowClipboardBanner) {
       setClipboardUrlBanner(null);
     }
     if (isSimpleMode) {
@@ -1246,13 +1246,13 @@ export default function App() {
       } else if (suite === 'image_pro') {
         const f = files.find((x) => x.kind === 'image')?.file ?? null;
         setImageProModal({open: true, tab: 'compare', file: f});
-        recordRecentTool({id: 'pro:image_pro', labelTr: 'Görsel Pro', labelEn: 'Image Pro'});
+        recordRecentTool({id: 'pro:image_pro', labelTr: 'Görsel Stüdyosu', labelEn: 'Image Studio'});
       } else {
         setPdfArchiveModal({open: true, tab: suite});
         recordRecentTool({
           id: `pro:${suite}`,
-          labelTr: suite === 'pipeline' ? 'Tarif Zinciri' : suite === 'archive' ? 'Arşiv Gezgini' : 'PDF Pro',
-          labelEn: suite === 'pipeline' ? 'Pipelines' : suite === 'archive' ? 'ZIP Explorer' : 'PDF Pro',
+          labelTr: suite === 'pipeline' ? 'Tarif Zinciri' : suite === 'archive' ? 'Arşiv Gezgini' : 'PDF Stüdyosu',
+          labelEn: suite === 'pipeline' ? 'Pipelines' : suite === 'archive' ? 'ZIP Explorer' : 'PDF Studio',
         });
       }
     },
@@ -2549,7 +2549,7 @@ export default function App() {
               setTab('studio');
             }}
             onChainToStudio={
-              !isSimpleMode && prefs.proShowResultChainBar !== false
+              !isSimpleMode && Boolean(prefs.proShowResultChainBar)
                 ? (target) => {
                     handleChainExportItems(job.result.items, target ?? 'studio');
                   }
@@ -2640,7 +2640,7 @@ export default function App() {
         ) : (
           <>
             {/* Item 8: Smart Clipboard Media URL Banner */}
-            {!isSimpleMode && prefs.proShowClipboardBanner !== false && clipboardUrlBanner && (
+            {!isSimpleMode && Boolean(prefs.proShowClipboardBanner) && clipboardUrlBanner && (
               <div className="mx-auto mt-3 flex w-full max-w-4xl items-center gap-2.5 px-4 sm:px-6">
                 <div className="flex w-full items-center gap-2.5 rounded-2xl border border-[var(--accent)]/45 bg-[var(--surface)] px-3.5 py-2.5 shadow-sm">
                   <Download className="h-4 w-4 shrink-0 text-[var(--accent-text)]" />
@@ -2711,24 +2711,24 @@ export default function App() {
               recentTools={recentTools}
               onQuickLaunchTool={handleQuickLaunchTool}
               onOpenProSuite={handleOpenProSuite}
-              showSuitesBar={!isSimpleMode && prefs.proShowStudioSuitesBar !== false}
+              showSuitesBar={!isSimpleMode && Boolean(prefs.proShowStudioSuitesBar)}
               suitesOrder={prefs.proSuitesOrder}
               hiddenSuites={prefs.proHiddenSuites}
-              showPinnedStrip={!isSimpleMode && prefs.proShowPinnedRecentStrip !== false}
+              showPinnedStrip={!isSimpleMode && Boolean(prefs.proShowPinnedRecentStrip)}
               onHideSuitesBar={() => {
                 setPrefs((p) => ({...p, proShowStudioSuitesBar: false}));
                 showToast(
                   lang === 'tr'
-                    ? 'Pro araç çubuğu gizlendi. Ayarlar → Görünüm veya Pro Modüller’den açabilirsin.'
-                    : 'Pro tools bar hidden. Re-enable anytime in Settings.'
+                    ? 'Stüdyo araç çubuğu gizlendi. Ayarlar → Deneysel’den tekrar açabilirsin.'
+                    : 'Studio tools bar hidden. Re-enable anytime in Settings → Experimental.'
                 );
               }}
               onHidePinnedStrip={() => {
                 setPrefs((p) => ({...p, proShowPinnedRecentStrip: false}));
                 showToast(
                   lang === 'tr'
-                    ? 'Sabitlenen kısayol şeridi gizlendi. Ayarlar → Görünüm veya Pro Modüller’den açabilirsin.'
-                    : 'Pinned shortcuts strip hidden. Re-enable anytime in Settings.'
+                    ? 'Sabitlenen kısayol şeridi gizlendi. Ayarlar → Deneysel’den tekrar açabilirsin.'
+                    : 'Pinned shortcuts strip hidden. Re-enable anytime in Settings → Experimental.'
                 );
               }}
             />

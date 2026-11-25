@@ -429,7 +429,8 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
                   step={5}
                   value={watermark.opacity}
                   onChange={(e) => onChange({opacity: Number(e.target.value)})}
-                  className="h-2 w-full cursor-pointer accent-[#FB923C]"
+                  style={{'--nle-pct': `${((watermark.opacity - 10) / 90) * 100}%`} as React.CSSProperties}
+                  className="morph-nle-range"
                 />
               </div>
 
@@ -447,7 +448,8 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
                   step={5}
                   value={Math.round(watermark.scale * 100)}
                   onChange={(e) => onChange({scale: Number((Number(e.target.value) / 100).toFixed(2))})}
-                  className="h-2 w-full cursor-pointer accent-[#FB923C]"
+                  style={{'--nle-pct': `${((Math.round(watermark.scale * 100) - 35) / 185) * 100}%`} as React.CSSProperties}
+                  className="morph-nle-range"
                 />
               </div>
 
@@ -463,7 +465,8 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
                   step={1}
                   value={watermark.rotation}
                   onChange={(e) => onChange({rotation: Number(e.target.value)})}
-                  className="h-2 w-full cursor-pointer accent-[#FB923C]"
+                  style={{'--nle-pct': `${((watermark.rotation + 45) / 90) * 100}%`} as React.CSSProperties}
+                  className="morph-nle-range"
                 />
               </div>
             </div>
@@ -532,7 +535,10 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
                         endSec: Math.max(nextStart + 0.3, watermark.endSec),
                       });
                     }}
-                    className="h-2 w-full cursor-pointer accent-[#FB923C]"
+                    style={{
+                      '--nle-pct': `${(Math.min(watermark.startSec, Math.max(0, totalTimelineDur - 0.3)) / Math.max(0.5, totalTimelineDur - 0.3)) * 100}%`,
+                    } as React.CSSProperties}
+                    className="morph-nle-range"
                   />
                 </div>
                 <div className="space-y-1">
@@ -549,7 +555,15 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
                     step={0.1}
                     value={Math.min(totalTimelineDur, Math.max(watermark.startSec + 0.3, watermark.endSec))}
                     onChange={(e) => onChange({endSec: Number(e.target.value)})}
-                    className="h-1.5 w-full cursor-pointer accent-[#FB923C]"
+                    style={{
+                      '--nle-pct': `${(() => {
+                        const lo = Math.min(totalTimelineDur, watermark.startSec + 0.3);
+                        const hi = Math.max(0.5, totalTimelineDur);
+                        const cur = Math.min(totalTimelineDur, Math.max(lo, watermark.endSec));
+                        return hi > lo ? ((cur - lo) / (hi - lo)) * 100 : 100;
+                      })()}%`,
+                    } as React.CSSProperties}
+                    className="morph-nle-range"
                   />
                 </div>
               </div>

@@ -68,7 +68,8 @@ export interface TimelineVideoClip {
   id: string;
   label: string;
   mediaId?: string; // defaults to PRIMARY_MEDIA_ID ('media-primary')
-  trackIndex?: number; // 0 = V1 Main Track, 1 = V2 Overlay / PiP Track
+  trackIndex?: number; // 0 = V1 Main Track, 1..4 = V2..V5 Video / PiP Tracks
+  layerMode?: 'video' | 'pip'; // 'video' (default) = full-frame clip; 'pip' = floating PiP overlay
   pipRect?: PipOverlayRect;
   sourceStart: number;
   sourceEnd: number;
@@ -277,6 +278,7 @@ export interface NleProjectState {
   updatedAt: number;
   fps: ProjectFps;
   snapEnabled: boolean;
+  allowVideoLayerOverlap?: boolean; // default false: normal video clips on V1..V5 cannot overlap in time (PiP always can)
   aspectRatio: AspectRatioPreset;
   fitMode: FitFillMode;
   cropBox: CropBoxRect;
@@ -374,11 +376,38 @@ export function getClipMediaId(clip: TimelineVideoClip): string {
   return clip.mediaId && clip.mediaId.trim() ? clip.mediaId : PRIMARY_MEDIA_ID;
 }
 
+export function isClipPipOverlay(clip: TimelineVideoClip): boolean {
+  return getClipTrackIndex(clip) >= 1 && clip.layerMode === 'pip';
+}
+
+export function findMainVideoClipAtTime(
+  videoClips: TimelineVideoClip[],
+  timelineSec: number
+): TimelineVideoClip | null {
+  const candidates = videoClips
+    .filter((c) => !isClipPipOverlay(c))
+    .sort(
+      (a, b) =>
+        getClipTrackIndex(b) - getClipTrackIndex(a) || a.timelineStart - b.timelineStart
+    );
+  for (const c of candidates) {
+    const start = c.timelineStart;
+    const end = clipTimelineEnd(c);
+    if (timelineSec >= start - 0.002 && timelineSec <= end + 0.002) {
+      return c;
+    }
+  }
+  return null;
+}
+
 export function findVideoClipAtTime(
   videoClips: TimelineVideoClip[],
   timelineSec: number,
   trackIndex = 0
 ): TimelineVideoClip | null {
+  if (trackIndex === 0) {
+    return findMainVideoClipAtTime(videoClips, timelineSec);
+  }
   const sorted = videoClips
     .filter((c) => getClipTrackIndex(c) === trackIndex)
     .sort((a, b) => a.timelineStart - b.timelineStart);
@@ -397,7 +426,7 @@ export function findOverlayVideoClipAtTime(
   timelineSec: number
 ): TimelineVideoClip | null {
   const overlays = videoClips
-    .filter((c) => getClipTrackIndex(c) >= 1)
+    .filter((c) => isClipPipOverlay(c))
     .sort(
       (a, b) =>
         getClipTrackIndex(b) - getClipTrackIndex(a) || a.timelineStart - b.timelineStart
@@ -422,7 +451,10 @@ export function timelineToSourceTime(
   sourceTime: number;
   isInGap: boolean;
 } {
-  const active = findVideoClipAtTime(videoClips, timelineSec, trackIndex);
+  const active =
+    trackIndex === 0
+      ? findMainVideoClipAtTime(videoClips, timelineSec)
+      : findOverlayVideoClipAtTime(videoClips, timelineSec);
   if (active) {
     if (active.isFreezeFrame) {
       return {clip: active, sourceTime: active.sourceStart, isInGap: false};
@@ -436,7 +468,7 @@ export function timelineToSourceTime(
     return {clip: active, sourceTime: Number(clamped.toFixed(4)), isInGap: false};
   }
   const sorted = videoClips
-    .filter((c) => getClipTrackIndex(c) === trackIndex)
+    .filter((c) => (trackIndex === 0 ? !isClipPipOverlay(c) : isClipPipOverlay(c)))
     .sort((a, b) => a.timelineStart - b.timelineStart);
   const nextClip = sorted.find((c) => c.timelineStart > timelineSec) ?? null;
   return {
@@ -690,24 +722,26 @@ export function splitVideoClipAtPlayhead(
 }
 
 function relabelTrackClips(videoClips: TimelineVideoClip[]): TimelineVideoClip[] {
-  const v1 = videoClips
-    .filter((c) => getClipTrackIndex(c) === 0)
-    .sort((a, b) => a.timelineStart - b.timelineStart)
+  const mainVideos = videoClips
+    .filter((c) => !isClipPipOverlay(c))
+    .sort((a, b) => a.timelineStart - b.timelineStart || getClipTrackIndex(a) - getClipTrackIndex(b))
     .map((c, idx) => ({
       ...c,
-      trackIndex: 0,
+      trackIndex: getClipTrackIndex(c),
+      layerMode: 'video' as const,
       label: c.isFreezeFrame ? `Donuk Kare ${idx + 1}` : `Klip ${idx + 1}`,
     }));
-  const v2 = videoClips
-    .filter((c) => getClipTrackIndex(c) >= 1)
-    .sort((a, b) => a.timelineStart - b.timelineStart)
+  const pipOverlays = videoClips
+    .filter((c) => isClipPipOverlay(c))
+    .sort((a, b) => a.timelineStart - b.timelineStart || getClipTrackIndex(a) - getClipTrackIndex(b))
     .map((c, idx) => ({
       ...c,
-      trackIndex: 1,
+      trackIndex: Math.max(1, getClipTrackIndex(c)),
+      layerMode: 'pip' as const,
       pipRect: c.pipRect ?? {...DEFAULT_PIP_RECT},
       label: c.isFreezeFrame ? `PiP Donuk ${idx + 1}` : `PiP ${idx + 1}`,
     }));
-  return [...v1, ...v2];
+  return [...mainVideos, ...pipOverlays];
 }
 
 export function trimVideoClipHandle(
@@ -1210,6 +1244,7 @@ export function createAppendedVideoClip(
     label: isPip ? 'PiP' : 'Klip',
     mediaId: asset.id,
     trackIndex: resolvedTrackIndex,
+    layerMode: isPip ? 'pip' : 'video',
     pipRect: isPip ? {...DEFAULT_PIP_RECT} : undefined,
     sourceStart: 0,
     sourceEnd: safeDur,
@@ -1235,12 +1270,52 @@ export function createAppendedVideoClip(
 }
 
 /**
- * Moves a selected clip between V1 (Main Track) and V2 (Overlay / PiP Track).
+ * Switches a V2..V5 video clip between normal full-frame 'video' mode and floating 'pip' overlay mode.
+ */
+export function setVideoClipLayerMode(
+  videoClips: TimelineVideoClip[],
+  clipId: string,
+  mode: 'video' | 'pip',
+  fps: ProjectFps,
+  allowVideoLayerOverlap = false
+): TimelineVideoClip[] {
+  const target = videoClips.find((c) => c.id === clipId);
+  if (!target) return videoClips;
+  const curTrack = getClipTrackIndex(target);
+  const nextTrack = mode === 'pip' ? Math.max(1, curTrack) : curTrack;
+  const targetDur = clipTimelineDuration(target);
+
+  let nextStart = target.timelineStart;
+  if (mode === 'video' && !allowVideoLayerOverlap) {
+    const blockers: TrackTimeInterval[] = videoClips
+      .filter((c) => c.id !== clipId && !isClipPipOverlay(c))
+      .map((c) => ({id: c.id, start: c.timelineStart, end: clipTimelineEnd(c)}));
+    nextStart = resolveNonOverlappingStart(target.timelineStart, targetDur, blockers, fps);
+  }
+
+  return relabelTrackClips(
+    videoClips.map((c) =>
+      c.id === clipId
+        ? {
+            ...c,
+            trackIndex: nextTrack,
+            layerMode: mode,
+            timelineStart: nextStart,
+            pipRect: mode === 'pip' ? c.pipRect ?? {...DEFAULT_PIP_RECT} : c.pipRect,
+          }
+        : c
+    )
+  );
+}
+
+/**
+ * Moves a selected clip between V1 (Main Track) and V2 (Lower Video Track — keeping normal video mode unless already PiP).
  */
 export function toggleClipTrackLayer(
   videoClips: TimelineVideoClip[],
   clipId: string,
-  fps: ProjectFps
+  fps: ProjectFps,
+  allowVideoLayerOverlap = false
 ): {clips: TimelineVideoClip[]; movedToTrack: 0 | 1; didMove: boolean; reason?: string} {
   const target = videoClips.find((c) => c.id === clipId);
   if (!target) return {clips: videoClips, movedToTrack: 0, didMove: false};
@@ -1259,31 +1334,45 @@ export function toggleClipTrackLayer(
     const nextV1 = v1Clips
       .filter((c) => c.id !== clipId)
       .sort((a, b) => a.timelineStart - b.timelineStart);
-    let cursor = 0;
-    const packedV1 = nextV1.map((c) => {
-      const start = snapToFrame(cursor, fps);
-      cursor = start + clipTimelineDuration(c);
-      return {...c, timelineStart: start};
-    });
+    const otherLower = videoClips.filter((c) => getClipTrackIndex(c) >= 1);
+    const targetDur = clipTimelineDuration(target);
+    const blockers: TrackTimeInterval[] = (
+      allowVideoLayerOverlap
+        ? otherLower.filter((c) => getClipTrackIndex(c) === 1)
+        : [...nextV1, ...otherLower.filter((c) => !isClipPipOverlay(c))]
+    ).map((c) => ({id: c.id, start: c.timelineStart, end: clipTimelineEnd(c)}));
+    const safeStart = resolveNonOverlappingStart(target.timelineStart, targetDur, blockers, fps);
     const movedClip: TimelineVideoClip = {
       ...target,
       trackIndex: 1,
-      pipRect: target.pipRect ?? {...DEFAULT_PIP_RECT},
-      timelineStart: Math.min(target.timelineStart, Math.max(0, cursor - 0.5)),
+      layerMode: 'video',
+      timelineStart: safeStart,
     };
-    const otherV2 = videoClips.filter((c) => getClipTrackIndex(c) >= 1);
     return {
-      clips: relabelTrackClips([...packedV1, ...otherV2, movedClip]),
+      clips: relabelTrackClips([...nextV1, ...otherLower, movedClip]),
       movedToTrack: 1,
       didMove: true,
     };
   } else {
-    // Move V2 overlay down to end of V1
+    // Move V2+ clip back to V1
     const v1End = v1Clips.reduce((acc, c) => Math.max(acc, clipTimelineEnd(c)), 0);
+    const targetDur = clipTimelineDuration(target);
+    const blockers: TrackTimeInterval[] = (
+      allowVideoLayerOverlap
+        ? v1Clips
+        : videoClips.filter((c) => c.id !== clipId && !isClipPipOverlay(c))
+    ).map((c) => ({id: c.id, start: c.timelineStart, end: clipTimelineEnd(c)}));
+    const safeStart = resolveNonOverlappingStart(
+      target.timelineStart || v1End,
+      targetDur,
+      blockers,
+      fps
+    );
     const movedClip: TimelineVideoClip = {
       ...target,
       trackIndex: 0,
-      timelineStart: snapToFrame(v1End, fps),
+      layerMode: 'video',
+      timelineStart: safeStart,
     };
     const nextClips = videoClips.map((c) => (c.id === clipId ? movedClip : c));
     return {
@@ -1296,16 +1385,18 @@ export function toggleClipTrackLayer(
 
 /**
  * Directly moves a video clip along the timeline (drag-to-reposition & drag-to-reorder).
- * - V2 overlay clips slide freely anywhere >= 0s.
+ * - PiP overlay clips slide freely across V1 time (only blocking same-row neighbors).
+ * - Normal video clips on V2..V5 NEVER overlap V1 or other normal video clips in time unless allowVideoLayerOverlap is enabled.
  * - V1 main clips swap order automatically when dragged past another V1 clip's center,
- *   or slide into open space / gaps without overlapping neighboring V1 clips.
+ *   or slide into open space / gaps without overlapping neighboring clips.
  */
 export function moveVideoClipOnTimeline(
   videoClips: TimelineVideoClip[],
   clipId: string,
   targetTimelineStart: number,
   fps: ProjectFps,
-  freeMode = false
+  freeMode = false,
+  allowVideoLayerOverlap = false
 ): TimelineVideoClip[] {
   const target = videoClips.find((c) => c.id === clipId);
   if (!target) return videoClips;
@@ -1314,11 +1405,18 @@ export function moveVideoClipOnTimeline(
   const targetDur = clipTimelineDuration(target);
 
   if (targetTrack >= 1) {
-    // Prevent two PiP overlay clips on the exact same V2/V3/V4 row from stacking on top of each other
-    const sameRowBlockers: TrackTimeInterval[] = videoClips
-      .filter((c) => c.id !== clipId && getClipTrackIndex(c) === targetTrack)
+    const isPip = isClipPipOverlay(target);
+    const blockers: TrackTimeInterval[] = videoClips
+      .filter((c) => {
+        if (c.id === clipId) return false;
+        if (isPip || allowVideoLayerOverlap) {
+          return getClipTrackIndex(c) === targetTrack;
+        }
+        // Normal lower-row video clip with overlap protection ON: block against same row AND all other normal videos (V1..V5)
+        return getClipTrackIndex(c) === targetTrack || !isClipPipOverlay(c);
+      })
       .map((c) => ({id: c.id, start: c.timelineStart, end: clipTimelineEnd(c)}));
-    const safeStart = resolveNonOverlappingStart(clampedStart, targetDur, sameRowBlockers, fps);
+    const safeStart = resolveNonOverlappingStart(clampedStart, targetDur, blockers, fps);
     return relabelTrackClips(
       videoClips.map((c) => (c.id === clipId ? {...c, timelineStart: safeStart} : c))
     );
@@ -1326,7 +1424,10 @@ export function moveVideoClipOnTimeline(
 
   if (freeMode) {
     const v1Blockers: TrackTimeInterval[] = videoClips
-      .filter((c) => c.id !== clipId && getClipTrackIndex(c) === 0)
+      .filter((c) => {
+        if (c.id === clipId) return false;
+        return allowVideoLayerOverlap ? getClipTrackIndex(c) === 0 : !isClipPipOverlay(c);
+      })
       .map((c) => ({id: c.id, start: c.timelineStart, end: clipTimelineEnd(c)}));
     const safeStart = resolveNonOverlappingStart(clampedStart, targetDur, v1Blockers, fps);
     return relabelTrackClips(
@@ -1340,10 +1441,16 @@ export function moveVideoClipOnTimeline(
   const v2Clips = videoClips.filter((c) => getClipTrackIndex(c) >= 1);
 
   if (v1Sorted.length <= 1) {
-    return relabelTrackClips([
-      {...target, timelineStart: clampedStart},
-      ...v2Clips,
-    ]);
+    const blockers: TrackTimeInterval[] = allowVideoLayerOverlap
+      ? []
+      : v2Clips
+          .filter((c) => !isClipPipOverlay(c))
+          .map((c) => ({id: c.id, start: c.timelineStart, end: clipTimelineEnd(c)}));
+    const safeStart =
+      blockers.length > 0
+        ? resolveNonOverlappingStart(clampedStart, targetDur, blockers, fps)
+        : clampedStart;
+    return relabelTrackClips([{...target, timelineStart: safeStart}, ...v2Clips]);
   }
 
   const targetCenter = clampedStart + targetDur / 2;
@@ -1372,12 +1479,32 @@ export function moveVideoClipOnTimeline(
     return relabelTrackClips([...packedV1, ...v2Clips]);
   }
 
-  // Otherwise slide freely between previous clip end and next clip start (preserving gaps)
+  // Otherwise slide freely between previous clip end and next clip start (preserving gaps & lower-row normal videos)
   const prevClip = origIdx > 0 ? v1Sorted[origIdx - 1] : null;
   const nextClip = origIdx < v1Sorted.length - 1 ? v1Sorted[origIdx + 1] : null;
   const minStart = prevClip ? clipTimelineEnd(prevClip) : 0;
   const maxStart = nextClip ? Math.max(minStart, nextClip.timelineStart - targetDur) : Number.MAX_SAFE_INTEGER;
-  const safeStart = snapToFrame(Math.min(maxStart, Math.max(minStart, clampedStart)), fps);
+  let safeStart = snapToFrame(Math.min(maxStart, Math.max(minStart, clampedStart)), fps);
+
+  if (!allowVideoLayerOverlap) {
+    const lowerNormalBlockers: TrackTimeInterval[] = v2Clips
+      .filter((c) => !isClipPipOverlay(c))
+      .map((c) => ({id: c.id, start: c.timelineStart, end: clipTimelineEnd(c)}));
+    if (lowerNormalBlockers.length > 0) {
+      const resolved = resolveNonOverlappingStart(
+        safeStart,
+        targetDur,
+        [
+          ...others.map((c) => ({id: c.id, start: c.timelineStart, end: clipTimelineEnd(c)})),
+          ...lowerNormalBlockers,
+        ],
+        fps
+      );
+      if (resolved >= minStart - OVERLAP_EPS && resolved <= maxStart + OVERLAP_EPS) {
+        safeStart = resolved;
+      }
+    }
+  }
 
   return relabelTrackClips([
     ...v1Sorted.map((c) => (c.id === clipId ? {...c, timelineStart: safeStart} : c)),
@@ -1391,7 +1518,8 @@ export function moveVideoClip2D(
   targetTimelineStart: number,
   targetTrackIndex: number,
   fps: ProjectFps,
-  freeMode = false
+  freeMode = false,
+  allowVideoLayerOverlap = false
 ): TimelineVideoClip[] {
   const target = videoClips.find((c) => c.id === clipId);
   if (!target) return videoClips;
@@ -1403,22 +1531,46 @@ export function moveVideoClip2D(
     const v1Count = videoClips.filter((c) => getClipTrackIndex(c) === 0).length;
     if (clampedTrack >= 1 && curTrack === 0 && v1Count <= 1) {
       // Keep at least one clip on V1 main track — still allow free horizontal slide!
-      return moveVideoClipOnTimeline(videoClips, clipId, clampedStart, fps, freeMode);
+      return moveVideoClipOnTimeline(
+        videoClips,
+        clipId,
+        clampedStart,
+        fps,
+        freeMode,
+        allowVideoLayerOverlap
+      );
     }
+    const nextLayerMode: 'video' | 'pip' =
+      clampedTrack === 0 ? 'video' : target.layerMode === 'pip' ? 'pip' : 'video';
     const switched = videoClips.map((c) =>
       c.id === clipId
         ? {
             ...c,
             trackIndex: clampedTrack,
+            layerMode: nextLayerMode,
             timelineStart: clampedStart,
-            pipRect: clampedTrack >= 1 ? c.pipRect ?? {...DEFAULT_PIP_RECT} : c.pipRect,
+            pipRect: nextLayerMode === 'pip' ? c.pipRect ?? {...DEFAULT_PIP_RECT} : c.pipRect,
           }
         : c
     );
-    return moveVideoClipOnTimeline(relabelTrackClips(switched), clipId, clampedStart, fps, freeMode);
+    return moveVideoClipOnTimeline(
+      relabelTrackClips(switched),
+      clipId,
+      clampedStart,
+      fps,
+      freeMode,
+      allowVideoLayerOverlap
+    );
   }
 
-  return moveVideoClipOnTimeline(videoClips, clipId, clampedStart, fps, freeMode);
+  return moveVideoClipOnTimeline(
+    videoClips,
+    clipId,
+    clampedStart,
+    fps,
+    freeMode,
+    allowVideoLayerOverlap
+  );
 }
 
 export function moveTextClipOnTimeline(
