@@ -252,12 +252,21 @@ export async function extractOrReversePdfBlob(
   return new Blob([new Uint8Array(bytes)], {type: 'application/pdf'});
 }
 
-export async function rotatePdfBlob(file: Blob, deg: number): Promise<Blob> {
+export async function rotatePdfBlob(
+  file: Blob,
+  deg: number,
+  pageRotations?: number[]
+): Promise<Blob> {
   const normalized = ((deg % 360) + 360) % 360;
   const doc = await PDFDocument.load(await file.arrayBuffer(), {ignoreEncryption: true});
-  for (const page of doc.getPages()) {
+  const pages = doc.getPages();
+  const hasPerPage = Array.isArray(pageRotations) && pageRotations.length > 0;
+  for (let i = 0; i < pages.length; i++) {
+    const page = pages[i];
+    const delta = hasPerPage ? ((pageRotations[i] ?? 0) % 360 + 360) % 360 : normalized;
+    if (delta === 0) continue;
     const current = page.getRotation().angle;
-    page.setRotation(degrees((current + normalized) % 360));
+    page.setRotation(degrees((current + delta) % 360));
   }
   const bytes = await doc.save();
   return new Blob([new Uint8Array(bytes)], {type: 'application/pdf'});
@@ -455,7 +464,15 @@ function parseHexToRgb01(hex: string): {r: number; g: number; b: number} {
 
 export async function watermarkPdfBlob(
   file: Blob,
-  opts: {text: string; opacity: number; color: string; position: 'diagonal' | 'center'}
+  opts: {
+    text: string;
+    opacity: number;
+    color: string;
+    position: 'diagonal' | 'center';
+    cx?: number;
+    cy?: number;
+    scale?: number;
+  }
 ): Promise<Blob> {
   const label = (opts.text || 'MORPH').trim();
   if (!label) throw new Error('Filigran metni boş olamaz.');
@@ -464,11 +481,14 @@ export async function watermarkPdfBlob(
   const pages = doc.getPages();
   const alpha = Math.min(0.9, Math.max(0.08, opts.opacity / 100));
   const needsUnicode = /[^\x20-\x7E]/.test(label);
+  const cxNorm = typeof opts.cx === 'number' && Number.isFinite(opts.cx) ? Math.max(0.05, Math.min(0.95, opts.cx)) : 0.5;
+  const cyNorm = typeof opts.cy === 'number' && Number.isFinite(opts.cy) ? Math.max(0.05, Math.min(0.95, opts.cy)) : 0.5;
+  const wmScale = typeof opts.scale === 'number' && Number.isFinite(opts.scale) ? Math.max(0.4, Math.min(2, opts.scale)) : 1;
 
   if (typeof document !== 'undefined') {
     // Render crisp high-DPI transparent PNG overlay supporting full Turkish Unicode & smooth rotation
-    const canvasW = 1200;
-    const canvasH = 800;
+    const canvasW = 1000;
+    const canvasH = 680;
     const canvas = document.createElement('canvas');
     canvas.width = canvasW;
     canvas.height = canvasH;
@@ -484,8 +504,8 @@ export async function watermarkPdfBlob(
       let fontPx = 112;
       ctx.font = `800 ${fontPx}px "Plus Jakarta Sans", -apple-system, Arial, sans-serif`;
       const measured = ctx.measureText(label).width;
-      if (measured > canvasW * 0.82) {
-        fontPx = Math.max(32, Math.floor((fontPx * (canvasW * 0.82)) / measured));
+      if (measured > canvasW * 0.8) {
+        fontPx = Math.max(30, Math.floor((fontPx * (canvasW * 0.8)) / measured));
         ctx.font = `800 ${fontPx}px "Plus Jakarta Sans", -apple-system, Arial, sans-serif`;
       }
       ctx.fillStyle = opts.color || '#64748B';
@@ -498,11 +518,13 @@ export async function watermarkPdfBlob(
       const embedded = await doc.embedPng(await pngBlob.arrayBuffer());
       for (const page of pages) {
         const {width, height} = page.getSize();
-        const drawW = width * 0.84;
+        const drawW = width * 0.72 * wmScale;
         const drawH = (drawW * canvasH) / canvasW;
+        const targetX = cxNorm * width;
+        const targetY = (1 - cyNorm) * height;
         page.drawImage(embedded, {
-          x: (width - drawW) / 2,
-          y: (height - drawH) / 2,
+          x: targetX - drawW / 2,
+          y: targetY - drawH / 2,
           width: drawW,
           height: drawH,
         });
@@ -533,16 +555,18 @@ export async function watermarkPdfBlob(
   const {r, g, b} = parseHexToRgb01(opts.color || '#64748B');
   for (const page of pages) {
     const {width, height} = page.getSize();
-    const size = Math.max(28, Math.min(64, Math.round(width * 0.09)));
+    const size = Math.max(18, Math.min(96, Math.round(width * 0.08 * wmScale)));
     const tw = font.widthOfTextAtSize(safeAscii, size);
+    const targetX = cxNorm * width;
+    const targetY = (1 - cyNorm) * height;
     page.drawText(safeAscii, {
-      x: Math.max(24, (width - tw) / 2),
-      y: height / 2,
+      x: targetX - tw / 2,
+      y: targetY - size / 3,
       size,
       font,
       color: rgb(r, g, b),
       opacity: alpha,
-      rotate: opts.position === 'diagonal' ? degrees(32) : degrees(0),
+      rotate: opts.position === 'diagonal' ? degrees(34) : degrees(0),
     });
   }
   const bytes = await doc.save();

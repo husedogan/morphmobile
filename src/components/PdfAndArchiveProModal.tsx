@@ -14,6 +14,7 @@ import {
   FolderArchive,
   Loader2,
   Lock,
+  Move,
   PenTool,
   Play,
   Plus,
@@ -22,6 +23,7 @@ import {
   ShieldAlert,
   Square,
   Trash2,
+  Type,
   Undo2,
   Upload,
   Workflow,
@@ -44,10 +46,33 @@ interface PdfAndArchiveProModalProps {
   open: boolean;
   lang: Lang;
   initialTab?: PdfArchiveTab;
+  initialZipFile?: File | null;
+  initialPdfFile?: File | null;
   studioFiles: PickedFile[];
   onClose: () => void;
   onExportBlobs: (items: Array<{blob: Blob; name: string}>, toolLabel: string) => void;
   onShowToast?: (msg: string) => void;
+}
+
+interface PdfRedactBox {
+  id: string;
+  x: number; // normalized 0..1 top-left origin
+  y: number;
+  w: number;
+  h: number;
+}
+
+function hexToPdfRgb(hex: string) {
+  const clean = hex.replace('#', '').trim();
+  if (clean.length === 6) {
+    const r = parseInt(clean.slice(0, 2), 16) / 255;
+    const g = parseInt(clean.slice(2, 4), 16) / 255;
+    const b = parseInt(clean.slice(4, 6), 16) / 255;
+    if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) {
+      return rgb(r, g, b);
+    }
+  }
+  return rgb(0.1, 0.1, 0.15);
 }
 
 interface PdfPageCard {
@@ -80,6 +105,8 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
   open,
   lang,
   initialTab = 'pdf_organize',
+  initialZipFile = null,
+  initialPdfFile = null,
   studioFiles,
   onClose,
   onExportBlobs,
@@ -95,16 +122,45 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
   const [addPageNumbers, setAddPageNumbers] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
 
-  // ---- PDF Sign, Redact & Lock State ----
+  // ---- PDF Visual Sign, Multi-Redact, Watermark & Lock State ----
   const [signPageNum, setSignPageNum] = useState(1);
-  const [signCorner, setSignCorner] = useState<'br' | 'bl' | 'tr' | 'center'>('br');
-  const [redactEnabled, setRedactEnabled] = useState(false);
-  const [redactX, setRedactX] = useState(12); // % from left
-  const [redactY, setRedactY] = useState(72); // % from bottom
-  const [redactW, setRedactW] = useState(44); // % width
-  const [redactH, setRedactH] = useState(6); // % height
+  const [signPageLoading, setSignPageLoading] = useState(false);
+  const [signPageSize, setSignPageSize] = useState<{w: number; h: number}>({w: 595, h: 842});
+  const [signToolMode, setSignToolMode] = useState<'redact' | 'signature' | 'watermark'>('redact');
+  const [redactions, setRedactions] = useState<PdfRedactBox[]>([]);
+  const [selectedRedactId, setSelectedRedactId] = useState<string | null>(null);
+  const [draftRedact, setDraftRedact] = useState<{x0: number; y0: number; x1: number; y1: number} | null>(null);
+  const [sigOverlay, setSigOverlay] = useState<{x: number; y: number; w: number; aspect: number}>({
+    x: 0.56,
+    y: 0.78,
+    w: 0.34,
+    aspect: 540 / 150,
+  });
+  const [sigDataUrl, setSigDataUrl] = useState<string | null>(null);
+  const [wmEnabled, setWmEnabled] = useState(false);
+  const [wmText, setWmText] = useState('MORPH');
+  const [wmOverlay, setWmOverlay] = useState<{cx: number; cy: number; sizePct: number; opacity: number; color: string; diagonal: boolean}>({
+    cx: 0.5,
+    cy: 0.5,
+    sizePct: 0.075,
+    opacity: 0.3,
+    color: '#DC2626',
+    diagonal: true,
+  });
   const [lockPassword, setLockPassword] = useState('');
   const sigCanvasRef = useRef<HTMLCanvasElement>(null);
+  const signPageCanvasRef = useRef<HTMLCanvasElement>(null);
+  const signStageRef = useRef<HTMLDivElement>(null);
+  const stageDragRef = useRef<
+    | {type: 'draw'; x0: number; y0: number}
+    | {type: 'move_redact'; id: string; startX: number; startY: number; origX: number; origY: number}
+    | {type: 'resize_redact'; id: string; startX: number; startY: number; origW: number; origH: number}
+    | {type: 'move_sig'; startX: number; startY: number; origX: number; origY: number}
+    | {type: 'resize_sig'; startX: number; origW: number}
+    | {type: 'move_wm'; startX: number; startY: number; origCx: number; origCy: number}
+    | {type: 'resize_wm'; startX: number; origSizePct: number}
+    | null
+  >(null);
   const sigDrawingRef = useRef(false);
   const [hasSigStroke, setHasSigStroke] = useState(false);
 
@@ -113,7 +169,13 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
   const [zipObj, setZipObj] = useState<JSZip | null>(null);
   const [zipEntries, setZipEntries] = useState<ZipEntryRow[]>([]);
   const [zipSearch, setZipSearch] = useState('');
-  const [zipPreview, setZipPreview] = useState<{name: string; kind: 'text' | 'image'; content: string} | null>(null);
+  const [zipPreview, setZipPreview] = useState<{
+    name: string;
+    kind: 'text' | 'image' | 'audio' | 'video';
+    content: string;
+    isObjectUrl?: boolean;
+  } | null>(null);
+  const zipPreviewUrlRef = useRef<string | null>(null);
 
   // ---- Pipeline Builder State ----
   const [pipelines, setPipelines] = useState<MorphPipeline[]>(() => loadPipelines());
@@ -129,18 +191,43 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
   const zipInputRef = useRef<HTMLInputElement>(null);
   const zipAddFileRef = useRef<HTMLInputElement>(null);
 
+  const clearZipPreview = () => {
+    if (zipPreviewUrlRef.current) {
+      URL.revokeObjectURL(zipPreviewUrlRef.current);
+      zipPreviewUrlRef.current = null;
+    }
+    setZipPreview(null);
+  };
+
   useEffect(() => {
-    if (!open) return;
+    return () => {
+      if (zipPreviewUrlRef.current) {
+        URL.revokeObjectURL(zipPreviewUrlRef.current);
+        zipPreviewUrlRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!open) {
+      clearZipPreview();
+      return;
+    }
     setTab(initialTab);
-    if (!pdfFile) {
+    if (initialPdfFile) {
+      setPdfFile(initialPdfFile);
+    } else if (!pdfFile) {
       const firstPdf = studioFiles.find((f) => f.kind === 'pdf');
       if (firstPdf) setPdfFile(firstPdf.file);
     }
-    if (!zipFile) {
+    if (initialZipFile) {
+      clearZipPreview();
+      setZipFile(initialZipFile);
+    } else if (!zipFile) {
       const firstZip = studioFiles.find((f) => f.kind === 'archive' || /\.zip$/i.test(f.name));
       if (firstZip) setZipFile(firstZip.file);
     }
-  }, [open, initialTab, studioFiles]);
+  }, [open, initialTab, initialZipFile, initialPdfFile, studioFiles]);
 
   // Load PDF page thumbnails when pdfFile changes
   useEffect(() => {
@@ -201,6 +288,44 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
       cancelled = true;
     };
   }, [pdfFile, open]);
+
+  // Render full-resolution active PDF page for visual Sign/Redact/Watermark canvas
+  useEffect(() => {
+    if (!open || tab !== 'pdf_sign' || !pdfFile) return;
+    let cancelled = false;
+    setSignPageLoading(true);
+    (async () => {
+      try {
+        const ab = await pdfFile.arrayBuffer();
+        const doc = await pdfjsLib.getDocument({data: new Uint8Array(ab)}).promise;
+        const pageNum = Math.max(1, Math.min(doc.numPages, signPageNum));
+        const page = await doc.getPage(pageNum);
+        const vp1 = page.getViewport({scale: 1});
+        const scale = Math.min(2.2, Math.max(1.2, 860 / Math.max(200, vp1.width)));
+        const vp = page.getViewport({scale});
+        if (cancelled) return;
+        setSignPageSize({w: vp1.width, h: vp1.height});
+        const canvas = signPageCanvasRef.current;
+        if (canvas) {
+          canvas.width = Math.round(vp.width);
+          canvas.height = Math.round(vp.height);
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            await page.render({canvasContext: ctx, viewport: vp, canvas}).promise;
+          }
+        }
+      } catch {
+        // Ignore preview error; fallback blank canvas keeps aspect ratio
+      } finally {
+        if (!cancelled) setSignPageLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, tab, pdfFile, signPageNum]);
 
   // Load ZIP contents when zipFile changes
   useEffect(() => {
@@ -279,7 +404,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
     }
   };
 
-  // ---- PDF Sign / Redact / Protect Export ----
+  // ---- PDF Sign / Visual Redact / Watermark / Protect Export ----
   const handleSaveSignedPdf = async () => {
     if (!pdfFile) return;
     setBusy(true);
@@ -287,37 +412,78 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
       const doc = await PDFDocument.load(await pdfFile.arrayBuffer(), {ignoreEncryption: true});
       const pIdx = Math.max(0, Math.min(doc.getPageCount() - 1, signPageNum - 1));
       const pg = doc.getPage(pIdx);
-      const {width, height} = pg.getSize();
+      const crop = pg.getCropBox();
+      const rotAngle = ((pg.getRotation().angle % 360) + 360) % 360;
 
-      // Embed drawn signature PNG if drawn
+      // Convert normalized [0..1] top-left visual box into pdf-lib bottom-left crop coordinates
+      const toPdfRect = (vx: number, vy: number, vw: number, vh: number) => {
+        if (rotAngle === 180) {
+          return {
+            x: crop.x + (1 - vx - vw) * crop.width,
+            y: crop.y + vy * crop.height,
+            w: vw * crop.width,
+            h: vh * crop.height,
+          };
+        }
+        return {
+          x: crop.x + vx * crop.width,
+          y: crop.y + crop.height - (vy + vh) * crop.height,
+          w: vw * crop.width,
+          h: vh * crop.height,
+        };
+      };
+
+      // Draw all visual black redaction rectangles
+      for (const box of redactions) {
+        const r = toPdfRect(box.x, box.y, box.w, box.h);
+        pg.drawRectangle({
+          x: r.x,
+          y: r.y,
+          width: r.w,
+          height: r.h,
+          color: rgb(0, 0, 0),
+        });
+      }
+
+      // Embed drawn signature PNG at exact placed box
       if (hasSigStroke && sigCanvasRef.current) {
         const dataUrl = sigCanvasRef.current.toDataURL('image/png');
         const sigImg = await doc.embedPng(dataUrl);
-        const sigW = Math.min(180, width * 0.32);
-        const sigH = (sigImg.height / sigImg.width) * sigW;
-        let x = width - sigW - 36;
-        let y = 36;
-        if (signCorner === 'bl') {
-          x = 36;
-          y = 36;
-        } else if (signCorner === 'tr') {
-          x = width - sigW - 36;
-          y = height - sigH - 36;
-        } else if (signCorner === 'center') {
-          x = (width - sigW) / 2;
-          y = (height - sigH) / 2;
-        }
-        pg.drawImage(sigImg, {x, y, width: sigW, height: sigH});
+        const pageAspect = signPageSize.w / Math.max(1, signPageSize.h);
+        const normH = (sigOverlay.w / Math.max(0.2, sigOverlay.aspect)) * pageAspect;
+        const clampedY = Math.min(Math.max(0, sigOverlay.y), Math.max(0, 1 - normH));
+        const r = toPdfRect(sigOverlay.x, clampedY, sigOverlay.w, normH);
+        pg.drawImage(sigImg, {
+          x: r.x,
+          y: r.y,
+          width: r.w,
+          height: r.h,
+        });
       }
 
-      // Draw permanent black redaction rectangle
-      if (redactEnabled) {
-        pg.drawRectangle({
-          x: (redactX / 100) * width,
-          y: (redactY / 100) * height,
-          width: (redactW / 100) * width,
-          height: (redactH / 100) * height,
-          color: rgb(0, 0, 0),
+      // Draw optional text watermark at exact dragged position & size
+      if (wmEnabled && wmText.trim()) {
+        const font = await doc.embedFont(StandardFonts.HelveticaBold);
+        const visualWidth = rotAngle === 90 || rotAngle === 270 ? crop.height : crop.width;
+        const fontSize = Math.max(8, wmOverlay.sizePct * visualWidth);
+        const text = wmText.trim();
+        const textW = font.widthOfTextAtSize(text, fontSize);
+        const angleRad = wmOverlay.diagonal ? (30 * Math.PI) / 180 : 0;
+        const centerPdfX = crop.x + wmOverlay.cx * crop.width;
+        const centerPdfY = crop.y + (1 - wmOverlay.cy) * crop.height;
+        const halfW = textW / 2;
+        const halfH = fontSize * 0.35;
+        const x = centerPdfX - (halfW * Math.cos(angleRad) - halfH * Math.sin(angleRad));
+        const y = centerPdfY - (halfW * Math.sin(angleRad) + halfH * Math.cos(angleRad));
+
+        pg.drawText(text, {
+          x,
+          y,
+          size: fontSize,
+          font,
+          color: hexToPdfRgb(wmOverlay.color),
+          opacity: Math.max(0.08, Math.min(1, wmOverlay.opacity)),
+          rotate: wmOverlay.diagonal ? degrees(30) : degrees(0),
         });
       }
 
@@ -381,12 +547,29 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
     if (!zipObj) return;
     const entry = zipObj.file(path);
     if (!entry) return;
+    clearZipPreview();
     if (/\.(png|jpg|jpeg|webp|gif|svg)$/i.test(path)) {
       const blob = await entry.async('blob');
-      setZipPreview({name: path, kind: 'image', content: URL.createObjectURL(blob)});
+      const url = URL.createObjectURL(blob);
+      zipPreviewUrlRef.current = url;
+      setZipPreview({name: path, kind: 'image', content: url, isObjectUrl: true});
+    } else if (/\.(mp3|wav|ogg|m4a|aac|flac|opus)$/i.test(path)) {
+      const raw = await entry.async('arraybuffer');
+      const ext = path.split('.').pop()?.toLowerCase() ?? 'mp3';
+      const mime = ext === 'mp3' ? 'audio/mpeg' : ext === 'm4a' ? 'audio/mp4' : `audio/${ext}`;
+      const url = URL.createObjectURL(new Blob([raw], {type: mime}));
+      zipPreviewUrlRef.current = url;
+      setZipPreview({name: path, kind: 'audio', content: url, isObjectUrl: true});
+    } else if (/\.(mp4|webm|mov|mkv|m4v|avi)$/i.test(path)) {
+      const raw = await entry.async('arraybuffer');
+      const ext = path.split('.').pop()?.toLowerCase() ?? 'mp4';
+      const mime = ext === 'mov' ? 'video/quicktime' : `video/${ext === 'm4v' ? 'mp4' : ext}`;
+      const url = URL.createObjectURL(new Blob([raw], {type: mime}));
+      zipPreviewUrlRef.current = url;
+      setZipPreview({name: path, kind: 'video', content: url, isObjectUrl: true});
     } else {
       const text = await entry.async('string');
-      setZipPreview({name: path, kind: 'text', content: text.slice(0, 6000)});
+      setZipPreview({name: path, kind: 'text', content: text.slice(0, 12000)});
     }
   };
 
@@ -698,37 +881,454 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
             </div>
           )}
 
-          {/* ==================== TAB 2: PDF SIGN, REDACT & PROTECT ==================== */}
+          {/* ==================== TAB 2: VISUAL PDF REDACT, SIGNATURE & WATERMARK ==================== */}
           {tab === 'pdf_sign' && (
             <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <button
                   type="button"
                   onClick={() => pdfInputRef.current?.click()}
-                  className="flex h-9 min-w-0 max-w-full items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-bold text-[var(--ink)]"
+                  className="flex h-10 min-w-0 max-w-full items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-bold text-[var(--ink)]"
                 >
                   <Upload className="h-3.5 w-3.5 shrink-0 text-[var(--accent-text)]" />
                   <span className="truncate">{pdfFile ? pdfFile.name : isTr ? 'PDF Seç' : 'Pick PDF'}</span>
                 </button>
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-[var(--muted)]">{isTr ? 'Hedef Sayfa:' : 'Target Page:'}</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={Math.max(1, pages.length)}
-                    value={signPageNum}
-                    onChange={(e) => setSignPageNum(Math.max(1, Number(e.target.value) || 1))}
-                    className="font-mono-num w-16 rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2 py-1 text-center font-bold text-[var(--ink)]"
-                  />
+                <div className="flex items-center gap-1.5 text-xs">
+                  <button
+                    type="button"
+                    disabled={signPageNum <= 1}
+                    onClick={() => setSignPageNum((p) => Math.max(1, p - 1))}
+                    className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] disabled:opacity-35"
+                    aria-label={isTr ? 'Önceki sayfa' : 'Previous page'}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                  </button>
+                  <span className="font-mono-num min-w-[54px] text-center font-bold text-[var(--ink)]">
+                    {signPageNum} / {Math.max(1, pages.length)}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={signPageNum >= Math.max(1, pages.length)}
+                    onClick={() => setSignPageNum((p) => Math.min(Math.max(1, pages.length), p + 1))}
+                    className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] disabled:opacity-35"
+                    aria-label={isTr ? 'Sonraki sayfa' : 'Next page'}
+                  >
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
+
+              {/* Active Tool Mode Switcher for Interactive Canvas */}
+              <div className="grid grid-cols-3 gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-1.5">
+                {(
+                  [
+                    {id: 'redact' as const, icon: ShieldAlert, tr: `Sansür (${redactions.length})`, en: `Redact (${redactions.length})`},
+                    {id: 'signature' as const, icon: PenTool, tr: 'İmza Yerleştir', en: 'Place Sign'},
+                    {id: 'watermark' as const, icon: Type, tr: 'Filigran', en: 'Watermark'},
+                  ] as const
+                ).map((modeBtn) => {
+                  const Icon = modeBtn.icon;
+                  const active = signToolMode === modeBtn.id;
+                  return (
+                    <button
+                      key={modeBtn.id}
+                      type="button"
+                      onClick={() => setSignToolMode(modeBtn.id)}
+                      className={`flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl px-2 text-[11px] font-bold ${
+                        active ? 'morph-accent-btn shadow-sm' : 'text-[var(--muted)] hover:text-[var(--ink)]'
+                      }`}
+                    >
+                      <Icon className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{isTr ? modeBtn.tr : modeBtn.en}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Interactive Visual PDF Page Stage */}
+              {pdfFile ? (
+                <div className="rounded-2xl border border-[var(--line)] bg-black/40 p-2.5 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+                    <p className="text-[11px] text-[var(--muted)]">
+                      {signToolMode === 'redact'
+                        ? isTr
+                          ? 'Sayfa üzerinde parmakla sürükleyip siyah sansür kutusu çiz, taşı veya boyutlandır.'
+                          : 'Drag on the page to draw, move, or resize black redaction boxes.'
+                        : signToolMode === 'signature'
+                          ? isTr
+                            ? 'İmzayı sürükleyerek taşı; sağ alt tutamaçla ölçeklendir.'
+                            : 'Drag signature to move; drag corner handle to resize.'
+                          : isTr
+                            ? 'Filigranı sayfa üzerinde sürükle ve köşeden boyutlandır.'
+                            : 'Drag watermark on page and resize from corner.'}
+                    </p>
+                    {redactions.length > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        {selectedRedactId && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRedactions((prev) => prev.filter((r) => r.id !== selectedRedactId));
+                              setSelectedRedactId(null);
+                            }}
+                            className="flex min-h-[34px] items-center gap-1 rounded-lg border border-rose-500/45 bg-rose-500/15 px-2.5 text-[11px] font-bold text-rose-400"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span>{isTr ? 'Seçiliyi Sil' : 'Delete Box'}</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRedactions([]);
+                            setSelectedRedactId(null);
+                          }}
+                          className="flex min-h-[34px] items-center gap-1 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2.5 text-[11px] font-bold text-[var(--muted)] hover:text-[var(--ink)]"
+                        >
+                          <Undo2 className="h-3.5 w-3.5" />
+                          <span>{isTr ? 'Temizle' : 'Clear'}</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div
+                    ref={signStageRef}
+                    style={{
+                      aspectRatio: `${signPageSize.w} / ${signPageSize.h}`,
+                      containerType: 'inline-size',
+                    }}
+                    onPointerDown={(e) => {
+                      if (signToolMode !== 'redact') return;
+                      const stage = signStageRef.current;
+                      if (!stage) return;
+                      const rect = stage.getBoundingClientRect();
+                      const nx = Math.max(0, Math.min(1, (e.clientX - rect.left) / Math.max(1, rect.width)));
+                      const ny = Math.max(0, Math.min(1, (e.clientY - rect.top) / Math.max(1, rect.height)));
+                      stageDragRef.current = {type: 'draw', x0: nx, y0: ny};
+                      setDraftRedact({x0: nx, y0: ny, x1: nx, y1: ny});
+                      setSelectedRedactId(null);
+                      stage.setPointerCapture(e.pointerId);
+                    }}
+                    onPointerMove={(e) => {
+                      const drag = stageDragRef.current;
+                      const stage = signStageRef.current;
+                      if (!drag || !stage) return;
+                      const rect = stage.getBoundingClientRect();
+                      const nx = Math.max(0, Math.min(1, (e.clientX - rect.left) / Math.max(1, rect.width)));
+                      const ny = Math.max(0, Math.min(1, (e.clientY - rect.top) / Math.max(1, rect.height)));
+                      const dx = nx - ('startX' in drag ? drag.startX : 0);
+                      const dy = ny - ('startY' in drag ? drag.startY : 0);
+
+                      if (drag.type === 'draw') {
+                        setDraftRedact({x0: drag.x0, y0: drag.y0, x1: nx, y1: ny});
+                      } else if (drag.type === 'move_redact') {
+                        setRedactions((prev) =>
+                          prev.map((r) =>
+                            r.id === drag.id
+                              ? {
+                                  ...r,
+                                  x: Math.max(0, Math.min(1 - r.w, drag.origX + dx)),
+                                  y: Math.max(0, Math.min(1 - r.h, drag.origY + dy)),
+                                }
+                              : r
+                          )
+                        );
+                      } else if (drag.type === 'resize_redact') {
+                        setRedactions((prev) =>
+                          prev.map((r) =>
+                            r.id === drag.id
+                              ? {
+                                  ...r,
+                                  w: Math.max(0.03, Math.min(1 - r.x, drag.origW + dx)),
+                                  h: Math.max(0.02, Math.min(1 - r.y, drag.origH + dy)),
+                                }
+                              : r
+                          )
+                        );
+                      } else if (drag.type === 'move_sig') {
+                        const pageAspect = signPageSize.w / Math.max(1, signPageSize.h);
+                        const normH = (sigOverlay.w / Math.max(0.2, sigOverlay.aspect)) * pageAspect;
+                        setSigOverlay((prev) => ({
+                          ...prev,
+                          x: Math.max(0, Math.min(1 - prev.w, drag.origX + dx)),
+                          y: Math.max(0, Math.min(Math.max(0, 1 - normH), drag.origY + dy)),
+                        }));
+                      } else if (drag.type === 'resize_sig') {
+                        setSigOverlay((prev) => ({
+                          ...prev,
+                          w: Math.max(0.1, Math.min(0.85, drag.origW + dx)),
+                        }));
+                      } else if (drag.type === 'move_wm') {
+                        setWmOverlay((prev) => ({
+                          ...prev,
+                          cx: Math.max(0.05, Math.min(0.95, drag.origCx + dx)),
+                          cy: Math.max(0.05, Math.min(0.95, drag.origCy + dy)),
+                        }));
+                      } else if (drag.type === 'resize_wm') {
+                        setWmOverlay((prev) => ({
+                          ...prev,
+                          sizePct: Math.max(0.025, Math.min(0.18, drag.origSizePct + dx * 0.35)),
+                        }));
+                      }
+                    }}
+                    onPointerUp={() => {
+                      if (stageDragRef.current?.type === 'draw' && draftRedact) {
+                        const x = Math.min(draftRedact.x0, draftRedact.x1);
+                        const y = Math.min(draftRedact.y0, draftRedact.y1);
+                        const w = Math.abs(draftRedact.x1 - draftRedact.x0);
+                        const h = Math.abs(draftRedact.y1 - draftRedact.y0);
+                        if (w >= 0.025 && h >= 0.015) {
+                          const newBox: PdfRedactBox = {
+                            id: `red-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                            x,
+                            y,
+                            w,
+                            h,
+                          };
+                          setRedactions((prev) => [...prev, newBox]);
+                          setSelectedRedactId(newBox.id);
+                        }
+                      }
+                      stageDragRef.current = null;
+                      setDraftRedact(null);
+                    }}
+                    onPointerCancel={() => {
+                      stageDragRef.current = null;
+                      setDraftRedact(null);
+                    }}
+                    className="relative mx-auto max-h-[54vh] w-full max-w-md touch-none select-none overflow-hidden rounded-xl bg-white shadow-xl"
+                  >
+                    <canvas ref={signPageCanvasRef} className="h-full w-full block object-contain" />
+                    {signPageLoading && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/35">
+                        <Loader2 className="h-6 w-6 animate-spin text-white" />
+                      </div>
+                    )}
+
+                    {/* Draft Redaction Preview */}
+                    {draftRedact && (
+                      <div
+                        className="pointer-events-none absolute border-2 border-dashed border-rose-400 bg-black/85"
+                        style={{
+                          left: `${Math.min(draftRedact.x0, draftRedact.x1) * 100}%`,
+                          top: `${Math.min(draftRedact.y0, draftRedact.y1) * 100}%`,
+                          width: `${Math.abs(draftRedact.x1 - draftRedact.x0) * 100}%`,
+                          height: `${Math.abs(draftRedact.y1 - draftRedact.y0) * 100}%`,
+                        }}
+                      />
+                    )}
+
+                    {/* Existing Multi-Box Redactions */}
+                    {redactions.map((box) => {
+                      const isSel = selectedRedactId === box.id;
+                      return (
+                        <div
+                          key={box.id}
+                          onPointerDown={(e) => {
+                            e.stopPropagation();
+                            setSelectedRedactId(box.id);
+                            setSignToolMode('redact');
+                            const stage = signStageRef.current;
+                            if (!stage) return;
+                            const rect = stage.getBoundingClientRect();
+                            const nx = (e.clientX - rect.left) / Math.max(1, rect.width);
+                            const ny = (e.clientY - rect.top) / Math.max(1, rect.height);
+                            stageDragRef.current = {
+                              type: 'move_redact',
+                              id: box.id,
+                              startX: nx,
+                              startY: ny,
+                              origX: box.x,
+                              origY: box.y,
+                            };
+                            stage.setPointerCapture(e.pointerId);
+                          }}
+                          style={{
+                            left: `${box.x * 100}%`,
+                            top: `${box.y * 100}%`,
+                            width: `${box.w * 100}%`,
+                            height: `${box.h * 100}%`,
+                          }}
+                          className={`absolute cursor-move bg-black ${
+                            isSel ? 'ring-2 ring-[var(--accent)]' : 'ring-1 ring-white/40'
+                          }`}
+                        >
+                          {isSel && (
+                            <>
+                              <button
+                                type="button"
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRedactions((prev) => prev.filter((r) => r.id !== box.id));
+                                  setSelectedRedactId(null);
+                                }}
+                                aria-label={isTr ? 'Sil' : 'Delete'}
+                                className="absolute -right-2.5 -top-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-rose-500 text-white shadow-md"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                              <div
+                                onPointerDown={(e) => {
+                                  e.stopPropagation();
+                                  const stage = signStageRef.current;
+                                  if (!stage) return;
+                                  const rect = stage.getBoundingClientRect();
+                                  const nx = (e.clientX - rect.left) / Math.max(1, rect.width);
+                                  const ny = (e.clientY - rect.top) / Math.max(1, rect.height);
+                                  stageDragRef.current = {
+                                    type: 'resize_redact',
+                                    id: box.id,
+                                    startX: nx,
+                                    startY: ny,
+                                    origW: box.w,
+                                    origH: box.h,
+                                  };
+                                  stage.setPointerCapture(e.pointerId);
+                                }}
+                                className="absolute -bottom-2.5 -right-2.5 flex h-7 w-7 cursor-nwse-resize items-center justify-center rounded-full border-2 border-white bg-[var(--accent)] text-white shadow-md"
+                              >
+                                <Move className="h-3 w-3" />
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Live Draggable & Scalable Signature Overlay */}
+                    {hasSigStroke && sigDataUrl && (
+                      <div
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          setSignToolMode('signature');
+                          const stage = signStageRef.current;
+                          if (!stage) return;
+                          const rect = stage.getBoundingClientRect();
+                          const nx = (e.clientX - rect.left) / Math.max(1, rect.width);
+                          const ny = (e.clientY - rect.top) / Math.max(1, rect.height);
+                          stageDragRef.current = {
+                            type: 'move_sig',
+                            startX: nx,
+                            startY: ny,
+                            origX: sigOverlay.x,
+                            origY: sigOverlay.y,
+                          };
+                          stage.setPointerCapture(e.pointerId);
+                        }}
+                        style={{
+                          left: `${sigOverlay.x * 100}%`,
+                          top: `${sigOverlay.y * 100}%`,
+                          width: `${sigOverlay.w * 100}%`,
+                        }}
+                        className={`absolute cursor-move rounded-lg p-0.5 ${
+                          signToolMode === 'signature'
+                            ? 'border-2 border-dashed border-[var(--accent)] bg-sky-500/10'
+                            : 'border border-sky-400/50'
+                        }`}
+                      >
+                        <img src={sigDataUrl} alt="Signature" className="pointer-events-none w-full h-auto" />
+                        {signToolMode === 'signature' && (
+                          <div
+                            onPointerDown={(e) => {
+                              e.stopPropagation();
+                              const stage = signStageRef.current;
+                              if (!stage) return;
+                              const rect = stage.getBoundingClientRect();
+                              const nx = (e.clientX - rect.left) / Math.max(1, rect.width);
+                              stageDragRef.current = {
+                                type: 'resize_sig',
+                                startX: nx,
+                                origW: sigOverlay.w,
+                              };
+                              stage.setPointerCapture(e.pointerId);
+                            }}
+                            className="absolute -bottom-2.5 -right-2.5 flex h-7 w-7 cursor-nwse-resize items-center justify-center rounded-full border-2 border-white bg-[var(--accent)] text-white shadow-md"
+                          >
+                            <Move className="h-3 w-3" />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Live Draggable & Scalable Text Watermark Overlay */}
+                    {wmEnabled && wmText.trim() && (
+                      <div
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          setSignToolMode('watermark');
+                          const stage = signStageRef.current;
+                          if (!stage) return;
+                          const rect = stage.getBoundingClientRect();
+                          const nx = (e.clientX - rect.left) / Math.max(1, rect.width);
+                          const ny = (e.clientY - rect.top) / Math.max(1, rect.height);
+                          stageDragRef.current = {
+                            type: 'move_wm',
+                            startX: nx,
+                            startY: ny,
+                            origCx: wmOverlay.cx,
+                            origCy: wmOverlay.cy,
+                          };
+                          stage.setPointerCapture(e.pointerId);
+                        }}
+                        style={{
+                          left: `${wmOverlay.cx * 100}%`,
+                          top: `${wmOverlay.cy * 100}%`,
+                          transform: `translate(-50%, -50%) ${wmOverlay.diagonal ? 'rotate(-30deg)' : ''}`,
+                          color: wmOverlay.color,
+                          opacity: wmOverlay.opacity,
+                          fontSize: `${wmOverlay.sizePct * 100}cqw`,
+                        }}
+                        className={`absolute cursor-move select-none whitespace-nowrap rounded-lg px-2 py-0.5 font-extrabold tracking-wide ${
+                          signToolMode === 'watermark' ? 'ring-2 ring-dashed ring-[var(--accent)]' : ''
+                        }`}
+                      >
+                        {wmText.trim()}
+                        {signToolMode === 'watermark' && (
+                          <div
+                            onPointerDown={(e) => {
+                              e.stopPropagation();
+                              const stage = signStageRef.current;
+                              if (!stage) return;
+                              const rect = stage.getBoundingClientRect();
+                              const nx = (e.clientX - rect.left) / Math.max(1, rect.width);
+                              stageDragRef.current = {
+                                type: 'resize_wm',
+                                startX: nx,
+                                origSizePct: wmOverlay.sizePct,
+                              };
+                              stage.setPointerCapture(e.pointerId);
+                            }}
+                            className="absolute -bottom-3 -right-3 flex h-7 w-7 cursor-nwse-resize items-center justify-center rounded-full border-2 border-white bg-[var(--accent)] text-white shadow-md"
+                            style={{opacity: 1}}
+                          >
+                            <Move className="h-3 w-3" />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => pdfInputRef.current?.click()}
+                  className="flex w-full flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-[var(--line)] bg-[var(--inset)] py-10 text-center hover:border-[var(--accent)]"
+                >
+                  <FileText className="h-8 w-8 text-amber-400" />
+                  <p className="text-sm font-bold text-[var(--ink)]">
+                    {isTr ? 'Sayfada Sansür / İmza İçin PDF Seç' : 'Pick a PDF to Sign / Redact Visually'}
+                  </p>
+                </button>
+              )}
 
               {/* Signature Pad */}
               <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-1.5 text-xs font-bold text-[var(--ink)]">
                     <PenTool className="h-3.5 w-3.5 text-[var(--accent-text)]" />
-                    {isTr ? 'Parmakla / Fareyle İmza Çiz' : 'Draw Digital Signature'}
+                    {isTr ? 'İmza Çiz (Otomatik Sayfaya Yerleşir)' : 'Draw Signature (Auto-Placed on Page)'}
                   </span>
                   <button
                     type="button"
@@ -736,8 +1336,9 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                       const c = sigCanvasRef.current;
                       if (c) c.getContext('2d')?.clearRect(0, 0, c.width, c.height);
                       setHasSigStroke(false);
+                      setSigDataUrl(null);
                     }}
-                    className="text-[11px] font-bold text-[var(--danger)] hover:underline"
+                    className="min-h-[32px] px-2 text-[11px] font-bold text-[var(--danger)] hover:underline"
                   >
                     {isTr ? 'Temizle' : 'Clear'}
                   </button>
@@ -753,7 +1354,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                     if (!ctx) return;
                     const p = getSigPos(e);
                     ctx.strokeStyle = '#0f172a';
-                    ctx.lineWidth = 3;
+                    ctx.lineWidth = 3.5;
                     ctx.lineCap = 'round';
                     ctx.beginPath();
                     ctx.moveTo(p.x, p.y);
@@ -769,114 +1370,89 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                   }}
                   onPointerUp={() => {
                     sigDrawingRef.current = false;
+                    if (sigCanvasRef.current) {
+                      setSigDataUrl(sigCanvasRef.current.toDataURL('image/png'));
+                      setSignToolMode('signature');
+                    }
                   }}
-                  className="h-32 w-full cursor-crosshair touch-none rounded-xl border border-[var(--line)] bg-white"
+                  className="h-28 w-full cursor-crosshair touch-none rounded-xl border border-[var(--line)] bg-white"
                 />
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-[11px] text-[var(--muted)]">{isTr ? 'Konum:' : 'Placement:'}</span>
-                  {(
-                    [
-                      {id: 'br' as const, tr: 'Sağ Alt', en: 'Bottom-Right'},
-                      {id: 'bl' as const, tr: 'Sol Alt', en: 'Bottom-Left'},
-                      {id: 'tr' as const, tr: 'Sağ Üst', en: 'Top-Right'},
-                      {id: 'center' as const, tr: 'Orta', en: 'Center'},
-                    ] as const
-                  ).map((pos) => (
-                    <button
-                      key={pos.id}
-                      type="button"
-                      onClick={() => setSignCorner(pos.id)}
-                      className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold ${
-                        signCorner === pos.id
-                          ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
-                          : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]'
-                      }`}
-                    >
-                      {isTr ? pos.tr : pos.en}
-                    </button>
-                  ))}
-                </div>
               </div>
 
-              {/* Permanent Redaction Bar */}
+              {/* Optional Text Watermark Controls */}
               <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-1.5 text-xs font-bold text-[var(--ink)]">
-                    <ShieldAlert className="h-3.5 w-3.5 text-rose-400" />
-                    {isTr ? 'Hassas Bilgi Sansürleme (Siyah Şerit)' : 'Permanent Redaction Bar'}
+                    <Type className="h-3.5 w-3.5 text-[var(--accent-text)]" />
+                    {isTr ? 'Metin Filigranı (Sayfada Sürükle)' : 'Text Watermark (Drag on Page)'}
                   </span>
                   <button
                     type="button"
-                    onClick={() => setRedactEnabled((v) => !v)}
-                    className={`rounded-lg px-2.5 py-1 text-[11px] font-bold ${
-                      redactEnabled ? 'bg-rose-500 text-white' : 'border border-[var(--line)] text-[var(--muted)]'
+                    onClick={() => {
+                      setWmEnabled((v) => !v);
+                      if (!wmEnabled) setSignToolMode('watermark');
+                    }}
+                    className={`min-h-[34px] rounded-xl px-3 text-[11px] font-bold ${
+                      wmEnabled ? 'morph-accent-btn' : 'border border-[var(--line)] text-[var(--muted)]'
                     }`}
                   >
-                    {redactEnabled ? (isTr ? 'Aktif' : 'ON') : isTr ? 'Kapalı' : 'OFF'}
+                    {wmEnabled ? (isTr ? 'Aktif' : 'ON') : isTr ? 'Ekle' : 'Enable'}
                   </button>
                 </div>
-                {redactEnabled && (
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    <label className="block text-[10px] text-[var(--muted)]">
-                      <span className="flex items-center justify-between">
-                        <span>Sol X</span>
-                        <span className="font-mono-num font-bold text-[var(--accent-text)]">%{redactX}</span>
-                      </span>
+                {wmEnabled && (
+                  <div className="space-y-2.5">
+                    <div className="flex items-center gap-2">
                       <input
-                        type="range"
-                        min={0}
-                        max={90}
-                        value={redactX}
-                        onChange={(e) => setRedactX(Number(e.target.value))}
-                        style={{'--slider-pct': `${(redactX / 90) * 100}%`} as React.CSSProperties}
-                        className="morph-slider mt-1.5"
+                        type="text"
+                        value={wmText}
+                        onChange={(e) => setWmText(e.target.value)}
+                        placeholder={isTr ? 'Örn: GİZLİ / MORPH' : 'e.g. CONFIDENTIAL'}
+                        className="min-h-[40px] min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-xs text-[var(--ink)]"
                       />
-                    </label>
-                    <label className="block text-[10px] text-[var(--muted)]">
-                      <span className="flex items-center justify-between">
-                        <span>Alt Y</span>
-                        <span className="font-mono-num font-bold text-[var(--accent-text)]">%{redactY}</span>
-                      </span>
-                      <input
-                        type="range"
-                        min={0}
-                        max={94}
-                        value={redactY}
-                        onChange={(e) => setRedactY(Number(e.target.value))}
-                        style={{'--slider-pct': `${(redactY / 94) * 100}%`} as React.CSSProperties}
-                        className="morph-slider mt-1.5"
-                      />
-                    </label>
-                    <label className="block text-[10px] text-[var(--muted)]">
-                      <span className="flex items-center justify-between">
-                        <span>Genişlik</span>
-                        <span className="font-mono-num font-bold text-[var(--accent-text)]">%{redactW}</span>
-                      </span>
-                      <input
-                        type="range"
-                        min={5}
-                        max={95}
-                        value={redactW}
-                        onChange={(e) => setRedactW(Number(e.target.value))}
-                        style={{'--slider-pct': `${((redactW - 5) / 90) * 100}%`} as React.CSSProperties}
-                        className="morph-slider mt-1.5"
-                      />
-                    </label>
-                    <label className="block text-[10px] text-[var(--muted)]">
-                      <span className="flex items-center justify-between">
-                        <span>Yükseklik</span>
-                        <span className="font-mono-num font-bold text-[var(--accent-text)]">%{redactH}</span>
-                      </span>
-                      <input
-                        type="range"
-                        min={2}
-                        max={40}
-                        value={redactH}
-                        onChange={(e) => setRedactH(Number(e.target.value))}
-                        style={{'--slider-pct': `${((redactH - 2) / 38) * 100}%`} as React.CSSProperties}
-                        className="morph-slider mt-1.5"
-                      />
-                    </label>
+                      <button
+                        type="button"
+                        onClick={() => setWmOverlay((p) => ({...p, diagonal: !p.diagonal}))}
+                        className={`min-h-[40px] shrink-0 rounded-xl border px-3 text-xs font-bold ${
+                          wmOverlay.diagonal
+                            ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
+                            : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]'
+                        }`}
+                      >
+                        {wmOverlay.diagonal ? '30°' : '0°'}
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        {['#DC2626', '#0F172A', '#2563EB', '#64748B'].map((col) => (
+                          <button
+                            key={col}
+                            type="button"
+                            onClick={() => setWmOverlay((p) => ({...p, color: col}))}
+                            className={`h-8 w-8 rounded-full border-2 ${
+                              wmOverlay.color === col ? 'border-[var(--accent)] scale-110' : 'border-[var(--line)]'
+                            }`}
+                            style={{backgroundColor: col}}
+                            aria-label={col}
+                          />
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {[0.18, 0.3, 0.5, 0.75].map((op) => (
+                          <button
+                            key={op}
+                            type="button"
+                            onClick={() => setWmOverlay((p) => ({...p, opacity: op}))}
+                            className={`min-h-[34px] rounded-lg border px-2 text-[11px] font-bold ${
+                              Math.abs(wmOverlay.opacity - op) < 0.05
+                                ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
+                                : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]'
+                            }`}
+                          >
+                            %{Math.round(op * 100)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -892,7 +1468,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                   value={lockPassword}
                   onChange={(e) => setLockPassword(e.target.value)}
                   placeholder={isTr ? 'Örn: Gizli — Sadece Dahili Kullanım' : 'e.g. Confidential — Internal Use Only'}
-                  className="mt-2 w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--ink)]"
+                  className="mt-2 min-h-[40px] w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-xs text-[var(--ink)]"
                 />
                 <p className="mt-1.5 text-[10px] leading-snug text-[var(--muted)]">
                   {isTr
@@ -1014,18 +1590,30 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
 
                   {zipPreview && (
                     <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3">
-                      <div className="mb-2 flex items-center justify-between">
-                        <span className="truncate font-mono text-xs font-bold text-[var(--ink)]">{zipPreview.name}</span>
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <span className="min-w-0 flex-1 truncate font-mono text-xs font-bold text-[var(--ink)]">
+                          {zipPreview.name}
+                        </span>
                         <button
                           type="button"
-                          onClick={() => setZipPreview(null)}
-                          className="text-xs text-[var(--muted)] hover:text-[var(--ink)]"
+                          onClick={clearZipPreview}
+                          aria-label={isTr ? 'Önizlemeyi kapat' : 'Close preview'}
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] hover:text-[var(--ink)]"
                         >
                           <X className="h-4 w-4" />
                         </button>
                       </div>
                       {zipPreview.kind === 'image' ? (
                         <img src={zipPreview.content} alt={zipPreview.name} className="max-h-48 rounded-xl object-contain" />
+                      ) : zipPreview.kind === 'audio' ? (
+                        <audio src={zipPreview.content} controls className="w-full" />
+                      ) : zipPreview.kind === 'video' ? (
+                        <video
+                          src={zipPreview.content}
+                          controls
+                          playsInline
+                          className="max-h-56 w-full rounded-xl bg-black"
+                        />
                       ) : (
                         <pre className="max-h-40 overflow-auto rounded-xl bg-black/30 p-2.5 font-mono text-[11px] text-slate-200 whitespace-pre-wrap">
                           {zipPreview.content}

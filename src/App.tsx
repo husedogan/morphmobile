@@ -45,6 +45,7 @@ import {
   X,
 } from 'lucide-react';
 import {AudioProStudio, AudioStudioTab} from './components/AudioProStudio';
+import {DocumentViewerModal} from './components/DocumentViewerModal';
 import {ExperimentalFxLayer} from './components/ExperimentalFxLayer';
 import {FileActionsModal} from './components/FileActionsModal';
 import {ImageProStudioModal, ImageProTab} from './components/ImageProStudioModal';
@@ -58,6 +59,9 @@ import {SettingsCategory, SettingsScreen} from './components/SettingsScreen';
 import {StudioScreen} from './components/StudioScreen';
 import {ToolFlow} from './components/ToolFlow';
 import {isSupportedMediaUrl} from './engine/linkMetadata';
+import {fileExtLower, isRichDocumentExt} from './engine/previewParsers';
+import {importMorphPackage} from './engine/projectStorage';
+import {NleProjectState} from './engine/videoTimelineEngine';
 import {
   QuickToolEntry,
   applyAutoCategorization,
@@ -129,7 +133,6 @@ import {
   shareExportItem,
   shareNativeOrWebBlob,
 } from './engine/nativeBridge';
-import {extractDocumentText} from './engine/officeOps';
 import {ToolOptions, runEmbeddedMediaTool, runLocalTool} from './engine/processor';
 import {
   cancelServerJob,
@@ -395,7 +398,17 @@ export default function App() {
   const [pdfArchiveModal, setPdfArchiveModal] = useState<{
     open: boolean;
     tab: PdfArchiveTab;
+    initialZipFile?: File | null;
+    initialPdfFile?: File | null;
   }>({open: false, tab: 'pdf_organize'});
+  const [docViewerModal, setDocViewerModal] = useState<{
+    open: boolean;
+    file: File | Blob | null;
+    name: string;
+    size: number;
+    mime?: string;
+  }>({open: false, file: null, name: '', size: 0});
+  const [importedMorphProject, setImportedMorphProject] = useState<NleProjectState | null>(null);
   const [initialLinkUrl, setInitialLinkUrl] = useState('');
   const [clipboardUrlBanner, setClipboardUrlBanner] = useState<string | null>(null);
   const lastDismissedClipUrlRef = useRef<string>('');
@@ -422,6 +435,9 @@ export default function App() {
       } else if (pdfArchiveModal.open) {
         e.preventDefault();
         setPdfArchiveModal((p) => ({...p, open: false}));
+      } else if (docViewerModal.open) {
+        e.preventDefault();
+        setDocViewerModal((p) => ({...p, open: false}));
       } else if (previewTarget) {
         e.preventDefault();
         const shouldRevoke = !previewTarget.previewUrl;
@@ -538,6 +554,7 @@ export default function App() {
     showManageTools ||
     customizeModal.open ||
     showMainWheelCustomize ||
+    docViewerModal.open ||
     Boolean(previewTarget) ||
     job.status === 'running';
 
@@ -560,6 +577,7 @@ export default function App() {
     (audioStudioModal.open ? 1 : 0) +
     (imageProModal.open ? 1 : 0) +
     (pdfArchiveModal.open ? 1 : 0) +
+    (docViewerModal.open ? 1 : 0) +
     (showFileActions ? 1 : 0) +
     (showManageTools ? 1 : 0) +
     (customizeModal.open ? 1 : 0) +
@@ -607,6 +625,10 @@ export default function App() {
       }
       if (pdfArchiveModal.open) {
         setPdfArchiveModal((p) => ({...p, open: false}));
+        return;
+      }
+      if (docViewerModal.open) {
+        setDocViewerModal((p) => ({...p, open: false}));
         return;
       }
       if (previewTarget) {
@@ -1428,6 +1450,28 @@ export default function App() {
       const target = explicitFile ?? files[0];
       if (!target) return;
 
+      const ext = fileExtLower(target.name);
+
+      if (target.kind === 'archive' || ext === 'zip') {
+        setPdfArchiveModal({
+          open: true,
+          tab: 'archive',
+          initialZipFile: target.file,
+        });
+        return;
+      }
+
+      if (target.kind === 'document' || isRichDocumentExt(ext)) {
+        setDocViewerModal({
+          open: true,
+          file: target.file,
+          name: target.name,
+          size: target.size,
+          mime: target.mime,
+        });
+        return;
+      }
+
       if (
         target.kind === 'image' ||
         target.kind === 'pdf' ||
@@ -1439,20 +1483,6 @@ export default function App() {
         setSourcePreviewText(null);
         setSourcePreviewUrl(url);
         return;
-      }
-
-      if (target.kind === 'document') {
-        try {
-          const text = await extractDocumentText(target);
-          setPreviewTarget(target);
-          setSourcePreviewUrl(null);
-          setSourcePreviewText(
-            text.slice(0, 120000) || (lang === 'tr' ? '(Boş belge)' : '(Empty document)')
-          );
-          return;
-        } catch {
-          // Fallback below
-        }
       }
 
       setShowFileActions(true);
@@ -2594,22 +2624,28 @@ export default function App() {
             initialTool={directTool}
             initialConvertFormat={directFormat}
             initialServerTool={directServerTool}
+            initialImportedProject={importedMorphProject}
             initialLinkUrl={initialLinkUrl}
             directEntry={Boolean(directTool || directFormat || directServerTool)}
             onBack={() => {
               setDirectTool(null);
               setDirectFormat(null);
               setDirectServerTool(null);
+              setImportedMorphProject(null);
               setInitialLinkUrl('');
               setToolMode(null);
             }}
             onRunLocal={handleRunLocal}
             onRunServer={handleRunServer}
             onRunLink={handleRunLink}
+            onOpenDocumentPreview={(f) => {
+              void handleOpenSourcePreview(f);
+            }}
             onOpenSettings={() => {
               setDirectTool(null);
               setDirectFormat(null);
               setDirectServerTool(null);
+              setImportedMorphProject(null);
               setToolMode(null);
               setSettingsCategory('downloads');
               setTab('settings');
@@ -2627,6 +2663,24 @@ export default function App() {
             onDelete={handleDeleteExport}
             onClearAll={handleClearLibrary}
             onShowToast={showToast}
+            onOpenArchivePreview={(item) => {
+              if (!item.blob || item.blob.size === 0) return;
+              const zFile =
+                item.blob instanceof File
+                  ? item.blob
+                  : new File([item.blob], item.name, {type: item.mime || 'application/zip'});
+              setPdfArchiveModal({open: true, tab: 'archive', initialZipFile: zFile});
+            }}
+            onOpenDocumentPreview={(item) => {
+              if (!item.blob || item.blob.size === 0) return;
+              setDocViewerModal({
+                open: true,
+                file: item.blob,
+                name: item.name,
+                size: item.size,
+                mime: item.mime,
+              });
+            }}
             onModalCountChange={setLibraryOverlayCount}
             closeSignal={libraryCloseSignal}
           />
@@ -2722,6 +2776,9 @@ export default function App() {
               onApplyUpdate={handleApplyUpdate}
               onOpenLinkDownload={() => openToolMode('web')}
               onOpenLibrary={() => setTab('library')}
+              onPreviewFile={(f) => {
+                void handleOpenSourcePreview(f);
+              }}
               pinnedTools={pinnedTools}
               recentTools={recentTools}
               onQuickLaunchTool={handleQuickLaunchTool}
@@ -3219,10 +3276,66 @@ export default function App() {
         open={pdfArchiveModal.open}
         lang={lang}
         initialTab={pdfArchiveModal.tab}
+        initialZipFile={pdfArchiveModal.initialZipFile ?? null}
+        initialPdfFile={pdfArchiveModal.initialPdfFile ?? null}
         studioFiles={files}
         onClose={() => setPdfArchiveModal((p) => ({...p, open: false}))}
         onExportBlobs={(outputs, toolLabel) => {
           void handleProExportBlobs(outputs, toolLabel);
+        }}
+        onShowToast={showToast}
+      />
+
+      <DocumentViewerModal
+        open={docViewerModal.open}
+        file={docViewerModal.file}
+        fileName={docViewerModal.name}
+        fileSize={docViewerModal.size}
+        mime={docViewerModal.mime}
+        lang={lang}
+        onClose={() => setDocViewerModal((p) => ({...p, open: false}))}
+        onSaveEditedBlob={(blob, newName) => {
+          void handleProExportBlobs(
+            [{blob, name: newName}],
+            lang === 'tr' ? 'Belge Düzenleyici' : 'Document Editor'
+          );
+          setDocViewerModal((p) => ({...p, open: false}));
+        }}
+        onOpenMorphInVideoEditor={async (blob, name) => {
+          try {
+            const f =
+              blob instanceof File
+                ? blob
+                : new File([blob], name, {type: 'application/octet-stream'});
+            const imported = await importMorphPackage(f);
+            const videoFile = imported.sourceVideoBlob
+              ? new File(
+                  [imported.sourceVideoBlob],
+                  imported.project.mediaAssets?.[0]?.name || `${imported.project.projectName || 'project'}.mp4`,
+                  {type: imported.sourceVideoBlob.type || 'video/mp4'}
+                )
+              : new File(
+                  [new Blob([], {type: 'video/mp4'})],
+                  `${imported.project.projectName || 'project'}.mp4`,
+                  {type: 'video/mp4'}
+                );
+            clearFiles();
+            addFiles([videoFile]);
+            setImportedMorphProject(imported.project);
+            setDocViewerModal((p) => ({...p, open: false}));
+            setJob({status: 'idle'});
+            const studioDef = SERVER_TOOLS.find((s) => s.id === 'video_studio') ?? null;
+            if (studioDef) {
+              openToolMode('tools', {serverTool: studioDef});
+            }
+            showToast(
+              lang === 'tr'
+                ? `"${imported.project.projectName}" Video Düzenleyici'de açıldı`
+                : `Opened "${imported.project.projectName}" in Video Editor`
+            );
+          } catch (err) {
+            showToast(err instanceof Error ? err.message : t('ProcessFailed', lang));
+          }
         }}
         onShowToast={showToast}
       />

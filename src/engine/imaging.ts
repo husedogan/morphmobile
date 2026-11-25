@@ -459,26 +459,61 @@ export async function watermarkImageBlob(
   }
 }
 
-export function renderCollageToCanvas(
-  bitmaps: ImageBitmap[],
-  opts: {columns: number; gap: number; backgroundColor: string; targetWidth?: number}
-): HTMLCanvasElement {
+export interface CollageCellTransform {
+  zoom: number; // 1.0 .. 3.0
+  panX: number; // -1.0 .. 1.0 (fraction of available horizontal crop margin)
+  panY: number; // -1.0 .. 1.0 (fraction of available vertical crop margin)
+}
+
+export interface CollageLayoutInfo {
+  cols: number;
+  rows: number;
+  width: number;
+  height: number;
+  cellW: number;
+  cellH: number;
+  gap: number;
+  radius: number;
+}
+
+export function computeCollageLayout(
+  bitmaps: Pick<ImageBitmap, 'width' | 'height'>[],
+  opts: {columns: number; gap: number; targetWidth?: number}
+): CollageLayoutInfo {
   const cols = Math.min(6, Math.max(1, opts.columns));
-  const rows = Math.max(1, Math.ceil(bitmaps.length / cols));
+  const rows = Math.max(1, Math.ceil(Math.max(1, bitmaps.length) / cols));
   const totalWidth = opts.targetWidth ?? 1440;
   const gap = Math.max(0, opts.gap);
   const cellW = Math.max(40, Math.round((totalWidth - gap * (cols + 1)) / cols));
-  const avgAspect = Math.min(
-    1.85,
-    Math.max(
-      0.55,
-      bitmaps.reduce((sum, b) => sum + b.width / Math.max(1, b.height), 0) / Math.max(1, bitmaps.length)
-    )
-  );
+  const avgAspect =
+    bitmaps.length > 0
+      ? Math.min(
+          1.85,
+          Math.max(
+            0.55,
+            bitmaps.reduce((sum, b) => sum + b.width / Math.max(1, b.height), 0) / bitmaps.length
+          )
+        )
+      : 1;
   const cellH = Math.max(40, Math.round(cellW / avgAspect));
   const width = cellW * cols + gap * (cols + 1);
   const height = cellH * rows + gap * (rows + 1);
   const radius = Math.max(6, Math.round(gap * 0.9));
+  return {cols, rows, width, height, cellW, cellH, gap, radius};
+}
+
+export function renderCollageToCanvas(
+  bitmaps: ImageBitmap[],
+  opts: {
+    columns: number;
+    gap: number;
+    backgroundColor: string;
+    targetWidth?: number;
+    cellTransforms?: CollageCellTransform[];
+    selectedCellIndex?: number | null;
+  }
+): HTMLCanvasElement {
+  const {cols, width, height, cellW, cellH, gap, radius} = computeCollageLayout(bitmaps, opts);
 
   const {canvas, ctx} = createCanvas(width, height, false);
   ctx.fillStyle = opts.backgroundColor;
@@ -490,17 +525,34 @@ export function renderCollageToCanvas(
     const x = gap + col * (cellW + gap);
     const y = gap + row * (cellH + gap);
 
-    const scale = Math.max(cellW / bmp.width, cellH / bmp.height);
+    const tf = opts.cellTransforms?.[index];
+    const zoom = Math.min(3, Math.max(1, tf?.zoom ?? 1));
+    const panX = Math.min(1, Math.max(-1, tf?.panX ?? 0));
+    const panY = Math.min(1, Math.max(-1, tf?.panY ?? 0));
+
+    const baseScale = Math.max(cellW / bmp.width, cellH / bmp.height);
+    const scale = baseScale * zoom;
     const dw = bmp.width * scale;
     const dh = bmp.height * scale;
-    const dx = x + (cellW - dw) / 2;
-    const dy = y + (cellH - dh) / 2;
+    const overflowX = Math.max(0, (dw - cellW) / 2);
+    const overflowY = Math.max(0, (dh - cellH) / 2);
+    const dx = x + (cellW - dw) / 2 + panX * overflowX;
+    const dy = y + (cellH - dh) / 2 + panY * overflowY;
 
     ctx.save();
     roundRectPath(ctx, x, y, cellW, cellH, radius);
     ctx.clip();
     ctx.drawImage(bmp, dx, dy, dw, dh);
     ctx.restore();
+
+    if (opts.selectedCellIndex === index) {
+      ctx.save();
+      roundRectPath(ctx, x + 2, y + 2, cellW - 4, cellH - 4, Math.max(4, radius - 2));
+      ctx.strokeStyle = 'rgba(240, 120, 138, 0.95)';
+      ctx.lineWidth = Math.max(3, Math.round(width * 0.005));
+      ctx.stroke();
+      ctx.restore();
+    }
   });
 
   return canvas;
@@ -508,7 +560,14 @@ export function renderCollageToCanvas(
 
 export async function collageImagesBlob(
   files: Blob[],
-  opts: {columns: number; gap: number; backgroundColor: string; format: string; quality: number},
+  opts: {
+    columns: number;
+    gap: number;
+    backgroundColor: string;
+    format: string;
+    quality: number;
+    cellTransforms?: CollageCellTransform[];
+  },
   onProgress?: (ratio: number) => void
 ): Promise<Blob> {
   const decoded: DecodedImage[] = [];
@@ -520,7 +579,12 @@ export async function collageImagesBlob(
     onProgress?.(0.85);
     const canvas = renderCollageToCanvas(
       decoded.map((d) => d.bitmap),
-      {columns: opts.columns, gap: opts.gap, backgroundColor: opts.backgroundColor}
+      {
+        columns: opts.columns,
+        gap: opts.gap,
+        backgroundColor: opts.backgroundColor,
+        cellTransforms: opts.cellTransforms,
+      }
     );
     return await canvasToBlob(canvas, opts.format, opts.quality);
   } finally {
@@ -528,25 +592,202 @@ export async function collageImagesBlob(
   }
 }
 
-/* ---------- 1. Document Scanner (SCAN_DOC) with Uneven Shadow Normalization ---------- */
+/* ---------- 1. Document Scanner (SCAN_DOC) with 4-Corner Perspective + Shadow Normalization ---------- */
 
 export type ScanMode = 'bw' | 'gray' | 'color';
 
+export interface PerspectivePoint {
+  x: number; // normalized 0..1
+  y: number; // normalized 0..1
+}
+
+export type PerspectiveCorners = [
+  PerspectivePoint, // top-left
+  PerspectivePoint, // top-right
+  PerspectivePoint, // bottom-right
+  PerspectivePoint, // bottom-left
+];
+
+export const DEFAULT_SCAN_CORNERS: PerspectiveCorners = [
+  {x: 0, y: 0},
+  {x: 1, y: 0},
+  {x: 1, y: 1},
+  {x: 0, y: 1},
+];
+
+function isDefaultCorners(corners?: PerspectiveCorners): boolean {
+  if (!corners) return true;
+  return (
+    Math.abs(corners[0].x) < 0.002 &&
+    Math.abs(corners[0].y) < 0.002 &&
+    Math.abs(corners[1].x - 1) < 0.002 &&
+    Math.abs(corners[1].y) < 0.002 &&
+    Math.abs(corners[2].x - 1) < 0.002 &&
+    Math.abs(corners[2].y - 1) < 0.002 &&
+    Math.abs(corners[3].x) < 0.002 &&
+    Math.abs(corners[3].y - 1) < 0.002
+  );
+}
+
+function solveLinear8(A: number[][], b: number[]): number[] | null {
+  const n = 8;
+  const M = A.map((row, i) => [...row, b[i]]);
+  for (let col = 0; col < n; col++) {
+    let pivot = col;
+    let maxVal = Math.abs(M[col][col]);
+    for (let r = col + 1; r < n; r++) {
+      const val = Math.abs(M[r][col]);
+      if (val > maxVal) {
+        maxVal = val;
+        pivot = r;
+      }
+    }
+    if (maxVal < 1e-10) return null;
+    if (pivot !== col) {
+      const tmp = M[col];
+      M[col] = M[pivot];
+      M[pivot] = tmp;
+    }
+    const diag = M[col][col];
+    for (let j = col; j <= n; j++) M[col][j] /= diag;
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const factor = M[r][col];
+      if (factor === 0) continue;
+      for (let j = col; j <= n; j++) {
+        M[r][j] -= factor * M[col][j];
+      }
+    }
+  }
+  return M.map((row) => row[n]);
+}
+
+export function warpPerspectiveToCanvas(
+  source: ImageBitmap | HTMLCanvasElement,
+  corners: PerspectiveCorners
+): HTMLCanvasElement {
+  const sw = source.width;
+  const sh = source.height;
+  const {canvas: srcCanvas, ctx: srcCtx} = createCanvas(sw, sh, true);
+  srcCtx.drawImage(source, 0, 0);
+
+  if (isDefaultCorners(corners)) {
+    return srcCanvas;
+  }
+
+  const pts = corners.map((p) => ({
+    x: Math.max(0, Math.min(sw - 1, p.x * sw)),
+    y: Math.max(0, Math.min(sh - 1, p.y * sh)),
+  }));
+
+  const topW = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+  const botW = Math.hypot(pts[2].x - pts[3].x, pts[2].y - pts[3].y);
+  const leftH = Math.hypot(pts[3].x - pts[0].x, pts[3].y - pts[0].y);
+  const rightH = Math.hypot(pts[2].x - pts[1].x, pts[2].y - pts[1].y);
+
+  const rawW = Math.max(120, Math.round(Math.max(topW, botW)));
+  const rawH = Math.max(120, Math.round(Math.max(leftH, rightH)));
+  const maxDim = Math.max(sw, sh, 2200);
+  const scaleCap = Math.max(rawW, rawH) > maxDim ? maxDim / Math.max(rawW, rawH) : 1;
+  const outW = Math.max(64, Math.round(rawW * scaleCap));
+  const outH = Math.max(64, Math.round(rawH * scaleCap));
+
+  const dstPts = [
+    {x: 0, y: 0},
+    {x: outW - 1, y: 0},
+    {x: outW - 1, y: outH - 1},
+    {x: 0, y: outH - 1},
+  ];
+
+  // Solve homography H: (dstX, dstY) -> (srcU, srcV)
+  const A: number[][] = [];
+  const b: number[] = [];
+  for (let i = 0; i < 4; i++) {
+    const X = dstPts[i].x;
+    const Y = dstPts[i].y;
+    const u = pts[i].x;
+    const v = pts[i].y;
+    A.push([X, Y, 1, 0, 0, 0, -u * X, -u * Y]);
+    b.push(u);
+    A.push([0, 0, 0, X, Y, 1, -v * X, -v * Y]);
+    b.push(v);
+  }
+
+  const h = solveLinear8(A, b);
+  if (!h) {
+    return srcCanvas;
+  }
+
+  const [h0, h1, h2, h3, h4, h5, h6, h7] = h;
+  const srcData = srcCtx.getImageData(0, 0, sw, sh).data;
+  const {canvas: outCanvas, ctx: outCtx} = createCanvas(outW, outH, true);
+  const outImg = outCtx.createImageData(outW, outH);
+  const outPx = outImg.data;
+  const maxSx = sw - 1;
+  const maxSy = sh - 1;
+
+  for (let y = 0; y < outH; y++) {
+    const rowBaseX = h1 * y + h2;
+    const rowBaseY = h4 * y + h5;
+    const rowBaseW = h7 * y + 1;
+    let outIdx = y * outW * 4;
+    for (let x = 0; x < outW; x++) {
+      const denom = h6 * x + rowBaseW;
+      const sx = (h0 * x + rowBaseX) / denom;
+      const sy = (h3 * x + rowBaseY) / denom;
+
+      const cx = sx < 0 ? 0 : sx > maxSx ? maxSx : sx;
+      const cy = sy < 0 ? 0 : sy > maxSy ? maxSy : sy;
+      const x0 = Math.floor(cx);
+      const y0 = Math.floor(cy);
+      const x1 = x0 < maxSx ? x0 + 1 : maxSx;
+      const y1 = y0 < maxSy ? y0 + 1 : maxSy;
+      const fx = cx - x0;
+      const fy = cy - y0;
+      const w00 = (1 - fx) * (1 - fy);
+      const w10 = fx * (1 - fy);
+      const w01 = (1 - fx) * fy;
+      const w11 = fx * fy;
+
+      const i00 = (y0 * sw + x0) * 4;
+      const i10 = (y0 * sw + x1) * 4;
+      const i01 = (y1 * sw + x0) * 4;
+      const i11 = (y1 * sw + x1) * 4;
+
+      outPx[outIdx] = srcData[i00] * w00 + srcData[i10] * w10 + srcData[i01] * w01 + srcData[i11] * w11;
+      outPx[outIdx + 1] =
+        srcData[i00 + 1] * w00 + srcData[i10 + 1] * w10 + srcData[i01 + 1] * w01 + srcData[i11 + 1] * w11;
+      outPx[outIdx + 2] =
+        srcData[i00 + 2] * w00 + srcData[i10 + 2] * w10 + srcData[i01 + 2] * w01 + srcData[i11 + 2] * w11;
+      outPx[outIdx + 3] = 255;
+      outIdx += 4;
+    }
+  }
+
+  outCtx.putImageData(outImg, 0, 0);
+  return outCanvas;
+}
+
 export function renderScanDocToCanvas(
   bitmap: ImageBitmap,
-  opts: {mode: ScanMode; strength: number}
+  opts: {mode: ScanMode; strength: number; corners?: PerspectiveCorners}
 ): HTMLCanvasElement {
-  const w = bitmap.width;
-  const h = bitmap.height;
-  const {canvas, ctx} = createCanvas(w, h, true);
-  ctx.drawImage(bitmap, 0, 0);
+  const prepared =
+    opts.corners && !isDefaultCorners(opts.corners)
+      ? warpPerspectiveToCanvas(bitmap, opts.corners)
+      : bitmap;
 
-  // Build low-frequency illumination background map (downscaled 32x + blur) to remove room/phone shadows
+  const w = prepared.width;
+  const h = prepared.height;
+  const {canvas, ctx} = createCanvas(w, h, true);
+  ctx.drawImage(prepared, 0, 0);
+
+  // Build low-frequency illumination background map (downscaled 24x + blur) to remove room/phone shadows
   const bgW = Math.max(8, Math.round(w / 24));
   const bgH = Math.max(8, Math.round(h / 24));
   const {canvas: bgSmall, ctx: bgSmallCtx} = createCanvas(bgW, bgH, true);
   bgSmallCtx.filter = 'blur(2px)';
-  bgSmallCtx.drawImage(bitmap, 0, 0, bgW, bgH);
+  bgSmallCtx.drawImage(prepared, 0, 0, bgW, bgH);
   bgSmallCtx.filter = 'none';
 
   const {canvas: bgFull, ctx: bgFullCtx} = createCanvas(w, h, true);
@@ -603,11 +844,15 @@ export function renderScanDocToCanvas(
 
 export async function scanDocImageBlob(
   file: Blob,
-  opts: {mode: ScanMode; strength: number; format: string; quality: number}
+  opts: {mode: ScanMode; strength: number; format: string; quality: number; corners?: PerspectiveCorners}
 ): Promise<Blob> {
   const decoded = await decodeImage(file, 2600);
   try {
-    const canvas = renderScanDocToCanvas(decoded.bitmap, {mode: opts.mode, strength: opts.strength});
+    const canvas = renderScanDocToCanvas(decoded.bitmap, {
+      mode: opts.mode,
+      strength: opts.strength,
+      corners: opts.corners,
+    });
     return await canvasToBlob(canvas, opts.format, opts.quality);
   } finally {
     decoded.bitmap.close();

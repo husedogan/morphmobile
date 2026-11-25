@@ -83,6 +83,7 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
   const [playhead, setPlayhead] = useState(0);
   const playCtxRef = useRef<AudioContext | null>(null);
   const playSrcRef = useRef<AudioBufferSourceNode | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   const playRafRef = useRef<number>(0);
 
   // DSP: EQ, Denoise, Compressor, Normalize
@@ -101,6 +102,7 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
   const [id3, setId3] = useState<Id3Tags>({title: '', artist: '', album: '', year: '', genre: ''});
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const vuCanvasRef = useRef<HTMLCanvasElement>(null);
   const dragHandleRef = useRef<'start' | 'end' | 'scrub' | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
@@ -232,20 +234,73 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
     }
 
     // Dim outside trim
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.48)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.52)';
     ctx.fillRect(0, 0, xStart, h);
     ctx.fillRect(xEnd, 0, w - xEnd, h);
 
-    // Trim Handles
-    ctx.fillStyle = '#38bdf8';
-    ctx.fillRect(xStart - 2, 0, 4, h);
-    ctx.fillRect(xEnd - 2, 0, 4, h);
+    // Prominent finger-friendly Left & Right Trim Handles
+    const drawTrimHandle = (xPos: number, isLeft: boolean) => {
+      const clampedX = Math.max(8, Math.min(w - 8, xPos));
+      ctx.save();
+      ctx.fillStyle = isLeft ? '#38bdf8' : '#22d3ee';
+      ctx.fillRect(clampedX - 1.5, 0, 3, h);
+
+      // Large rounded top/bottom grab tabs for touch
+      const tabW = 18;
+      const tabH = 22;
+      const tabX = isLeft ? Math.max(0, clampedX - 3) : Math.min(w - tabW, clampedX - tabW + 3);
+      ctx.beginPath();
+      ctx.roundRect(tabX, 4, tabW, tabH, 6);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.roundRect(tabX, h - tabH - 4, tabW, tabH, 6);
+      ctx.fill();
+
+      // Inner grip lines
+      ctx.fillStyle = '#0c111a';
+      ctx.fillRect(tabX + tabW / 2 - 2.5, 10, 1.5, 10);
+      ctx.fillRect(tabX + tabW / 2 + 1, 10, 1.5, 10);
+      ctx.fillRect(tabX + tabW / 2 - 2.5, h - 20, 1.5, 10);
+      ctx.fillRect(tabX + tabW / 2 + 1, h - 20, 1.5, 10);
+      ctx.restore();
+    };
+    drawTrimHandle(xStart, true);
+    drawTrimHandle(xEnd, false);
 
     // Playhead
     const xPlay = (playhead / dur) * w;
     ctx.fillStyle = '#f8fafc';
     ctx.fillRect(xPlay - 1, 0, 2, h);
   }, [peaks, buffer, trimStart, trimEnd, playhead, silenceSegments, tab, removeSilence, muteEnabled, muteStart, muteEnd]);
+
+  const drawVuIdle = () => {
+    const vu = vuCanvasRef.current;
+    if (!vu) return;
+    const rect = vu.getBoundingClientRect();
+    const w = Math.max(200, Math.floor(rect.width || 300));
+    const h = Math.max(28, Math.floor(rect.height || 32));
+    if (vu.width !== w || vu.height !== h) {
+      vu.width = w;
+      vu.height = h;
+    }
+    const ctx = vu.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#070b12';
+    ctx.fillRect(0, 0, w, h);
+    const bars = 28;
+    const bw = (w - 8) / bars;
+    for (let i = 0; i < bars; i++) {
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.16)';
+      ctx.fillRect(4 + i * bw + 1, h - 6, Math.max(2, bw - 2), 3);
+    }
+  };
+
+  useEffect(() => {
+    if (open && buffer && tab !== 'id3' && !playing) {
+      drawVuIdle();
+    }
+  }, [open, buffer, tab, playing]);
 
   const stopPlayback = () => {
     if (playRafRef.current) cancelAnimationFrame(playRafRef.current);
@@ -255,11 +310,13 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
       // ignore
     }
     playSrcRef.current = null;
+    analyserRef.current = null;
     if (playCtxRef.current) {
       void playCtxRef.current.close().catch(() => {});
       playCtxRef.current = null;
     }
     setPlaying(false);
+    drawVuIdle();
   };
 
   const togglePlayback = () => {
@@ -287,8 +344,17 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
     }
     const gNode = ctx.createGain();
     gNode.gain.value = gain;
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 128;
+    analyser.smoothingTimeConstant = 0.76;
+    analyserRef.current = analyser;
+
     head.connect(gNode);
-    gNode.connect(ctx.destination);
+    gNode.connect(analyser);
+    analyser.connect(ctx.destination);
+
+    const freqData = new Uint8Array(analyser.frequencyBinCount);
+    const timeData = new Uint8Array(analyser.fftSize);
 
     const startOffset = playhead >= trimStart && playhead < trimEnd - 0.1 ? playhead : trimStart;
     const dur = Math.max(0.1, trimEnd - startOffset);
@@ -307,6 +373,54 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
         return;
       }
       setPlayhead(pos);
+
+      // Render live VU & frequency spectrum bar
+      const vu = vuCanvasRef.current;
+      const an = analyserRef.current;
+      if (vu && an) {
+        const rect = vu.getBoundingClientRect();
+        const w = Math.max(200, Math.floor(rect.width || 300));
+        const h = Math.max(28, Math.floor(rect.height || 32));
+        if (vu.width !== w || vu.height !== h) {
+          vu.width = w;
+          vu.height = h;
+        }
+        const vctx = vu.getContext('2d');
+        if (vctx) {
+          an.getByteFrequencyData(freqData);
+          an.getByteTimeDomainData(timeData);
+          let peak = 0;
+          for (let i = 0; i < timeData.length; i++) {
+            const dev = Math.abs(timeData[i] - 128) / 128;
+            if (dev > peak) peak = dev;
+          }
+          vctx.fillStyle = '#070b12';
+          vctx.fillRect(0, 0, w, h);
+
+          // Top slim VU level bar (4px height)
+          const vuW = Math.min(1, peak * 1.45) * (w - 8);
+          const grad = vctx.createLinearGradient(4, 0, w - 4, 0);
+          grad.addColorStop(0, '#34d399');
+          grad.addColorStop(0.7, '#f59e0b');
+          grad.addColorStop(1, '#f43f5e');
+          vctx.fillStyle = 'rgba(148, 163, 184, 0.15)';
+          vctx.fillRect(4, 3, w - 8, 4);
+          vctx.fillStyle = grad;
+          vctx.fillRect(4, 3, vuW, 4);
+
+          // 28 live frequency spectrum bars
+          const bars = 28;
+          const bw = (w - 8) / bars;
+          const step = Math.max(1, Math.floor(freqData.length / bars));
+          for (let i = 0; i < bars; i++) {
+            const val = freqData[Math.min(freqData.length - 1, i * step)] / 255;
+            const bh = Math.max(2, val * (h - 12));
+            vctx.fillStyle = val > 0.78 ? '#f43f5e' : val > 0.5 ? '#38bdf8' : '#34d399';
+            vctx.fillRect(4 + i * bw + 1, h - 2 - bh, Math.max(2, bw - 2.5), bh);
+          }
+        }
+      }
+
       playRafRef.current = requestAnimationFrame(tick);
     };
     playRafRef.current = requestAnimationFrame(tick);
@@ -316,15 +430,18 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
   const handleCanvasPointer = (e: React.PointerEvent<HTMLCanvasElement>, isDown: boolean) => {
     if (!buffer || !canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
-    const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / Math.max(1, rect.width)));
     const sec = frac * buffer.duration;
 
     if (isDown) {
-      const distStart = Math.abs(sec - trimStart);
-      const distEnd = Math.abs(sec - trimEnd);
-      const snapTol = buffer.duration * 0.05;
-      if (distStart < snapTol && distStart <= distEnd) dragHandleRef.current = 'start';
-      else if (distEnd < snapTol) dragHandleRef.current = 'end';
+      const pointerPx = frac * rect.width;
+      const startPx = (trimStart / Math.max(0.01, buffer.duration)) * rect.width;
+      const endPx = (trimEnd / Math.max(0.01, buffer.duration)) * rect.width;
+      const tolPx = 28; // generous finger hitbox regardless of track duration
+      const distStartPx = Math.abs(pointerPx - startPx);
+      const distEndPx = Math.abs(pointerPx - endPx);
+      if (distStartPx <= tolPx && distStartPx <= distEndPx) dragHandleRef.current = 'start';
+      else if (distEndPx <= tolPx) dragHandleRef.current = 'end';
       else dragHandleRef.current = 'scrub';
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
     }
@@ -515,9 +632,9 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
 
           {buffer && !loading && (
             <>
-              {/* Interactive Waveform Canvas (shown on Waveform / EQ / Silence) */}
+              {/* Interactive Waveform Canvas + Live VU/Spectrum Level Bar */}
               {tab !== 'id3' && (
-                <div className="rounded-2xl border border-[var(--line)] bg-[#0c111a] p-3">
+                <div className="rounded-2xl border border-[var(--line)] bg-[#0c111a] p-3 space-y-2">
                   <canvas
                     ref={canvasRef}
                     onPointerDown={(e) => handleCanvasPointer(e, true)}
@@ -527,14 +644,21 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
                     onPointerUp={() => {
                       dragHandleRef.current = null;
                     }}
+                    onPointerCancel={() => {
+                      dragHandleRef.current = null;
+                    }}
                     className="h-36 w-full cursor-ew-resize touch-none rounded-xl"
                   />
-                  <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <canvas
+                    ref={vuCanvasRef}
+                    className="h-8 w-full rounded-lg border border-white/10 bg-[#070b12]"
+                  />
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={togglePlayback}
-                        className="morph-accent-btn flex h-9 items-center gap-1.5 rounded-xl px-3.5 text-xs font-bold"
+                        className="morph-accent-btn flex h-10 items-center gap-1.5 rounded-xl px-4 text-xs font-bold"
                       >
                         {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
                         <span>{playing ? (isTr ? 'Durdur' : 'Pause') : isTr ? 'Önizle' : 'Play'}</span>

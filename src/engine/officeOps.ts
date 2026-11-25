@@ -24,7 +24,7 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-function parseCsvRows(raw: string, delimiter?: string): string[][] {
+export function parseCsvRows(raw: string, delimiter?: string): string[][] {
   const clean = raw.replace(/^\uFEFF/, '');
   const firstLine = clean.split(/\r?\n/, 1)[0] || '';
   const sep =

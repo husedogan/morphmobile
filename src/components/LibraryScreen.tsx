@@ -27,6 +27,7 @@ import {
 import {Lang, t} from '../data/i18n';
 import {ExportItem, detectFileKind, formatBytes, formatDate} from '../data/models';
 import {saveOrDownloadBlob} from '../engine/nativeBridge';
+import {fileExtLower, isRichDocumentExt} from '../engine/previewParsers';
 import {
   LibraryFolder,
   computeLibraryStorage,
@@ -48,6 +49,8 @@ interface LibraryScreenProps {
   onDelete: (id: string) => void;
   onClearAll: () => void;
   onShowToast?: (msg: string) => void;
+  onOpenArchivePreview?: (item: ExportItem) => void;
+  onOpenDocumentPreview?: (item: ExportItem) => void;
   onModalCountChange?: (count: number) => void;
   closeSignal?: number;
 }
@@ -66,6 +69,8 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   onDelete,
   onClearAll,
   onShowToast,
+  onOpenArchivePreview,
+  onOpenDocumentPreview,
   onModalCountChange,
   closeSignal = 0,
 }) => {
@@ -149,6 +154,16 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
           ? 'Bu dosya için tarayıcı önizlemesi mevcut değil.'
           : 'In-browser preview is unavailable for this file.'
       );
+      return;
+    }
+    const kind = detectFileKind(item.name, item.mime);
+    const ext = fileExtLower(item.name);
+    if (kind === 'archive' && hasBlob && onOpenArchivePreview) {
+      onOpenArchivePreview(item);
+      return;
+    }
+    if ((kind === 'document' || isRichDocumentExt(ext)) && hasBlob && onOpenDocumentPreview) {
+      onOpenDocumentPreview(item);
       return;
     }
     if (ownedPreviewUrlRef.current) {
@@ -641,12 +656,20 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
           <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
             {filtered.map((item) => {
               const kind = detectFileKind(item.name, item.mime);
+              const ext = fileExtLower(item.name);
               const isBlobExpired = isExpiredItem(item);
               const hasInMemoryBlob = Boolean(item.blob && item.blob.size > 0);
               const canPreview =
                 !isBlobExpired &&
                 (Boolean(item.previewUrl) || hasInMemoryBlob) &&
-                (kind === 'image' || kind === 'pdf' || kind === 'video' || kind === 'audio');
+                (kind === 'image' ||
+                  kind === 'pdf' ||
+                  kind === 'video' ||
+                  kind === 'audio' ||
+                  (kind === 'archive' && hasInMemoryBlob && Boolean(onOpenArchivePreview)) ||
+                  ((kind === 'document' || isRichDocumentExt(ext)) &&
+                    hasInMemoryBlob &&
+                    Boolean(onOpenDocumentPreview)));
               const isSelected = selectedIds.includes(item.id);
               return (
                 <div

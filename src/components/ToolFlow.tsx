@@ -13,6 +13,7 @@ import {
   Contrast,
   Crop,
   Droplets,
+  Eye,
   EyeOff,
   FileArchive,
   FileCheck2,
@@ -42,6 +43,7 @@ import {
   Play,
   Plus,
   Repeat,
+  RotateCcw,
   RotateCw,
   ScanLine,
   Scissors,
@@ -55,6 +57,7 @@ import {
   Undo2,
   VolumeX,
   X,
+  ZoomIn,
 } from 'lucide-react';
 import {Lang, t} from '../data/i18n';
 import {
@@ -75,14 +78,18 @@ import {
 import {BatchRenameRules, computeBatchRenamedNames} from '../engine/fileInspector';
 import {LinkDownloaderPro} from './LinkDownloaderPro';
 import {
+  CollageCellTransform,
+  DEFAULT_SCAN_CORNERS,
   DecodedImage,
   FilterPreset,
+  PerspectiveCorners,
   RedactBox,
   RedactStyle,
   ScanMode,
   SocialAspect,
   SocialFillMode,
   WatermarkPosition,
+  computeCollageLayout,
   decodeImage,
   renderCollageToCanvas,
   renderEditedToCanvas,
@@ -96,12 +103,24 @@ import {
 } from '../engine/imaging';
 import {extractRealAudioWaveform} from '../engine/audioEngine';
 import {EngineCardInfo, getAllEnginesStatus} from '../engine/morphEnginesBridge';
+import {extractDocumentText} from '../engine/officeOps';
+import {fileExtLower, isQuickViewOfficeExt, isRichDocumentExt} from '../engine/previewParsers';
 import {ToolOptions} from '../engine/processor';
+import {NleProjectState} from '../engine/videoTimelineEngine';
 import {CropEditor} from './CropEditor';
 import {AudioEffectPreview, AudioEffectToolId} from './AudioEffectPreview';
 import {FileThumb} from './FileThumb';
 import {MediaJoinTimeline} from './MediaJoinTimeline';
 import {MediaRangeMode, MediaRangeTrimmer} from './MediaRangeTrimmer';
+import {
+  PdfExtractVisualPicker,
+  PdfNupVisualPreview,
+  PdfRemoveVisualPicker,
+  PdfRotateVisualPicker,
+  PdfSplitVisualPicker,
+  PdfStampVisualPreview,
+  PdfWatermarkVisualPreview,
+} from './PdfVisualTools';
 import type {VideoEditorState, VideoEditorTab} from './VideoEditor';
 
 const AUDIO_EFFECT_TOOL_IDS = new Set<AudioEffectToolId>([
@@ -367,6 +386,86 @@ const InlineMediaPreview: React.FC<{files: PickedFile[]; lang: Lang}> = ({files,
   );
 };
 
+const DocumentQuickViewCard: React.FC<{
+  file: PickedFile;
+  lang: Lang;
+  onOpenFullPreview?: (file: PickedFile) => void;
+}> = ({file, lang, onOpenFullPreview}) => {
+  const isTr = lang === 'tr';
+  const ext = fileExtLower(file.name);
+  const isOffice = isQuickViewOfficeExt(ext);
+  const [snippet, setSnippet] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    extractDocumentText(file)
+      .then((text) => {
+        if (!active) return;
+        const trimmed = text.trim();
+        setSnippet(trimmed ? trimmed.slice(0, 1400) : '');
+      })
+      .catch(() => {
+        if (active) setSnippet('');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [file]);
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)]">
+      <div className="flex items-center justify-between gap-2 border-b border-[var(--line)] px-3.5 py-2.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <FileText className="h-4 w-4 shrink-0 text-[var(--accent)]" />
+          <div className="min-w-0">
+            <p className="truncate text-xs font-bold text-[var(--ink)]">
+              {isOffice
+                ? isTr
+                  ? 'Hızlı Okuma (Quick View)'
+                  : 'Quick View'
+                : isTr
+                  ? 'Belge Önizleme'
+                  : 'Document Preview'}
+            </p>
+            <p className="truncate text-[10px] text-[var(--muted)]">
+              {file.name} · {ext.toUpperCase() || 'DOC'} · {formatBytes(file.size)}
+            </p>
+          </div>
+        </div>
+        {onOpenFullPreview && (
+          <button
+            type="button"
+            onClick={() => onOpenFullPreview(file)}
+            className="flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-xl border border-[var(--accent)]/45 bg-[var(--accent)]/12 px-2.5 text-[11px] font-bold text-[var(--ink)] hover:border-[var(--accent)]"
+          >
+            <Eye className="h-3.5 w-3.5 text-[var(--accent)]" />
+            <span>{isTr ? 'Tam Aç' : 'Open'}</span>
+          </button>
+        )}
+      </div>
+      <div className="max-h-36 overflow-y-auto bg-[var(--inset)]/70 p-3 text-xs leading-relaxed text-[var(--ink)]">
+        {loading ? (
+          <p className="text-[var(--muted)]">{isTr ? 'İçerik okunuyor...' : 'Reading content...'}</p>
+        ) : snippet ? (
+          <pre className="whitespace-pre-wrap break-words font-sans text-[11.5px] leading-relaxed text-[var(--ink)]">
+            {snippet}
+            {snippet.length >= 1400 ? '\n…' : ''}
+          </pre>
+        ) : (
+          <p className="text-[var(--muted)]">
+            {isTr ? 'Metin önizlemesi bulunamadı.' : 'No text preview available.'}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+};
+
 interface ToolFlowProps {
   mode: 'convert' | 'tools' | 'web';
   files: PickedFile[];
@@ -377,6 +476,7 @@ interface ToolFlowProps {
   initialTool?: ToolId | null;
   initialConvertFormat?: string | null;
   initialServerTool?: ServerToolDef | null;
+  initialImportedProject?: NleProjectState | null;
   initialLinkUrl?: string;
   directEntry?: boolean;
   onBack: () => void;
@@ -384,6 +484,7 @@ interface ToolFlowProps {
   onRunServer: (tool: ServerToolDef, options: Record<string, string>) => void;
   onRunLink: (url: string, options: Record<string, string>) => void;
   onOpenSettings: () => void;
+  onOpenDocumentPreview?: (file: PickedFile) => void;
 }
 
 const FRAME_SWATCHES = [
@@ -547,6 +648,7 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
   initialTool = null,
   initialConvertFormat = null,
   initialServerTool = null,
+  initialImportedProject = null,
   initialLinkUrl = '',
   directEntry = false,
   onBack,
@@ -554,6 +656,7 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
   onRunServer,
   onRunLink,
   onOpenSettings,
+  onOpenDocumentPreview,
 }) => {
   const [selectedTool, setSelectedTool] = useState<ToolId | null>(initialTool);
   const [convertFormat, setConvertFormat] = useState<string | null>(initialConvertFormat);
@@ -913,6 +1016,10 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
               <span>{t('VeOpenStudioBtn', lang)}</span>
             </button>
           )}
+        </div>
+      ) : files[0] && (firstKind === 'document' || isRichDocumentExt(fileExtLower(files[0].name))) ? (
+        <div className="mt-4">
+          <DocumentQuickViewCard file={files[0]} lang={lang} onOpenFullPreview={onOpenDocumentPreview} />
         </div>
       ) : (
         <div className="mt-4 flex items-center gap-2 overflow-x-auto pb-1">
@@ -1351,8 +1458,9 @@ const ConvertConfig: React.FC<{
   lang: Lang;
   onBack: () => void;
   onOpenVideoEditor?: () => void;
+  onOpenDocumentPreview?: (file: PickedFile) => void;
   onExport: (opts: ToolOptions) => void;
-}> = ({files, format, lang, onBack, onOpenVideoEditor, onExport}) => {
+}> = ({files, format, lang, onBack, onOpenVideoEditor, onOpenDocumentPreview, onExport}) => {
   const [quality, setQuality] = useState(90);
   const [videoCrf, setVideoCrf] = useState('24');
   const [maxDim, setMaxDim] = useState('0');
@@ -1381,6 +1489,10 @@ const ConvertConfig: React.FC<{
     >
       {(firstKind === 'video' || firstKind === 'audio') && (
         <InlineMediaPreview files={files} lang={lang} />
+      )}
+
+      {files[0] && (firstKind === 'document' || isRichDocumentExt(fileExtLower(files[0].name))) && (
+        <DocumentQuickViewCard file={files[0]} lang={lang} onOpenFullPreview={onOpenDocumentPreview} />
       )}
 
       {firstKind === 'video' && onOpenVideoEditor && (
@@ -1494,11 +1606,32 @@ const LocalToolConfig: React.FC<{
   // Collage
   const [columns, setColumns] = useState('2');
   const [gap, setGap] = useState(14);
+  const [collageTransforms, setCollageTransforms] = useState<Record<number, CollageCellTransform>>({});
+  const [selectedCollageCell, setSelectedCollageCell] = useState<number>(0);
+  const collageStageRef = useRef<HTMLCanvasElement>(null);
+  const collagePointersRef = useRef<Map<number, {x: number; y: number}>>(new Map());
+  const collageGestureRef = useRef<{
+    mode: 'pan' | 'pinch';
+    cellIdx: number;
+    startX: number;
+    startY: number;
+    origPanX: number;
+    origPanY: number;
+    origZoom: number;
+    startDist: number;
+  } | null>(null);
 
   // Scan Doc
   const [scanMode, setScanMode] = useState<ScanMode>('bw');
   const [scanStrength, setScanStrength] = useState(65);
   const [scanFormat, setScanFormat] = useState('pdf');
+  const [scanCorners, setScanCorners] = useState<PerspectiveCorners>(
+    () => DEFAULT_SCAN_CORNERS.map((p) => ({...p})) as PerspectiveCorners
+  );
+  const [scanEditCorners, setScanEditCorners] = useState(false);
+  const [scanAspect, setScanAspect] = useState<number>(0.75);
+  const scanStageRef = useRef<HTMLDivElement>(null);
+  const activeCornerDragRef = useRef<number | null>(null);
 
   // Social Fit
   const [socialAspect, setSocialAspect] = useState<SocialAspect>('4:5');
@@ -1524,17 +1657,21 @@ const LocalToolConfig: React.FC<{
   const [passportFormat, setPassportFormat] = useState('jpg');
 
   // PDF Split / Remove / Extract / Rotate / Watermark / N-Up
-  const [splitMode, setSplitMode] = useState<'every' | 'ranges'>('every');
+  const [splitMode, setSplitMode] = useState<'every' | 'ranges'>('ranges');
   const [everyN, setEveryN] = useState(1);
   const [ranges, setRanges] = useState('');
   const [pdfDeg, setPdfDeg] = useState('90');
+  const [pdfPageRotations, setPdfPageRotations] = useState<number[]>([]);
   const [pdfDeleteRanges, setPdfDeleteRanges] = useState('1');
-  const [pdfExtractMode, setPdfExtractMode] = useState<'reverse' | 'custom'>('reverse');
-  const [pdfExtractOrder, setPdfExtractOrder] = useState('1-3');
+  const [pdfExtractMode, setPdfExtractMode] = useState<'reverse' | 'custom'>('custom');
+  const [pdfExtractOrder, setPdfExtractOrder] = useState('1');
   const [pdfWmText, setPdfWmText] = useState(lang === 'tr' ? 'ÖRNEK' : 'CONFIDENTIAL');
   const [pdfWmPos, setPdfWmPos] = useState<'diagonal' | 'center'>('diagonal');
   const [pdfWmOpacity, setPdfWmOpacity] = useState(28);
   const [pdfWmColor, setPdfWmColor] = useState('#64748B');
+  const [pdfWmCx, setPdfWmCx] = useState(0.5);
+  const [pdfWmCy, setPdfWmCy] = useState(0.5);
+  const [pdfWmScale, setPdfWmScale] = useState(1);
   const [pdfNupCount, setPdfNupCount] = useState<'2' | '4'>('2');
 
   // Filters
@@ -1666,20 +1803,35 @@ const LocalToolConfig: React.FC<{
         shadow,
       });
     } else if (toolId === 'COLLAGE' && decodedListRef.current.length > 0) {
-      source = renderCollageToCanvas(
-        decodedListRef.current.map((d) => d.bitmap),
-        {
-          columns: Number(columns) || 2,
-          gap,
-          backgroundColor: bgColor,
-          targetWidth: 720,
-        }
-      );
-    } else if (toolId === 'SCAN_DOC' && decodedSingleRef.current) {
-      source = renderScanDocToCanvas(decodedSingleRef.current.bitmap, {
-        mode: scanMode,
-        strength: scanStrength,
+      const bitmaps = decodedListRef.current.map((d) => d.bitmap);
+      const cellTransforms = bitmaps.map((_, idx) => collageTransforms[idx] ?? {zoom: 1, panX: 0, panY: 0});
+      source = renderCollageToCanvas(bitmaps, {
+        columns: Number(columns) || 2,
+        gap,
+        backgroundColor: bgColor,
+        targetWidth: 720,
+        cellTransforms,
+        selectedCellIndex: selectedCollageCell,
       });
+    } else if (toolId === 'SCAN_DOC' && decodedSingleRef.current) {
+      const bmp = decodedSingleRef.current.bitmap;
+      const nextAspect = bmp.width / Math.max(1, bmp.height);
+      if (Math.abs(scanAspect - nextAspect) > 0.01) {
+        setScanAspect(nextAspect);
+      }
+      if (scanEditCorners) {
+        const rawCanvas = document.createElement('canvas');
+        rawCanvas.width = bmp.width;
+        rawCanvas.height = bmp.height;
+        rawCanvas.getContext('2d')?.drawImage(bmp, 0, 0);
+        source = rawCanvas;
+      } else {
+        source = renderScanDocToCanvas(bmp, {
+          mode: scanMode,
+          strength: scanStrength,
+          corners: scanCorners,
+        });
+      }
     } else if (toolId === 'SOCIAL_FIT' && decodedSingleRef.current) {
       source = renderSocialFitToCanvas(decodedSingleRef.current.bitmap, {
         aspect: socialAspect,
@@ -1769,8 +1921,13 @@ const LocalToolConfig: React.FC<{
     shadow,
     columns,
     gap,
+    collageTransforms,
+    selectedCollageCell,
     scanMode,
     scanStrength,
+    scanCorners,
+    scanEditCorners,
+    scanAspect,
     socialAspect,
     socialFill,
     redactBoxes,
@@ -1967,6 +2124,8 @@ const LocalToolConfig: React.FC<{
   }
 
   if (toolId === 'SCAN_DOC') {
+    const isTr = lang === 'tr';
+    const cornerLabels = ['TL', 'TR', 'BR', 'BL'];
     return (
       <ConfigShell
         title={t('ToolScanDoc', lang)}
@@ -1982,14 +2141,122 @@ const LocalToolConfig: React.FC<{
             strength: scanStrength,
             format: scanFormat,
             quality: 92,
+            corners: scanCorners,
           })
         }
       >
-        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3">
-          {showToolLabels && (
-            <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
+        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3 space-y-2.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] p-1">
+              <button
+                type="button"
+                onClick={() => setScanEditCorners(false)}
+                className={`min-h-[36px] min-w-0 truncate rounded-lg px-2 text-xs font-bold transition-colors ${
+                  !scanEditCorners
+                    ? 'bg-[var(--accent)] text-white'
+                    : 'text-[var(--muted)] hover:text-[var(--ink)]'
+                }`}
+              >
+                {isTr ? 'Tarama Önizleme' : 'Scan Preview'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setScanEditCorners(true)}
+                className={`min-h-[36px] min-w-0 truncate rounded-lg px-2 text-xs font-bold transition-colors ${
+                  scanEditCorners
+                    ? 'bg-[var(--accent)] text-white'
+                    : 'text-[var(--muted)] hover:text-[var(--ink)]'
+                }`}
+              >
+                {isTr ? '4 Köşe Düzelt' : '4-Corner Warp'}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setScanCorners(DEFAULT_SCAN_CORNERS.map((p) => ({...p})) as PerspectiveCorners)
+              }
+              title={isTr ? 'Köşeleri Sıfırla' : 'Reset Corners'}
+              aria-label={isTr ? 'Köşeleri Sıfırla' : 'Reset Corners'}
+              className="flex min-h-[38px] shrink-0 items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-2.5 text-xs font-bold text-[var(--muted)] hover:text-[var(--ink)]"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span>{isTr ? 'Sıfırla' : 'Reset'}</span>
+            </button>
+          </div>
+
+          <div
+            ref={scanStageRef}
+            style={{aspectRatio: scanEditCorners ? `${scanAspect}` : undefined}}
+            onPointerMove={(e) => {
+              const idx = activeCornerDragRef.current;
+              const stage = scanStageRef.current;
+              if (idx === null || !stage) return;
+              const rect = stage.getBoundingClientRect();
+              const nx = Math.max(0.01, Math.min(0.99, (e.clientX - rect.left) / Math.max(1, rect.width)));
+              const ny = Math.max(0.01, Math.min(0.99, (e.clientY - rect.top) / Math.max(1, rect.height)));
+              setScanCorners((prev) => {
+                const next = [...prev] as PerspectiveCorners;
+                next[idx] = {x: nx, y: ny};
+                return next;
+              });
+            }}
+            onPointerUp={() => {
+              activeCornerDragRef.current = null;
+            }}
+            onPointerCancel={() => {
+              activeCornerDragRef.current = null;
+            }}
+            className="relative mx-auto max-h-72 w-full max-w-full overflow-hidden rounded-lg select-none"
+          >
+            <canvas
+              ref={previewCanvasRef}
+              className="mx-auto block h-full max-h-72 w-full max-w-full rounded-lg object-contain"
+            />
+            {scanEditCorners && (
+              <>
+                <svg
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="none"
+                  className="pointer-events-none absolute inset-0 h-full w-full"
+                >
+                  <polygon
+                    points={scanCorners.map((c) => `${c.x * 100},${c.y * 100}`).join(' ')}
+                    fill="rgba(240, 120, 138, 0.14)"
+                    stroke="rgba(240, 120, 138, 0.95)"
+                    strokeWidth="0.9"
+                  />
+                </svg>
+                {scanCorners.map((pt, idx) => (
+                  <div
+                    key={cornerLabels[idx]}
+                    role="slider"
+                    aria-label={cornerLabels[idx]}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      activeCornerDragRef.current = idx;
+                      scanStageRef.current?.setPointerCapture(e.pointerId);
+                    }}
+                    style={{
+                      left: `${pt.x * 100}%`,
+                      top: `${pt.y * 100}%`,
+                      transform: 'translate(-50%, -50%)',
+                    }}
+                    className="absolute flex h-11 w-11 cursor-grab touch-none items-center justify-center active:cursor-grabbing"
+                  >
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-[var(--accent)] text-[8px] font-extrabold text-white shadow-lg" />
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+          {scanEditCorners && (
+            <p className="text-center text-[11px] text-[var(--muted)]">
+              {isTr
+                ? 'Belgenin 4 köşesini parmakla sürükleyin, ardından Tarama Önizleme ile sonucu görün.'
+                : 'Drag the 4 document corners with your finger, then switch to Scan Preview.'}
+            </p>
           )}
-          <canvas ref={previewCanvasRef} className="mx-auto max-h-64 max-w-full rounded-lg object-contain" />
         </div>
         <div>
           <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('ScanModeLabel', lang)}</p>
@@ -2509,6 +2776,45 @@ const LocalToolConfig: React.FC<{
   }
 
   if (toolId === 'COLLAGE') {
+    const isTr = lang === 'tr';
+    const currentCellTf = collageTransforms[selectedCollageCell] ?? {zoom: 1, panX: 0, panY: 0};
+    const updateCellTf = (idx: number, patch: Partial<CollageCellTransform>) => {
+      setCollageTransforms((prev) => {
+        const cur = prev[idx] ?? {zoom: 1, panX: 0, panY: 0};
+        return {
+          ...prev,
+          [idx]: {
+            zoom: Math.min(3, Math.max(1, patch.zoom ?? cur.zoom)),
+            panX: Math.min(1, Math.max(-1, patch.panX ?? cur.panX)),
+            panY: Math.min(1, Math.max(-1, patch.panY ?? cur.panY)),
+          },
+        };
+      });
+    };
+
+    const hitTestCollageCell = (clientX: number, clientY: number, canvasEl: HTMLCanvasElement): number => {
+      const rect = canvasEl.getBoundingClientRect();
+      const bitmaps = decodedListRef.current.map((d) => d.bitmap);
+      if (bitmaps.length === 0) return 0;
+      const layout = computeCollageLayout(bitmaps, {
+        columns: Number(columns) || 2,
+        gap,
+        targetWidth: 720,
+      });
+      const cx = ((clientX - rect.left) / Math.max(1, rect.width)) * layout.width;
+      const cy = ((clientY - rect.top) / Math.max(1, rect.height)) * layout.height;
+      const col = Math.min(
+        layout.cols - 1,
+        Math.max(0, Math.floor((cx - layout.gap / 2) / Math.max(1, layout.cellW + layout.gap)))
+      );
+      const row = Math.min(
+        layout.rows - 1,
+        Math.max(0, Math.floor((cy - layout.gap / 2) / Math.max(1, layout.cellH + layout.gap)))
+      );
+      const idx = row * layout.cols + col;
+      return Math.min(bitmaps.length - 1, Math.max(0, idx));
+    };
+
     return (
       <ConfigShell
         title={t('ToolCollage', lang)}
@@ -2525,14 +2831,121 @@ const LocalToolConfig: React.FC<{
             color: bgColor,
             format,
             quality: 92,
+            cellTransforms: files.map((_, idx) => collageTransforms[idx] ?? {zoom: 1, panX: 0, panY: 0}),
           })
         }
       >
-        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3">
-          {showToolLabels && (
-            <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
-          )}
-          <canvas ref={previewCanvasRef} className="mx-auto max-h-64 max-w-full rounded-lg object-contain" />
+        <div className="space-y-3 overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate text-xs font-semibold text-[var(--muted)]">
+              {isTr
+                ? `Hücre #${selectedCollageCell + 1} · Sürükle/Çimdikle`
+                : `Cell #${selectedCollageCell + 1} · Drag / Pinch`}
+            </span>
+            <button
+              type="button"
+              onClick={() => updateCellTf(selectedCollageCell, {zoom: 1, panX: 0, panY: 0})}
+              className="flex min-h-[34px] shrink-0 items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-2.5 text-[11px] font-bold text-[var(--muted)] hover:text-[var(--ink)]"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span>{isTr ? 'Hücreyi Sıfırla' : 'Reset Cell'}</span>
+            </button>
+          </div>
+          <canvas
+            ref={(el) => {
+              (previewCanvasRef as React.MutableRefObject<HTMLCanvasElement | null>).current = el;
+              (collageStageRef as React.MutableRefObject<HTMLCanvasElement | null>).current = el;
+            }}
+            onPointerDown={(e) => {
+              const canvasEl = e.currentTarget;
+              canvasEl.setPointerCapture(e.pointerId);
+              collagePointersRef.current.set(e.pointerId, {x: e.clientX, y: e.clientY});
+              if (collagePointersRef.current.size === 1) {
+                const cellIdx = hitTestCollageCell(e.clientX, e.clientY, canvasEl);
+                setSelectedCollageCell(cellIdx);
+                const cur = collageTransforms[cellIdx] ?? {zoom: 1, panX: 0, panY: 0};
+                collageGestureRef.current = {
+                  mode: 'pan',
+                  cellIdx,
+                  startX: e.clientX,
+                  startY: e.clientY,
+                  origPanX: cur.panX,
+                  origPanY: cur.panY,
+                  origZoom: cur.zoom,
+                  startDist: 1,
+                };
+              } else if (collagePointersRef.current.size >= 2) {
+                const pts = Array.from(collagePointersRef.current.values());
+                const dist = Math.max(10, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y));
+                const cur = collageTransforms[selectedCollageCell] ?? {zoom: 1, panX: 0, panY: 0};
+                collageGestureRef.current = {
+                  mode: 'pinch',
+                  cellIdx: selectedCollageCell,
+                  startX: pts[0].x,
+                  startY: pts[0].y,
+                  origPanX: cur.panX,
+                  origPanY: cur.panY,
+                  origZoom: cur.zoom,
+                  startDist: dist,
+                };
+              }
+            }}
+            onPointerMove={(e) => {
+              if (!collagePointersRef.current.has(e.pointerId)) return;
+              collagePointersRef.current.set(e.pointerId, {x: e.clientX, y: e.clientY});
+              const g = collageGestureRef.current;
+              if (!g) return;
+              if (g.mode === 'pinch' && collagePointersRef.current.size >= 2) {
+                const pts = Array.from(collagePointersRef.current.values());
+                const dist = Math.max(10, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y));
+                const ratio = dist / g.startDist;
+                updateCellTf(g.cellIdx, {zoom: Number((g.origZoom * ratio).toFixed(2))});
+              } else if (g.mode === 'pan') {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const dx = (e.clientX - g.startX) / Math.max(40, rect.width * 0.25);
+                const dy = (e.clientY - g.startY) / Math.max(40, rect.height * 0.25);
+                updateCellTf(g.cellIdx, {
+                  panX: Number((g.origPanX + dx).toFixed(3)),
+                  panY: Number((g.origPanY + dy).toFixed(3)),
+                });
+              }
+            }}
+            onPointerUp={(e) => {
+              collagePointersRef.current.delete(e.pointerId);
+              if (collagePointersRef.current.size === 0) {
+                collageGestureRef.current = null;
+              }
+            }}
+            onPointerCancel={(e) => {
+              collagePointersRef.current.delete(e.pointerId);
+              if (collagePointersRef.current.size === 0) {
+                collageGestureRef.current = null;
+              }
+            }}
+            className="mx-auto max-h-64 max-w-full cursor-grab touch-none rounded-lg object-contain select-none active:cursor-grabbing"
+          />
+          <div className="flex items-center gap-3 pt-1">
+            <ZoomIn className="h-4 w-4 shrink-0 text-[var(--accent)]" />
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 flex items-center justify-between text-[11px]">
+                <span className="font-semibold text-[var(--muted)]">
+                  {isTr ? `Hücre #${selectedCollageCell + 1} Yakınlaştır` : `Cell #${selectedCollageCell + 1} Zoom`}
+                </span>
+                <span className="font-mono-num font-bold text-[var(--accent)]">
+                  {currentCellTf.zoom.toFixed(2)}×
+                </span>
+              </div>
+              <input
+                type="range"
+                min={100}
+                max={300}
+                value={Math.round(currentCellTf.zoom * 100)}
+                onChange={(e) => updateCellTf(selectedCollageCell, {zoom: Number(e.target.value) / 100})}
+                style={{'--slider-pct': `${((currentCellTf.zoom - 1) / 2) * 100}%`} as React.CSSProperties}
+                className="morph-slider"
+              />
+            </div>
+          </div>
         </div>
         <div>
           <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('Columns', lang)}</p>
@@ -2604,43 +3017,16 @@ const LocalToolConfig: React.FC<{
           })
         }
       >
-        <OptionPills
-          selected={splitMode}
-          onSelect={(v) => setSplitMode(v as 'every' | 'ranges')}
-          options={[
-            {value: 'every', label: t('EveryNPages', lang)},
-            {value: 'ranges', label: t('PageRanges', lang)},
-          ]}
+        <PdfSplitVisualPicker
+          file={files[0]?.file}
+          lang={lang}
+          splitMode={splitMode}
+          everyN={everyN}
+          ranges={ranges}
+          onChangeMode={setSplitMode}
+          onChangeEveryN={setEveryN}
+          onChangeRanges={setRanges}
         />
-        {splitMode === 'every' ? (
-          <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() => setEveryN((n) => Math.max(1, n - 1))}
-              aria-label="-1"
-              className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
-            >
-              <Minus className="h-4.5 w-4.5" />
-            </button>
-            <span className="font-mono-num min-w-[3rem] text-center text-2xl font-bold">{everyN}</span>
-            <button
-              type="button"
-              onClick={() => setEveryN((n) => Math.min(100, n + 1))}
-              aria-label="+1"
-              className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
-            >
-              <Plus className="h-4.5 w-4.5" />
-            </button>
-          </div>
-        ) : (
-          <input
-            type="text"
-            value={ranges}
-            onChange={(e) => setRanges(e.target.value)}
-            placeholder={t('RangesPlaceholder', lang)}
-            className="min-h-[46px] w-full rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-4 text-sm text-[var(--ink)] outline-none focus:border-[var(--accent)]"
-          />
-        )}
       </ConfigShell>
     );
   }
@@ -2662,20 +3048,16 @@ const LocalToolConfig: React.FC<{
         }
       >
         {showToolLabels && (
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-4 text-xs text-[var(--muted)]">
+          <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-xs text-[var(--muted)]">
             {t('ToolPdfRemovePagesDesc', lang)}
           </div>
         )}
-        <div>
-          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('PagesToDeleteLabel', lang)}</p>
-          <input
-            type="text"
-            value={pdfDeleteRanges}
-            onChange={(e) => setPdfDeleteRanges(e.target.value)}
-            placeholder={t('RangesPlaceholder', lang)}
-            className="min-h-[46px] w-full rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-4 text-sm text-[var(--ink)] outline-none focus:border-[var(--accent)]"
-          />
-        </div>
+        <PdfRemoveVisualPicker
+          file={files[0]?.file}
+          lang={lang}
+          ranges={pdfDeleteRanges}
+          onChangeRanges={setPdfDeleteRanges}
+        />
       </ConfigShell>
     );
   }
@@ -2697,29 +3079,14 @@ const LocalToolConfig: React.FC<{
           })
         }
       >
-        <div>
-          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('ExtractModeLabel', lang)}</p>
-          <OptionPills
-            selected={pdfExtractMode}
-            onSelect={(v) => setPdfExtractMode(v as 'reverse' | 'custom')}
-            options={[
-              {value: 'reverse', label: t('ExtractReverseAll', lang)},
-              {value: 'custom', label: t('ExtractCustomOrder', lang)},
-            ]}
-          />
-        </div>
-        {pdfExtractMode === 'custom' && (
-          <div>
-            <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('PageRanges', lang)}</p>
-            <input
-              type="text"
-              value={pdfExtractOrder}
-              onChange={(e) => setPdfExtractOrder(e.target.value)}
-              placeholder={t('CustomOrderPlaceholder', lang)}
-              className="min-h-[46px] w-full rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-4 text-sm text-[var(--ink)] outline-none focus:border-[var(--accent)]"
-            />
-          </div>
-        )}
+        <PdfExtractVisualPicker
+          file={files[0]?.file}
+          lang={lang}
+          mode={pdfExtractMode}
+          ranges={pdfExtractOrder}
+          onChangeMode={setPdfExtractMode}
+          onChangeRanges={setPdfExtractOrder}
+        />
       </ConfigShell>
     );
   }
@@ -2733,20 +3100,22 @@ const LocalToolConfig: React.FC<{
         showToolLabels={showToolLabels}
         onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
-        onExport={() => onExport({kind: 'pdfRotate', degrees: Number(pdfDeg) || 90})}
+        onExport={() =>
+          onExport({
+            kind: 'pdfRotate',
+            degrees: Number(pdfDeg) || 90,
+            pageRotations: pdfPageRotations.length > 0 ? pdfPageRotations : undefined,
+          })
+        }
       >
-        <div>
-          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('Degrees', lang)}</p>
-          <OptionPills
-            selected={pdfDeg}
-            onSelect={setPdfDeg}
-            options={[
-              {value: '90', label: '90°'},
-              {value: '180', label: '180°'},
-              {value: '270', label: '270°'},
-            ]}
-          />
-        </div>
+        <PdfRotateVisualPicker
+          file={files[0]?.file}
+          lang={lang}
+          degrees={Number(pdfDeg) || 0}
+          pageRotations={pdfPageRotations}
+          onChangeDegrees={(d) => setPdfDeg(String(d))}
+          onChangePageRotations={setPdfPageRotations}
+        />
       </ConfigShell>
     );
   }
@@ -2768,9 +3137,28 @@ const LocalToolConfig: React.FC<{
             opacity: pdfWmOpacity,
             color: pdfWmColor,
             position: pdfWmPos,
+            cx: pdfWmCx,
+            cy: pdfWmCy,
+            scale: pdfWmScale,
           })
         }
       >
+        <PdfWatermarkVisualPreview
+          file={files[0]?.file}
+          lang={lang}
+          text={pdfWmText}
+          opacity={pdfWmOpacity}
+          color={pdfWmColor}
+          position={pdfWmPos}
+          cx={pdfWmCx}
+          cy={pdfWmCy}
+          scale={pdfWmScale}
+          onChangeCoords={(cx, cy) => {
+            setPdfWmCx(cx);
+            setPdfWmCy(cy);
+          }}
+          onChangeScale={setPdfWmScale}
+        />
         <div>
           <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('WatermarkText', lang)}</p>
           <input
@@ -2836,8 +3224,13 @@ const LocalToolConfig: React.FC<{
           })
         }
       >
+        <PdfNupVisualPreview
+          file={files[0]?.file}
+          lang={lang}
+          pagesPerSheet={Number(pdfNupCount) as 2 | 4}
+        />
         {showToolLabels && (
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-4 text-xs text-[var(--muted)]">
+          <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-xs text-[var(--muted)]">
             {t('ToolPdfNupDesc', lang)}
           </div>
         )}
@@ -3085,6 +3478,14 @@ const LocalToolConfig: React.FC<{
           })
         }
       >
+        <PdfStampVisualPreview
+          file={files[0]?.file}
+          lang={lang}
+          text={stampText}
+          pageNumbers={stampPageNums}
+          position={stampPos}
+          onChangePosition={setStampPos}
+        />
         <div>
           <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('StampText', lang)}</p>
           <input
@@ -3322,8 +3723,19 @@ const ServerToolConfig: React.FC<{
   onToggleToolLabels?: () => void;
   onBack: () => void;
   onOpenVideoEditor?: () => void;
+  onOpenDocumentPreview?: (file: PickedFile) => void;
   onRun: (options: Record<string, string>) => void;
-}> = ({tool, files, lang, showToolLabels = false, onToggleToolLabels, onBack, onOpenVideoEditor, onRun}) => {
+}> = ({
+  tool,
+  files,
+  lang,
+  showToolLabels = false,
+  onToggleToolLabels,
+  onBack,
+  onOpenVideoEditor,
+  onOpenDocumentPreview,
+  onRun,
+}) => {
   const [format, setFormat] = useState(tool.formats[0] ?? '');
   const [quality, setQuality] = useState('26');
   const [start, setStart] = useState('0');
@@ -3423,6 +3835,8 @@ const ServerToolConfig: React.FC<{
         />
       ) : (firstKind === 'video' || firstKind === 'audio') ? (
         <InlineMediaPreview files={files} lang={lang} />
+      ) : files[0] && (firstKind === 'document' || isRichDocumentExt(fileExtLower(files[0].name))) ? (
+        <DocumentQuickViewCard file={files[0]} lang={lang} onOpenFullPreview={onOpenDocumentPreview} />
       ) : null}
 
       {firstKind === 'video' && onOpenVideoEditor && (

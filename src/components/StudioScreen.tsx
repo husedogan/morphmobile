@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Cpu,
   Download,
+  Eye,
   EyeOff,
   FileText,
   Film,
@@ -27,6 +28,7 @@ import {
 import {Lang, t} from '../data/i18n';
 import {PickedFile, formatBytes} from '../data/models';
 import {GithubUpdateInfo, isUpdateApkDownloaded} from '../engine/githubUpdater';
+import {fileExtLower, isRichDocumentExt} from '../engine/previewParsers';
 import {QuickToolEntry} from '../engine/workspaceProStore';
 import {FileThumb} from './FileThumb';
 import {DEFAULT_PRO_SUITES_ORDER, ProSuiteId} from './SettingsProTab';
@@ -57,6 +59,7 @@ interface StudioScreenProps {
   onApplyUpdate?: () => void;
   onOpenLinkDownload: () => void;
   onOpenLibrary: () => void;
+  onPreviewFile?: (file: PickedFile) => void;
   pinnedTools?: QuickToolEntry[];
   recentTools?: QuickToolEntry[];
   onQuickLaunchTool?: (toolEntryId: string) => void;
@@ -95,6 +98,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   onApplyUpdate,
   onOpenLinkDownload,
   onOpenLibrary,
+  onPreviewFile,
   pinnedTools = [],
   recentTools = [],
   onQuickLaunchTool,
@@ -535,50 +539,72 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
           {files.length > 0 && (
             <div className="mt-5">
               <div className="max-h-72 divide-y divide-[var(--line)] overflow-y-auto rounded-2xl border border-[var(--line)] bg-[var(--inset)]/70">
-                {files.map((file, idx) => (
-                  <div
-                    key={file.id}
-                    className="flex items-center gap-3 px-3 py-2.5"
-                  >
-                    <FileThumb previewUrl={file.previewUrl} kind={file.kind} alt={file.name} sizeClass="h-10 w-10" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-[var(--ink)]">{file.name}</p>
-                      <p className="font-mono-num text-xs text-[var(--muted)]">
-                        {formatBytes(file.size)} · {file.ext ? file.ext.toUpperCase() : file.kind}
-                      </p>
-                    </div>
-                    {files.length > 1 && (
-                      <div className="flex items-center gap-0.5">
-                        <button
-                          type="button"
-                          disabled={idx === 0}
-                          onClick={() => onMoveFile(idx, -1)}
-                          aria-label={t('MoveUp', lang)}
-                          className="flex h-10 w-9 items-center justify-center rounded-xl text-[var(--muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--ink)] disabled:opacity-25"
-                        >
-                          <ArrowUp className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          disabled={idx === files.length - 1}
-                          onClick={() => onMoveFile(idx, 1)}
-                          aria-label={t('MoveDown', lang)}
-                          className="flex h-10 w-9 items-center justify-center rounded-xl text-[var(--muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--ink)] disabled:opacity-25"
-                        >
-                          <ArrowDown className="h-4 w-4" />
-                        </button>
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => onRemoveFile(file.id)}
-                      aria-label={t('Remove', lang)}
-                      className="flex h-10 w-10 items-center justify-center rounded-xl text-[var(--muted)] transition-colors hover:bg-[var(--danger)]/12 hover:text-[var(--danger)]"
+                {files.map((file, idx) => {
+                  const ext = fileExtLower(file.name);
+                  const canPreviewRow =
+                    Boolean(onPreviewFile) &&
+                    (file.kind === 'image' ||
+                      file.kind === 'pdf' ||
+                      file.kind === 'video' ||
+                      file.kind === 'audio' ||
+                      file.kind === 'archive' ||
+                      file.kind === 'document' ||
+                      isRichDocumentExt(ext));
+                  return (
+                    <div
+                      key={file.id}
+                      className="flex items-center gap-2.5 px-3 py-2.5"
                     >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
+                      <FileThumb previewUrl={file.previewUrl} kind={file.kind} alt={file.name} sizeClass="h-10 w-10" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-[var(--ink)]">{file.name}</p>
+                        <p className="font-mono-num text-xs text-[var(--muted)]">
+                          {formatBytes(file.size)} · {file.ext ? file.ext.toUpperCase() : file.kind}
+                        </p>
+                      </div>
+                      {canPreviewRow && (
+                        <button
+                          type="button"
+                          onClick={() => onPreviewFile?.(file)}
+                          aria-label={t('Preview', lang)}
+                          className="flex h-10 w-9 shrink-0 items-center justify-center rounded-xl text-[var(--muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--accent-text)]"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                      )}
+                      {files.length > 1 && (
+                        <div className="flex items-center gap-0.5">
+                          <button
+                            type="button"
+                            disabled={idx === 0}
+                            onClick={() => onMoveFile(idx, -1)}
+                            aria-label={t('MoveUp', lang)}
+                            className="flex h-10 w-9 items-center justify-center rounded-xl text-[var(--muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--ink)] disabled:opacity-25"
+                          >
+                            <ArrowUp className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={idx === files.length - 1}
+                            onClick={() => onMoveFile(idx, 1)}
+                            aria-label={t('MoveDown', lang)}
+                            className="flex h-10 w-9 items-center justify-center rounded-xl text-[var(--muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--ink)] disabled:opacity-25"
+                          >
+                            <ArrowDown className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => onRemoveFile(file.id)}
+                        aria-label={t('Remove', lang)}
+                        className="flex h-10 w-9 shrink-0 items-center justify-center rounded-xl text-[var(--muted)] transition-colors hover:bg-[var(--danger)]/12 hover:text-[var(--danger)]"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
               {files.length > 1 && (
                 <p className="mt-2 text-xs text-[var(--muted)]">{t('ReorderHint', lang)}</p>

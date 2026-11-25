@@ -253,6 +253,7 @@ interface VideoEditorProps {
   lang: Lang;
   initialTab?: VideoEditorTab;
   initialPreset?: Partial<VideoEditorState>;
+  initialImportedProject?: NleProjectState | null;
   expArmadilloReel?: boolean;
   expArmadilloHideOnFullPreview?: boolean;
   expArmadilloHideOnPlay?: boolean;
@@ -542,6 +543,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   lang,
   initialTab = 'trim',
   initialPreset,
+  initialImportedProject = null,
   expArmadilloReel = true,
   expArmadilloHideOnFullPreview = true,
   expArmadilloHideOnPlay = true,
@@ -943,10 +945,12 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
 
   // Initialize NLE Project State
   const [project, setProject] = useState<NleProjectState>(() =>
-    createInitialNleProject(file.name, 10, 30, lang === 'tr')
+    initialImportedProject ?? createInitialNleProject(file.name, 10, 30, lang === 'tr')
   );
-  const [history, setHistory] = useState<NleProjectState[]>([]);
-  const [historyIdx, setHistoryIdx] = useState(-1);
+  const [history, setHistory] = useState<NleProjectState[]>(() =>
+    initialImportedProject ? [initialImportedProject] : []
+  );
+  const [historyIdx, setHistoryIdx] = useState(initialImportedProject ? 0 : -1);
   const projectRef = useRef<NleProjectState>(project);
   const historyIdxRef = useRef<number>(historyIdx);
   const audioObjectUrlsRef = useRef<Set<string>>(new Set());
@@ -975,7 +979,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   projectRef.current = project;
   historyIdxRef.current = historyIdx;
 
-  const [selectedClipId, setSelectedClipId] = useState<string>('clip-main-1');
+  const [selectedClipId, setSelectedClipId] = useState<string>(
+    () => initialImportedProject?.videoClips[0]?.id || 'clip-main-1'
+  );
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
   const [selectedAudioId, setSelectedAudioId] = useState<string | null>('aud-orig-1');
 
@@ -1394,6 +1400,16 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     const vh = v.videoHeight || 720;
     setDuration(d);
     setVideoMeta({w: vw, h: vh});
+
+    if (initialImportedProject) {
+      setPlayhead(0);
+      try {
+        v.currentTime = 0.001;
+      } catch {
+        // Ignore initial seek errors
+      }
+      return;
+    }
 
     const initialProj = createInitialNleProject(file.name, d, 30);
     if (initialProj.mediaAssets?.[0]) {

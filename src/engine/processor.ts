@@ -12,7 +12,9 @@ import {createZipArchive, extractZipArchive} from './archiveOps';
 import {runLocalFfmpegTool} from './ffmpegOps';
 import {BatchRenameRules, computeBatchRenamedNames, generateFileHashReportBlob} from './fileInspector';
 import {
+  CollageCellTransform,
   FilterPreset,
+  PerspectiveCorners,
   RedactBox,
   RedactStyle,
   ScanMode,
@@ -89,8 +91,23 @@ export type ToolOptions =
       quality: number;
     }
   | {kind: 'frame'; color: string; padding: number; radius: number; shadow: boolean; format: string; quality?: number}
-  | {kind: 'collage'; columns: number; gap: number; color: string; format: string; quality?: number}
-  | {kind: 'scanDoc'; mode: ScanMode; strength: number; format: string; quality: number}
+  | {
+      kind: 'collage';
+      columns: number;
+      gap: number;
+      color: string;
+      format: string;
+      quality?: number;
+      cellTransforms?: CollageCellTransform[];
+    }
+  | {
+      kind: 'scanDoc';
+      mode: ScanMode;
+      strength: number;
+      format: string;
+      quality: number;
+      corners?: PerspectiveCorners;
+    }
   | {
       kind: 'socialFit';
       aspect: SocialAspect;
@@ -113,8 +130,17 @@ export type ToolOptions =
   | {kind: 'pdfSplit'; everyN: number; ranges: string}
   | {kind: 'pdfRemovePages'; ranges: string}
   | {kind: 'pdfExtractPages'; mode: 'custom' | 'reverse'; ranges: string}
-  | {kind: 'pdfRotate'; degrees: number}
-  | {kind: 'pdfWatermark'; text: string; opacity: number; color: string; position: 'diagonal' | 'center'}
+  | {kind: 'pdfRotate'; degrees: number; pageRotations?: number[]}
+  | {
+      kind: 'pdfWatermark';
+      text: string;
+      opacity: number;
+      color: string;
+      position: 'diagonal' | 'center';
+      cx?: number;
+      cy?: number;
+      scale?: number;
+    }
   | {kind: 'pdfNup'; pagesPerSheet: 2 | 4}
   | {kind: 'pdfStamp'; text: string; pageNumbers: boolean; position: 'bottom' | 'top'}
   | {kind: 'pdfToImages'; format: string; quality: number; maxDim?: number}
@@ -314,6 +340,7 @@ export async function runLocalTool(
           backgroundColor: opts.color,
           format: fmt,
           quality: opts.quality ?? 92,
+          cellTransforms: opts.cellTransforms,
         },
         (r) => onProgress(r, files[0].name)
       );
@@ -337,6 +364,7 @@ export async function runLocalTool(
               strength: opts.strength,
               format: 'jpg',
               quality: opts.quality,
+              corners: i === 0 ? opts.corners : undefined,
             })
           );
         }
@@ -352,6 +380,7 @@ export async function runLocalTool(
             strength: opts.strength,
             format: fmt,
             quality: opts.quality,
+            corners: i === 0 ? opts.corners : undefined,
           });
           outputs.push({name: `${files[i].baseName}-scan.${fmt}`, blob});
         }
@@ -513,7 +542,7 @@ export async function runLocalTool(
     case 'PDF_ROTATE': {
       const opts = options.kind === 'pdfRotate' ? options : {kind: 'pdfRotate' as const, degrees: 90};
       onProgress(0.35, files[0].name);
-      const blob = await rotatePdfBlob(files[0].file, opts.degrees);
+      const blob = await rotatePdfBlob(files[0].file, opts.degrees, opts.pageRotations);
       outputs.push({name: `${files[0].baseName}-rotated.pdf`, blob});
       break;
     }
