@@ -10,6 +10,7 @@ import {
   Layers,
   MoveHorizontal,
   Search,
+  SlidersHorizontal,
   Sparkles,
   Terminal,
   WrapText,
@@ -59,8 +60,8 @@ export const EXP_LAUNCHER_STYLES: readonly ExpLauncherStyleMeta[] = [
     titleEn: 'Cascading Accordion',
     shortTr: 'Akordeon',
     shortEn: 'Accordion',
-    descTr: 'Kategoriye bastıkça alt araçlar hemen altında akıcı şekilde açılır.',
-    descEn: 'Tap a category to unfold its nested sub-tools smoothly inline.',
+    descTr: 'Kategoriye dokundukça alt araçlar hemen altında açılır.',
+    descEn: 'Tap a category to unfold its sub-tools cleanly inline.',
     icon: Layers,
   },
   {
@@ -69,8 +70,8 @@ export const EXP_LAUNCHER_STYLES: readonly ExpLauncherStyleMeta[] = [
     titleEn: 'Dual-Arc Thumb Fan',
     shortTr: 'Yelpaze',
     shortEn: 'Arc Fan',
-    descTr: 'Alt yayda kategoriler dizilir; seçtiğin kategorinin ekstra araçları üst yayda açılır.',
-    descEn: 'Inner thumb arc shows categories; tapping blooms nested tools on an outer arc.',
+    descTr: 'İki eşmerkezli yay üzerinde başparmakla hızlı seçim.',
+    descEn: 'Concentric dual thumb arcs for categories and nested tools.',
     icon: Sparkles,
   },
   {
@@ -79,8 +80,8 @@ export const EXP_LAUNCHER_STYLES: readonly ExpLauncherStyleMeta[] = [
     titleEn: 'Branching Node Tree',
     shortTr: 'Ağaç',
     shortEn: 'Tree',
-    descTr: 'Merkezden kategorilere, seçilen kategoriden alt araçlara çizgilerle dallanır.',
-    descEn: 'Curved SVG branches extend from the root hub to categories and child tools.',
+    descTr: 'Kategorilerden alt araçlara net eğrisel dallarla bağlanır.',
+    descEn: 'Crisp curved connectors extend from categories to tools.',
     icon: GitBranch,
   },
   {
@@ -89,8 +90,8 @@ export const EXP_LAUNCHER_STYLES: readonly ExpLauncherStyleMeta[] = [
     titleEn: 'Split Master-Detail',
     shortTr: 'Çift Ray',
     shortEn: 'Split Rail',
-    descTr: 'Sol rayda kategoriler sabit durur, sağ panelde o kategorinin araçları anında listelenir.',
-    descEn: 'Pinned category rail on the left with instant nested tool grid on the right.',
+    descTr: 'Sol rayda kategoriler, sağ panelde o grubun araçları.',
+    descEn: 'Pinned category rail on the left, sub-tools on the right.',
     icon: Columns2,
   },
   {
@@ -99,8 +100,8 @@ export const EXP_LAUNCHER_STYLES: readonly ExpLauncherStyleMeta[] = [
     titleEn: 'Command Deck',
     shortTr: 'Komut',
     shortEn: 'Command',
-    descTr: 'Anlık arama ve adım izi (Kategori › Araç) ile tüm alt araçlara hızla ulaş.',
-    descEn: 'Live search across every nested tool plus crisp category drill-down breadcrumbs.',
+    descTr: 'Canlı arama ve kategori › araç adım iziyle anında açılış.',
+    descEn: 'Live tool search, keyboard navigation, and drill-down grid.',
     icon: Terminal,
   },
 ] as const;
@@ -137,8 +138,8 @@ export const EXP_LAUNCHER_LABEL_MODES: readonly ExpLauncherLabelModeMeta[] = [
     id: 'cloud',
     titleTr: 'Bulut İçinde',
     titleEn: 'Cloud Bubble',
-    descTr: 'Bulut balonu içinde tam yazı',
-    descEn: 'Full text in cloud bubble',
+    descTr: 'Kapsül balon içinde etiket',
+    descEn: 'Text inside soft bubble',
     icon: Cloud,
   },
   {
@@ -198,6 +199,7 @@ export interface LauncherLabelProps {
   cloudPointer?: 'top' | 'none';
   accent?: string;
   forceVisible?: boolean;
+  maxLines?: 1 | 2;
 }
 
 /**
@@ -213,6 +215,7 @@ export const LauncherLabel: React.FC<LauncherLabelProps> = ({
   cloudPointer = 'none',
   accent,
   forceVisible = false,
+  maxLines,
 }) => {
   const isVisible = enabled || forceVisible;
   const viewportRef = useRef<HTMLSpanElement | null>(null);
@@ -270,6 +273,9 @@ export const LauncherLabel: React.FC<LauncherLabelProps> = ({
 
   if (!isVisible) return null;
 
+  const clampClass =
+    maxLines === 1 ? 'line-clamp-1' : maxLines === 2 ? 'line-clamp-2' : '';
+
   if (mode === 'marquee') {
     const isOverflow = marqueeState.overflow > 0;
     return (
@@ -304,11 +310,13 @@ export const LauncherLabel: React.FC<LauncherLabelProps> = ({
         data-pointer={cloudPointer}
         style={
           accent
-            ? {borderColor: isStudio ? `${accent}52` : `${accent}44`}
+            ? {borderColor: isStudio ? `${accent}48` : `${accent}3D`}
             : undefined
         }
       >
-        <span className="whitespace-normal break-normal leading-[1.18]">{text}</span>
+        <span className={`whitespace-normal break-words leading-[1.18] ${clampClass}`}>
+          {text}
+        </span>
       </span>
     );
   }
@@ -323,10 +331,10 @@ export const LauncherLabel: React.FC<LauncherLabelProps> = ({
     );
   }
 
-  // Default: 'wrap' — full multi-line wrap at clean word boundaries so labels never chop mid-word
+  // Default: 'wrap' — clean word wrapping with optional line clamp to keep layout grids crisp
   return (
     <span
-      className={`block whitespace-normal break-normal leading-[1.2] ${align === 'center' ? 'text-center' : 'text-left'} ${className}`}
+      className={`block whitespace-normal break-words leading-[1.2] ${clampClass} ${align === 'center' ? 'text-center' : 'text-left'} ${className}`}
     >
       {text}
     </span>
@@ -334,23 +342,22 @@ export const LauncherLabel: React.FC<LauncherLabelProps> = ({
 };
 
 /**
- * Secondary description renderer that obeys the selected label mode:
- * - 'wrap' & 'cloud': wraps cleanly onto multiple lines (NEVER clipped with '...')
- * - 'marquee': slides smoothly horizontally if wider than card
- * - 'compact': single-line compact truncate
+ * Secondary description renderer with bounded height so long captions never blow up grid rows or trigger scrollbars.
  */
 export const LauncherDesc: React.FC<{
   text: string;
   mode: ActiveLauncherLabelMode;
   className?: string;
   align?: 'left' | 'center';
-}> = ({text, mode, className = '', align = 'left'}) => {
+  maxLines?: 1 | 2;
+}> = ({text, mode, className = '', align = 'left', maxLines = 1}) => {
   const effectiveMode: ActiveLauncherLabelMode = mode === 'cloud' ? 'wrap' : mode;
   return (
     <LauncherLabel
       text={text}
       mode={effectiveMode}
       align={align}
+      maxLines={effectiveMode === 'wrap' ? maxLines : undefined}
       className={className}
     />
   );
@@ -370,6 +377,8 @@ interface ExperimentalToolLauncherProps {
   surfaceTone?: 'adaptive' | 'studio';
   onSelect: (id: string) => void;
   onDisabledSelect?: () => void;
+  onOpenCustomize?: () => void;
+  holdToCustomize?: boolean;
   onDismiss: () => void;
 }
 
@@ -387,6 +396,8 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
   surfaceTone = 'adaptive',
   onSelect,
   onDisabledSelect,
+  onOpenCustomize,
+  holdToCustomize = false,
   onDismiss,
 }) => {
   const isTr = lang === 'tr';
@@ -398,40 +409,108 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
 
   // Typography scales for Small / Normal / Large
   const cardTitleSize =
-    textSize === 'sm' ? 'text-[10.5px]' : textSize === 'lg' ? 'text-[12.5px]' : 'text-[11.5px]';
+    textSize === 'sm' ? 'text-[10.5px]' : textSize === 'lg' ? 'text-[12px]' : 'text-[11px]';
   const catTitleSize =
-    textSize === 'sm' ? 'text-[11.5px]' : textSize === 'lg' ? 'text-[13.5px]' : 'text-xs';
+    textSize === 'sm' ? 'text-[11px]' : textSize === 'lg' ? 'text-[13px]' : 'text-xs';
   const fanTitleSize =
-    textSize === 'sm' ? 'text-[8.5px]' : textSize === 'lg' ? 'text-[10px]' : 'text-[9.5px]';
+    textSize === 'sm' ? 'text-[8.5px]' : textSize === 'lg' ? 'text-[10px]' : 'text-[9px]';
   const railCatSize =
-    textSize === 'sm' ? 'text-[9.5px]' : textSize === 'lg' ? 'text-[10.5px]' : 'text-[10px]';
+    textSize === 'sm' ? 'text-[9.5px]' : textSize === 'lg' ? 'text-[11px]' : 'text-[10.5px]';
   const descSize =
-    textSize === 'sm' ? 'text-[9.5px]' : textSize === 'lg' ? 'text-[10.5px]' : 'text-[10px]';
+    textSize === 'sm' ? 'text-[9px]' : textSize === 'lg' ? 'text-[10px]' : 'text-[9.5px]';
 
   const [expandedCatId, setExpandedCatId] = useState<string | null>(null);
   const [commandCatId, setCommandCatId] = useState<string | null>(null);
+  const [fanPage, setFanPage] = useState(0);
   const [query, setQuery] = useState('');
+  const [cmdHighlightIdx, setCmdHighlightIdx] = useState(0);
   const [hoveredCaption, setHoveredCaption] = useState<{label: string; desc?: string} | null>(null);
+  const [holdProgress, setHoldProgress] = useState(0);
+  const [holdHintFlash, setHoldHintFlash] = useState(false);
+  const holdRafRef = useRef<number | null>(null);
+  const holdHintTimerRef = useRef<number | null>(null);
+  const holdTriggeredRef = useRef(false);
+
   const treeWrapRef = useRef<HTMLDivElement | null>(null);
+  const treeSvgColRef = useRef<HTMLDivElement | null>(null);
   const treeCatRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const treeItemRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [treeGeom, setTreeGeom] = useState<{
+    width: number;
     height: number;
     startY: number;
     endYs: number[];
-  }>({height: 220, startY: 32, endYs: []});
+  }>({width: 28, height: 220, startY: 32, endYs: []});
+
+  const cancelCustomizeHold = (showShortTapHint = false) => {
+    if (holdRafRef.current !== null) {
+      cancelAnimationFrame(holdRafRef.current);
+      holdRafRef.current = null;
+    }
+    setHoldProgress(0);
+    if (showShortTapHint && !holdTriggeredRef.current) {
+      setHoldHintFlash(true);
+      if (holdHintTimerRef.current !== null) window.clearTimeout(holdHintTimerRef.current);
+      holdHintTimerRef.current = window.setTimeout(() => setHoldHintFlash(false), 2100);
+    }
+  };
+
+  const startCustomizeHold = () => {
+    if (!onOpenCustomize) return;
+    cancelCustomizeHold(false);
+    setHoldHintFlash(false);
+    holdTriggeredRef.current = false;
+    const HOLD_MS = 2850;
+    const startAt = performance.now();
+    const tick = (now: number) => {
+      const elapsed = now - startAt;
+      const pct = Math.min(1, elapsed / HOLD_MS);
+      setHoldProgress(pct);
+      if (pct >= 1) {
+        holdRafRef.current = null;
+        holdTriggeredRef.current = true;
+        setHoldProgress(0);
+        hapticTap(20);
+        onOpenCustomize();
+        return;
+      }
+      holdRafRef.current = requestAnimationFrame(tick);
+    };
+    holdRafRef.current = requestAnimationFrame(tick);
+  };
 
   useEffect(() => {
-    if (!open) return;
+    return () => {
+      if (holdRafRef.current !== null) cancelAnimationFrame(holdRafRef.current);
+      if (holdHintTimerRef.current !== null) window.clearTimeout(holdHintTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!open) {
+      cancelCustomizeHold(false);
+      setHoldHintFlash(false);
+      return;
+    }
     setQuery('');
     setCommandCatId(null);
     setHoveredCaption(null);
+    setFanPage(0);
+    setCmdHighlightIdx(0);
     if (categories.length > 0) {
       setExpandedCatId(categories[0].id);
     } else {
       setExpandedCatId(null);
     }
   }, [open, categories]);
+
+  useEffect(() => {
+    setFanPage(0);
+  }, [expandedCatId]);
+
+  useEffect(() => {
+    setCmdHighlightIdx(0);
+  }, [query]);
 
   useEffect(() => {
     if (!open) return;
@@ -447,13 +526,17 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
     [categories, expandedCatId]
   );
 
-  // Measure pixel-exact SVG bezier connector endpoints for Branching Tree style
+  // Measure pixel-exact SVG connector endpoints in 1:1 CSS pixels (zero distortion)
   useLayoutEffect(() => {
     if (!open || styleMode !== 'orbit_tree' || !activeCategory) return;
+    let cancelled = false;
     const measure = () => {
+      if (cancelled) return;
       const wrap = treeWrapRef.current;
+      const svgCol = treeSvgColRef.current;
       if (!wrap) return;
       const wrapRect = wrap.getBoundingClientRect();
+      const colW = svgCol ? Math.max(16, Math.round(svgCol.getBoundingClientRect().width)) : 28;
       const parentEl = treeCatRefs.current[activeCategory.id];
       const startY = parentEl
         ? parentEl.getBoundingClientRect().top + parentEl.getBoundingClientRect().height / 2 - wrapRect.top
@@ -465,16 +548,30 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
         return r.top + r.height / 2 - wrapRect.top;
       });
       setTreeGeom({
-        height: Math.max(120, Math.round(wrapRect.height)),
+        width: colW,
+        height: Math.max(100, Math.round(wrapRect.height)),
         startY,
         endYs,
       });
     };
     measure();
-    const raf = requestAnimationFrame(measure);
+    const raf1 = requestAnimationFrame(measure);
+    const raf2 = requestAnimationFrame(() => requestAnimationFrame(measure));
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && treeWrapRef.current) {
+      ro = new ResizeObserver(measure);
+      ro.observe(treeWrapRef.current);
+      if (treeSvgColRef.current) ro.observe(treeSvgColRef.current);
+    }
+    if (typeof document !== 'undefined' && document.fonts?.ready) {
+      document.fonts.ready.then(measure).catch(() => {});
+    }
     window.addEventListener('resize', measure);
     return () => {
-      cancelAnimationFrame(raf);
+      cancelled = true;
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+      ro?.disconnect();
       window.removeEventListener('resize', measure);
     };
   }, [open, styleMode, activeCategory, categories, labelsEnabled, labelMode, showDesc, textSize]);
@@ -506,43 +603,129 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
     onSelect(item.id);
   };
 
-  // Surface token helpers (works cleanly in Light/Dark adaptive app AND Dark Studio Video Editor)
+  // Surface token helpers (clean in Light/Dark adaptive app AND Dark Studio Video Editor)
   const panelBg = isStudio
     ? 'bg-[#101116]/96 border-white/12 text-white'
-    : 'bg-[var(--surface)]/96 border-[var(--line)] text-[var(--ink)]';
+    : 'bg-[var(--surface)]/97 border-[var(--line)] text-[var(--ink)]';
   const cardBg = isStudio
-    ? 'bg-white/[0.05] border-white/[0.10] hover:border-white/25'
+    ? 'bg-white/[0.045] border-white/[0.09] hover:border-white/25'
     : 'bg-[var(--inset)] border-[var(--line)] hover:border-[var(--accent)]/55';
   const subCardBg = isStudio
-    ? 'bg-white/[0.04] border-white/[0.08] hover:bg-white/[0.09]'
+    ? 'bg-white/[0.04] border-white/[0.08] hover:bg-white/[0.085] hover:border-white/20'
     : 'bg-[var(--surface)] border-[var(--line)] hover:border-[var(--accent)]/60';
-  // Clean unboxed hover surface for Cloud mode (eliminates cluttered box-inside-box framing)
+  // Clean unboxed subtle hover surface for Cloud mode
   const cloudRowBg = isStudio
-    ? 'border-transparent bg-transparent hover:bg-white/[0.06]'
-    : 'border-transparent bg-transparent hover:bg-[var(--surface)]/70';
+    ? 'border-transparent bg-transparent hover:bg-white/[0.05]'
+    : 'border-transparent bg-transparent hover:bg-[var(--inset)]/75';
   const mutedTxt = isStudio ? 'text-white/60' : 'text-[var(--muted)]';
   const dividerBorder = isStudio ? 'border-white/10' : 'border-[var(--line)]/80';
 
-  const renderHeader = () => (
-    <div className={`flex items-center justify-between gap-3 border-b px-4 py-3 ${dividerBorder}`}>
-      <div className="min-w-0">
-        <h2 className="truncate text-sm font-bold tracking-tight">{title}</h2>
-        {subtitle && <p className={`truncate text-[11px] font-medium ${mutedTxt}`}>{subtitle}</p>}
+  const renderHeader = () => {
+    const ringCircumference = 2 * Math.PI * 15;
+    const ringOffset = ringCircumference * (1 - holdProgress);
+    const headerSubtext =
+      holdProgress > 0
+        ? tr(
+            `Özelleştiriliyor… ${Math.max(1, Math.ceil(3 * (1 - holdProgress)))} sn`,
+            `Opening customizer… ${Math.max(1, Math.ceil(3 * (1 - holdProgress)))}s`
+          )
+        : holdHintFlash
+          ? tr('Özelleştirmek için 3 sn basılı tut', 'Hold 3s to customize')
+          : subtitle;
+
+    return (
+      <div className={`relative flex items-center justify-between gap-2.5 border-b px-4 py-2.5 ${dividerBorder}`}>
+        <div className="flex min-w-0 items-center gap-2.5">
+          {onOpenCustomize && holdToCustomize && (
+            <button
+              type="button"
+              aria-label={tr('Özelleştirmek için 3 saniye basılı tut', 'Hold 3 seconds to customize')}
+              title={tr('Özelleştirmek için 3 saniye basılı tut', 'Hold 3 seconds to customize')}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                startCustomizeHold();
+              }}
+              onPointerUp={() => cancelCustomizeHold(true)}
+              onPointerLeave={() => cancelCustomizeHold(false)}
+              onPointerCancel={() => cancelCustomizeHold(false)}
+              onContextMenu={(e) => e.preventDefault()}
+              className={`relative flex h-9 w-9 shrink-0 touch-none select-none items-center justify-center rounded-full border transition-transform active:scale-95 ${
+                isStudio
+                  ? 'border-white/14 bg-white/[0.07]'
+                  : 'border-[var(--line)] bg-[var(--inset)]'
+              }`}
+            >
+              <svg viewBox="0 0 36 36" aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full -rotate-90">
+                <circle
+                  cx="18"
+                  cy="18"
+                  r="15"
+                  fill="none"
+                  stroke="var(--accent)"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeDasharray={ringCircumference.toFixed(2)}
+                  strokeDashoffset={ringOffset.toFixed(2)}
+                  opacity={holdProgress > 0 ? 1 : 0}
+                />
+              </svg>
+              <img
+                src="/morph-mark.png"
+                alt="Morph"
+                draggable={false}
+                className="h-4.5 w-auto object-contain transition-transform"
+                style={holdProgress > 0 ? {transform: `scale(${(1 + holdProgress * 0.14).toFixed(3)})`} : undefined}
+              />
+            </button>
+          )}
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-bold tracking-tight">{title}</h2>
+            {headerSubtext && (
+              <p
+                className={`truncate text-[11px] font-medium ${
+                  holdProgress > 0 || holdHintFlash ? 'text-[var(--accent)]' : mutedTxt
+                }`}
+              >
+                {headerSubtext}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {onOpenCustomize && !holdToCustomize && (
+            <button
+              type="button"
+              onClick={() => {
+                hapticTap(10);
+                onOpenCustomize();
+              }}
+              aria-label={tr('Özelleştir', 'Customize')}
+              className={`flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border px-2.5 text-[11px] font-bold transition-colors ${
+                isStudio
+                  ? 'border-white/12 bg-white/[0.06] text-white/90 hover:bg-white/12'
+                  : 'border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] hover:border-[var(--accent)]'
+              }`}
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5 text-[var(--accent)]" />
+              <span>{tr('Özelleştir', 'Customize')}</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onDismiss}
+            aria-label={tr('Kapat', 'Close')}
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-colors ${
+              isStudio
+                ? 'border-white/12 bg-white/[0.06] text-white/80 hover:bg-white/12'
+                : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
+            }`}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
-      <button
-        type="button"
-        onClick={onDismiss}
-        aria-label={tr('Kapat', 'Close')}
-        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-colors ${
-          isStudio
-            ? 'border-white/12 bg-white/[0.06] text-white/80 hover:bg-white/12'
-            : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
-        }`}
-      >
-        <X className="h-4 w-4" />
-      </button>
-    </div>
-  );
+    );
+  };
 
   // Quiet live orientation strip when labels are OFF (icon-only mode)
   const renderHiddenModeCaption = (fallbackLabel?: string) => {
@@ -565,16 +748,15 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
   // STYLE 1: KADEMELİ AKORDEON (Cascading Accordion Drawer)
   // =========================================================================
   const renderCascadeSheet = () => {
-    // Dedicated clean icon-only layout when labels are OFF (no awkward empty-middle bars)
     if (labelsHidden) {
       const currentCat = activeCategory;
       return (
         <div
-          className={`mx-auto flex max-h-[82dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border shadow-2xl backdrop-blur-xl sm:rounded-3xl ${panelBg}`}
+          className={`mx-auto flex max-h-[86dvh] w-full max-w-[540px] flex-col overflow-hidden rounded-t-3xl border shadow-2xl backdrop-blur-xl sm:rounded-3xl ${panelBg}`}
         >
-          <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-current opacity-20 sm:hidden" />
+          <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-current opacity-20 sm:hidden" />
           {renderHeader()}
-          <div className={`flex items-center justify-center gap-2 overflow-x-auto border-b px-3.5 py-2.5 ${dividerBorder}`}>
+          <div className={`no-scrollbar flex items-center justify-center gap-2 overflow-x-auto border-b px-3.5 py-2.5 ${dividerBorder}`}>
             {categories.map((cat) => {
               const CatIcon = cat.icon;
               const active = currentCat?.id === cat.id;
@@ -604,7 +786,7 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
               );
             })}
           </div>
-          <div className="flex-1 overflow-y-auto p-3.5 pb-[calc(var(--morph-safe-bottom)+1rem)]">
+          <div className="no-scrollbar flex-1 overflow-y-auto p-3 pb-[calc(var(--morph-safe-bottom)+0.75rem)]">
             {currentCat && (
               <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
                 {currentCat.items.map((item) => {
@@ -620,7 +802,7 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                       onMouseLeave={() => setHoveredCaption(null)}
                       onFocus={() => setHoveredCaption({label: item.label, desc: item.desc})}
                       onClick={() => triggerItem(item)}
-                      className={`flex min-h-[56px] items-center justify-center rounded-2xl border p-2 transition-all active:scale-95 ${
+                      className={`flex min-h-[52px] items-center justify-center rounded-2xl border p-2 transition-all active:scale-95 ${
                         item.disabled
                           ? 'opacity-40'
                           : item.active
@@ -647,11 +829,11 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
 
     return (
       <div
-        className={`mx-auto flex max-h-[82dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border shadow-2xl backdrop-blur-xl sm:rounded-3xl ${panelBg}`}
+        className={`mx-auto flex max-h-[86dvh] w-full max-w-[540px] flex-col overflow-hidden rounded-t-3xl border shadow-2xl backdrop-blur-xl sm:rounded-3xl ${panelBg}`}
       >
-        <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-current opacity-20 sm:hidden" />
+        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-current opacity-20 sm:hidden" />
         {renderHeader()}
-        <div className="flex-1 space-y-2.5 overflow-y-auto p-3.5 pb-[calc(var(--morph-safe-bottom)+1rem)]">
+        <div className="no-scrollbar flex-1 space-y-2 overflow-y-auto p-3 pb-[calc(var(--morph-safe-bottom)+0.75rem)]">
           {categories.map((cat) => {
             const CatIcon = cat.icon;
             const isOpen = expandedCatId === cat.id;
@@ -661,8 +843,8 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                 className={`overflow-hidden rounded-2xl border transition-all duration-200 ${
                   isOpen
                     ? isStudio
-                      ? 'border-white/25 bg-white/[0.07]'
-                      : 'border-[var(--accent)]/50 bg-[var(--inset)]'
+                      ? 'border-white/22 bg-white/[0.06]'
+                      : 'border-[var(--accent)]/45 bg-[var(--inset)]'
                     : cardBg
                 }`}
               >
@@ -674,14 +856,14 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                     hapticTap(8);
                     setExpandedCatId(isOpen ? null : cat.id);
                   }}
-                  className="flex min-h-[54px] w-full items-center justify-between gap-2.5 overflow-hidden px-3 py-2.5 text-left"
+                  className="flex min-h-[46px] w-full items-center justify-between gap-2.5 overflow-hidden px-3 py-2 text-left"
                 >
                   <div className="flex min-w-0 flex-1 items-center gap-2.5 overflow-hidden">
                     <span
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
                       style={{backgroundColor: `${cat.accent}20`, color: cat.accent}}
                     >
-                      <CatIcon className="h-4.5 w-4.5" />
+                      <CatIcon className="h-4 w-4" />
                     </span>
                     <div className="min-w-0 flex-1 overflow-hidden">
                       <LauncherLabel
@@ -689,12 +871,14 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                         mode={labelMode}
                         isStudio={isStudio}
                         accent={cat.accent}
+                        maxLines={1}
                         className={`font-bold ${catTitleSize}`}
                       />
                       {effectiveShowDesc && (
                         <LauncherDesc
                           text={cat.subtitle || `${cat.items.length} ${tr('araç', 'tools')}`}
                           mode={labelMode}
+                          maxLines={1}
                           className={`mt-0.5 ${descSize} ${mutedTxt}`}
                         />
                       )}
@@ -714,7 +898,7 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
 
                 {isOpen && (
                   <div
-                    className={`grid grid-cols-2 gap-2 border-t px-2.5 pb-3 pt-2.5 ${dividerBorder}`}
+                    className={`grid grid-cols-2 gap-1.5 border-t px-2.5 pb-2.5 pt-2 ${dividerBorder}`}
                   >
                     {cat.items.map((item) => {
                       const ItemIcon = item.icon;
@@ -726,7 +910,7 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                           aria-label={item.label}
                           title={item.label}
                           onClick={() => triggerItem(item)}
-                          className={`flex min-h-[52px] items-center gap-2 overflow-hidden rounded-xl border px-2 py-2 text-left transition-all active:scale-[0.98] ${
+                          className={`flex min-h-[46px] items-center gap-2 overflow-hidden rounded-xl border px-2 py-1.5 text-left transition-all active:scale-[0.98] ${
                             item.disabled
                               ? 'opacity-40'
                               : item.active
@@ -748,12 +932,14 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                               mode={labelMode}
                               isStudio={isStudio}
                               accent={col}
+                              maxLines={2}
                               className={`font-bold ${cardTitleSize}`}
                             />
                             {effectiveShowDesc && item.desc && (
                               <LauncherDesc
                                 text={item.desc}
                                 mode={labelMode}
+                                maxLines={1}
                                 className={`mt-0.5 ${descSize} ${mutedTxt}`}
                               />
                             )}
@@ -772,47 +958,54 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
   };
 
   // =========================================================================
-  // STYLE 2: ÇİFT KATMANLI YELPAZE (Dual-Arc Thumb Fan)
+  // STYLE 2: ÇİFT KATMANLI YELPAZE (Dual-Arc Thumb Fan — Collision-Free Math)
   // =========================================================================
   const renderRadialFan = () => {
     const activeCat = activeCategory;
     const subItems = activeCat?.items ?? [];
-    const innerCount = Math.max(1, categories.length);
-    const outerCount = Math.max(1, subItems.length);
-    const visibleOuter = subItems.slice(0, 5);
+    const PAGE_SIZE = 6;
+    const totalPages = Math.max(1, Math.ceil(subItems.length / PAGE_SIZE));
+    const safePage = Math.min(fanPage, totalPages - 1);
+    const visibleOuter = subItems.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
     const visibleInner = categories.slice(0, 5);
-    const stageH = labelsHidden ? 268 : isCloudMode ? 326 : 312;
-    const originY = labelsHidden ? 218 : isCloudMode ? 256 : 244;
-    const outerRy = labelsHidden ? 138 : isCloudMode ? 172 : 166;
-    const innerRy = labelsHidden ? 70 : isCloudMode ? 68 : 72;
+
+    const stageW = 396;
+    const stageH = labelsHidden ? 248 : isCloudMode ? 314 : 302;
+    const originY = labelsHidden ? 202 : isCloudMode ? 248 : 238;
+    const centerX = stageW / 2;
+    const outerRx = 152;
+    const outerRy = labelsHidden ? 132 : isCloudMode ? 168 : 162;
+    const innerRx = 82;
+    const innerRy = labelsHidden ? 68 : 74;
 
     return (
       <div
-        className={`mx-auto flex w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border shadow-2xl backdrop-blur-xl sm:rounded-3xl ${panelBg}`}
+        className={`mx-auto flex w-full max-w-[540px] flex-col overflow-hidden rounded-t-3xl border shadow-2xl backdrop-blur-xl sm:rounded-3xl ${panelBg}`}
       >
+        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-current opacity-20 sm:hidden" />
         {renderHeader()}
 
-        <div className="relative flex flex-col items-center px-3 pb-[calc(var(--morph-safe-bottom)+1rem)] pt-3">
-          {/* Dual Concentric Fan Stage: Outer Sub-Tools Arc + Inner Category Arc */}
+        <div className="relative flex flex-col items-center px-3 pb-[calc(var(--morph-safe-bottom)+0.75rem)] pt-2">
+          {/* Dual Concentric Fan Stage */}
           <div
-            className="relative w-full max-w-[352px] overflow-visible"
-            style={{height: `${stageH}px`}}
+            className="relative w-full overflow-visible"
+            style={{maxWidth: `${stageW}px`, height: `${stageH}px`}}
           >
             <svg
-              viewBox={`0 0 352 ${stageH}`}
+              viewBox={`0 0 ${stageW} ${stageH}`}
               aria-hidden="true"
               className="pointer-events-none absolute inset-0 h-full w-full"
             >
               <path
-                d={`M 40 ${originY} A 136 136 0 0 1 312 ${originY}`}
+                d={`M ${centerX - outerRx} ${originY} A ${outerRx} ${outerRy} 0 0 1 ${centerX + outerRx} ${originY}`}
                 fill="none"
                 stroke={activeCat?.accent || 'var(--accent)'}
-                strokeOpacity="0.24"
+                strokeOpacity="0.22"
                 strokeWidth="1.5"
                 strokeDasharray="4 4"
               />
               <path
-                d={`M 102 ${originY} A 74 74 0 0 1 250 ${originY}`}
+                d={`M ${centerX - innerRx} ${originY} A ${innerRx} ${innerRy} 0 0 1 ${centerX + innerRx} ${originY}`}
                 fill="none"
                 stroke="currentColor"
                 strokeOpacity="0.14"
@@ -820,19 +1013,41 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
               />
             </svg>
 
-            {/* Outer Arc: Nested Sub-Tools */}
+            {/* Outer Arc: Up to 6 collision-free sub-tools */}
             {visibleOuter.map((item, idx) => {
               const count = visibleOuter.length;
-              const spanStart = count <= 2 ? -125 : count === 3 ? -144 : -156;
-              const spanEnd = count <= 2 ? -55 : count === 3 ? -36 : -24;
+              const spanStart =
+                count === 1
+                  ? -90
+                  : count === 2
+                    ? -124
+                    : count === 3
+                      ? -140
+                      : count === 4
+                        ? -152
+                        : count === 5
+                          ? -158
+                          : -164;
+              const spanEnd =
+                count === 1
+                  ? -90
+                  : count === 2
+                    ? -56
+                    : count === 3
+                      ? -40
+                      : count === 4
+                        ? -28
+                        : count === 5
+                          ? -22
+                          : -16;
               const t = count === 1 ? 0.5 : idx / (count - 1);
               const angleDeg = spanStart + t * (spanEnd - spanStart);
               const rad = (angleDeg * Math.PI) / 180;
-              const rx = 136;
-              const cx = 176 + Math.cos(rad) * rx;
+              const cx = centerX + Math.cos(rad) * outerRx;
               const cy = originY + Math.sin(rad) * outerRy;
               const ItemIcon = item.icon;
               const col = item.accent || activeCat?.accent || '#E94F78';
+              const tileW = count >= 6 ? 'w-[60px]' : 'w-[68px]';
 
               if (isCloudMode) {
                 return (
@@ -846,11 +1061,11 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                     onFocus={() => setHoveredCaption({label: item.label, desc: item.desc})}
                     onClick={() => triggerItem(item)}
                     style={{
-                      left: `${(cx / 352) * 100}%`,
+                      left: `${(cx / stageW) * 100}%`,
                       top: `${(cy / stageH) * 100}%`,
                       transform: 'translate(-50%, -50%)',
                     }}
-                    className={`group absolute flex w-[76px] flex-col items-center gap-1.5 text-center transition-transform duration-200 active:scale-95 ${
+                    className={`group absolute flex ${tileW} flex-col items-center gap-1 text-center transition-transform duration-150 active:scale-95 ${
                       item.disabled ? 'opacity-40' : ''
                     }`}
                   >
@@ -869,7 +1084,8 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                       isStudio={isStudio}
                       cloudPointer="top"
                       accent={col}
-                      className={`max-w-[76px] font-bold ${fanTitleSize}`}
+                      maxLines={2}
+                      className={`max-w-full font-bold ${fanTitleSize}`}
                     />
                   </button>
                 );
@@ -886,14 +1102,12 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                   onFocus={() => setHoveredCaption({label: item.label, desc: item.desc})}
                   onClick={() => triggerItem(item)}
                   style={{
-                    left: `${(cx / 352) * 100}%`,
+                    left: `${(cx / stageW) * 100}%`,
                     top: `${(cy / stageH) * 100}%`,
                     transform: 'translate(-50%, -50%)',
                   }}
-                  className={`group absolute flex flex-col items-center justify-center overflow-hidden rounded-2xl border text-center shadow-sm transition-all duration-200 active:scale-95 ${
-                    labelsHidden
-                      ? 'h-11 w-11'
-                      : 'w-[74px] gap-1 px-1.5 py-1.5'
+                  className={`group absolute flex flex-col items-center justify-center overflow-hidden rounded-2xl border text-center shadow-sm transition-all duration-150 active:scale-95 ${
+                    labelsHidden ? 'h-11 w-11' : `${tileW} gap-1 px-1 py-1.5`
                   } ${
                     item.disabled
                       ? 'opacity-40'
@@ -918,6 +1132,7 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                         align="center"
                         isStudio={isStudio}
                         accent={col}
+                        maxLines={2}
                         className={`w-full font-bold ${fanTitleSize}`}
                       />
                     </div>
@@ -928,12 +1143,13 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
 
             {/* Inner Arc: Primary Categories */}
             {visibleInner.map((cat, idx) => {
-              const count = Math.min(innerCount, visibleInner.length);
+              const count = Math.max(1, visibleInner.length);
+              const spanStart = count === 1 ? -90 : count === 2 ? -125 : count === 3 ? -145 : -158;
+              const spanEnd = count === 1 ? -90 : count === 2 ? -55 : count === 3 ? -35 : -22;
               const t = count === 1 ? 0.5 : idx / (count - 1);
-              const angleDeg = -168 + t * 156;
+              const angleDeg = spanStart + t * (spanEnd - spanStart);
               const rad = (angleDeg * Math.PI) / 180;
-              const rx = 74;
-              const cx = 176 + Math.cos(rad) * rx;
+              const cx = centerX + Math.cos(rad) * innerRx;
               const cy = originY + Math.sin(rad) * innerRy;
               const CatIcon = cat.icon;
               const active = activeCat?.id === cat.id;
@@ -950,12 +1166,12 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                     setHoveredCaption(null);
                   }}
                   style={{
-                    left: `${(cx / 352) * 100}%`,
+                    left: `${(cx / stageW) * 100}%`,
                     top: `${(cy / stageH) * 100}%`,
-                    transform: `translate(-50%, -50%) scale(${active ? 1.06 : 1})`,
+                    transform: `translate(-50%, -50%) scale(${active ? 1.07 : 1})`,
                     borderColor: active ? cat.accent : undefined,
                   }}
-                  className={`absolute flex h-10 w-10 items-center justify-center rounded-2xl border transition-all duration-200 ${
+                  className={`absolute flex h-10 w-10 items-center justify-center rounded-2xl border transition-all duration-150 ${
                     active
                       ? 'bg-[var(--accent)] text-white shadow-md'
                       : isStudio
@@ -965,97 +1181,94 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                   title={cat.label}
                   aria-label={cat.label}
                 >
-                  <CatIcon
-                    className="h-4 w-4"
-                    style={active ? undefined : {color: cat.accent}}
-                  />
+                  <CatIcon className="h-4 w-4" style={active ? undefined : {color: cat.accent}} />
                 </button>
               );
             })}
 
-            {/* Bottom Center Anchor Hub */}
-            <div className="pointer-events-none absolute bottom-1.5 left-1/2 max-w-[196px] -translate-x-1/2 text-center">
-              {isCloudMode ? (
-                <div className="flex flex-col items-center gap-0.5">
-                  <LauncherLabel
-                    text={hoveredCaption?.label || activeCat?.label || ''}
-                    mode="cloud"
-                    align="center"
-                    isStudio={isStudio}
-                    accent={activeCat?.accent}
-                    className="text-[11px] font-extrabold"
-                  />
-                  {effectiveShowDesc && (
-                    <LauncherDesc
-                      text={hoveredCaption?.desc || `${outerCount} ${tr('alt araç', 'sub-tools')}`}
-                      mode={labelMode}
-                      align="center"
-                      className={`text-[10px] font-medium ${mutedTxt}`}
-                    />
-                  )}
+            {/* Bottom Center Anchor Hub + Inline Arc Pager (if >6 sub-tools) */}
+            <div className="absolute bottom-0.5 left-1/2 flex w-[220px] -translate-x-1/2 flex-col items-center text-center">
+              {totalPages > 1 && (
+                <div className="mb-1 flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      hapticTap(6);
+                      setFanPage((p) => (p - 1 + totalPages) % totalPages);
+                    }}
+                    aria-label={tr('Önceki araçlar', 'Previous tools')}
+                    className={`flex h-6 w-6 items-center justify-center rounded-lg border ${subCardBg}`}
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+                  <span className={`font-mono-num text-[10px] font-bold ${mutedTxt}`}>
+                    {safePage + 1}/{totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      hapticTap(6);
+                      setFanPage((p) => (p + 1) % totalPages);
+                    }}
+                    aria-label={tr('Sonraki araçlar', 'Next tools')}
+                    className={`flex h-6 w-6 items-center justify-center rounded-lg border ${subCardBg}`}
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-              ) : (
-                <>
-                  <LauncherLabel
-                    text={hoveredCaption?.label || activeCat?.label || ''}
-                    mode={labelMode}
-                    align="center"
-                    isStudio={isStudio}
-                    className="text-xs font-extrabold tracking-tight"
-                  />
-                  {effectiveShowDesc && (
-                    <LauncherDesc
-                      text={hoveredCaption?.desc || `${outerCount} ${tr('alt araç', 'sub-tools')}`}
+              )}
+              <div className="pointer-events-none w-full">
+                {isCloudMode ? (
+                  <div className="flex flex-col items-center gap-0.5">
+                    <LauncherLabel
+                      text={hoveredCaption?.label || activeCat?.label || ''}
+                      mode="cloud"
+                      align="center"
+                      isStudio={isStudio}
+                      accent={activeCat?.accent}
+                      maxLines={1}
+                      className="text-[11px] font-extrabold"
+                    />
+                    {effectiveShowDesc && (
+                      <LauncherDesc
+                        text={hoveredCaption?.desc || `${subItems.length} ${tr('alt araç', 'sub-tools')}`}
+                        mode={labelMode}
+                        align="center"
+                        maxLines={1}
+                        className={`text-[10px] font-medium ${mutedTxt}`}
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <LauncherLabel
+                      text={hoveredCaption?.label || activeCat?.label || ''}
                       mode={labelMode}
                       align="center"
-                      className={`mt-0.5 text-[10px] font-medium ${mutedTxt}`}
+                      isStudio={isStudio}
+                      maxLines={1}
+                      className="text-xs font-extrabold tracking-tight"
                     />
-                  )}
-                </>
-              )}
+                    {effectiveShowDesc && (
+                      <LauncherDesc
+                        text={hoveredCaption?.desc || `${subItems.length} ${tr('alt araç', 'sub-tools')}`}
+                        mode={labelMode}
+                        align="center"
+                        maxLines={1}
+                        className={`mt-0.5 text-[10px] font-medium ${mutedTxt}`}
+                      />
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Overflow sub-tools (if category has > 5 items) */}
-          {subItems.length > 5 && (
-            <div className="mt-2 flex w-full flex-wrap justify-center gap-1.5">
-              {subItems.slice(5).map((item) => {
-                const ItemIcon = item.icon;
-                const col = item.accent || activeCat?.accent || '#E94F78';
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    aria-label={item.label}
-                    title={item.label}
-                    onMouseEnter={() => setHoveredCaption({label: item.label, desc: item.desc})}
-                    onMouseLeave={() => setHoveredCaption(null)}
-                    onClick={() => triggerItem(item)}
-                    className={`flex min-h-[36px] max-w-[155px] items-center gap-1.5 overflow-hidden rounded-xl border px-2.5 text-[11px] font-semibold ${
-                      isCloudMode ? cloudRowBg : subCardBg
-                    }`}
-                  >
-                    <ItemIcon className="h-3.5 w-3.5 shrink-0" style={{color: col}} />
-                    {!labelsHidden && (
-                      <div className="min-w-0 flex-1 overflow-hidden">
-                        <LauncherLabel
-                          text={item.label}
-                          mode={labelMode}
-                          isStudio={isStudio}
-                          accent={col}
-                          className={cardTitleSize}
-                        />
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Category Quick Labels Strip below arc */}
+          {/* Clean Category Quick Tabs Strip below stage */}
           {!labelsHidden && (
-            <div className="mt-2 flex w-full flex-wrap items-center justify-center gap-1">
+            <div
+              className={`mt-2 flex w-full flex-wrap items-center justify-center gap-1 border-t pt-2 ${dividerBorder}`}
+            >
               {categories.map((cat) => {
                 const active = activeCat?.id === cat.id;
                 return (
@@ -1066,10 +1279,10 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                       hapticTap(8);
                       setExpandedCatId(cat.id);
                     }}
-                    className={`min-h-[32px] rounded-xl px-2.5 text-[11px] font-bold transition-colors whitespace-nowrap ${
+                    className={`min-h-[30px] whitespace-nowrap rounded-lg px-2.5 text-[11px] font-bold transition-colors ${
                       active
                         ? 'bg-[var(--accent)]/16 text-[var(--accent)]'
-                        : `${mutedTxt} hover:opacity-100`
+                        : `${mutedTxt} hover:text-current`
                     }`}
                   >
                     {cat.label}
@@ -1084,30 +1297,32 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
   };
 
   // =========================================================================
-  // STYLE 3: DALLANAN AĞAÇ (Branching Node Tree with Pixel-Exact SVG Curves)
+  // STYLE 3: DALLANAN AĞAÇ (Branching Node Tree — Zero Scroll, 1:1 Pixel SVG)
   // =========================================================================
   const renderOrbitTree = () => {
     const activeCat = activeCategory;
     const subItems = activeCat?.items ?? [];
+    const svgW = treeGeom.width;
+    const spineX = Math.round(svgW * 0.34);
 
     return (
       <div
-        className={`mx-auto flex max-h-[84dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border shadow-2xl backdrop-blur-xl sm:rounded-3xl ${panelBg}`}
+        className={`mx-auto flex max-h-[86dvh] w-full max-w-[540px] flex-col overflow-hidden rounded-t-3xl border shadow-2xl backdrop-blur-xl sm:rounded-3xl ${panelBg}`}
       >
+        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-current opacity-20 sm:hidden" />
         {renderHeader()}
 
-        <div className="flex-1 overflow-y-auto p-3.5 pb-[calc(var(--morph-safe-bottom)+1rem)]">
-          {/* Root Hub -> Category Nodes -> Exact Measured Bezier Curves -> Child Tool Nodes */}
+        <div className="no-scrollbar flex-1 overflow-y-auto p-3 pb-[calc(var(--morph-safe-bottom)+0.75rem)]">
           <div
             ref={treeWrapRef}
             className={`relative grid items-stretch gap-0 ${
               labelsHidden
-                ? 'mx-auto w-fit grid-cols-[56px_48px_56px]'
-                : 'grid-cols-[minmax(124px,0.94fr)_24px_minmax(0,1.28fr)]'
+                ? 'mx-auto w-fit grid-cols-[56px_44px_56px]'
+                : 'grid-cols-[minmax(112px,0.78fr)_28px_minmax(0,1.42fr)] sm:grid-cols-[minmax(132px,0.8fr)_34px_minmax(0,1.45fr)]'
             }`}
           >
             {/* Left Column: Parent Category Nodes */}
-            <div className="flex flex-col justify-center gap-2">
+            <div className="flex flex-col justify-center gap-1.5">
               {categories.map((cat) => {
                 const CatIcon = cat.icon;
                 const active = activeCat?.id === cat.id;
@@ -1127,13 +1342,13 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                       setExpandedCatId(cat.id);
                     }}
                     style={active ? {borderColor: cat.accent} : undefined}
-                    className={`relative flex min-h-[50px] items-center overflow-hidden rounded-2xl border transition-all ${
-                      labelsHidden ? 'justify-center p-2' : 'gap-2 px-2 py-2 text-left'
+                    className={`relative flex min-h-[44px] items-center overflow-hidden rounded-2xl border transition-all ${
+                      labelsHidden ? 'justify-center p-2' : 'gap-2 px-2 py-1.5 text-left'
                     } ${
                       active
                         ? isStudio
-                          ? 'bg-white/[0.11] shadow-md'
-                          : 'bg-[var(--accent)]/12 shadow-sm'
+                          ? 'bg-white/[0.10] shadow-sm'
+                          : 'bg-[var(--accent)]/12 shadow-xs'
                         : isCloudMode
                           ? cloudRowBg
                           : cardBg
@@ -1154,6 +1369,7 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                           mode={labelMode}
                           isStudio={isStudio}
                           accent={cat.accent}
+                          maxLines={2}
                           className={`font-bold ${cardTitleSize}`}
                         />
                         {effectiveShowDesc && (
@@ -1168,30 +1384,44 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
               })}
             </div>
 
-            {/* Middle Column: Pixel-Exact SVG Bezier Connector Branches */}
-            <div className="relative" aria-hidden="true">
+            {/* Middle Column: Clean 1:1 Pixel SVG Bezier Spine & Branches (zero stretching) */}
+            <div ref={treeSvgColRef} className="relative" aria-hidden="true">
               <svg
-                viewBox={`0 0 28 ${treeGeom.height}`}
-                preserveAspectRatio="none"
-                style={{height: `${treeGeom.height}px`}}
-                className="w-full overflow-visible"
+                width={svgW}
+                height={treeGeom.height}
+                viewBox={`0 0 ${svgW} ${treeGeom.height}`}
+                className="block h-full w-full overflow-visible"
               >
+                {/* Short clean horizontal stem from active category */}
+                {subItems.length > 0 && (
+                  <path
+                    d={`M 0 ${treeGeom.startY} L ${spineX} ${treeGeom.startY}`}
+                    fill="none"
+                    stroke={activeCat?.accent || 'var(--accent)'}
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeOpacity="0.85"
+                  />
+                )}
                 {subItems.map((item, sIdx) => {
                   const endY = treeGeom.endYs[sIdx] ?? treeGeom.startY;
+                  const c1x = spineX + (svgW - spineX) * 0.45;
+                  const c2x = spineX + (svgW - spineX) * 0.55;
+                  const col = item.accent || activeCat?.accent || 'var(--accent)';
                   return (
                     <g key={item.id}>
                       <path
-                        d={`M 0 ${treeGeom.startY} C 14 ${treeGeom.startY}, 14 ${endY}, 28 ${endY}`}
+                        d={`M ${spineX} ${treeGeom.startY} C ${c1x} ${treeGeom.startY}, ${c2x} ${endY}, ${svgW - 3} ${endY}`}
                         fill="none"
-                        stroke={activeCat?.accent || 'var(--accent)'}
-                        strokeWidth="1.75"
-                        strokeOpacity="0.72"
+                        stroke={col}
+                        strokeWidth="1.5"
+                        strokeOpacity="0.62"
                       />
                       <circle
-                        cx="27"
+                        cx={svgW - 2.5}
                         cy={endY}
                         r="2.2"
-                        fill={activeCat?.accent || 'var(--accent)'}
+                        fill={col}
                       />
                     </g>
                   );
@@ -1199,8 +1429,8 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
               </svg>
             </div>
 
-            {/* Right Column: Branched Child Tool Nodes */}
-            <div className="flex flex-col justify-center gap-2">
+            {/* Right Column: Compact Even-Height Child Tool Nodes */}
+            <div className="flex flex-col justify-center gap-1.5">
               {subItems.map((item) => {
                 const ItemIcon = item.icon;
                 const col = item.accent || activeCat?.accent || '#E94F78';
@@ -1217,8 +1447,8 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                     onMouseLeave={() => setHoveredCaption(null)}
                     onFocus={() => setHoveredCaption({label: item.label, desc: item.desc})}
                     onClick={() => triggerItem(item)}
-                    className={`flex min-h-[48px] items-center overflow-hidden rounded-2xl border transition-all active:scale-[0.98] ${
-                      labelsHidden ? 'justify-center p-2' : 'gap-2 px-2.5 py-2 text-left'
+                    className={`flex min-h-[44px] items-center overflow-hidden rounded-2xl border transition-all active:scale-[0.98] ${
+                      labelsHidden ? 'justify-center p-2' : 'gap-2 px-2.5 py-1.5 text-left'
                     } ${
                       item.disabled
                         ? 'opacity-40'
@@ -1245,12 +1475,14 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                             mode={labelMode}
                             isStudio={isStudio}
                             accent={col}
+                            maxLines={1}
                             className={`font-bold ${cardTitleSize}`}
                           />
                           {effectiveShowDesc && item.desc && (
                             <LauncherDesc
                               text={item.desc}
                               mode={labelMode}
+                              maxLines={1}
                               className={`mt-0.5 ${descSize} ${mutedTxt}`}
                             />
                           )}
@@ -1270,21 +1502,22 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
   };
 
   // =========================================================================
-  // STYLE 4: ÇİFT PANEL RAY (Master-Detail Split Rail)
+  // STYLE 4: ÇİFT PANEL RAY (Master-Detail Split Rail — Clean Proportions)
   // =========================================================================
   const renderPillRail = () => {
     const activeCat = activeCategory;
     return (
       <div
-        className={`mx-auto flex max-h-[82dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border shadow-2xl backdrop-blur-xl sm:rounded-3xl ${panelBg}`}
+        className={`mx-auto flex max-h-[86dvh] w-full max-w-[540px] flex-col overflow-hidden rounded-t-3xl border shadow-2xl backdrop-blur-xl sm:rounded-3xl ${panelBg}`}
       >
+        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-current opacity-20 sm:hidden" />
         {renderHeader()}
 
-        <div className="flex min-h-[300px] flex-1 overflow-hidden">
+        <div className="flex min-h-0 flex-1 overflow-hidden">
           {/* Left Category Rail */}
           <div
-            className={`flex shrink-0 flex-col gap-1.5 overflow-y-auto border-r p-2 pb-[calc(var(--morph-safe-bottom)+0.75rem)] ${dividerBorder} ${
-              labelsHidden ? 'w-[64px]' : 'w-[106px]'
+            className={`no-scrollbar flex shrink-0 flex-col gap-1 overflow-y-auto border-r p-2 pb-[calc(var(--morph-safe-bottom)+0.75rem)] ${dividerBorder} ${
+              labelsHidden ? 'w-[62px]' : 'w-[126px] sm:w-[144px]'
             }`}
           >
             {categories.map((cat) => {
@@ -1302,31 +1535,33 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                     hapticTap(8);
                     setExpandedCatId(cat.id);
                   }}
-                  className={`flex flex-col items-center justify-center gap-1 overflow-hidden rounded-2xl border px-1.5 py-2 text-center transition-all ${
-                    labelsHidden ? 'min-h-[48px]' : 'min-h-[58px]'
+                  className={`flex overflow-hidden rounded-xl border transition-all ${
+                    labelsHidden
+                      ? 'min-h-[46px] items-center justify-center p-2'
+                      : 'min-h-[44px] items-center gap-2 px-2 py-2 text-left'
                   } ${
                     active
                       ? isStudio
-                        ? 'border-white/25 bg-white/[0.11] text-white shadow-xs'
-                        : 'border-[var(--accent)] bg-[var(--accent)]/14 text-[var(--ink)] shadow-xs'
+                        ? 'border-white/22 bg-white/[0.10] text-white'
+                        : 'border-[var(--accent)]/70 bg-[var(--accent)]/12 text-[var(--ink)]'
                       : isStudio
                         ? 'border-transparent text-white/60 hover:bg-white/[0.05] hover:text-white'
                         : 'border-transparent text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)]'
                   }`}
                 >
                   <CatIcon
-                    className="h-4.5 w-4.5 shrink-0"
+                    className="h-4 w-4 shrink-0"
                     style={{color: active ? cat.accent : undefined}}
                   />
                   {!labelsHidden && (
-                    <div className="w-full min-w-0 overflow-hidden">
+                    <div className="min-w-0 flex-1 overflow-hidden">
                       <LauncherLabel
                         text={cat.label}
                         mode={labelMode}
-                        align="center"
                         isStudio={isStudio}
                         accent={cat.accent}
-                        className={`w-full font-bold ${railCatSize}`}
+                        maxLines={2}
+                        className={`font-bold ${railCatSize}`}
                       />
                     </div>
                   )}
@@ -1336,17 +1571,17 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
           </div>
 
           {/* Right Nested Sub-Tools Detail Pane */}
-          <div className="flex-1 overflow-y-auto p-3 pb-[calc(var(--morph-safe-bottom)+1rem)]">
+          <div className="no-scrollbar flex-1 overflow-y-auto p-3 pb-[calc(var(--morph-safe-bottom)+0.75rem)]">
             {activeCat && (
               <>
-                <div className="mb-2.5 flex items-baseline justify-between gap-2">
-                  <p className="text-xs font-extrabold">{activeCat.label}</p>
-                  <span className={`font-mono-num text-[10px] font-semibold ${mutedTxt}`}>
+                <div className="mb-2 flex items-baseline justify-between gap-2">
+                  <p className="truncate text-xs font-extrabold">{activeCat.label}</p>
+                  <span className={`font-mono-num shrink-0 text-[10px] font-semibold ${mutedTxt}`}>
                     {activeCat.items.length} {tr('araç', 'tools')}
                   </span>
                 </div>
                 <div
-                  className={`grid gap-2 ${
+                  className={`grid gap-1.5 ${
                     labelsHidden ? 'grid-cols-3 sm:grid-cols-4' : 'grid-cols-1 sm:grid-cols-2'
                   }`}
                 >
@@ -1363,10 +1598,10 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                         onMouseLeave={() => setHoveredCaption(null)}
                         onFocus={() => setHoveredCaption({label: item.label, desc: item.desc})}
                         onClick={() => triggerItem(item)}
-                        className={`flex overflow-hidden rounded-2xl border transition-all active:scale-[0.98] ${
+                        className={`flex overflow-hidden rounded-xl border transition-all active:scale-[0.98] ${
                           labelsHidden
-                            ? 'min-h-[56px] items-center justify-center p-2'
-                            : 'min-h-[52px] items-center gap-2.5 px-2.5 py-2 text-left'
+                            ? 'min-h-[52px] items-center justify-center p-2'
+                            : 'min-h-[46px] items-center gap-2 px-2.5 py-1.5 text-left'
                         } ${
                           item.disabled
                             ? 'opacity-40'
@@ -1378,12 +1613,12 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                         }`}
                       >
                         <span
-                          className={`flex shrink-0 items-center justify-center rounded-xl ${
-                            labelsHidden ? 'h-9 w-9' : 'h-8 w-8'
+                          className={`flex shrink-0 items-center justify-center rounded-lg ${
+                            labelsHidden ? 'h-8 w-8' : 'h-7 w-7'
                           }`}
                           style={{backgroundColor: `${col}20`, color: col}}
                         >
-                          <ItemIcon className="h-4 w-4" />
+                          <ItemIcon className="h-3.5 w-3.5" />
                         </span>
                         {!labelsHidden && (
                           <div className="min-w-0 flex-1 overflow-hidden">
@@ -1392,12 +1627,14 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                               mode={labelMode}
                               isStudio={isStudio}
                               accent={col}
+                              maxLines={1}
                               className={`font-bold ${cardTitleSize}`}
                             />
                             {effectiveShowDesc && item.desc && (
                               <LauncherDesc
                                 text={item.desc}
                                 mode={labelMode}
+                                maxLines={1}
                                 className={`mt-0.5 ${descSize} ${mutedTxt}`}
                               />
                             )}
@@ -1417,7 +1654,7 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
   };
 
   // =========================================================================
-  // STYLE 5: KOMUT PALETİ & ADIM (Spotlight Command Deck + Breadcrumb Drill)
+  // STYLE 5: KOMUT PALETİ & ADIM (Spotlight Command Deck + Keyboard Nav)
   // =========================================================================
   const renderCommandDeck = () => {
     const drilledCat = commandCatId
@@ -1425,16 +1662,32 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
       : null;
     const isSearching = query.trim().length > 0;
 
+    const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (!isSearching || flatSearchResults.length === 0) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setCmdHighlightIdx((i) => (i + 1) % flatSearchResults.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setCmdHighlightIdx((i) => (i - 1 + flatSearchResults.length) % flatSearchResults.length);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const hit = flatSearchResults[cmdHighlightIdx] ?? flatSearchResults[0];
+        if (hit) triggerItem(hit.item);
+      }
+    };
+
     return (
       <div
-        className={`mx-auto flex max-h-[82dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border shadow-2xl backdrop-blur-xl sm:rounded-3xl ${panelBg}`}
+        className={`mx-auto flex max-h-[86dvh] w-full max-w-[540px] flex-col overflow-hidden rounded-t-3xl border shadow-2xl backdrop-blur-xl sm:rounded-3xl ${panelBg}`}
       >
+        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-current opacity-20 sm:hidden" />
         {renderHeader()}
 
         {/* Live Search + Breadcrumb Bar */}
         <div className={`border-b px-3.5 py-2.5 ${dividerBorder}`}>
           <div
-            className={`flex min-h-[42px] items-center gap-2 rounded-xl border px-3 ${
+            className={`flex min-h-[40px] items-center gap-2 rounded-xl border px-3 ${
               isStudio
                 ? 'border-white/12 bg-white/[0.06]'
                 : 'border-[var(--line)] bg-[var(--inset)]'
@@ -1445,6 +1698,7 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
               placeholder={tr('Araç veya efekt ara… (örn. ses, hız, renk)', 'Search tools or effects…')}
               className="w-full bg-transparent text-xs font-medium outline-none placeholder:opacity-55"
             />
@@ -1468,7 +1722,7 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                   hapticTap(8);
                   setCommandCatId(null);
                 }}
-                className="flex min-h-[30px] items-center gap-1 rounded-lg px-2 text-[var(--accent)] hover:bg-[var(--accent)]/12"
+                className="flex min-h-[28px] items-center gap-1 rounded-lg px-2 text-[var(--accent)] hover:bg-[var(--accent)]/12"
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
                 <span>{title}</span>
@@ -1479,7 +1733,7 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-3.5 pb-[calc(var(--morph-safe-bottom)+1rem)]">
+        <div className="no-scrollbar flex-1 overflow-y-auto p-3 pb-[calc(var(--morph-safe-bottom)+0.75rem)]">
           {isSearching ? (
             flatSearchResults.length === 0 ? (
               <p className={`py-8 text-center text-xs font-medium ${mutedTxt}`}>
@@ -1487,24 +1741,32 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
               </p>
             ) : (
               <div className="space-y-1.5">
-                {flatSearchResults.map(({cat, item}) => {
+                {flatSearchResults.map(({cat, item}, idx) => {
                   const ItemIcon = item.icon;
                   const col = item.accent || cat.accent;
+                  const isHighlighted = idx === cmdHighlightIdx;
                   return (
                     <button
                       key={`${cat.id}-${item.id}`}
                       type="button"
+                      onMouseEnter={() => setCmdHighlightIdx(idx)}
                       onClick={() => triggerItem(item)}
-                      className={`flex min-h-[50px] w-full items-center justify-between gap-3 overflow-hidden rounded-2xl border px-3 py-2 text-left transition-colors ${
-                        item.disabled ? 'opacity-40' : isCloudMode ? cloudRowBg : subCardBg
+                      className={`flex min-h-[48px] w-full items-center justify-between gap-3 overflow-hidden rounded-xl border px-3 py-1.5 text-left transition-colors ${
+                        item.disabled
+                          ? 'opacity-40'
+                          : isHighlighted
+                            ? 'border-[var(--accent)]/70 bg-[var(--accent)]/10'
+                            : isCloudMode
+                              ? cloudRowBg
+                              : subCardBg
                       }`}
                     >
                       <div className="flex min-w-0 flex-1 items-center gap-2.5 overflow-hidden">
                         <span
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
                           style={{backgroundColor: `${col}20`, color: col}}
                         >
-                          <ItemIcon className="h-4 w-4" />
+                          <ItemIcon className="h-3.5 w-3.5" />
                         </span>
                         <div className="min-w-0 flex-1 overflow-hidden">
                           <LauncherLabel
@@ -1513,12 +1775,14 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                             forceVisible
                             isStudio={isStudio}
                             accent={col}
+                            maxLines={1}
                             className={`font-bold ${cardTitleSize}`}
                           />
                           {showDesc && (
                             <LauncherDesc
                               text={`${cat.label}${item.desc ? ` · ${item.desc}` : ''}`}
                               mode={labelMode}
+                              maxLines={1}
                               className={`mt-0.5 ${descSize} ${mutedTxt}`}
                             />
                           )}
@@ -1532,7 +1796,7 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
             )
           ) : drilledCat ? (
             <div
-              className={`grid gap-2 ${
+              className={`grid gap-1.5 ${
                 labelsHidden ? 'grid-cols-4 sm:grid-cols-5' : 'grid-cols-2'
               }`}
             >
@@ -1549,10 +1813,10 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                     onMouseLeave={() => setHoveredCaption(null)}
                     onFocus={() => setHoveredCaption({label: item.label, desc: item.desc})}
                     onClick={() => triggerItem(item)}
-                    className={`flex overflow-hidden rounded-2xl border transition-all active:scale-[0.98] ${
+                    className={`flex overflow-hidden rounded-xl border transition-all active:scale-[0.98] ${
                       labelsHidden
-                        ? 'min-h-[58px] items-center justify-center p-2'
-                        : 'min-h-[58px] items-center gap-2 px-2.5 py-2 text-left'
+                        ? 'min-h-[54px] items-center justify-center p-2'
+                        : 'min-h-[50px] items-center gap-2 px-2.5 py-1.5 text-left'
                     } ${
                       item.disabled
                         ? 'opacity-40'
@@ -1564,10 +1828,10 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                     }`}
                   >
                     <span
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
                       style={{backgroundColor: `${col}20`, color: col}}
                     >
-                      <ItemIcon className="h-4 w-4" />
+                      <ItemIcon className="h-3.5 w-3.5" />
                     </span>
                     {!labelsHidden && (
                       <div className="min-w-0 flex-1 overflow-hidden">
@@ -1576,12 +1840,14 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                           mode={labelMode}
                           isStudio={isStudio}
                           accent={col}
+                          maxLines={2}
                           className={`font-bold ${cardTitleSize}`}
                         />
                         {effectiveShowDesc && item.desc && (
                           <LauncherDesc
                             text={item.desc}
                             mode={labelMode}
+                            maxLines={1}
                             className={`mt-0.5 ${descSize} ${mutedTxt}`}
                           />
                         )}
@@ -1593,7 +1859,7 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
             </div>
           ) : (
             <div
-              className={`grid gap-2.5 ${
+              className={`grid gap-2 ${
                 labelsHidden ? 'grid-cols-3 sm:grid-cols-4' : 'grid-cols-2'
               }`}
             >
@@ -1616,34 +1882,36 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
                       isCloudMode ? cloudRowBg : cardBg
                     } ${
                       labelsHidden
-                        ? 'min-h-[68px] flex-col items-center justify-center gap-1 p-3'
-                        : 'min-h-[82px] flex-col justify-between p-3 text-left'
+                        ? 'min-h-[62px] flex-col items-center justify-center gap-1 p-2.5'
+                        : 'min-h-[66px] flex-col justify-between p-2.5 text-left'
                     }`}
                   >
                     <div className="flex w-full items-center justify-between gap-2">
                       <span
-                        className={`flex h-9 w-9 items-center justify-center rounded-xl ${
+                        className={`flex h-8 w-8 items-center justify-center rounded-xl ${
                           labelsHidden ? 'mx-auto' : ''
                         }`}
                         style={{backgroundColor: `${cat.accent}20`, color: cat.accent}}
                       >
-                        <CatIcon className="h-4.5 w-4.5" />
+                        <CatIcon className="h-4 w-4" />
                       </span>
-                      {!labelsHidden && <ChevronRight className={`h-4 w-4 ${mutedTxt}`} />}
+                      {!labelsHidden && <ChevronRight className={`h-3.5 w-3.5 ${mutedTxt}`} />}
                     </div>
                     {!labelsHidden && (
-                      <div className="mt-2.5 w-full min-w-0 overflow-hidden">
+                      <div className="mt-2 w-full min-w-0 overflow-hidden">
                         <LauncherLabel
                           text={cat.label}
                           mode={labelMode}
                           isStudio={isStudio}
                           accent={cat.accent}
+                          maxLines={1}
                           className={`font-bold ${cardTitleSize}`}
                         />
                         {effectiveShowDesc && (
                           <LauncherDesc
                             text={`${cat.items.length} ${tr('alt araç', 'sub-tools')}`}
                             mode={labelMode}
+                            maxLines={1}
                             className={`mt-0.5 ${descSize} ${mutedTxt}`}
                           />
                         )}

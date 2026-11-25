@@ -28,6 +28,7 @@ interface StudioHeaderProps {
   splitCompareEnabled?: boolean;
   hasUnsavedChanges?: boolean;
   showGrid: boolean;
+  showMobileGridBtn?: boolean;
   isPortraitMode: boolean;
   onBack: () => void;
   onSaveProject: () => void;
@@ -60,6 +61,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
   splitCompareEnabled = false,
   hasUnsavedChanges = false,
   showGrid,
+  showMobileGridBtn = true,
   isPortraitMode,
   onBack,
   onSaveProject,
@@ -76,21 +78,21 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
   const resTag = `${Math.max(targetWidth, targetHeight)}p`;
 
   return (
-    <header className="pt-safe relative z-40 flex min-h-12 shrink-0 items-center justify-between gap-2 border-b border-white/[0.07] bg-[#0B0B0E] px-2.5 py-1 sm:px-3.5">
+    <header className="pt-safe relative z-40 flex min-h-12 shrink-0 items-center justify-between gap-1 border-b border-white/[0.07] bg-[#0B0B0E] px-2 py-1 sm:gap-2 sm:px-3.5">
       {/* Left: Back + Stacked Project Title & Clean Unboxed Technical Metadata */}
-      <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
+      <div className="flex min-w-0 flex-1 items-center gap-1 sm:gap-2">
         <StudioTooltipBtn
           tooltip={tr('Projeden Çık', 'Exit Editor')}
           placement="bottom"
           align="left"
           onClick={onBack}
-          className="flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] shrink-0 items-center justify-center rounded-lg text-white/75 transition-colors hover:bg-white/[0.07] hover:text-white"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/75 transition-colors hover:bg-white/[0.07] hover:text-white sm:h-[var(--ve-btn-size,36px)] sm:w-[var(--ve-btn-size,36px)]"
         >
           <ChevronLeft className="h-5 w-5" />
         </StudioTooltipBtn>
 
-        <div className="min-w-[68px] flex-1">
-          <h1 className="truncate text-[13px] font-bold leading-tight tracking-tight text-white">
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-[12.5px] font-bold leading-tight tracking-tight text-white sm:text-[13px]">
             {projectName}
           </h1>
           <div className="font-mono-num flex items-center gap-1 text-[10px] font-medium text-white/50">
@@ -100,7 +102,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
             {isProxyEnabled && (
               <>
                 <span aria-hidden="true">·</span>
-                <span className="whitespace-nowrap font-bold text-[#34D399]">PROXY</span>
+                <span className="whitespace-nowrap font-bold text-[#34D399]">PX</span>
               </>
             )}
           </div>
@@ -108,7 +110,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
       </div>
 
       {/* Right: Clean Icon-First Studio Controls + Primary Export */}
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
         <StudioTooltipBtn
           tooltip={
             isGeneratingProxy
@@ -121,7 +123,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           }
           placement="bottom"
           onClick={onToggleProxy}
-          className={`flex h-[var(--ve-btn-size,36px)] items-center justify-center gap-1 rounded-xl px-2 text-[11px] font-bold transition-colors ${
+          className={`flex h-8 items-center justify-center gap-1 rounded-xl px-1.5 text-[11px] font-bold transition-colors sm:h-[var(--ve-btn-size,36px)] sm:px-2 ${
             isProxyEnabled
               ? 'bg-[#34D399]/18 text-[#34D399]'
               : proxyRecommended
@@ -130,7 +132,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           }`}
         >
           <Zap className="h-4 w-4 shrink-0" />
-          <span className="font-mono-num hidden text-[10px] min-[400px]:inline">
+          <span className="font-mono-num hidden text-[10px] min-[420px]:inline">
             {isGeneratingProxy ? `${Math.round(proxyProgress * 100)}%` : 'PX'}
           </span>
         </StudioTooltipBtn>
@@ -143,11 +145,11 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           }
           placement="bottom"
           onClick={onSaveProject}
-          className="relative flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl text-white/70 transition-colors hover:bg-white/[0.07] hover:text-white"
+          className="relative flex h-8 w-8 items-center justify-center rounded-xl text-white/70 transition-colors hover:bg-white/[0.07] hover:text-white sm:h-[var(--ve-btn-size,36px)] sm:w-[var(--ve-btn-size,36px)]"
         >
           <Save className="h-4 w-4" />
           {hasUnsavedChanges && (
-            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#F43F5E] shadow-[0_0_6px_#F43F5E]" />
+            <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#F43F5E] shadow-[0_0_6px_#F43F5E] sm:right-1.5 sm:top-1.5" />
           )}
         </StudioTooltipBtn>
 
@@ -155,7 +157,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           tooltip={tr('Projeler, Şablonlar & .morph', 'Projects, Templates & .morph')}
           placement="bottom"
           onClick={onOpenProjects}
-          className="flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl text-white/70 transition-colors hover:bg-white/[0.07] hover:text-white"
+          className="flex h-8 w-8 items-center justify-center rounded-xl text-white/70 transition-colors hover:bg-white/[0.07] hover:text-white sm:h-[var(--ve-btn-size,36px)] sm:w-[var(--ve-btn-size,36px)]"
         >
           <FolderOpen className="h-4 w-4" />
         </StudioTooltipBtn>
@@ -169,7 +171,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
             }
             placement="bottom"
             onClick={onToggleSplitCompare}
-            className={`hidden h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl transition-colors sm:flex ${
+            className={`${showMobileGridBtn ? 'flex' : 'hidden sm:flex'} h-8 w-8 items-center justify-center rounded-xl transition-colors sm:h-[var(--ve-btn-size,36px)] sm:w-[var(--ve-btn-size,36px)] ${
               splitCompareEnabled
                 ? 'bg-[#F43F5E]/20 text-[#FB7185]'
                 : 'text-white/70 hover:bg-white/[0.07] hover:text-white'
@@ -185,7 +187,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           onPointerDown={() => onSetCompareOriginal(true)}
           onPointerUp={() => onSetCompareOriginal(false)}
           onPointerLeave={() => onSetCompareOriginal(false)}
-          className={`hidden h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl transition-colors min-[380px]:flex ${
+          className={`hidden h-8 w-8 items-center justify-center rounded-xl transition-colors min-[400px]:flex sm:h-[var(--ve-btn-size,36px)] sm:w-[var(--ve-btn-size,36px)] ${
             compareOriginal
               ? 'bg-[#F43F5E]/20 text-[#FB7185]'
               : 'text-white/70 hover:bg-white/[0.07] hover:text-white'
@@ -198,7 +200,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           tooltip={tr('Kadraj Izgarası (3×3)', 'Rule of Thirds Grid')}
           placement="bottom"
           onClick={onToggleGrid}
-          className={`hidden h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl transition-colors sm:flex ${
+          className={`${showMobileGridBtn ? 'flex' : 'hidden sm:flex'} h-8 w-8 items-center justify-center rounded-xl transition-colors sm:h-[var(--ve-btn-size,36px)] sm:w-[var(--ve-btn-size,36px)] ${
             showGrid
               ? 'bg-[#A78BFA]/20 text-[#C4B5FD]'
               : 'text-white/70 hover:bg-white/[0.07] hover:text-white'
@@ -211,7 +213,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           tooltip={tr('Dikey / Yatay Stüdyo Düzeni', 'Portrait / Landscape Studio')}
           placement="bottom"
           onClick={onToggleOrientation}
-          className={`flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl transition-colors ${
+          className={`flex h-8 w-8 items-center justify-center rounded-xl transition-colors sm:h-[var(--ve-btn-size,36px)] sm:w-[var(--ve-btn-size,36px)] ${
             !isPortraitMode
               ? 'bg-[var(--accent)]/20 text-[var(--accent)]'
               : 'text-white/70 hover:bg-white/[0.07] hover:text-white'
@@ -238,7 +240,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           placement="bottom"
           align="right"
           onClick={onExport}
-          className="morph-accent-btn ml-1 flex h-[var(--ve-btn-size,36px)] items-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-xs font-extrabold shadow-sm transition-transform active:scale-95"
+          className="morph-accent-btn ml-0.5 flex h-8 items-center gap-1.5 whitespace-nowrap rounded-xl px-2.5 text-xs font-extrabold shadow-sm transition-transform active:scale-95 sm:ml-1 sm:h-[var(--ve-btn-size,36px)] sm:px-3"
         >
           <Share className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">{tr('Dışa Aktar', 'Export')}</span>

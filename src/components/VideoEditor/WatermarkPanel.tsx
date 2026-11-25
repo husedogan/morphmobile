@@ -235,7 +235,7 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
                   value={watermark.text}
                   onChange={(e) => onChange({text: e.target.value})}
                   placeholder={tr('Örn: @kullaniciadi veya Marka Adı', 'e.g. @username or Brand Name')}
-                  className="min-h-[38px] flex-1 rounded-lg border border-[var(--line)] bg-[var(--inset)] px-3 py-1.5 text-xs font-bold text-[var(--ink)] focus:border-[#FB923C] focus:outline-none"
+                  className="min-h-[38px] min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--inset)] px-3 py-1.5 text-xs font-bold text-[var(--ink)] focus:border-[#FB923C] focus:outline-none"
                 />
                 <select
                   value={watermark.fontFamily}

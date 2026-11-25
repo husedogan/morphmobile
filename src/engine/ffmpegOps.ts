@@ -838,12 +838,14 @@ async function runLocalFfmpegToolInternal(
             case 'cinema_grain':
               f.push(
                 `eq=contrast=${(1 + 0.14 * k).toFixed(2)}:saturation=${(1 - 0.14 * k).toFixed(2)}`,
-                `noise=alls=${Math.round(6 + 12 * k)}:allf=t`
+                `noise=alls=${Math.round(6 + 12 * k)}:allf=t`,
+                `drawbox=x=0:y=0:w=iw:h=trunc(ih*${(0.085 * k).toFixed(3)}):color=black@0.95:t=fill`,
+                `drawbox=x=0:y=ih-trunc(ih*${(0.085 * k).toFixed(3)}):w=iw:h=trunc(ih*${(0.085 * k).toFixed(3)}):color=black@0.95:t=fill`
               );
               break;
             case 'neon_glow':
               f.push(
-                `eq=brightness=${(0.08 * k).toFixed(2)}:contrast=${(1 + 0.24 * k).toFixed(2)}:saturation=${(1 + 0.7 * k).toFixed(2)}`
+                `eq=brightness=${(0.06 * k).toFixed(2)}:contrast=${(1 + 0.22 * k).toFixed(2)}:saturation=${(1 + 0.65 * k).toFixed(2)}`
               );
               break;
             case 'dreamy':
@@ -907,15 +909,17 @@ async function runLocalFfmpegToolInternal(
         const effFadeIn = clipFadeInOverride ?? videoFadeSec;
         const effFadeOut = clipFadeOutOverride ?? videoFadeSec;
         const kfs = clipKeyframes ?? [];
-        const avgKfZoom =
-          kfs.length > 0
-            ? Math.max(
-                zoom,
-                kfs.reduce((sum, item) => sum + Math.max(1, item.zoom || 1), 0) / kfs.length
-              )
-            : zoom;
+        const kfZoomVals = kfs.map((item) => Math.max(1, item.zoom || 1));
+        const hasAnimKfZoom =
+          kfs.length >= 2 && Math.max(...kfZoomVals) - Math.min(...kfZoomVals) > 0.03;
+        const staticZoom =
+          hasAnimKfZoom
+            ? zoom
+            : kfs.length > 0
+              ? Math.max(zoom, kfZoomVals.reduce((s, v) => s + v, 0) / kfZoomVals.length)
+              : zoom;
         const lines: string[] = [];
-        const pre = buildPreFilters(avgKfZoom);
+        const pre = buildPreFilters(staticZoom);
         let curPad = '0:v';
         if (pre.length > 0) {
           lines.push(`[0:v]${pre.join(',')}[vpre]`);
@@ -939,7 +943,7 @@ async function runLocalFfmpegToolInternal(
         } else {
           const cropSteps: string[] = [];
           if (targetRatio && !hasCustomCropBox) {
-            if (cropAspect === '1:1') cropSteps.push("crop='trunc(min(iw,ih)/2)*2':'trunc(min(iw,ih)/2)*2'");
+            if (cropAspect === '1:1') cropSteps.push("crop='trunc(min(iw,ih)/2)*2':'trunc(min(ih,iw)/2)*2'");
             else if (cropAspect === '16:9')
               cropSteps.push("crop='trunc(min(iw,ih*16/9)/2)*2':'trunc(min(ih,iw*9/16)/2)*2'");
             else if (cropAspect === '9:16')
@@ -952,6 +956,28 @@ async function runLocalFfmpegToolInternal(
           cropSteps.push(`scale=${outW}:${outH}`);
           lines.push(`[${curPad}]${cropSteps.join(',')}[vframed]`);
           curPad = 'vframed';
+        }
+
+        // Real Neon Bloom Glow screen-blend pass
+        if (visualFx === 'neon_glow') {
+          const k = Math.max(0.15, Math.min(1, visualFxIntensity / 100));
+          lines.push(`[${curPad}]split=2[ngbase][ngsrc]`);
+          lines.push(
+            `[ngsrc]gblur=sigma=${(4 + 8 * k).toFixed(1)},eq=brightness=${(0.1 * k).toFixed(2)}:saturation=${(1.35 + 0.45 * k).toFixed(2)}[ngbloom]`
+          );
+          lines.push(
+            `[ngbase][ngbloom]blend=all_mode=screen:all_opacity=${(0.32 + 0.36 * k).toFixed(2)}[vneon]`
+          );
+          curPad = 'vneon';
+        }
+
+        // Animated Keyframe Zoom (Ken Burns / Pulse)
+        if (hasAnimKfZoom && mode !== 'snapshot') {
+          const zoomExpr = buildPiecewiseLerpExpr(kfs, (k) => Math.max(1, k.zoom || 1));
+          lines.push(
+            `[${curPad}]scale=w='trunc(${outW}*(${zoomExpr})/2)*2':h='trunc(${outH}*(${zoomExpr})/2)*2':eval=frame,crop=${outW}:${outH}:(iw-ow)/2:(ih-oh)/2[vkfzoom]`
+          );
+          curPad = 'vkfzoom';
         }
 
         // Mirror / Split symmetry Visual FX
@@ -972,11 +998,32 @@ async function runLocalFfmpegToolInternal(
           curPad = 'vkfrot';
         }
 
+        // Detect animated opacity fade-in / fade-out from keyframes vs static opacity
+        const kfOpVals = kfs.map((k) => (Number.isFinite(k.opacity) ? k.opacity : 100));
+        let kfFadeInDur = 0;
+        let kfFadeOutDur = 0;
+        let applyStaticAvgOpacity = true;
+        if (kfs.length >= 2 && Math.max(...kfOpVals) - Math.min(...kfOpVals) > 15) {
+          applyStaticAvgOpacity = false;
+          const firstOp = kfOpVals[0];
+          const secondOp = kfOpVals[1];
+          if (firstOp < 50 && secondOp >= firstOp + 25) {
+            kfFadeInDur = Math.max(0.15, kfs[1].timeOffsetSec - kfs[0].timeOffsetSec);
+          }
+          const lastOp = kfOpVals[kfOpVals.length - 1];
+          const prevOp = kfOpVals[kfOpVals.length - 2];
+          if (lastOp < 50 && prevOp >= lastOp + 25) {
+            kfFadeOutDur = Math.max(
+              0.15,
+              kfs[kfs.length - 1].timeOffsetSec - kfs[kfs.length - 2].timeOffsetSec
+            );
+          }
+        }
         const avgOpacity =
           kfs.length > 0
-            ? kfs.reduce((s, k) => s + (Number.isFinite(k.opacity) ? k.opacity : 100), 0) / kfs.length
+            ? kfOpVals.reduce((s, v) => s + v, 0) / kfOpVals.length
             : clipOpacityOverride ?? 100;
-        if (avgOpacity < 99) {
+        if (applyStaticAvgOpacity && avgOpacity < 99) {
           const alpha = Math.max(0.05, Math.min(1, avgOpacity / 100)).toFixed(2);
           lines.push(`color=c=black:s=${outW}x${outH}[vopbg]`);
           lines.push(`[${curPad}]format=rgba,colorchannelmixer=aa=${alpha}[vopfg]`);
@@ -1017,12 +1064,14 @@ async function runLocalFfmpegToolInternal(
             post.push('reverse');
           }
           const effDur = (clipDurationSec > 0 ? clipDurationSec : 5) / effSpeed;
-          if (effFadeIn > 0.05) {
-            const dIn = Math.min(effFadeIn, Math.max(0.15, effDur * 0.45));
+          const totalFadeIn = Math.max(effFadeIn, kfFadeInDur);
+          const totalFadeOut = Math.max(effFadeOut, kfFadeOutDur);
+          if (totalFadeIn > 0.05) {
+            const dIn = Math.min(totalFadeIn, Math.max(0.15, effDur * 0.45));
             post.push(`fade=t=in:st=0:d=${dIn.toFixed(2)}`);
           }
-          if (effFadeOut > 0.05) {
-            const dOut = Math.min(effFadeOut, Math.max(0.15, effDur * 0.45));
+          if (totalFadeOut > 0.05) {
+            const dOut = Math.min(totalFadeOut, Math.max(0.15, effDur * 0.45));
             if (effDur > dOut * 1.4) {
               post.push(`fade=t=out:st=${Math.max(0, effDur - dOut).toFixed(2)}:d=${dOut.toFixed(2)}`);
             }
@@ -1062,13 +1111,34 @@ async function runLocalFfmpegToolInternal(
         return [`atempo=${spd.toFixed(3)}`];
       };
 
+      const buildMasterDspFilters = (): string[] => {
+        const dsp: string[] = [];
+        if (Math.abs(eqBassDb) >= 0.5) {
+          dsp.push(`equalizer=f=100:t=q:w=1.1:g=${eqBassDb.toFixed(1)}`);
+        }
+        if (Math.abs(eqMidDb) >= 0.5) {
+          dsp.push(`equalizer=f=1000:t=q:w=1.2:g=${eqMidDb.toFixed(1)}`);
+        }
+        if (Math.abs(eqTrebleDb) >= 0.5) {
+          dsp.push(`equalizer=f=8000:t=q:w=1.0:g=${eqTrebleDb.toFixed(1)}`);
+        }
+        if (audioCompressor) {
+          dsp.push('acompressor=threshold=-18dB:ratio=3.5:attack=15:release=180:makeup=2');
+        }
+        if (audioLimiter) {
+          dsp.push('alimiter=limit=0.95');
+        }
+        return dsp;
+      };
+
       const buildAudioChain = (
         clipDurationSec: number,
         reversed: boolean,
         clipVolOverride?: number,
         clipSpeedOverride?: number,
         clipFadeInOverride?: number,
-        clipFadeOutOverride?: number
+        clipFadeOutOverride?: number,
+        deferMasterDsp = false
       ): string[] => {
         const effVol = clipVolOverride ?? volumePct;
         const effSpeed = clipSpeedOverride ?? speed;
@@ -1078,17 +1148,19 @@ async function runLocalFfmpegToolInternal(
         if (noiseReduction) {
           af.push('highpass=f=85,lowpass=f=11500');
         }
-        if (Math.abs(eqBassDb) >= 0.5) {
-          af.push(`equalizer=f=100:t=q:w=1.1:g=${eqBassDb.toFixed(1)}`);
-        }
-        if (Math.abs(eqMidDb) >= 0.5) {
-          af.push(`equalizer=f=1000:t=q:w=1.2:g=${eqMidDb.toFixed(1)}`);
-        }
-        if (Math.abs(eqTrebleDb) >= 0.5) {
-          af.push(`equalizer=f=8000:t=q:w=1.0:g=${eqTrebleDb.toFixed(1)}`);
-        }
-        if (audioCompressor) {
-          af.push('acompressor=threshold=-18dB:ratio=3.5:attack=15:release=180:makeup=2');
+        if (!deferMasterDsp) {
+          if (Math.abs(eqBassDb) >= 0.5) {
+            af.push(`equalizer=f=100:t=q:w=1.1:g=${eqBassDb.toFixed(1)}`);
+          }
+          if (Math.abs(eqMidDb) >= 0.5) {
+            af.push(`equalizer=f=1000:t=q:w=1.2:g=${eqMidDb.toFixed(1)}`);
+          }
+          if (Math.abs(eqTrebleDb) >= 0.5) {
+            af.push(`equalizer=f=8000:t=q:w=1.0:g=${eqTrebleDb.toFixed(1)}`);
+          }
+          if (audioCompressor) {
+            af.push('acompressor=threshold=-18dB:ratio=3.5:attack=15:release=180:makeup=2');
+          }
         }
         if (Math.abs(effVol - 100) > 1) {
           af.push(`volume=${(effVol / 100).toFixed(2)}`);
@@ -1108,7 +1180,7 @@ async function runLocalFfmpegToolInternal(
             af.push(`afade=t=out:st=${Math.max(0, effDur - dOut).toFixed(2)}:d=${dOut.toFixed(2)}`);
           }
         }
-        if (audioLimiter) {
+        if (!deferMasterDsp && audioLimiter) {
           af.push('alimiter=limit=0.95');
         }
         return af;
@@ -1308,6 +1380,8 @@ async function runLocalFfmpegToolInternal(
       interface ParsedSeg {
         mediaId: string;
         trackIndex: number;
+        layerMode: 'video' | 'pip';
+        isFreezeFrame: boolean;
         pipRect?: {x: number; y: number; w: number; h: number};
         opacity: number;
         sourceStart: number;
@@ -1351,21 +1425,31 @@ async function runLocalFfmpegToolInternal(
                 const rawPip = c.pipRect as Record<string, unknown> | undefined;
                 const rawKfs = Array.isArray(c.keyframes) ? c.keyframes : [];
                 const keyframes: ParsedClipKeyframe[] = rawKfs
-                  .map((k: Record<string, unknown>) => ({
-                    timeOffsetSec: Math.max(0, Number(k?.timeOffsetSec) || 0),
-                    zoom: Math.min(3, Math.max(1, Number(k?.zoom) || 1)),
-                    opacity: Math.min(100, Math.max(5, Number(k?.opacity ?? 100))),
-                    posX: Math.min(50, Math.max(-50, Number(k?.posX) || 0)),
-                    posY: Math.min(50, Math.max(-50, Number(k?.posY) || 0)),
-                    rotation: Math.min(180, Math.max(-180, Number(k?.rotation) || 0)),
-                  }))
+                  .map((k: Record<string, unknown>) => {
+                    const rawOp = Number(k?.opacity ?? 100);
+                    // Normalize legacy 0..1 keyframe opacities cleanly into 0..100
+                    const normOp = rawOp > 0 && rawOp <= 1.05 ? rawOp * 100 : rawOp;
+                    return {
+                      timeOffsetSec: Math.max(0, Number(k?.timeOffsetSec) || 0),
+                      zoom: Math.min(3, Math.max(1, Number(k?.zoom) || 1)),
+                      opacity: Math.min(100, Math.max(5, Number.isFinite(normOp) ? normOp : 100)),
+                      posX: Math.min(50, Math.max(-50, Number(k?.posX) || 0)),
+                      posY: Math.min(50, Math.max(-50, Number(k?.posY) || 0)),
+                      rotation: Math.min(180, Math.max(-180, Number(k?.rotation) || 0)),
+                    };
+                  })
                   .sort((a, b) => a.timeOffsetSec - b.timeOffsetSec);
+                const parsedTrackIdx = Math.max(0, Math.min(4, Math.floor(Number(c.trackIndex) || 0)));
+                const parsedLayerMode: 'video' | 'pip' =
+                  parsedTrackIdx >= 1 && c.layerMode === 'pip' ? 'pip' : 'video';
                 return {
                   mediaId:
                     typeof c.mediaId === 'string' && c.mediaId.trim()
                       ? c.mediaId
                       : PRIMARY_MEDIA_ID,
-                  trackIndex: Math.max(0, Math.min(4, Math.floor(Number(c.trackIndex) || 0))),
+                  trackIndex: parsedTrackIdx,
+                  layerMode: parsedLayerMode,
+                  isFreezeFrame: Boolean(c.isFreezeFrame),
                   pipRect: rawPip
                     ? {
                         x: Math.max(0, Math.min(0.9, Number(rawPip.x) || 0.62)),
@@ -1393,22 +1477,25 @@ async function runLocalFfmpegToolInternal(
               })
               .filter((c) => c.sourceEnd - c.sourceStart >= 0.08);
 
-            const v1Segs = parsedAll
-              .filter((c) => c.trackIndex === 0)
-              .sort((a, b) => a.timelineStart - b.timelineStart);
+            // Normal full-frame videos across V1-V5 belong to main timeline; only explicit PiP clips go to overlay pass
+            const mainSegs = parsedAll
+              .filter((c) => !(c.trackIndex >= 1 && c.layerMode === 'pip'))
+              .sort((a, b) => a.timelineStart - b.timelineStart || b.trackIndex - a.trackIndex);
             v2OverlaySegments = parsedAll
-              .filter((c) => c.trackIndex >= 1)
+              .filter((c) => c.trackIndex >= 1 && c.layerMode === 'pip')
               .sort((a, b) => a.trackIndex - b.trackIndex || a.timelineStart - b.timelineStart);
-            primaryClipMeta = v1Segs[0] ?? null;
+            primaryClipMeta = mainSegs[0] ?? null;
 
-            const hasSecondarySource = v1Segs.some((c) => c.mediaId !== PRIMARY_MEDIA_ID);
+            const hasSecondarySource = mainSegs.some((c) => c.mediaId !== PRIMARY_MEDIA_ID);
+            const hasFreeze = mainSegs.some((c) => c.isFreezeFrame);
             if (
-              v1Segs.length > 1 ||
+              mainSegs.length > 1 ||
               hasSecondarySource ||
+              hasFreeze ||
               v2OverlaySegments.length > 0 ||
-              (v1Segs.length === 1 && v1Segs[0].timelineStart > 0.05)
+              (mainSegs.length === 1 && mainSegs[0].timelineStart > 0.05)
             ) {
-              multiSegments = v1Segs;
+              multiSegments = mainSegs;
             }
           }
         } catch {
@@ -1491,17 +1578,31 @@ async function runLocalFfmpegToolInternal(
             case 'zoom':
               return 'zoomin';
             case 'blur':
-              return 'smoothleft';
+              return 'hblur';
             default:
               return null;
           }
         };
 
+        // Track timeline shortening caused by cross-clip xfade overlaps so overlays & external audio stay in exact sync
+        const xfadeShifts: Array<{origTimelineSec: number; deltaSec: number}> = [];
+        const mapTimelineSecToExportSec = (origSec: number): number => {
+          let shift = 0;
+          for (const item of xfadeShifts) {
+            if (origSec >= item.origTimelineSec - 0.005) {
+              shift += item.deltaSec;
+            }
+          }
+          return Math.max(0, Number((origSec - shift).toFixed(3)));
+        };
+        const willMixExternalAudio = !isGif && externalAudioClips.length > 0 && !mute;
+
         // Multi-clip NLE timeline rendering, real cross-clip xfade transitions & gap-preserving concatenation
-        // Also supports Boomerang & GIF post-pass on top of multi-clip timelines so cut clips are never skipped!
+        // Also supports Boomerang, Loop & GIF post-pass on top of multi-clip timelines so cut clips are never skipped!
         if (multiSegments.length > 0) {
           interface RenderedPiece {
             fileName: string;
+            origTimelineStart: number;
             durationSec: number;
             isGap: boolean;
             transitionIn: string;
@@ -1534,6 +1635,7 @@ async function runLocalFfmpegToolInternal(
               tempFilesToClean.push(gapName);
               pieces.push({
                 fileName: gapName,
+                origTimelineStart: timelineCursor,
                 durationSec: gapDur,
                 isGap: true,
                 transitionIn: 'none',
@@ -1605,6 +1707,7 @@ async function runLocalFfmpegToolInternal(
 
             pieces.push({
               fileName: segName,
+              origTimelineStart: seg.timelineStart,
               durationSec: segTimelineDur,
               isGap: false,
               transitionIn: canUseXfadeLater ? seg.transitionIn : 'none',
@@ -1616,17 +1719,23 @@ async function runLocalFfmpegToolInternal(
               !canUseXfadeLater && seg.transitionIn !== 'none'
                 ? Math.max(seg.fadeInSec, seg.transitionDurationSec)
                 : seg.fadeInSec;
-            const {complex, outPad} = buildVideoComplexGraph(
+            const {complex: baseComplex, outPad: baseOutPad} = buildVideoComplexGraph(
               segDur,
-              seg.reversed ? 'reverse' : 'normal',
+              seg.isFreezeFrame ? 'normal' : seg.reversed ? 'reverse' : 'normal',
               false,
-              seg.speed,
+              seg.isFreezeFrame ? 1 : seg.speed,
               effFadeIn,
               seg.fadeOutSec,
               seg.opacity,
               seg.keyframes
             );
-            const segKeepAudio = anyAudio && srcMeta.hasAudio && !seg.muted && seg.volume > 0;
+            const complex = seg.isFreezeFrame
+              ? `${baseComplex};[${baseOutPad}]trim=duration=0.1,setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=${segTimelineDur.toFixed(3)},trim=duration=${segTimelineDur.toFixed(3)},fps=${effFps}[vfrz]`
+              : baseComplex;
+            const outPad = seg.isFreezeFrame ? 'vfrz' : baseOutPad;
+
+            const segKeepAudio =
+              !seg.isFreezeFrame && anyAudio && srcMeta.hasAudio && !seg.muted && seg.volume > 0;
             const afList = segKeepAudio
               ? buildAudioChain(
                   segDur,
@@ -1634,17 +1743,19 @@ async function runLocalFfmpegToolInternal(
                   seg.volume,
                   seg.speed,
                   effFadeIn,
-                  seg.fadeOutSec
+                  seg.fadeOutSec,
+                  willMixExternalAudio
                 )
               : [];
 
             // Ensure every piece has matching audio format when project has audio so concat & xfade never desync
             let segExecArgs: string[];
+            const segSeekDuration = seg.isFreezeFrame ? '0.25' : String(segDur);
             if (anyAudio && !segKeepAudio) {
               segExecArgs = [
                 ...(seg.sourceStart > 0.03 ? ['-ss', String(seg.sourceStart)] : []),
                 '-t',
-                String(segDur),
+                segSeekDuration,
                 '-i',
                 srcMeta.vfsName,
                 ...extraInputs,
@@ -1658,6 +1769,8 @@ async function runLocalFfmpegToolInternal(
                 `[${outPad}]`,
                 '-map',
                 `${hasOverlayPng ? 2 : 1}:a:0`,
+                '-t',
+                String(segTimelineDur),
                 '-c:a',
                 'aac',
                 '-ar',
@@ -1683,7 +1796,7 @@ async function runLocalFfmpegToolInternal(
               segExecArgs = [
                 ...(seg.sourceStart > 0.03 ? ['-ss', String(seg.sourceStart)] : []),
                 '-t',
-                String(segDur),
+                segSeekDuration,
                 '-i',
                 srcMeta.vfsName,
                 ...extraInputs,
@@ -1692,6 +1805,7 @@ async function runLocalFfmpegToolInternal(
                 '-map',
                 `[${outPad}]`,
                 ...gSeg.audioMapArgs,
+                ...(seg.isFreezeFrame ? ['-t', String(segTimelineDur)] : []),
                 ...(segKeepAudio ? ['-c:a', 'aac', '-ar', '48000', '-ac', '2', '-b:a', audioBitrate] : ['-an']),
                 '-pix_fmt',
                 'yuv420p',
@@ -1762,8 +1876,13 @@ async function runLocalFfmpegToolInternal(
               ]);
               if (signal?.aborted) throw new Error('Cancelled');
               if (rcXf === 0) {
+                xfadeShifts.push({
+                  origTimelineSec: nextPiece.origTimelineStart,
+                  deltaSec: xDur,
+                });
                 currentHead = {
                   fileName: mergedFile,
+                  origTimelineStart: currentHead.origTimelineStart,
                   durationSec: Math.max(0.1, currentHead.durationSec + nextPiece.durationSec - xDur),
                   isGap: false,
                   transitionIn: 'none',
@@ -1781,7 +1900,8 @@ async function runLocalFfmpegToolInternal(
           }
 
           onProgress(0.76, outFile);
-          const timelineBaseFile = isGif || isBoomerang ? 'nle_timeline_base.mp4' : outFile;
+          const needsMultiPostPass = isGif || isBoomerang || isLoop;
+          const timelineBaseFile = needsMultiPostPass ? 'nle_timeline_base.mp4' : outFile;
           if (timelineBaseFile !== outFile) tempFilesToClean.push(timelineBaseFile);
           if (finalConcatFiles.length === 1 && (timelineBaseFile !== outFile || outFmt !== 'webm')) {
             const rcSingle = await ffmpeg.exec([
@@ -1848,6 +1968,22 @@ async function runLocalFfmpegToolInternal(
             if (signal?.aborted) throw new Error('Cancelled');
             if (rcPost !== 0) throw new Error('Çoklu klip efekt çıktısı oluşturulamadı.');
             await cleanupVfsFiles(ffmpeg, [timelineBaseFile]);
+          } else if (isLoop) {
+            onProgress(0.8, outFile);
+            const rcLoopMulti = await ffmpeg.exec([
+              '-stream_loop',
+              String(Math.max(1, loopCount - 1)),
+              '-i',
+              timelineBaseFile,
+              ...(outFmt === 'webm'
+                ? ['-c:v', 'libvpx', '-b:v', '1.8M', ...(anyAudio ? ['-c:a', 'libvorbis'] : ['-an'])]
+                : ['-c', 'copy']),
+              '-y',
+              outFile,
+            ]);
+            if (signal?.aborted) throw new Error('Cancelled');
+            if (rcLoopMulti !== 0) throw new Error('Çoklu klip döngüsü oluşturulamadı.');
+            await cleanupVfsFiles(ffmpeg, [timelineBaseFile]);
           }
         } else {
           const seekArgs = [
@@ -1880,7 +2016,9 @@ async function runLocalFfmpegToolInternal(
               primaryClipMeta?.opacity,
               primaryClipMeta?.keyframes
             );
-            const segAf = keepAudio ? buildAudioChain(effectiveClipDur, false) : [];
+            const segAf = keepAudio
+              ? buildAudioChain(effectiveClipDur, false, undefined, undefined, undefined, undefined, willMixExternalAudio)
+              : [];
             const gSeg = attachAudioComplex(complex, segAf, keepAudio);
             const rcSeg = await ffmpeg.exec([
               ...seekArgs,
@@ -1930,7 +2068,9 @@ async function runLocalFfmpegToolInternal(
               primaryClipMeta?.opacity,
               primaryClipMeta?.keyframes
             );
-            const afList = keepAudio ? buildAudioChain(effectiveClipDur, isReverse) : [];
+            const afList = keepAudio
+              ? buildAudioChain(effectiveClipDur, isReverse, undefined, undefined, undefined, undefined, willMixExternalAudio)
+              : [];
             const gMain = attachAudioComplex(complex, afList, keepAudio);
             onProgress(0.22, outFile);
 
@@ -1984,13 +2124,13 @@ async function runLocalFfmpegToolInternal(
           v2OverlaySegments.forEach((ov, ovIdx) => {
             const ovSrc = mediaVfsMap.get(ov.mediaId)?.vfsName ?? inName;
             const ovDur = Math.max(0.1, Number((ov.sourceEnd - ov.sourceStart).toFixed(3)));
-            const ovTimelineDur = ovDur / ov.speed;
+            const ovTimelineDur = ov.isFreezeFrame ? ovDur : ovDur / ov.speed;
             const rect = ov.pipRect ?? {x: 0.62, y: 0.06, w: 0.34, h: 0.34};
             const pipW = makeEven(Math.max(48, Math.round(outW * rect.w)));
             const pipH = makeEven(Math.max(48, Math.round(outH * rect.h)));
             const pipX = Math.max(0, Math.min(outW - pipW, Math.round(outW * rect.x)));
             const pipY = Math.max(0, Math.min(outH - pipH, Math.round(outH * rect.y)));
-            const startT = Math.max(0, Number(ov.timelineStart.toFixed(3)));
+            const startT = mapTimelineSecToExportSec(ov.timelineStart);
             const endT = Number((startT + ovTimelineDur).toFixed(3));
             const alpha = Math.min(1, Math.max(0.05, ov.opacity / 100)).toFixed(2);
             const inpIdx = ovIdx + 1;
@@ -1998,15 +2138,34 @@ async function runLocalFfmpegToolInternal(
             pipInputs.push(
               ...(ov.sourceStart > 0.03 ? ['-ss', String(ov.sourceStart)] : []),
               '-t',
-              String(ovDur),
+              ov.isFreezeFrame ? '0.25' : String(ovDur),
               '-i',
               ovSrc
             );
             const speedExpr =
-              Math.abs(ov.speed - 1) > 0.01 ? `${(1 / ov.speed).toFixed(3)}*(PTS-STARTPTS)` : 'PTS-STARTPTS';
-            pipChains.push(
-              `[${inpIdx}:v]scale=${pipW}:${pipH}:force_original_aspect_ratio=increase,crop=${pipW}:${pipH},format=rgba,colorchannelmixer=aa=${alpha},setpts=${speedExpr}+${startT}/TB[pip${ovIdx}]`
+              !ov.isFreezeFrame && Math.abs(ov.speed - 1) > 0.01
+                ? `${(1 / ov.speed).toFixed(3)}*(PTS-STARTPTS)`
+                : 'PTS-STARTPTS';
+            const pipPreOps: string[] = [
+              `scale=${pipW}:${pipH}:force_original_aspect_ratio=increase`,
+              `crop=${pipW}:${pipH}`,
+            ];
+            if (ov.isFreezeFrame) {
+              pipPreOps.push(
+                `trim=duration=0.1`,
+                'setpts=PTS-STARTPTS',
+                `tpad=stop_mode=clone:stop_duration=${ovTimelineDur.toFixed(3)}`,
+                `trim=duration=${ovTimelineDur.toFixed(3)}`
+              );
+            } else if (ov.reversed) {
+              pipPreOps.push('reverse');
+            }
+            pipPreOps.push(
+              'format=rgba',
+              `colorchannelmixer=aa=${alpha}`,
+              `setpts=${speedExpr}+${startT}/TB`
             );
+            pipChains.push(`[${inpIdx}:v]${pipPreOps.join(',')}[pip${ovIdx}]`);
             const nextPad = `vcomp${ovIdx}`;
             pipChains.push(
               `[${curVidPad}][pip${ovIdx}]overlay=x=${pipX}:y=${pipY}:enable='between(t,${startT},${endT})':eof_action=pass[${nextPad}]`
@@ -2084,9 +2243,11 @@ async function runLocalFfmpegToolInternal(
               const inIdx = nextInputIdx++;
               const scaledPad = `vt${idxInBatch}`;
               const outPadLabel = `vto${idxInBatch}`;
+              const adjStart = mapTimelineSecToExportSec(item.startSec);
+              const adjEnd = Math.max(adjStart + 0.05, mapTimelineSecToExportSec(item.endSec));
               ovChains.push(`[${inIdx}:v]scale=${outW}:${outH},format=rgba[${scaledPad}]`);
               ovChains.push(
-                `[${curVidPad}][${scaledPad}]overlay=0:0:enable='between(t,${item.startSec.toFixed(3)},${item.endSec.toFixed(3)})'[${outPadLabel}]`
+                `[${curVidPad}][${scaledPad}]overlay=0:0:enable='between(t,${adjStart.toFixed(3)},${adjEnd.toFixed(3)})'[${outPadLabel}]`
               );
               curVidPad = outPadLabel;
             });
@@ -2142,8 +2303,10 @@ async function runLocalFfmpegToolInternal(
           onProgress(0.85, outFile);
           const wmOut = `nle_wm_${outFile}`;
           tempFilesToClean.push(wmOut);
+          const adjWmStart = mapTimelineSecToExportSec(Math.max(0, wmStartNum));
+          const adjWmEnd = Math.max(adjWmStart + 0.05, mapTimelineSecToExportSec(wmEndNum));
           const wmEnable = hasWmRange
-            ? `:enable='between(t,${Math.max(0, wmStartNum).toFixed(3)},${wmEndNum.toFixed(3)})'`
+            ? `:enable='between(t,${adjWmStart.toFixed(3)},${adjWmEnd.toFixed(3)})'`
             : '';
           const wmFilter = isGif
             ? `[1:v]scale=${outW}:${outH},format=rgba[wm];[0:v][wm]overlay=0:0${wmEnable},split[ga][gb];[ga]palettegen[gp];[gb][gp]paletteuse[vwm]`
@@ -2222,16 +2385,31 @@ async function runLocalFfmpegToolInternal(
             const mixedOut = `nle_mixed_${outFile}`;
             tempFilesToClean.push(mixedOut);
 
-            const hasVoiceover = resolvedExtTracks.some((t) => t.clip.kind === 'voiceover');
+            const voWindows = resolvedExtTracks
+              .filter((t) => t.clip.kind === 'voiceover')
+              .map(({clip}) => {
+                const st = mapTimelineSecToExportSec(clip.timelineStart);
+                const dur = Math.max(0.2, Number((clip.sourceEnd - clip.sourceStart).toFixed(3)));
+                return {start: st, end: Number((st + dur).toFixed(3))};
+              });
+            const hasVoiceover = voWindows.length > 0;
+            const voBetweenExpr = voWindows
+              .map((w) => `between(t,${w.start.toFixed(2)},${w.end.toFixed(2)})`)
+              .join('+');
             const mixInputs: string[] = ['-i', outFile];
             const filterChains: string[] = [];
             const mixPadLabels: string[] = [];
 
             if (renderedHasAudio) {
-              const mainDuckGain = audioDuckingEnabled && hasVoiceover ? 0.55 : 1.0;
-              filterChains.push(
-                `[0:a:0]aformat=sample_rates=48000:channel_layouts=stereo,volume=${mainDuckGain.toFixed(2)}[amain]`
-              );
+              if (audioDuckingEnabled && hasVoiceover && voBetweenExpr) {
+                filterChains.push(
+                  `[0:a:0]aformat=sample_rates=48000:channel_layouts=stereo,volume='if(${voBetweenExpr},0.50,1.0)':eval=frame[amain]`
+                );
+              } else {
+                filterChains.push(
+                  `[0:a:0]aformat=sample_rates=48000:channel_layouts=stereo[amain]`
+                );
+              }
               mixPadLabels.push('[amain]');
             }
 
@@ -2239,13 +2417,12 @@ async function runLocalFfmpegToolInternal(
               mixInputs.push('-i', vfsName);
               const inputIdx = idx + 1;
               const clipDur = Math.max(0.2, Number((clip.sourceEnd - clip.sourceStart).toFixed(3)));
-              const delayMs = Math.max(0, Math.round(clip.timelineStart * 1000));
+              const adjStartSec = mapTimelineSecToExportSec(clip.timelineStart);
+              const delayMs = Math.max(0, Math.round(adjStartSec * 1000));
               const masterFactor = Math.max(0, volumePct / 100);
-              const duckFactor =
-                clip.kind === 'music' && (audioDuckingEnabled || clip.ducking) && (hasVoiceover || renderedHasAudio)
-                  ? 0.45
-                  : 1.0;
-              const effGain = Math.min(2.5, Math.max(0.02, (clip.volume / 100) * masterFactor * duckFactor));
+              const baseGain = Math.min(2.5, Math.max(0.02, (clip.volume / 100) * masterFactor));
+              const shouldDuckMusic =
+                clip.kind === 'music' && (audioDuckingEnabled || clip.ducking);
 
               const chain: string[] = [
                 `atrim=start=${clip.sourceStart.toFixed(3)}:duration=${clipDur.toFixed(3)}`,
@@ -2255,7 +2432,6 @@ async function runLocalFfmpegToolInternal(
               if (clip.noiseReduction) {
                 chain.push('highpass=f=85,lowpass=f=11500');
               }
-              chain.push(`volume=${effGain.toFixed(2)}`);
               if (clip.fadeInSec > 0.05) {
                 const dIn = Math.min(clip.fadeInSec, clipDur * 0.45);
                 chain.push(`afade=t=in:st=0:d=${dIn.toFixed(2)}`);
@@ -2267,16 +2443,33 @@ async function runLocalFfmpegToolInternal(
               if (delayMs > 0) {
                 chain.push(`adelay=${delayMs}|${delayMs}`);
               }
+              // Apply volume (with dynamic time-windowed ducking during voiceover speech when enabled)
+              if (shouldDuckMusic && hasVoiceover && voBetweenExpr) {
+                const duckedGain = (baseGain * 0.38).toFixed(3);
+                chain.push(
+                  `volume='if(${voBetweenExpr},${duckedGain},${baseGain.toFixed(3)})':eval=frame`
+                );
+              } else if (shouldDuckMusic && renderedHasAudio) {
+                chain.push(`volume=${(baseGain * 0.55).toFixed(3)}`);
+              } else {
+                chain.push(`volume=${baseGain.toFixed(3)}`);
+              }
               const pad = `aext${idx}`;
               filterChains.push(`[${inputIdx}:a]${chain.join(',')}[${pad}]`);
               mixPadLabels.push(`[${pad}]`);
             });
 
+            // Apply Master Bus DSP (EQ, Compressor, Limiter) across the complete mixed audio bus
+            const masterBusDsp = buildMasterDspFilters();
+            if (!masterBusDsp.some((f) => f.startsWith('alimiter'))) {
+              masterBusDsp.push('alimiter=limit=0.95');
+            }
+            const busDspSuffix = masterBusDsp.join(',');
             if (mixPadLabels.length === 1) {
-              filterChains.push(`${mixPadLabels[0]}alimiter=limit=0.95[amixed]`);
+              filterChains.push(`${mixPadLabels[0]}${busDspSuffix}[amixed]`);
             } else {
               filterChains.push(
-                `${mixPadLabels.join('')}amix=inputs=${mixPadLabels.length}:duration=first:dropout_transition=2:normalize=0,alimiter=limit=0.95[amixed]`
+                `${mixPadLabels.join('')}amix=inputs=${mixPadLabels.length}:duration=first:dropout_transition=2:normalize=0,${busDspSuffix}[amixed]`
               );
             }
 

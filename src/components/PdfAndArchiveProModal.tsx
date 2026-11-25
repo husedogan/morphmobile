@@ -535,12 +535,12 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                 key={item.id}
                 type="button"
                 onClick={() => setTab(item.id)}
-                className={`flex min-h-[38px] items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-bold ${
+                className={`flex min-h-[40px] flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[10.5px] leading-tight font-bold sm:flex-row sm:gap-1.5 sm:px-2 sm:text-xs ${
                   active ? 'morph-accent-btn shadow-sm' : 'text-[var(--muted)] hover:text-[var(--ink)]'
                 }`}
               >
-                <Icon className="h-3.5 w-3.5" />
-                <span className="truncate">{isTr ? item.tr : item.en}</span>
+                <Icon className="h-3.5 w-3.5 shrink-0" />
+                <span className="max-w-full truncate">{isTr ? item.tr : item.en}</span>
               </button>
             );
           })}
@@ -555,10 +555,10 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                 <button
                   type="button"
                   onClick={() => pdfInputRef.current?.click()}
-                  className="flex h-9 items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)]"
+                  className="flex h-9 min-w-0 max-w-full items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)]"
                 >
-                  <Upload className="h-3.5 w-3.5 text-[var(--accent-text)]" />
-                  <span>{pdfFile ? pdfFile.name : isTr ? 'PDF Dosyası Seç' : 'Pick PDF File'}</span>
+                  <Upload className="h-3.5 w-3.5 shrink-0 text-[var(--accent-text)]" />
+                  <span className="truncate">{pdfFile ? pdfFile.name : isTr ? 'PDF Dosyası Seç' : 'Pick PDF File'}</span>
                 </button>
                 <button
                   type="button"
@@ -705,10 +705,10 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                 <button
                   type="button"
                   onClick={() => pdfInputRef.current?.click()}
-                  className="flex h-9 items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-bold text-[var(--ink)]"
+                  className="flex h-9 min-w-0 max-w-full items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-bold text-[var(--ink)]"
                 >
-                  <Upload className="h-3.5 w-3.5 text-[var(--accent-text)]" />
-                  <span>{pdfFile ? pdfFile.name : isTr ? 'PDF Seç' : 'Pick PDF'}</span>
+                  <Upload className="h-3.5 w-3.5 shrink-0 text-[var(--accent-text)]" />
+                  <span className="truncate">{pdfFile ? pdfFile.name : isTr ? 'PDF Seç' : 'Pick PDF'}</span>
                 </button>
                 <div className="flex items-center gap-2 text-xs">
                   <span className="text-[var(--muted)]">{isTr ? 'Hedef Sayfa:' : 'Target Page:'}</span>
@@ -920,15 +920,15 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                 <button
                   type="button"
                   onClick={() => zipInputRef.current?.click()}
-                  className="flex h-9 items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-bold text-[var(--ink)]"
+                  className="flex h-9 min-w-0 max-w-full items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-bold text-[var(--ink)]"
                 >
-                  <Archive className="h-3.5 w-3.5 text-amber-400" />
-                  <span>{zipFile ? zipFile.name : isTr ? 'ZIP Arşivi Aç' : 'Open ZIP Archive'}</span>
+                  <Archive className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+                  <span className="truncate">{zipFile ? zipFile.name : isTr ? 'ZIP Arşivi Aç' : 'Open ZIP Archive'}</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => zipAddFileRef.current?.click()}
-                  className="flex h-9 items-center gap-1.5 rounded-xl border border-[var(--accent)]/45 bg-[var(--accent)]/12 px-3 text-xs font-bold text-[var(--accent-text)]"
+                  className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-[var(--accent)]/45 bg-[var(--accent)]/12 px-3 text-xs font-bold text-[var(--accent-text)]"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   <span>{isTr ? 'Arşive Dosya Ekle' : 'Add Files to ZIP'}</span>
@@ -938,7 +938,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                     type="button"
                     disabled={busy}
                     onClick={handleSaveModifiedZip}
-                    className="ml-auto flex h-9 items-center gap-1.5 rounded-xl border border-emerald-500/45 bg-emerald-500/12 px-3 text-xs font-bold text-emerald-400"
+                    className="ml-auto flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-emerald-500/45 bg-emerald-500/12 px-3 text-xs font-bold text-emerald-400"
                   >
                     <Download className="h-3.5 w-3.5" />
                     <span>{isTr ? 'Güncel ZIP’i Kaydet' : 'Save Updated ZIP'}</span>
@@ -948,8 +948,8 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
 
               {zipObj && (
                 <>
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
+                  <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
+                    <div className="relative min-w-0 flex-1">
                       <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" />
                       <input
                         type="text"
@@ -963,7 +963,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                       type="button"
                       disabled={busy || !zipEntries.some((e) => e.selected)}
                       onClick={handleExtractSelectedZip}
-                      className="morph-accent-btn h-9 rounded-xl px-3.5 text-xs font-bold disabled:opacity-40"
+                      className="morph-accent-btn min-h-9 shrink-0 whitespace-nowrap rounded-xl px-3.5 py-1.5 text-xs font-bold disabled:opacity-40"
                     >
                       {isTr
                         ? `Seçilenleri Çıkar (${zipEntries.filter((e) => e.selected).length})`
@@ -1087,7 +1087,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                               )
                             );
                           }}
-                          className="flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2 py-1.5 text-xs text-[var(--ink)]"
+                          className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2 py-1.5 text-xs text-[var(--ink)]"
                         >
                           {Object.entries(STEP_LABELS).map(([k, meta]) => (
                             <option key={k} value={k}>

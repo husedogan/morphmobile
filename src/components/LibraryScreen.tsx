@@ -48,6 +48,8 @@ interface LibraryScreenProps {
   onDelete: (id: string) => void;
   onClearAll: () => void;
   onShowToast?: (msg: string) => void;
+  onModalCountChange?: (count: number) => void;
+  closeSignal?: number;
 }
 
 type FilterKind = 'all' | 'image' | 'pdf' | 'archive' | 'other';
@@ -64,6 +66,8 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   onDelete,
   onClearAll,
   onShowToast,
+  onModalCountChange,
+  closeSignal = 0,
 }) => {
   const [filter, setFilter] = useState<FilterKind>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -74,6 +78,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   const [confirmClear, setConfirmClear] = useState(false);
   const [previewItem, setPreviewItem] = useState<{item: ExportItem; url: string} | null>(null);
   const ownedPreviewUrlRef = useRef<string | null>(null);
+  const prevCloseSignalRef = useRef<number>(closeSignal);
   const [folders, setFolders] = useState<LibraryFolder[]>(() => loadLibraryFolders());
   const [itemTags, setItemTags] = useState<Record<string, string>>(() => loadLibraryItemTags());
   const [activeFolder, setActiveFolder] = useState<string>('all');
@@ -137,6 +142,15 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   }, [items]);
 
   const openPreview = (item: ExportItem) => {
+    const hasBlob = Boolean(item.blob && item.blob.size > 0);
+    if (!item.previewUrl && !hasBlob) {
+      onShowToast?.(
+        lang === 'tr'
+          ? 'Bu dosya için tarayıcı önizlemesi mevcut değil.'
+          : 'In-browser preview is unavailable for this file.'
+      );
+      return;
+    }
     if (ownedPreviewUrlRef.current) {
       URL.revokeObjectURL(ownedPreviewUrlRef.current);
       ownedPreviewUrlRef.current = null;
@@ -167,6 +181,20 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   }, []);
 
   useEffect(() => {
+    onModalCountChange?.((previewItem ? 1 : 0) + (confirmClear ? 1 : 0));
+  }, [previewItem, confirmClear, onModalCountChange]);
+
+  useEffect(() => {
+    if (closeSignal === prevCloseSignalRef.current) return;
+    prevCloseSignalRef.current = closeSignal;
+    if (previewItem) {
+      closePreview();
+    } else if (confirmClear) {
+      setConfirmClear(false);
+    }
+  }, [closeSignal, previewItem, confirmClear]);
+
+  useEffect(() => {
     if (!confirmClear && !previewItem) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -186,9 +214,25 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   };
 
   const selectableFiltered = useMemo(
-    () => filtered.filter((item) => !isExpiredItem(item)),
+    () => filtered.filter((item) => !isExpiredItem(item) && item.blob && item.blob.size > 0),
     [filtered]
   );
+
+  const commitNewFolder = () => {
+    const trimmed = newFolderName.trim();
+    if (!trimmed) return;
+    const palette = ['#06B6D4', '#8B5CF6', '#F97316', '#EC4899', '#22C55E'];
+    const created: LibraryFolder = {
+      id: `fld_${Date.now()}`,
+      name: trimmed,
+      color: palette[folders.length % palette.length],
+    };
+    const next = [...folders, created];
+    setFolders(next);
+    saveLibraryFolders(next);
+    setNewFolderName('');
+    setAddingFolder(false);
+  };
 
   const handleBatchZipDownload = async () => {
     const picked = items.filter(
@@ -413,28 +457,31 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                   value={newFolderName}
                   onChange={(e) => setNewFolderName(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && newFolderName.trim()) {
-                      const palette = ['#06B6D4', '#8B5CF6', '#F97316', '#EC4899', '#22C55E'];
-                      const created: LibraryFolder = {
-                        id: `fld_${Date.now()}`,
-                        name: newFolderName.trim(),
-                        color: palette[folders.length % palette.length],
-                      };
-                      const next = [...folders, created];
-                      setFolders(next);
-                      saveLibraryFolders(next);
-                      setNewFolderName('');
-                      setAddingFolder(false);
+                    if (e.key === 'Enter') {
+                      commitNewFolder();
                     }
                   }}
                   placeholder={lang === 'tr' ? 'Klasör adı…' : 'Folder…'}
-                  className="w-28 rounded-xl border border-[var(--accent)] bg-[var(--surface)] px-2.5 py-1 text-[11px] text-[var(--ink)] focus:outline-none"
+                  className="w-28 rounded-xl border border-[var(--accent)] bg-[var(--surface)] px-2.5 py-1.5 text-[11px] text-[var(--ink)] focus:outline-none"
                   autoFocus
                 />
                 <button
                   type="button"
-                  onClick={() => setAddingFolder(false)}
-                  className="p-1 text-[var(--muted)]"
+                  disabled={!newFolderName.trim()}
+                  onClick={commitNewFolder}
+                  aria-label={lang === 'tr' ? 'Klasörü Onayla' : 'Confirm Folder'}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--accent)]/50 bg-[var(--accent)]/15 text-[var(--accent-text)] disabled:opacity-35"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewFolderName('');
+                    setAddingFolder(false);
+                  }}
+                  aria-label={t('Cancel', lang)}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted)] hover:text-[var(--ink)]"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -595,20 +642,22 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
             {filtered.map((item) => {
               const kind = detectFileKind(item.name, item.mime);
               const isBlobExpired = isExpiredItem(item);
+              const hasInMemoryBlob = Boolean(item.blob && item.blob.size > 0);
               const canPreview =
                 !isBlobExpired &&
+                (Boolean(item.previewUrl) || hasInMemoryBlob) &&
                 (kind === 'image' || kind === 'pdf' || kind === 'video' || kind === 'audio');
               const isSelected = selectedIds.includes(item.id);
               return (
                 <div
                   key={item.id}
                   onClick={
-                    selectMode && !isBlobExpired
+                    selectMode && !isBlobExpired && hasInMemoryBlob
                       ? () => toggleSelectItem(item.id)
                       : undefined
                   }
-                  className={`flex items-center gap-2.5 rounded-2xl border p-2.5 transition-colors sm:gap-3 sm:p-3 ${
-                    selectMode && !isBlobExpired ? 'cursor-pointer' : ''
+                  className={`flex flex-wrap items-center gap-2.5 rounded-2xl border p-2.5 transition-colors sm:flex-nowrap sm:gap-3 sm:p-3 ${
+                    selectMode && !isBlobExpired && hasInMemoryBlob ? 'cursor-pointer' : ''
                   } ${
                     isSelected
                       ? 'border-[var(--accent)] bg-[var(--accent)]/10'
@@ -618,7 +667,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                   {selectMode && (
                     <button
                       type="button"
-                      disabled={isBlobExpired}
+                      disabled={isBlobExpired || !hasInMemoryBlob}
                       onClick={(e) => {
                         e.stopPropagation();
                         toggleSelectItem(item.id);
@@ -666,7 +715,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                     </p>
                   </div>
                   {!selectMode && (
-                    <div className="flex shrink-0 items-center gap-1.5">
+                    <div className="flex w-full shrink-0 items-center justify-end gap-1 border-t border-[var(--line)]/50 pt-1.5 sm:w-auto sm:border-t-0 sm:pt-0 sm:gap-1.5">
                       {showFoldersBar && (
                         <button
                           type="button"

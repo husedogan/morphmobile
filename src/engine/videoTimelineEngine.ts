@@ -441,6 +441,23 @@ export function findOverlayVideoClipAtTime(
   return null;
 }
 
+export function findAllOverlayVideoClipsAtTime(
+  videoClips: TimelineVideoClip[],
+  timelineSec: number
+): TimelineVideoClip[] {
+  return videoClips
+    .filter((c) => {
+      if (!isClipPipOverlay(c)) return false;
+      const start = c.timelineStart;
+      const end = clipTimelineEnd(c);
+      return timelineSec >= start - 0.002 && timelineSec <= end + 0.002;
+    })
+    .sort(
+      (a, b) =>
+        getClipTrackIndex(a) - getClipTrackIndex(b) || a.timelineStart - b.timelineStart
+    );
+}
+
 export function timelineToSourceTime(
   videoClips: TimelineVideoClip[],
   timelineSec: number,
@@ -853,8 +870,22 @@ export function deleteClipRipple(
     };
   }
   const targetTrack = getClipTrackIndex(target);
-  if (targetTrack >= 1) {
-    // Deleting a V2 overlay clip simply removes it without shifting V1 main clips
+  const targetIsPip = isClipPipOverlay(target);
+  const mainNonPipCount = videoClips.filter((c) => !isClipPipOverlay(c)).length;
+
+  if (!targetIsPip && mainNonPipCount <= 1) {
+    return {
+      videoClips,
+      textClips,
+      audioClips,
+      nextSelectedId: target.id,
+      didDelete: false,
+      reason: 'Ana video katmanındaki tek klip silinemez. Önce klibi bölün veya yeni klip ekleyin.',
+    };
+  }
+
+  if (targetIsPip) {
+    // Deleting a PiP overlay removes it without shifting main timeline clips
     const remaining = relabelTrackClips(videoClips.filter((c) => c.id !== clipId));
     return {
       videoClips: remaining,
@@ -865,39 +896,49 @@ export function deleteClipRipple(
     };
   }
 
-  const v1Sorted = videoClips
-    .filter((c) => getClipTrackIndex(c) === 0)
+  const sameTrackSorted = videoClips
+    .filter((c) => getClipTrackIndex(c) === targetTrack && !isClipPipOverlay(c))
     .sort((a, b) => a.timelineStart - b.timelineStart);
-  const v2Clips = videoClips.filter((c) => getClipTrackIndex(c) >= 1);
+  const otherClips = videoClips.filter(
+    (c) => getClipTrackIndex(c) !== targetTrack || isClipPipOverlay(c)
+  );
 
-  if (v1Sorted.length <= 1) {
-    return {
-      videoClips,
-      textClips,
-      audioClips,
-      nextSelectedId: v1Sorted[0]?.id ?? null,
-      didDelete: false,
-      reason: 'Ana video katmanındaki tek klip silinemez. Önce klibi bölün veya yeni klip ekleyin.',
-    };
-  }
-  const targetIdx = v1Sorted.findIndex((c) => c.id === clipId);
+  const targetIdx = sameTrackSorted.findIndex((c) => c.id === clipId);
   const removedStart = target.timelineStart;
-  const nextClip = v1Sorted[targetIdx + 1];
-  const shiftAmount = nextClip
-    ? snapToFrame(nextClip.timelineStart - removedStart, fps)
-    : clipTimelineDuration(target);
+  const removedDur = clipTimelineDuration(target);
+  const nextSameTrackClip = sameTrackSorted[targetIdx + 1];
+  const shiftAmount = nextSameTrackClip
+    ? Math.max(removedDur, snapToFrame(nextSameTrackClip.timelineStart - removedStart, fps))
+    : removedDur;
 
-  const remainingV1 = v1Sorted.filter((c) => c.id !== clipId);
-  let cursor = 0;
-  const packedV1 = remainingV1.map((c) => {
-    const start = snapToFrame(cursor, fps);
-    cursor = start + clipTimelineDuration(c);
-    return {...c, timelineStart: start};
-  });
+  // Preserve intentional earlier gaps before removedStart; only ripple clips strictly after the deleted clip
+  let prevEnd = 0;
+  const shiftedSameTrack = sameTrackSorted
+    .filter((c) => c.id !== clipId)
+    .map((c) => {
+      let nextStart = c.timelineStart;
+      if (c.timelineStart > removedStart + 0.002) {
+        nextStart = Math.max(prevEnd, snapToFrame(c.timelineStart - shiftAmount, fps));
+      } else {
+        nextStart = Math.max(prevEnd, snapToFrame(c.timelineStart, fps));
+      }
+      prevEnd = snapToFrame(nextStart + clipTimelineDuration(c), fps);
+      return {...c, timelineStart: nextStart};
+    });
+
+  // Also shift later non-PiP clips on other rows when syncing layers on main timeline
+  const adjustedOtherClips =
+    syncOtherLayers && targetTrack === 0 && shiftAmount > 0
+      ? otherClips.map((c) =>
+          c.timelineStart > removedStart + 0.002
+            ? {...c, timelineStart: Math.max(0, snapToFrame(c.timelineStart - shiftAmount, fps))}
+            : c
+        )
+      : otherClips;
 
   let nextTexts = textClips;
   let nextAudios = audioClips;
-  if (syncOtherLayers && shiftAmount > 0) {
+  if (syncOtherLayers && targetTrack === 0 && shiftAmount > 0) {
     nextTexts = textClips.map((t) =>
       t.timelineStart >= removedStart
         ? {...t, timelineStart: Math.max(0, snapToFrame(t.timelineStart - shiftAmount, fps))}
@@ -910,8 +951,11 @@ export function deleteClipRipple(
     );
   }
 
-  const finalClips = relabelTrackClips([...packedV1, ...v2Clips]);
-  const nextSel = packedV1[Math.min(targetIdx, packedV1.length - 1)]?.id ?? finalClips[0]?.id ?? null;
+  const finalClips = relabelTrackClips([...shiftedSameTrack, ...adjustedOtherClips]);
+  const nextSel =
+    shiftedSameTrack[Math.min(targetIdx, Math.max(0, shiftedSameTrack.length - 1))]?.id ??
+    finalClips[0]?.id ??
+    null;
   return {
     videoClips: finalClips,
     textClips: nextTexts,
@@ -1006,45 +1050,113 @@ export function insertFreezeFrameAtPlayhead(
   freezeDurationSec: number,
   fps: ProjectFps
 ): {clips: TimelineVideoClip[]; freezeClipId: string | null; didInsert: boolean} {
-  const v1Clips = videoClips.filter((c) => getClipTrackIndex(c) === 0);
+  const mainClips = videoClips.filter((c) => !isClipPipOverlay(c));
   const target =
-    findVideoClipAtTime(videoClips, playheadSec, 0) ||
-    v1Clips.find((c) => c.id === selectedClipId) ||
-    v1Clips[0];
+    findMainVideoClipAtTime(videoClips, playheadSec) ||
+    mainClips.find((c) => c.id === selectedClipId) ||
+    mainClips[0];
   if (!target) return {clips: videoClips, freezeClipId: null, didInsert: false};
 
+  const targetTrack = getClipTrackIndex(target);
+  const clipStart = target.timelineStart;
+  const clipEnd = clipTimelineEnd(target);
+  const safeFreezeDur = Math.max(0.25, snapToFrame(freezeDurationSec, fps));
+  const minEdge = Math.max(0.08, framesToSec(2, fps));
+  const stamp = Date.now().toString(36).slice(-4);
+  const freezeId = `freeze-${stamp}`;
+
   const mapped = timelineToSourceTime(videoClips, playheadSec, 0);
-  const freezeSourceTime = snapToFrame(mapped.clip ? mapped.sourceTime : target.sourceStart, fps);
-  const freezeId = `freeze-${Date.now().toString(36).slice(-4)}`;
+  const freezeSourceTime = snapToFrame(
+    mapped.clip && mapped.clip.id === target.id
+      ? mapped.sourceTime
+      : playheadSec <= clipStart + minEdge
+        ? target.reversed
+          ? target.sourceEnd
+          : target.sourceStart
+        : target.reversed
+          ? target.sourceStart
+          : target.sourceEnd,
+    fps
+  );
+
+  const isInsideClip =
+    playheadSec > clipStart + minEdge && playheadSec < clipEnd - minEdge && !target.isFreezeFrame;
+
+  const insertAtSec = isInsideClip
+    ? snapToFrame(playheadSec, fps)
+    : playheadSec <= clipStart + minEdge
+      ? clipStart
+      : clipEnd;
 
   const freezeClip: TimelineVideoClip = {
     ...target,
     id: freezeId,
     label: 'Donuk Kare',
-    trackIndex: 0,
+    trackIndex: targetTrack,
+    layerMode: 'video',
     sourceStart: freezeSourceTime,
-    sourceEnd: snapToFrame(freezeSourceTime + freezeDurationSec, fps),
-    timelineStart: clipTimelineEnd(target),
+    sourceEnd: snapToFrame(freezeSourceTime + safeFreezeDur, fps),
+    timelineStart: insertAtSec,
     speed: 1,
     reversed: false,
     isFreezeFrame: true,
     muted: true,
     volume: 0,
+    fadeInSec: 0,
+    fadeOutSec: 0,
+    transitionIn: 'none',
   };
 
-  const v1Sorted = [...v1Clips].sort((a, b) => a.timelineStart - b.timelineStart);
-  const v2Clips = videoClips.filter((c) => getClipTrackIndex(c) >= 1);
-  const idx = v1Sorted.findIndex((c) => c.id === target.id);
-  v1Sorted.splice(idx + 1, 0, freezeClip);
+  const nextClips: TimelineVideoClip[] = [];
+  for (const c of videoClips) {
+    if (c.id === target.id) {
+      if (isInsideClip) {
+        const localOffset = Math.max(0, insertAtSec - clipStart);
+        const rawSourceSplit = target.reversed
+          ? target.sourceEnd - localOffset * target.speed
+          : target.sourceStart + localOffset * target.speed;
+        const sourceSplit = snapToFrame(
+          Math.min(target.sourceEnd - 0.04, Math.max(target.sourceStart + 0.04, rawSourceSplit)),
+          fps
+        );
+        const firstPart: TimelineVideoClip = {
+          ...target,
+          id: `${target.id}-fa-${stamp}`,
+          sourceStart: target.reversed ? sourceSplit : target.sourceStart,
+          sourceEnd: target.reversed ? target.sourceEnd : sourceSplit,
+          timelineStart: clipStart,
+          fadeOutSec: 0,
+        };
+        const secondPart: TimelineVideoClip = {
+          ...target,
+          id: `${target.id}-fb-${stamp}`,
+          sourceStart: target.reversed ? target.sourceStart : sourceSplit,
+          sourceEnd: target.reversed ? sourceSplit : target.sourceEnd,
+          timelineStart: snapToFrame(insertAtSec + safeFreezeDur, fps),
+          fadeInSec: 0,
+          transitionIn: 'none',
+        };
+        nextClips.push(firstPart, freezeClip, secondPart);
+      } else if (insertAtSec <= clipStart + 0.002) {
+        nextClips.push(freezeClip, {
+          ...target,
+          timelineStart: snapToFrame(target.timelineStart + safeFreezeDur, fps),
+        });
+      } else {
+        nextClips.push(target, freezeClip);
+      }
+    } else if (!isClipPipOverlay(c) && c.timelineStart >= insertAtSec - 0.002) {
+      // Shift subsequent main video clips forward so freeze frame never collides with them, while preserving earlier gaps
+      nextClips.push({
+        ...c,
+        timelineStart: snapToFrame(c.timelineStart + safeFreezeDur, fps),
+      });
+    } else {
+      nextClips.push(c);
+    }
+  }
 
-  let cursor = 0;
-  const packedV1 = v1Sorted.map((c) => {
-    const start = snapToFrame(cursor, fps);
-    cursor = start + clipTimelineDuration(c);
-    return {...c, timelineStart: start};
-  });
-
-  return {clips: relabelTrackClips([...packedV1, ...v2Clips]), freezeClipId: freezeId, didInsert: true};
+  return {clips: relabelTrackClips(nextClips), freezeClipId: freezeId, didInsert: true};
 }
 
 export interface TrackTimeInterval {

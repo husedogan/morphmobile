@@ -198,7 +198,22 @@ export type WheelIconStylePref =
   | 'pill_dock'
   | 'octa_shield'
   | 'blade_hex'
-  | 'star_prism';
+  | 'star_prism'
+  | 'shield_crest';
+
+export type WheelInnerStylePref =
+  | 'auto'
+  | 'wheel_spokes'
+  | 'morph_m'
+  | 'gear_hub'
+  | 'polar_star'
+  | 'hex_core'
+  | 'turbine'
+  | 'orbit'
+  | 'crosshair'
+  | 'bolt'
+  | 'deadpool'
+  | 'minimal_dot';
 
 export type WheelBurnStylePref =
   | 'classic_fire'
@@ -222,56 +237,96 @@ export interface WheelShapeMeta {
   descEn: string;
 }
 
-export const EXP_WHEEL_SHAPES: readonly WheelShapeMeta[] = [
+export interface WheelInnerStyleMeta {
+  id: WheelInnerStylePref;
+  titleTr: string;
+  titleEn: string;
+}
+
+export const WHEEL_INNER_STYLES: readonly WheelInnerStyleMeta[] = [
+  {id: 'auto', titleTr: 'Otomatik', titleEn: 'Auto'},
+  {id: 'wheel_spokes', titleTr: 'Çark', titleEn: 'Wheel'},
+  {id: 'morph_m', titleTr: 'Morph', titleEn: 'Morph'},
+  {id: 'gear_hub', titleTr: 'Dişli', titleEn: 'Gear'},
+  {id: 'polar_star', titleTr: 'Yıldız', titleEn: 'Star'},
+  {id: 'hex_core', titleTr: 'Altıgen', titleEn: 'Hex'},
+  {id: 'turbine', titleTr: 'Türbin', titleEn: 'Turbine'},
+  {id: 'orbit', titleTr: 'Yörünge', titleEn: 'Orbit'},
+  {id: 'crosshair', titleTr: 'Nişan', titleEn: 'Reticle'},
+  {id: 'bolt', titleTr: 'Şimşek', titleEn: 'Bolt'},
+  {id: 'deadpool', titleTr: 'Deadpool', titleEn: 'Deadpool'},
+  {id: 'minimal_dot', titleTr: 'Nokta', titleEn: 'Dot'},
+] as const;
+
+export const WHEEL_OUTER_SHAPES: readonly WheelShapeMeta[] = [
+  {
+    id: 'wheel',
+    titleTr: 'Yuvarlak',
+    titleEn: 'Round',
+    descTr: 'Klasik daire',
+    descEn: 'Classic circle',
+  },
   {
     id: 'squircle',
     titleTr: 'Karemsi',
     titleEn: 'Squircle',
-    descTr: 'Yuvarlatılmış kare',
+    descTr: 'Yumuşak kare',
     descEn: 'Rounded square',
   },
   {
     id: 'diamond',
     titleTr: 'Elmas',
     titleEn: 'Diamond',
-    descTr: '45° prizma kesim',
-    descEn: '45° prism cut',
+    descTr: '45° prizma',
+    descEn: '45° prism',
   },
   {
     id: 'pill_dock',
     titleTr: 'Kapsül',
     titleEn: 'Capsule',
-    descTr: 'Yatay kapsül bar',
+    descTr: 'Yatay bar',
     descEn: 'Horizontal pill',
   },
   {
     id: 'octa_shield',
     titleTr: 'Sekizgen',
     titleEn: 'Octagon',
-    descTr: '8 köşeli kalkan',
-    descEn: '8-sided shield',
+    descTr: '8 köşeli',
+    descEn: '8-sided',
   },
   {
     id: 'blade_hex',
     titleTr: 'Altıgen',
-    titleEn: 'Cyber Hex',
-    descTr: '6 köşeli türbin',
-    descEn: '6-sided turbine',
+    titleEn: 'Hexagon',
+    descTr: '6 köşeli',
+    descEn: '6-sided',
   },
   {
     id: 'star_prism',
     titleTr: 'Yıldız',
-    titleEn: 'Star Orbit',
-    descTr: 'Yıldız & yörünge',
-    descEn: 'Star & orbit core',
+    titleEn: 'Star',
+    descTr: '4 uçlu',
+    descEn: '4-point star',
+  },
+  {
+    id: 'shield_crest',
+    titleTr: 'Kalkan',
+    titleEn: 'Crest',
+    descTr: 'Armalı',
+    descEn: 'Shield crest',
   },
 ] as const;
+
+export const WHEEL_SHAPES_CATALOG: readonly WheelShapeMeta[] = WHEEL_OUTER_SHAPES;
+export const EXP_WHEEL_SHAPES: readonly WheelShapeMeta[] = WHEEL_OUTER_SHAPES.slice(1);
 
 export type WheelSpinModePref =
   | 'both_cw'
   | 'outer_ccw_inner_cw'
   | 'outer_cw_inner_ccw'
   | 'both_ccw'
+  | 'outer_fixed_inner_cw'
+  | 'outer_fixed_inner_ccw'
   | 'pendulum_gyro'
   | 'turbo_counter';
 
@@ -313,6 +368,20 @@ export const WHEEL_SPIN_MODES: readonly WheelSpinModeMeta[] = [
     titleEn: 'Both Counter-CW',
     descTr: 'Dış ve iç sola',
     descEn: 'Outer & inner CCW',
+  },
+  {
+    id: 'outer_fixed_inner_cw',
+    titleTr: 'Dış Sabit, İçi Sağa',
+    titleEn: 'Fixed Shell, Inner CW',
+    descTr: 'Yalnızca iç sağa',
+    descEn: 'Only inner CW',
+  },
+  {
+    id: 'outer_fixed_inner_ccw',
+    titleTr: 'Dış Sabit, İçi Sola',
+    titleEn: 'Fixed Shell, Inner CCW',
+    descTr: 'Yalnızca iç sola',
+    descEn: 'Only inner CCW',
   },
   {
     id: 'pendulum_gyro',
@@ -375,6 +444,7 @@ export interface Prefs {
   mainWheelItems?: string[];
   wheelSide?: WheelSidePref;
   wheelIconStyle?: WheelIconStylePref;
+  wheelInnerStyle?: WheelInnerStylePref;
   uiScale?: UiScalePref;
   cornerStyle?: CornerStylePref;
   reducedMotion?: boolean;
@@ -414,6 +484,10 @@ export interface Prefs {
   expArmadilloHideOnFullPreview?: boolean;
   /** Defaults to true: auto-hide the rolled Cinema Wheel while video is playing, show again on pause */
   expArmadilloHideOnPlay?: boolean;
+  /** Defaults to true: show 3x3 Grid & Split Before/After buttons directly in Video Editor top header on mobile */
+  expVideoMobileGridInHeader?: boolean;
+  /** Defaults to true: show compact Master Mute button directly in Video Editor transport bar on mobile */
+  expVideoMobileMuteInTransport?: boolean;
   /** Optional extra timecode badges in Video Editor experimental bars & wheel top strip (wheel center timecode always stays ON) */
   expVideoExtraTimecodes?: boolean;
   expWheelCenterHoldCustomize?: boolean;

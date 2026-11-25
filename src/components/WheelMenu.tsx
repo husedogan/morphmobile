@@ -5,6 +5,7 @@ import {
   MAX_WHEEL_SLICES,
   WheelBurnStylePref,
   WheelIconStylePref,
+  WheelInnerStylePref,
   WheelSidePref,
   WheelSpinModePref,
   WheelSpinTriggerPref,
@@ -1257,6 +1258,7 @@ export const WheelFab: React.FC<{
   hidden?: boolean;
   side?: WheelSidePref;
   iconStyle?: WheelIconStylePref;
+  innerStyle?: WheelInnerStylePref;
   expWheelBurnEffect?: boolean;
   burnStyle?: WheelBurnStylePref;
   expWheelSpinEnabled?: boolean;
@@ -1275,6 +1277,7 @@ export const WheelFab: React.FC<{
   hidden = false,
   side = 'right',
   iconStyle = 'wheel',
+  innerStyle = 'auto',
   expWheelBurnEffect = false,
   burnStyle = 'classic_fire',
   expWheelSpinEnabled = false,
@@ -1359,7 +1362,9 @@ export const WheelFab: React.FC<{
   // Keep burn acceleration direction strictly aligned with the selected dual-layer spin mode's inner direction
   innerBurnDirRef.current =
     expWheelSpinEnabled &&
-    (expWheelSpinMode === 'both_ccw' || expWheelSpinMode === 'outer_cw_inner_ccw')
+    (expWheelSpinMode === 'both_ccw' ||
+      expWheelSpinMode === 'outer_cw_inner_ccw' ||
+      expWheelSpinMode === 'outer_fixed_inner_ccw')
       ? -1
       : 1;
 
@@ -1455,6 +1460,14 @@ export const WheelFab: React.FC<{
           case 'outer_cw_inner_ccw':
             st.outer = (st.outer + 46 * speedMul * dtSec) % 360;
             st.inner = (st.inner - 76 * speedMul * dtSec + 360) % 360;
+            break;
+          case 'outer_fixed_inner_cw':
+            st.outer = 0;
+            st.inner = (st.inner + 92 * speedMul * dtSec) % 360;
+            break;
+          case 'outer_fixed_inner_ccw':
+            st.outer = 0;
+            st.inner = (st.inner - 92 * speedMul * dtSec + 360) % 360;
             break;
           case 'pendulum_gyro':
             st.outer = Math.sin(st.elapsedSec * 2.15 * speedMul) * 34;
@@ -1891,7 +1904,7 @@ export const WheelFab: React.FC<{
         heat > 0.72 ? burnTheme.gradHotEnd : burnTheme.gradWarmEnd
       } ${Math.round(emberRatio * 100)}%, var(--accent-end))`;
 
-  // Shape geometry for both classic circular & 6 new non-circular designs
+  // Shape geometry for both classic circular & 7 sculpted non-circular designs
 
   const shapeShellClass =
     iconStyle === 'squircle'
@@ -1906,7 +1919,9 @@ export const WheelFab: React.FC<{
               ? 'h-[54px] w-[60px] rounded-none'
               : iconStyle === 'star_prism'
                 ? 'h-[62px] w-[62px] rounded-none'
-                : 'h-14 w-14 rounded-full';
+                : iconStyle === 'shield_crest'
+                  ? 'h-[58px] w-[58px] rounded-none'
+                  : 'h-14 w-14 rounded-full';
 
   const shapeClipPath: string | undefined =
     iconStyle === 'octa_shield'
@@ -1915,7 +1930,9 @@ export const WheelFab: React.FC<{
         ? 'polygon(25% 4%, 75% 4%, 99% 50%, 75% 96%, 25% 96%, 1% 50%)'
         : iconStyle === 'star_prism'
           ? 'polygon(50% 2%, 67% 33%, 98% 50%, 67% 67%, 50% 98%, 33% 67%, 2% 50%, 33% 33%)'
-          : undefined;
+          : iconStyle === 'shield_crest'
+            ? 'polygon(50% 2%, 95% 26%, 88% 78%, 50% 99%, 12% 78%, 5% 26%)'
+            : undefined;
 
   const baseOuterRot = (iconStyle === 'diamond' ? 45 : 0) + (expWheelSpinEnabled ? idleOuterDeg : 0);
   const effectiveBtnScale =
@@ -2123,6 +2140,14 @@ export const WheelFab: React.FC<{
       [-15.0, 24.8],
       [-29.4, 0],
     ];
+    const crestVerts: Array<[number, number]> = [
+      [0, -29.2],
+      [25.5, -14.8],
+      [21.5, 16.5],
+      [0, 29.5],
+      [-21.5, 16.5],
+      [-25.5, -14.8],
+    ];
 
     const sample = (count: number): PerimeterSample[] => {
       switch (iconStyle) {
@@ -2132,6 +2157,8 @@ export const WheelFab: React.FC<{
           return samplePolygon(octaVerts, count);
         case 'blade_hex':
           return samplePolygon(hexVerts, count);
+        case 'shield_crest':
+          return samplePolygon(crestVerts, count);
         case 'squircle':
           return sampleRoundedRect(27.5, 27.5, 17.5, count);
         case 'diamond':
@@ -2156,6 +2183,8 @@ export const WheelFab: React.FC<{
           return buildPolygonPath(octaVerts, 1 + inflatePx / 27.8);
         case 'blade_hex':
           return buildPolygonPath(hexVerts, 1 + inflatePx / 27.0);
+        case 'shield_crest':
+          return buildPolygonPath(crestVerts, 1 + inflatePx / 29.2);
         case 'squircle':
           return buildRoundedRectPath(27.5 + inflatePx, 27.5 + inflatePx, 17.5 + inflatePx * 0.65);
         case 'diamond':
@@ -2674,158 +2703,361 @@ export const WheelFab: React.FC<{
                 );
               })}
 
-            {iconStyle === 'wheel' && (
-              <>
-                {[0, 60, 120, 180, 240, 300].map((deg) => {
-                  const a1 = ((deg - 82) * Math.PI) / 180;
-                  const a2 = ((deg - 38) * Math.PI) / 180;
-                  const r = 10.5;
-                  const x1 = 14 + r * Math.cos(a1);
-                  const y1 = 14 + r * Math.sin(a1);
-                  const x2 = 14 + r * Math.cos(a2);
-                  const y2 = 14 + r * Math.sin(a2);
-                  return (
-                    <path
-                      key={deg}
-                      d={`M ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2}`}
-                      stroke={wheelTone}
-                      strokeWidth="2.3"
-                      strokeLinecap="round"
-                    />
-                  );
-                })}
-                <circle cx="14" cy="14" r={2.3 + toothReveal * 0.6} fill={wheelTone} />
-              </>
-            )}
-            {iconStyle === 'morph' && (
-              <>
-                <circle cx="14" cy="14" r="10.2" stroke={wheelTone} strokeWidth="1.9" strokeOpacity="0.45" />
-                <text
-                  x="14"
-                  y="18.2"
-                  textAnchor="middle"
-                  fontSize="15"
-                  fontWeight="800"
-                  fill={wheelTone}
-                  fontFamily="system-ui, sans-serif"
-                >
-                  m
-                </text>
-              </>
-            )}
-            {iconStyle === 'gear' && (
-              <g transform="translate(14 14) scale(0.72)">
-                <path d={PRECISION_GEAR_PATH} fill={wheelTone} fillRule="evenodd" />
-                <circle cx="0" cy="0" r="6.8" fill="none" stroke={wheelTone} strokeWidth="1.5" />
-                <circle cx="0" cy="0" r={3 + toothReveal * 0.6} fill={wheelTone} />
-              </g>
-            )}
-            {iconStyle === 'compass' && (
-              <>
-                <circle cx="14" cy="14" r="9.6" stroke={wheelTone} strokeWidth="1.8" strokeOpacity="0.4" />
-                <path
-                  d="M14 4 L16.7 11.3 L24 14 L16.7 16.7 L14 24 L11.3 16.7 L4 14 L11.3 11.3 Z"
-                  fill={wheelTone}
-                />
-                <circle cx="14" cy="14" r="2.2" fill="var(--accent)" />
-              </>
-            )}
-            {iconStyle === 'hex' && (
-              <>
-                <polygon
-                  points="14,3.8 22.8,8.9 22.8,19.1 14,24.2 5.2,19.1 5.2,8.9"
-                  stroke={wheelTone}
-                  strokeWidth="2.1"
-                  strokeLinejoin="round"
-                />
-                <circle cx="14" cy="14" r={3 + toothReveal * 0.6} fill={wheelTone} />
-              </>
-            )}
+            {(() => {
+              const renderCustomCore = (mode: Exclude<WheelInnerStylePref, 'auto'>) => {
+                switch (mode) {
+                  case 'morph_m':
+                    return (
+                      <>
+                        <circle cx="14" cy="14" r="9.6" stroke={wheelTone} strokeWidth="1.7" strokeOpacity="0.42" />
+                        <text
+                          x="14"
+                          y="18.2"
+                          textAnchor="middle"
+                          fontSize="14.5"
+                          fontWeight="800"
+                          fill={wheelTone}
+                          fontFamily="system-ui, sans-serif"
+                        >
+                          m
+                        </text>
+                      </>
+                    );
+                  case 'wheel_spokes':
+                    return (
+                      <>
+                        {[0, 60, 120, 180, 240, 300].map((deg) => {
+                          const a1 = ((deg - 82) * Math.PI) / 180;
+                          const a2 = ((deg - 38) * Math.PI) / 180;
+                          const r = 9.8;
+                          const x1 = 14 + r * Math.cos(a1);
+                          const y1 = 14 + r * Math.sin(a1);
+                          const x2 = 14 + r * Math.cos(a2);
+                          const y2 = 14 + r * Math.sin(a2);
+                          return (
+                            <path
+                              key={deg}
+                              d={`M ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2}`}
+                              stroke={wheelTone}
+                              strokeWidth="2.2"
+                              strokeLinecap="round"
+                            />
+                          );
+                        })}
+                        <circle cx="14" cy="14" r={2.3 + toothReveal * 0.5} fill={wheelTone} />
+                      </>
+                    );
+                  case 'gear_hub':
+                    return (
+                      <g transform="translate(14 14) scale(0.68)">
+                        <path d={PRECISION_GEAR_PATH} fill={wheelTone} fillRule="evenodd" />
+                        <circle cx="0" cy="0" r="6.8" fill="none" stroke={wheelTone} strokeWidth="1.5" />
+                        <circle cx="0" cy="0" r={3 + toothReveal * 0.6} fill={wheelTone} />
+                      </g>
+                    );
+                  case 'polar_star':
+                    return (
+                      <>
+                        <circle cx="14" cy="14" r="9.2" stroke={wheelTone} strokeWidth="1.5" strokeOpacity="0.36" />
+                        <path
+                          d="M14 4.5 L16.5 11.5 L23.5 14 L16.5 16.5 L14 23.5 L11.5 16.5 L4.5 14 L11.5 11.5 Z"
+                          fill={wheelTone}
+                        />
+                        <circle cx="14" cy="14" r="2.1" fill="var(--accent)" />
+                      </>
+                    );
+                  case 'hex_core':
+                    return (
+                      <>
+                        <polygon
+                          points="14,4.2 22.2,8.9 22.2,19.1 14,23.8 5.8,19.1 5.8,8.9"
+                          stroke={wheelTone}
+                          strokeWidth="2"
+                          strokeLinejoin="round"
+                        />
+                        <circle cx="14" cy="14" r={2.8 + toothReveal * 0.5} fill={wheelTone} />
+                      </>
+                    );
+                  case 'crosshair':
+                    return (
+                      <>
+                        <circle cx="14" cy="14" r="8.2" stroke={wheelTone} strokeWidth="1.8" strokeOpacity="0.72" />
+                        <line x1="14" y1="3.8" x2="14" y2="8.6" stroke={wheelTone} strokeWidth="2.1" strokeLinecap="round" />
+                        <line x1="14" y1="19.4" x2="14" y2="24.2" stroke={wheelTone} strokeWidth="2.1" strokeLinecap="round" />
+                        <line x1="3.8" y1="14" x2="8.6" y2="14" stroke={wheelTone} strokeWidth="2.1" strokeLinecap="round" />
+                        <line x1="19.4" y1="14" x2="24.2" y2="14" stroke={wheelTone} strokeWidth="2.1" strokeLinecap="round" />
+                        <circle cx="14" cy="14" r={2.4 + toothReveal * 0.5} fill={wheelTone} />
+                      </>
+                    );
+                  case 'turbine':
+                    return (
+                      <>
+                        {[0, 120, 240].map((deg) => (
+                          <path
+                            key={deg}
+                            d="M14 14 Q 18 7.5 22.8 10.5 Q 19.5 14.5 14 14 Z"
+                            fill={wheelTone}
+                            transform={`rotate(${deg} 14 14)`}
+                          />
+                        ))}
+                        <circle cx="14" cy="14" r={2.6 + toothReveal * 0.5} fill={wheelTone} />
+                      </>
+                    );
+                  case 'orbit':
+                    return (
+                      <>
+                        <path
+                          d="M 8.2 10.2 A 6.9 6.9 0 0 1 19.8 10.2"
+                          stroke={wheelTone}
+                          strokeWidth="2.1"
+                          strokeLinecap="round"
+                        />
+                        <path
+                          d="M 19.8 17.8 A 6.9 6.9 0 0 1 8.2 17.8"
+                          stroke={wheelTone}
+                          strokeWidth="2.1"
+                          strokeLinecap="round"
+                          strokeOpacity="0.82"
+                        />
+                        <circle cx="20.0" cy="10.4" r="1.55" fill={wheelTone} />
+                        <circle cx="8.0" cy="17.6" r="1.55" fill={wheelTone} fillOpacity="0.85" />
+                        <circle cx="14" cy="14" r={2.5 + toothReveal * 0.5} fill={wheelTone} />
+                      </>
+                    );
+                  case 'bolt':
+                    return (
+                      <>
+                        <circle cx="14" cy="14" r="9.8" stroke={wheelTone} strokeWidth="1.6" strokeOpacity="0.38" />
+                        <path
+                          d="M15.4 5.2 L8.8 14.8 H13.6 L12.4 22.8 L19.2 13.0 H14.4 Z"
+                          fill={wheelTone}
+                          strokeLinejoin="round"
+                        />
+                      </>
+                    );
+                  case 'deadpool':
+                    return (
+                      <>
+                        <circle cx="14" cy="14" r="10.3" stroke={wheelTone} strokeWidth="1.65" />
+                        <path
+                          d="M 12.4 5.5 A 8.6 8.6 0 0 0 12.4 22.5 Z M 6.8 11.6 L 11.2 14.7 L 10.6 16.2 L 7.8 15.3 Z"
+                          fill={wheelTone}
+                          fillRule="evenodd"
+                        />
+                        <path
+                          d="M 15.6 5.5 A 8.6 8.6 0 0 1 15.6 22.5 Z M 21.2 11.6 L 16.8 14.7 L 17.4 16.2 L 20.2 15.3 Z"
+                          fill={wheelTone}
+                          fillRule="evenodd"
+                        />
+                      </>
+                    );
+                  case 'minimal_dot':
+                  default:
+                    return (
+                      <>
+                        <circle cx="14" cy="14" r="8.8" stroke={wheelTone} strokeWidth="1.9" strokeOpacity="0.55" />
+                        <circle cx="14" cy="14" r={3.6 + toothReveal * 0.6} fill={wheelTone} />
+                      </>
+                    );
+                }
+              };
 
-            {/* 5 NEW NON-CIRCULAR DESIGN ARTWORKS */}
-            {iconStyle === 'squircle' && (
-              <>
-                <rect x="4.8" y="4.8" width="7.2" height="7.2" rx="2.2" stroke={wheelTone} strokeWidth="2" />
-                <rect x="16" y="4.8" width="7.2" height="7.2" rx="2.2" stroke={wheelTone} strokeWidth="2" />
-                <rect x="4.8" y="16" width="7.2" height="7.2" rx="2.2" stroke={wheelTone} strokeWidth="2" />
-                <rect x="16" y="16" width="7.2" height="7.2" rx="2.2" fill={wheelTone} />
-              </>
-            )}
-            {iconStyle === 'diamond' && (
-              <>
-                <polygon
-                  points="14,3.5 24.5,14 14,24.5 3.5,14"
-                  stroke={wheelTone}
-                  strokeWidth="2"
-                  strokeLinejoin="round"
-                />
-                <polygon
-                  points="14,8.5 19.5,14 14,19.5 8.5,14"
-                  fill={wheelTone}
-                  fillOpacity="0.9"
-                />
-              </>
-            )}
-            {iconStyle === 'pill_dock' && (
-              <>
-                <g transform={`rotate(${(expWheelSpinEnabled ? localInnerDeg : spinDeg).toFixed(1)} 14 12)`}>
-                  <circle cx="14" cy="12" r="6.8" stroke={wheelTone} strokeWidth="2" strokeDasharray="7 3.5" strokeLinecap="round" />
-                  <circle cx="14" cy="12" r="2.2" fill={wheelTone} />
-                </g>
-                <rect x="26" y="7.5" width="14" height="2.4" rx="1.2" fill={wheelTone} fillOpacity="0.92" />
-                <rect x="26" y="12.2" width="10" height="2.4" rx="1.2" fill={wheelTone} fillOpacity="0.65" />
-                <circle cx="39" cy="13.4" r="1.5" fill={wheelTone} />
-              </>
-            )}
-            {iconStyle === 'octa_shield' && (
-              <>
-                <polygon
-                  points="10,4.2 18,4.2 23.8,10 23.8,18 18,23.8 10,23.8 4.2,18 4.2,10"
-                  stroke={wheelTone}
-                  strokeWidth="1.9"
-                  strokeLinejoin="round"
-                  strokeOpacity="0.72"
-                />
-                <line x1="14" y1="7" x2="14" y2="10.2" stroke={wheelTone} strokeWidth="2" strokeLinecap="round" />
-                <line x1="14" y1="17.8" x2="14" y2="21" stroke={wheelTone} strokeWidth="2" strokeLinecap="round" />
-                <line x1="7" y1="14" x2="10.2" y2="14" stroke={wheelTone} strokeWidth="2" strokeLinecap="round" />
-                <line x1="17.8" y1="14" x2="21" y2="14" stroke={wheelTone} strokeWidth="2" strokeLinecap="round" />
-                <circle cx="14" cy="14" r={2.8 + toothReveal * 0.5} fill={wheelTone} />
-              </>
-            )}
-            {iconStyle === 'blade_hex' && (
-              <>
-                {[0, 120, 240].map((deg) => (
-                  <path
-                    key={deg}
-                    d="M14 14 Q 18 7.5 22.8 10.5 Q 19.5 14.5 14 14 Z"
-                    fill={wheelTone}
-                    transform={`rotate(${deg} 14 14)`}
-                  />
-                ))}
-                <circle cx="14" cy="14" r={2.6 + toothReveal * 0.5} fill={wheelTone} />
-              </>
-            )}
-            {iconStyle === 'star_prism' && (
-              <>
-                <path
-                  d="M 8.6 10.6 A 6.4 6.4 0 0 1 19.4 10.6"
-                  stroke={wheelTone}
-                  strokeWidth="2.1"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M 19.4 17.4 A 6.4 6.4 0 0 1 8.6 17.4"
-                  stroke={wheelTone}
-                  strokeWidth="2.1"
-                  strokeLinecap="round"
-                  strokeOpacity="0.82"
-                />
-                <circle cx="19.6" cy="10.8" r="1.5" fill={wheelTone} />
-                <circle cx="8.4" cy="17.2" r="1.5" fill={wheelTone} fillOpacity="0.85" />
-                <circle cx="14" cy="14" r={2.5 + toothReveal * 0.5} fill={wheelTone} />
-              </>
-            )}
+              if (iconStyle === 'pill_dock') {
+                return (
+                  <>
+                    <g transform={`rotate(${(expWheelSpinEnabled ? localInnerDeg : spinDeg).toFixed(1)} 14 12)`}>
+                      {innerStyle === 'auto' ? (
+                        <>
+                          <circle cx="14" cy="12" r="6.8" stroke={wheelTone} strokeWidth="2" strokeDasharray="7 3.5" strokeLinecap="round" />
+                          <circle cx="14" cy="12" r="2.2" fill={wheelTone} />
+                        </>
+                      ) : (
+                        <g transform="translate(14 12) scale(0.72) translate(-14 -14)">
+                          {renderCustomCore(innerStyle)}
+                        </g>
+                      )}
+                    </g>
+                    <rect x="26" y="7.5" width="14" height="2.4" rx="1.2" fill={wheelTone} fillOpacity="0.92" />
+                    <rect x="26" y="12.2" width="10" height="2.4" rx="1.2" fill={wheelTone} fillOpacity="0.65" />
+                    <circle cx="39" cy="13.4" r="1.5" fill={wheelTone} />
+                  </>
+                );
+              }
+
+              if (innerStyle !== 'auto') {
+                return renderCustomCore(innerStyle);
+              }
+
+              switch (iconStyle) {
+                case 'wheel':
+                  return (
+                    <>
+                      {[0, 60, 120, 180, 240, 300].map((deg) => {
+                        const a1 = ((deg - 82) * Math.PI) / 180;
+                        const a2 = ((deg - 38) * Math.PI) / 180;
+                        const r = 10.5;
+                        const x1 = 14 + r * Math.cos(a1);
+                        const y1 = 14 + r * Math.sin(a1);
+                        const x2 = 14 + r * Math.cos(a2);
+                        const y2 = 14 + r * Math.sin(a2);
+                        return (
+                          <path
+                            key={deg}
+                            d={`M ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2}`}
+                            stroke={wheelTone}
+                            strokeWidth="2.3"
+                            strokeLinecap="round"
+                          />
+                        );
+                      })}
+                      <circle cx="14" cy="14" r={2.3 + toothReveal * 0.6} fill={wheelTone} />
+                    </>
+                  );
+                case 'morph':
+                  return (
+                    <>
+                      <circle cx="14" cy="14" r="10.2" stroke={wheelTone} strokeWidth="1.9" strokeOpacity="0.45" />
+                      <text
+                        x="14"
+                        y="18.2"
+                        textAnchor="middle"
+                        fontSize="15"
+                        fontWeight="800"
+                        fill={wheelTone}
+                        fontFamily="system-ui, sans-serif"
+                      >
+                        m
+                      </text>
+                    </>
+                  );
+                case 'gear':
+                  return (
+                    <g transform="translate(14 14) scale(0.72)">
+                      <path d={PRECISION_GEAR_PATH} fill={wheelTone} fillRule="evenodd" />
+                      <circle cx="0" cy="0" r="6.8" fill="none" stroke={wheelTone} strokeWidth="1.5" />
+                      <circle cx="0" cy="0" r={3 + toothReveal * 0.6} fill={wheelTone} />
+                    </g>
+                  );
+                case 'compass':
+                  return (
+                    <>
+                      <circle cx="14" cy="14" r="9.6" stroke={wheelTone} strokeWidth="1.8" strokeOpacity="0.4" />
+                      <path
+                        d="M14 4 L16.7 11.3 L24 14 L16.7 16.7 L14 24 L11.3 16.7 L4 14 L11.3 11.3 Z"
+                        fill={wheelTone}
+                      />
+                      <circle cx="14" cy="14" r="2.2" fill="var(--accent)" />
+                    </>
+                  );
+                case 'hex':
+                  return (
+                    <>
+                      <polygon
+                        points="14,3.8 22.8,8.9 22.8,19.1 14,24.2 5.2,19.1 5.2,8.9"
+                        stroke={wheelTone}
+                        strokeWidth="2.1"
+                        strokeLinejoin="round"
+                      />
+                      <circle cx="14" cy="14" r={3 + toothReveal * 0.6} fill={wheelTone} />
+                    </>
+                  );
+                case 'squircle':
+                  return (
+                    <>
+                      <rect x="4.8" y="4.8" width="7.2" height="7.2" rx="2.2" stroke={wheelTone} strokeWidth="2" />
+                      <rect x="16" y="4.8" width="7.2" height="7.2" rx="2.2" stroke={wheelTone} strokeWidth="2" />
+                      <rect x="4.8" y="16" width="7.2" height="7.2" rx="2.2" stroke={wheelTone} strokeWidth="2" />
+                      <rect x="16" y="16" width="7.2" height="7.2" rx="2.2" fill={wheelTone} />
+                    </>
+                  );
+                case 'diamond':
+                  return (
+                    <>
+                      <polygon
+                        points="14,3.5 24.5,14 14,24.5 3.5,14"
+                        stroke={wheelTone}
+                        strokeWidth="2"
+                        strokeLinejoin="round"
+                      />
+                      <polygon
+                        points="14,8.5 19.5,14 14,19.5 8.5,14"
+                        fill={wheelTone}
+                        fillOpacity="0.9"
+                      />
+                    </>
+                  );
+                case 'octa_shield':
+                  return (
+                    <>
+                      <polygon
+                        points="10,4.2 18,4.2 23.8,10 23.8,18 18,23.8 10,23.8 4.2,18 4.2,10"
+                        stroke={wheelTone}
+                        strokeWidth="1.9"
+                        strokeLinejoin="round"
+                        strokeOpacity="0.72"
+                      />
+                      <line x1="14" y1="7" x2="14" y2="10.2" stroke={wheelTone} strokeWidth="2" strokeLinecap="round" />
+                      <line x1="14" y1="17.8" x2="14" y2="21" stroke={wheelTone} strokeWidth="2" strokeLinecap="round" />
+                      <line x1="7" y1="14" x2="10.2" y2="14" stroke={wheelTone} strokeWidth="2" strokeLinecap="round" />
+                      <line x1="17.8" y1="14" x2="21" y2="14" stroke={wheelTone} strokeWidth="2" strokeLinecap="round" />
+                      <circle cx="14" cy="14" r={2.8 + toothReveal * 0.5} fill={wheelTone} />
+                    </>
+                  );
+                case 'blade_hex':
+                  return (
+                    <>
+                      {[0, 120, 240].map((deg) => (
+                        <path
+                          key={deg}
+                          d="M14 14 Q 18 7.5 22.8 10.5 Q 19.5 14.5 14 14 Z"
+                          fill={wheelTone}
+                          transform={`rotate(${deg} 14 14)`}
+                        />
+                      ))}
+                      <circle cx="14" cy="14" r={2.6 + toothReveal * 0.5} fill={wheelTone} />
+                    </>
+                  );
+                case 'star_prism':
+                  return (
+                    <>
+                      <path
+                        d="M 8.6 10.6 A 6.4 6.4 0 0 1 19.4 10.6"
+                        stroke={wheelTone}
+                        strokeWidth="2.1"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M 19.4 17.4 A 6.4 6.4 0 0 1 8.6 17.4"
+                        stroke={wheelTone}
+                        strokeWidth="2.1"
+                        strokeLinecap="round"
+                        strokeOpacity="0.82"
+                      />
+                      <circle cx="19.6" cy="10.8" r="1.5" fill={wheelTone} />
+                      <circle cx="8.4" cy="17.2" r="1.5" fill={wheelTone} fillOpacity="0.85" />
+                      <circle cx="14" cy="14" r={2.5 + toothReveal * 0.5} fill={wheelTone} />
+                    </>
+                  );
+                case 'shield_crest':
+                default:
+                  return (
+                    <>
+                      <polygon
+                        points="14,4.2 22.5,8.6 20.6,19.2 14,23.8 7.4,19.2 5.5,8.6"
+                        stroke={wheelTone}
+                        strokeWidth="1.9"
+                        strokeLinejoin="round"
+                        strokeOpacity="0.72"
+                      />
+                      <path
+                        d="M9.8 12.2 L14 8.6 L18.2 12.2 L14 19.5 Z"
+                        fill={wheelTone}
+                        fillOpacity="0.9"
+                      />
+                    </>
+                  );
+              }
+            })()}
           </svg>
         </button>
       </div>

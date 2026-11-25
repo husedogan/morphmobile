@@ -55,12 +55,14 @@ import {
   QuickToolEntry,
   loadAutoCategoryRules,
   loadLibraryFolders,
+  loadLibraryItemTags,
   loadPinnedTools,
   loadPipelines,
   resetAutoCategoryRules,
   saveAutoCategoryRules,
   saveLibraryFolders,
   savePipelines,
+  setLibraryItemFolder,
   togglePinnedTool,
 } from '../engine/workspaceProStore';
 
@@ -1252,6 +1254,17 @@ export const SettingsProTab: React.FC<SettingsProTabProps> = ({
                       const next = folders.filter((x) => x.id !== f.id);
                       saveLibraryFolders(next);
                       setFolders(next);
+                      const fallbackId = next[0]?.id ?? '';
+                      const nextRules = loadAutoCategoryRules().map((r) =>
+                        r.folderId === f.id ? {...r, folderId: fallbackId, enabled: Boolean(fallbackId) && r.enabled} : r
+                      );
+                      saveAutoCategoryRules(nextRules);
+                      const tags = loadLibraryItemTags();
+                      for (const [itemId, folderId] of Object.entries(tags)) {
+                        if (folderId === f.id) {
+                          setLibraryItemFolder(itemId, null);
+                        }
+                      }
                     }}
                     className="ml-0.5 text-[var(--muted)] hover:text-[var(--danger)]"
                   >

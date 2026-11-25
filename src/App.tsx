@@ -82,7 +82,6 @@ import {
   ALL_WHEEL_ACTIONS_CATALOG,
   DEFAULT_MAIN_WHEEL_ITEMS,
   DEFAULT_WHEEL_CONFIG,
-  EXP_WHEEL_SHAPES,
   ExportItem,
   JobState,
   MAX_WHEEL_SLICES,
@@ -231,6 +230,8 @@ export default function App() {
   const [showMainWheelCustomize, setShowMainWheelCustomize] = useState(false);
   const [showManageTools, setShowManageTools] = useState(false);
   const [showFileActions, setShowFileActions] = useState(false);
+  const [libraryOverlayCount, setLibraryOverlayCount] = useState(0);
+  const [libraryCloseSignal, setLibraryCloseSignal] = useState(0);
   const [previewTarget, setPreviewTarget] = useState<PickedFile | null>(null);
   const [sourcePreviewUrl, setSourcePreviewUrl] = useState<string | null>(null);
   const [sourcePreviewText, setSourcePreviewText] = useState<string | null>(null);
@@ -563,8 +564,15 @@ export default function App() {
     (showManageTools ? 1 : 0) +
     (customizeModal.open ? 1 : 0) +
     (showMainWheelCustomize ? 1 : 0) +
-    (previewTarget ? 1 : 0);
+    (previewTarget ? 1 : 0) +
+    (tab === 'library' ? libraryOverlayCount : 0);
   const pushedHistoryDepthRef = useRef(0);
+
+  useEffect(() => {
+    if (tab !== 'library' && libraryOverlayCount !== 0) {
+      setLibraryOverlayCount(0);
+    }
+  }, [tab, libraryOverlayCount]);
 
   useEffect(() => {
     if (overlayDepth > pushedHistoryDepthRef.current) {
@@ -639,6 +647,10 @@ export default function App() {
         resetNavigationFlow();
         return;
       }
+      if (tab === 'library' && libraryOverlayCount > 0) {
+        setLibraryCloseSignal((n) => n + 1);
+        return;
+      }
       if (tab !== 'studio') {
         setTab('studio');
       }
@@ -658,6 +670,7 @@ export default function App() {
     wheelKind,
     job.status,
     toolMode,
+    libraryOverlayCount,
     tab,
     resetNavigationFlow,
   ]);
@@ -2614,6 +2627,8 @@ export default function App() {
             onDelete={handleDeleteExport}
             onClearAll={handleClearLibrary}
             onShowToast={showToast}
+            onModalCountChange={setLibraryOverlayCount}
+            closeSignal={libraryCloseSignal}
           />
         ) : tab === 'settings' ? (
           <SettingsScreen
@@ -2745,13 +2760,8 @@ export default function App() {
           <WheelFab
             hidden={wheelKind !== null}
             side={prefs.wheelSide ?? 'right'}
-            iconStyle={
-              prefs.expWheelBurnEffect && prefs.expWheelShape
-                ? prefs.expWheelShape
-                : prefs.wheelIconStyle && !EXP_WHEEL_SHAPES.some((s) => s.id === prefs.wheelIconStyle)
-                  ? prefs.wheelIconStyle
-                  : 'wheel'
-            }
+            iconStyle={prefs.wheelIconStyle ?? prefs.expWheelShape ?? 'wheel'}
+            innerStyle={prefs.wheelInnerStyle ?? 'auto'}
             expWheelBurnEffect={Boolean(prefs.expWheelBurnEffect)}
             burnStyle={prefs.expWheelBurnStyle ?? 'classic_fire'}
             expWheelSpinEnabled={Boolean(prefs.expWheelSpinEnabled)}
@@ -2853,6 +2863,24 @@ export default function App() {
                 : false)
         );
         const labelPrefs = resolveLauncherLabelPrefs(prefs);
+        const wheelCustomizeHandler =
+          wheelKind === 'main'
+            ? () => {
+                setWheelKind(null);
+                setShowMainWheelCustomize(true);
+              }
+            : wheelKind === 'convert' || wheelKind === 'tools' || wheelKind === 'actions'
+              ? () => {
+                  const initialTab: CustomizeWheelTab =
+                    wheelKind === 'convert'
+                      ? 'convert'
+                      : wheelKind === 'actions'
+                        ? 'actions'
+                        : 'tools';
+                  setWheelKind(null);
+                  setCustomizeModal({open: true, tab: initialTab});
+                }
+              : undefined;
         return (
           <>
             <WheelMenu
@@ -2864,25 +2892,7 @@ export default function App() {
               onDismiss={() => setWheelKind(null)}
               onSelect={handleWheelSelect}
               onDisabledSelect={() => showToast(t('SliceDisabledToast', lang))}
-              onOpenCustomize={
-                wheelKind === 'main'
-                  ? () => {
-                      setWheelKind(null);
-                      setShowMainWheelCustomize(true);
-                    }
-                  : wheelKind === 'convert' || wheelKind === 'tools' || wheelKind === 'actions'
-                    ? () => {
-                        const initialTab: CustomizeWheelTab =
-                          wheelKind === 'convert'
-                            ? 'convert'
-                            : wheelKind === 'actions'
-                              ? 'actions'
-                              : 'tools';
-                        setWheelKind(null);
-                        setCustomizeModal({open: true, tab: initialTab});
-                      }
-                    : undefined
-              }
+              onOpenCustomize={wheelCustomizeHandler}
             />
 
             {prefs.expAltLauncher && (
@@ -2899,6 +2909,8 @@ export default function App() {
                 lang={lang}
                 onSelect={handleWheelSelect}
                 onDisabledSelect={() => showToast(t('SliceDisabledToast', lang))}
+                onOpenCustomize={wheelCustomizeHandler}
+                holdToCustomize={Boolean(prefs.expWheelCenterHoldCustomize)}
                 onDismiss={() => setWheelKind(null)}
               />
             )}

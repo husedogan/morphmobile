@@ -67,6 +67,7 @@ interface PreviewMonitorProps {
   splitCompareEnabled: boolean;
   splitComparePct: number;
   showGrid: boolean;
+  showMobileMuteBtn?: boolean;
   isCropTabActive: boolean;
   isWatermarkTabActive?: boolean;
   freePositionMode?: boolean;
@@ -76,6 +77,8 @@ interface PreviewMonitorProps {
   selectedTextId?: string | null;
   activeTimelineClip: TimelineVideoClip | undefined;
   activeV2Clip: TimelineVideoClip | undefined;
+  activePipClips?: TimelineVideoClip[];
+  resolveClipVideoSrc?: (clip: TimelineVideoClip) => string | null;
   activeTextOverlays: TimelineTextClip[];
   interpolatedKeyframe: InterpolatedKeyframeState;
   evaluatedTransition: EvaluatedTransitionStyle;
@@ -145,6 +148,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
   splitCompareEnabled,
   splitComparePct,
   showGrid,
+  showMobileMuteBtn = true,
   isCropTabActive,
   isWatermarkTabActive = false,
   freePositionMode = false,
@@ -154,6 +158,8 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
   selectedTextId = null,
   activeTimelineClip,
   activeV2Clip,
+  activePipClips,
+  resolveClipVideoSrc,
   activeTextOverlays,
   interpolatedKeyframe,
   evaluatedTransition,
@@ -189,6 +195,12 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
   const tr = (t: string, e: string) => (isTr ? t : e);
   const safeTotalDur = Math.max(0.2, totalTimelineDur);
   const playheadPct = Math.min(100, Math.max(0, (playhead / safeTotalDur) * 100));
+  const resolvedPipList =
+    activePipClips && activePipClips.length > 0
+      ? activePipClips
+      : activeV2Clip
+        ? [activeV2Clip]
+        : [];
 
   // 500ms (50 salise) press-and-hold state for unlocking the downward floor lock
   const [isHoldingFloorLock, setIsHoldingFloorLock] = React.useState(false);
@@ -521,34 +533,33 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
             </>
           )}
 
-          {/* Synchronized V2 Overlay / Picture-in-Picture Layer */}
-          {trackVisibility.v2 && activeV2Clip && activeV2VideoSrc && !compareOriginal && (
-            <div
-              onPointerDown={(e) => onStartPipDrag(e, activeV2Clip.id)}
-              style={{
-                left: `${(activeV2Clip.pipRect ?? DEFAULT_PIP_RECT).x * 100}%`,
-                top: `${(activeV2Clip.pipRect ?? DEFAULT_PIP_RECT).y * 100}%`,
-                width: `${(activeV2Clip.pipRect ?? DEFAULT_PIP_RECT).w * 100}%`,
-                height: `${(activeV2Clip.pipRect ?? DEFAULT_PIP_RECT).h * 100}%`,
-                opacity: Math.max(0.1, activeV2Clip.opacity / 100),
-              }}
-              className={`absolute z-10 cursor-move overflow-hidden rounded-md bg-black shadow-2xl touch-none ${
-                selectedClip?.id === activeV2Clip.id
-                  ? 'ring-2 ring-[#A855F7]'
-                  : 'ring-1 ring-white/35'
-              }`}
-            >
-              <video
-                ref={v2VideoRef}
-                src={activeV2VideoSrc}
-                muted
-                playsInline
-                preload="auto"
-                poster={TRANSPARENT_POSTER}
-                className="morph-nle-video pointer-events-none h-full w-full object-cover"
-              />
-            </div>
-          )}
+          {/* Synchronized Multi-Row V2..V5 Overlay / Picture-in-Picture Layers */}
+          {trackVisibility.v2 &&
+            !compareOriginal &&
+            resolvedPipList.map((pipClip, pipIdx) => {
+              const pipSrc =
+                (resolveClipVideoSrc ? resolveClipVideoSrc(pipClip) : null) ??
+                (pipIdx === 0 ? activeV2VideoSrc : null) ??
+                activePreviewVideoSrc;
+              if (!pipSrc) return null;
+              return (
+                <PipLayerVideo
+                  key={pipClip.id}
+                  pipClip={pipClip}
+                  src={pipSrc}
+                  isPrimaryPip={pipIdx === 0}
+                  primaryRef={v2VideoRef}
+                  isSelected={selectedClip?.id === pipClip.id}
+                  zOrder={10 + getClipTrackIndex(pipClip)}
+                  playhead={playhead}
+                  isPlaying={isPlaying}
+                  masterMuted={project.masterMuted}
+                  masterVolume={project.masterVolume}
+                  a2Visible={trackVisibility.a2}
+                  onStartPipDrag={onStartPipDrag}
+                />
+              );
+            })}
 
           {/* Vignette Overlay */}
           {project.colorGrading.vignette > 5 && !compareOriginal && !isInGap && (
@@ -1012,14 +1023,14 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
         />
       </div>
 
-      {/* Minimalist Transport Bar — Customizable Safe Touch Targets */}
-      <div className="relative z-30 flex min-h-12 shrink-0 items-center justify-between gap-1.5 border-y border-white/[0.07] bg-[#0D0D10] px-2 py-1 sm:px-3.5">
-        <div className="flex items-center gap-1">
+      {/* Minimalist Transport Bar — Safe 390px Touch Targets & Optional Mobile Mute */}
+      <div className="relative z-30 flex min-h-12 shrink-0 items-center justify-between gap-1 border-y border-white/[0.07] bg-[#0D0D10] px-1.5 py-1 sm:gap-1.5 sm:px-3.5">
+        <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
           <StudioTooltipBtn
             tooltip={isPlaying ? tr('Duraklat', 'Pause') : tr('Oynat', 'Play')}
             align="left"
             onClick={onTogglePlay}
-            className="flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl bg-white/[0.09] text-white transition-transform hover:bg-white/[0.15] active:scale-95"
+            className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/[0.09] text-white transition-transform hover:bg-white/[0.15] active:scale-95 sm:h-[var(--ve-btn-size,36px)] sm:w-[var(--ve-btn-size,36px)]"
           >
             {isPlaying ? (
               <Pause className="h-4 w-4 fill-current" />
@@ -1031,7 +1042,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
           <StudioTooltipBtn
             tooltip={tr('1 Kare Geri', 'Step Back 1 Frame')}
             onClick={() => onStepFrame(-1)}
-            className="flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white"
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white sm:h-[var(--ve-btn-size,36px)] sm:w-[var(--ve-btn-size,36px)]"
           >
             <ChevronLeft className="h-4 w-4" />
           </StudioTooltipBtn>
@@ -1039,17 +1050,17 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
           <StudioTooltipBtn
             tooltip={tr('1 Kare İleri', 'Step Forward 1 Frame')}
             onClick={() => onStepFrame(1)}
-            className="flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white"
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white sm:h-[var(--ve-btn-size,36px)] sm:w-[var(--ve-btn-size,36px)]"
           >
             <ChevronRight className="h-4 w-4" />
           </StudioTooltipBtn>
         </div>
 
         {/* Center: Crisp Tabular Timecode */}
-        <div className="font-mono-num flex shrink-0 items-baseline gap-1 whitespace-nowrap text-xs font-bold tracking-tight">
+        <div className="font-mono-num flex min-w-0 shrink-0 items-baseline gap-0.5 whitespace-nowrap text-[11px] font-bold tracking-tight sm:gap-1 sm:text-xs">
           <span className="text-white">{formatSmpteTimecode(playhead, project.fps)}</span>
           <span className="text-white/25">/</span>
-          <span className="text-[11px] font-medium text-white/45">
+          <span className="text-[10px] font-medium text-white/45 sm:text-[11px]">
             {formatSmpteTimecode(safeTotalDur, project.fps)}
           </span>
         </div>
@@ -1060,7 +1071,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
             tooltip={tr('Geri Al', 'Undo')}
             onClick={onUndo}
             disabled={!canUndo}
-            className="flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-25"
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-25 sm:h-[var(--ve-btn-size,36px)] sm:w-[var(--ve-btn-size,36px)]"
           >
             <Undo2 className="h-4 w-4" />
           </StudioTooltipBtn>
@@ -1069,7 +1080,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
             tooltip={tr('İleri Al', 'Redo')}
             onClick={onRedo}
             disabled={!canRedo}
-            className="flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-25"
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-25 sm:h-[var(--ve-btn-size,36px)] sm:w-[var(--ve-btn-size,36px)]"
           >
             <Redo2 className="h-4 w-4" />
           </StudioTooltipBtn>
@@ -1081,7 +1092,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
                 : tr('Bu Kareye Keyframe Ekle (◆)', 'Add Keyframe at Playhead (◆)')
             }
             onClick={onQuickToggleKeyframe}
-            className={`flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl transition-colors ${
+            className={`flex h-8 w-8 items-center justify-center rounded-xl transition-colors sm:h-[var(--ve-btn-size,36px)] sm:w-[var(--ve-btn-size,36px)] ${
               hasKeyframeAtPlayhead
                 ? 'bg-[#F43F5E]/20 text-[#FB7185]'
                 : 'text-white/65 hover:bg-white/[0.06] hover:text-[#FB7185]'
@@ -1093,7 +1104,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
           <StudioTooltipBtn
             tooltip={project.masterMuted ? tr('Sesi Aç', 'Unmute') : tr('Sesi Kapat', 'Mute')}
             onClick={onToggleMute}
-            className={`hidden h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl transition-colors sm:flex ${
+            className={`${showMobileMuteBtn ? 'flex' : 'hidden sm:flex'} h-8 w-8 items-center justify-center rounded-xl transition-colors sm:h-[var(--ve-btn-size,36px)] sm:w-[var(--ve-btn-size,36px)] ${
               project.masterMuted
                 ? 'text-rose-400'
                 : 'text-white/65 hover:bg-white/[0.06] hover:text-white'
@@ -1110,7 +1121,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
             tooltip={tr('Kare Yakala (Fotoğraf)', 'Capture Frame Snapshot')}
             align="right"
             onClick={onCaptureSnapshot}
-            className="flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white"
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white sm:h-[var(--ve-btn-size,36px)] sm:w-[var(--ve-btn-size,36px)]"
           >
             <Camera className="h-4 w-4" />
           </StudioTooltipBtn>
@@ -1220,6 +1231,110 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
           )}
         </div>
       )}
+    </div>
+  );
+};
+
+interface PipLayerVideoProps {
+  pipClip: TimelineVideoClip;
+  src: string;
+  isPrimaryPip: boolean;
+  primaryRef: React.RefObject<HTMLVideoElement | null>;
+  isSelected: boolean;
+  zOrder: number;
+  playhead: number;
+  isPlaying: boolean;
+  masterMuted: boolean;
+  masterVolume: number;
+  a2Visible: boolean;
+  onStartPipDrag: (e: React.PointerEvent, clipId: string) => void;
+}
+
+const PipLayerVideo: React.FC<PipLayerVideoProps> = ({
+  pipClip,
+  src,
+  isPrimaryPip,
+  primaryRef,
+  isSelected,
+  zOrder,
+  playhead,
+  isPlaying,
+  masterMuted,
+  masterVolume,
+  a2Visible,
+  onStartPipDrag,
+}) => {
+  const localRef = React.useRef<HTMLVideoElement | null>(null);
+  const rect = pipClip.pipRect ?? DEFAULT_PIP_RECT;
+
+  React.useEffect(() => {
+    const el = localRef.current;
+    if (!el) return;
+    if (isPrimaryPip && primaryRef) {
+      primaryRef.current = el;
+    }
+    const localOffset = Math.max(0, playhead - pipClip.timelineStart);
+    const spd = Math.min(4, Math.max(0.25, pipClip.speed || 1));
+    const targetSrcTime = pipClip.isFreezeFrame
+      ? pipClip.sourceStart
+      : pipClip.reversed
+        ? Math.max(pipClip.sourceStart, pipClip.sourceEnd - localOffset * spd)
+        : Math.min(pipClip.sourceEnd, pipClip.sourceStart + localOffset * spd);
+
+    const effVol = Math.min(1, Math.max(0, (masterVolume / 100) * (pipClip.volume / 100)));
+    const effMuted =
+      masterMuted || !a2Visible || pipClip.muted || pipClip.isFreezeFrame || effVol <= 0.005;
+    el.muted = effMuted;
+    el.volume = effVol;
+    el.playbackRate = spd;
+
+    if (Math.abs(el.currentTime - targetSrcTime) > (pipClip.reversed ? 0.04 : 0.22)) {
+      try {
+        el.currentTime = targetSrcTime;
+      } catch {
+        // Ignore seek before metadata ready
+      }
+    }
+
+    if (isPlaying && !pipClip.isFreezeFrame && !pipClip.reversed) {
+      if (el.paused) void el.play().catch(() => {});
+    } else if (!el.paused) {
+      el.pause();
+    }
+  }, [
+    pipClip,
+    isPrimaryPip,
+    primaryRef,
+    playhead,
+    isPlaying,
+    masterMuted,
+    masterVolume,
+    a2Visible,
+  ]);
+
+  return (
+    <div
+      onPointerDown={(e) => onStartPipDrag(e, pipClip.id)}
+      style={{
+        left: `${rect.x * 100}%`,
+        top: `${rect.y * 100}%`,
+        width: `${rect.w * 100}%`,
+        height: `${rect.h * 100}%`,
+        opacity: Math.max(0.1, pipClip.opacity / 100),
+        zIndex: zOrder,
+      }}
+      className={`absolute cursor-move overflow-hidden rounded-md bg-black shadow-2xl touch-none ${
+        isSelected ? 'ring-2 ring-[#A855F7]' : 'ring-1 ring-white/35'
+      }`}
+    >
+      <video
+        ref={localRef}
+        src={src}
+        playsInline
+        preload="auto"
+        poster={TRANSPARENT_POSTER}
+        className="morph-nle-video pointer-events-none h-full w-full object-cover"
+      />
     </div>
   );
 };

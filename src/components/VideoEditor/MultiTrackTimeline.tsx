@@ -1535,7 +1535,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                 className="flex flex-col items-center justify-center gap-1 rounded-xl border border-white/[0.07] bg-white/[0.03] px-1 py-2 text-white/85 transition-all hover:border-[#C084FC]/45 hover:bg-[#C084FC]/12 hover:text-[#D8B4FE] active:scale-95"
               >
                 <PictureInPicture2 className="h-4 w-4 text-[#C084FC]" />
-                <span className="text-[9px] font-bold leading-none">{tr('PiP', 'PiP')}</span>
+                <span className="text-[9px] font-bold leading-none">{tr('Video/PiP', 'Video/PiP')}</span>
               </button>
 
               <button
@@ -1615,7 +1615,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                     className="flex items-center justify-center gap-1 rounded-xl border border-[#C084FC]/28 bg-[#C084FC]/10 px-2 py-1.5 text-[10px] font-bold text-[#D8B4FE] transition-all hover:border-[#C084FC]/55 hover:bg-[#C084FC]/18 active:scale-95 disabled:opacity-35"
                   >
                     <Plus className="h-3 w-3 shrink-0" />
-                    <span>PiP</span>
+                    <span>{tr('Katman', 'Layer')}</span>
                     <span className="font-mono-num rounded bg-black/35 px-1 text-[8.5px] opacity-85">
                       V{Math.min(5, pipRowCount + 2)}
                     </span>
@@ -2086,7 +2086,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                           )}
                         </div>
                         <div
-                          className={`pointer-events-none absolute inset-0 flex items-center gap-1 overflow-hidden pl-5 pr-5 text-[9px] font-bold ${
+                          className={`pointer-events-none absolute inset-0 flex items-center gap-1 overflow-hidden pl-5 text-[9px] font-bold ${
+                            isSelected && widthPct >= 20 ? 'pr-10' : 'pr-5'
+                          } ${
                             isPip
                               ? 'bg-gradient-to-r from-[#3B0764]/85 via-[#3B0764]/40 to-transparent text-purple-100'
                               : 'bg-gradient-to-r from-[#0E0E13]/85 via-[#0E0E13]/35 to-transparent text-white'

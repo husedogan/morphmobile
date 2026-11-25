@@ -41,7 +41,6 @@ import {Lang, t} from '../data/i18n';
 import {
   CornerStylePref,
   DownloadEngineId,
-  EXP_WHEEL_SHAPES,
   ExpLauncherLabelMode,
   ExpLauncherStyle,
   ExpLauncherTextSize,
@@ -49,9 +48,12 @@ import {
   UiScalePref,
   VideoQualityPref,
   WHEEL_BURN_STYLES,
+  WHEEL_INNER_STYLES,
+  WHEEL_OUTER_SHAPES,
   WHEEL_SPIN_MODES,
   WheelBurnStylePref,
   WheelIconStylePref,
+  WheelInnerStylePref,
   WheelSidePref,
   WheelSpinModePref,
   WheelSpinTriggerPref,
@@ -250,7 +252,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   });
   const [expTabVisible, setExpTabVisible] = useState<boolean>(() => {
     try {
-      return typeof window !== 'undefined' && window.sessionStorage.getItem(EXP_UNLOCK_KEY) === '1';
+      return (
+        typeof window !== 'undefined' &&
+        (window.sessionStorage.getItem(EXP_TAB_VISIBLE_KEY) === '1' ||
+          window.sessionStorage.getItem(EXP_UNLOCK_KEY) === '1')
+      );
     } catch {
       return false;
     }
@@ -282,6 +288,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [expPassVisible, setExpPassVisible] = useState(false);
   const [expPassError, setExpPassError] = useState(false);
   const [expSpinDetailsOpen, setExpSpinDetailsOpen] = useState(false);
+  const [expLauncherFocusedScope, setExpLauncherFocusedScope] = useState<
+    'expAltLauncherForMenus' | 'expAltLauncherForMain' | 'expAltLauncherForVideo'
+  >('expAltLauncherForMenus');
 
   useEffect(() => {
     if (!expGateOpen) return;
@@ -556,7 +565,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const uiScale: UiScalePref = prefs.uiScale ?? 'default';
   const cornerStyle: CornerStylePref = prefs.cornerStyle ?? 'balanced';
   const wheelSide: WheelSidePref = prefs.wheelSide ?? 'right';
-  const wheelIconStyle: WheelIconStylePref = prefs.wheelIconStyle ?? 'wheel';
+  const wheelIconStyle: WheelIconStylePref = prefs.wheelIconStyle ?? prefs.expWheelShape ?? 'wheel';
+  const wheelInnerStyle: WheelInnerStylePref = prefs.wheelInnerStyle ?? 'auto';
   const showIntegratedEngines = Boolean(prefs.showIntegratedEngines);
   const showToolLabels = Boolean(prefs.showToolLabels);
   const reducedMotion = Boolean(prefs.reducedMotion);
@@ -850,17 +860,38 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         />
       )}
 
-      {/* CATEGORY 1: APPEARANCE, THEMES, INTERFACE CONTROLS & RADIAL WHEELS */}
+      {/* CATEGORY 1: APPEARANCE — CLEAN HIERARCHY, LIVE WHEEL PREVIEW & MINIMAL CONTROLS */}
       {category === 'appearance' && (
-        <div className="mt-5 space-y-5">
-          {/* Basit Mod (Simple Mode) 1-Tap Switch Card */}
-          <section
-            className={`rounded-3xl border p-4.5 transition-colors ${
-              simpleMode
-                ? 'border-[var(--accent)]/60 bg-[var(--accent)]/10'
-                : 'border-[var(--line)] bg-[var(--surface)]'
-            }`}
-          >
+        <div className="mt-4 space-y-4">
+          {/* Compact Top Bar: Language + Simple Mode */}
+          <section className="grid grid-cols-1 divide-y divide-[var(--line)] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+            {/* Language Switcher */}
+            <div className="flex items-center justify-between gap-3 px-4 py-3">
+              <span className="text-xs font-bold text-[var(--ink)]">{t('Language', lang)}</span>
+              <div className="inline-flex rounded-xl border border-[var(--line)] bg-[var(--inset)] p-0.5">
+                {(
+                  [
+                    ['tr', 'Türkçe'],
+                    ['en', 'English'],
+                  ] as const
+                ).map(([code, label]) => (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => onChangePrefs((p) => ({...p, lang: code}))}
+                    className={`min-h-[32px] rounded-[10px] px-3 text-xs font-semibold transition-colors whitespace-nowrap ${
+                      prefs.lang === code
+                        ? 'bg-[var(--surface)] text-[var(--ink)] shadow-sm ring-1 ring-[var(--accent)]/55'
+                        : 'text-[var(--muted)] hover:text-[var(--ink)]'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Simple Mode Compact Switch */}
             <button
               type="button"
               onClick={() => {
@@ -877,33 +908,18 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 );
               }}
               aria-pressed={simpleMode}
-              className="flex w-full items-center justify-between gap-3.5 text-left"
+              className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors ${
+                simpleMode ? 'bg-[var(--accent)]/10' : 'hover:bg-[var(--inset)]/45'
+              }`}
             >
-              <div className="flex min-w-0 items-start gap-3">
-                <div
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border ${
-                    simpleMode
-                      ? 'border-[var(--accent)]/50 bg-[var(--accent)] text-white'
-                      : 'border-[var(--line)] bg-[var(--inset)] text-[var(--accent-text)]'
-                  }`}
-                >
-                  <Sparkles className="h-4.5 w-4.5" />
-                </div>
+              <div className="flex min-w-0 items-center gap-2.5">
+                <Sparkles className={`h-4 w-4 shrink-0 ${simpleMode ? 'text-[var(--accent)]' : 'text-[var(--muted)]'}`} />
                 <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-sm font-extrabold text-[var(--ink)]">
-                      {lang === 'tr' ? 'Basit Mod (Sade Arayüz)' : 'Simple Mode (Clean UI)'}
-                    </h2>
-                    {simpleMode && (
-                      <span className="rounded-md bg-[var(--accent)]/20 px-1.5 py-0.5 text-[10px] font-bold text-[var(--accent-text)]">
-                        {lang === 'tr' ? 'Aktif' : 'Active'}
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
-                    {lang === 'tr'
-                      ? 'Ekran çok dolu geliyorsa stüdyo çubukları, kısayol şeritleri, gelişmiş indirme sekmeleri ve klasör etiketlerini gizler. Kapattığında tüm ayarların aynen geri gelir.'
-                      : 'Hides studio tool strips, pinned bars, advanced downloader tabs, and extra panels for a calm workspace. Turning it off restores all your preferences.'}
+                  <p className="truncate text-xs font-bold text-[var(--ink)]">
+                    {lang === 'tr' ? 'Basit Mod' : 'Simple Mode'}
+                  </p>
+                  <p className="truncate text-[10.5px] text-[var(--muted)]">
+                    {lang === 'tr' ? 'Sade arayüzü açar' : 'Minimal clean UI'}
                   </p>
                 </div>
               </div>
@@ -913,91 +929,50 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </button>
           </section>
 
-          {/* Language Card — placed right near the top for instant access */}
-          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4.5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-sm font-extrabold text-[var(--ink)]">{t('Language', lang)}</h2>
-              <div className="flex w-full gap-2 sm:w-auto sm:min-w-[220px]">
-                {(
-                  [
-                    ['tr', 'Türkçe'],
-                    ['en', 'English'],
-                  ] as const
-                ).map(([code, label]) => (
-                  <button
-                    key={code}
-                    type="button"
-                    onClick={() => onChangePrefs((p) => ({...p, lang: code}))}
-                    className={`min-h-[42px] flex-1 rounded-2xl border px-3 text-xs font-bold transition-colors whitespace-nowrap ${
-                      prefs.lang === code
-                        ? 'border-[var(--accent)] bg-[var(--accent)]/18 text-[var(--ink)]'
-                        : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* Instant Recovery Card in Appearance when the Home Quick Wheel is turned OFF */}
+          {/* Instant Recovery Banner when Home Quick Wheel is hidden */}
           {prefs.showQuickWheel === false && (
-            <section className="flex flex-col gap-3 rounded-3xl border border-[var(--accent)]/45 bg-[var(--accent)]/10 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex min-w-0 items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[var(--accent)]/40 bg-[var(--surface)] text-[var(--accent)]">
-                  <EyeOff className="h-4.5 w-4.5" />
-                </div>
+            <section className="flex flex-col gap-3 rounded-2xl border border-[var(--accent)]/45 bg-[var(--accent)]/10 p-3.5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <EyeOff className="h-4.5 w-4.5 shrink-0 text-[var(--accent)]" />
                 <div className="min-w-0">
-                  <h3 className="text-sm font-extrabold text-[var(--ink)]">
+                  <p className="text-xs font-bold text-[var(--ink)]">
                     {t('QuickWheelHiddenBannerTitle', lang)}
-                  </h3>
-                  <p className="mt-0.5 text-xs leading-snug text-[var(--muted)]">
+                  </p>
+                  <p className="text-[11px] leading-snug text-[var(--muted)]">
                     {t('QuickWheelHiddenBannerDesc', lang)}
                   </p>
                 </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {onOpenMainWheelCustomize && (
-                  <button
-                    type="button"
-                    onClick={onOpenMainWheelCustomize}
-                    className="min-h-[40px] rounded-full border border-[var(--line)] bg-[var(--surface)] px-3.5 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] whitespace-nowrap"
-                  >
-                    {t('MainWheelCustomizeTitle', lang)}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    onChangePrefs((p) => ({...p, showQuickWheel: true}));
-                    onShowToast?.(t('QuickWheelEnabledToast', lang));
-                  }}
-                  className="morph-accent-btn flex min-h-[40px] items-center gap-1.5 rounded-full px-4 text-xs font-bold whitespace-nowrap"
-                >
-                  <Eye className="h-3.5 w-3.5" />
-                  <span>{t('QuickWheelEnableNow', lang)}</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  onChangePrefs((p) => ({...p, showQuickWheel: true}));
+                  onShowToast?.(t('QuickWheelEnabledToast', lang));
+                }}
+                className="morph-accent-btn flex min-h-[36px] w-full shrink-0 items-center justify-center gap-1.5 rounded-xl px-3.5 text-xs font-bold whitespace-nowrap sm:w-auto"
+              >
+                <Eye className="h-3.5 w-3.5" />
+                <span>{t('QuickWheelEnableNow', lang)}</span>
+              </button>
             </section>
           )}
 
-          {/* Themes & Separate System + Single Sun/Crescent Icon Mode Switcher */}
-          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
+          {/* 1. Theme Mode & Presets */}
+          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4 sm:p-5">
             <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <Palette className="h-5 w-5 text-[var(--accent-text)]" />
-                <h2 className="text-base font-semibold text-[var(--ink)]">{t('Appearance', lang)}</h2>
+              <div className="flex items-center gap-2">
+                <Palette className="h-4.5 w-4.5 text-[var(--accent-text)]" />
+                <h2 className="text-sm font-bold text-[var(--ink)] sm:text-base">{t('Themes', lang)}</h2>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => onChangePrefs((p) => ({...p, theme: 'system'}))}
                   aria-pressed={prefs.theme === 'system'}
-                  className={`min-h-[44px] rounded-full border px-3.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                  className={`min-h-[36px] rounded-full border px-3 text-xs font-semibold transition-colors whitespace-nowrap ${
                     prefs.theme === 'system'
-                      ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--ink)]'
+                      ? 'border-[var(--accent)] bg-[var(--accent)]/18 text-[var(--ink)]'
                       : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
                   }`}
                 >
@@ -1010,40 +985,34 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   aria-pressed={dayNightSelected}
                   title={dayNightActionLabel}
                   aria-label={dayNightActionLabel}
-                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition-all active:scale-95 ${
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-all active:scale-95 ${
                     dayNightSelected
-                      ? 'border-[var(--accent)] bg-[var(--accent)]/20 text-[var(--accent-text)]'
+                      ? 'border-[var(--accent)] bg-[var(--accent)]/18 text-[var(--accent-text)]'
                       : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
                   }`}
                 >
-                  {isDark ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
+                  {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowAllThemes((v) => !v)}
+                  className="min-h-[36px] rounded-full border border-[var(--line)] bg-[var(--inset)] px-3 text-[11px] font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] whitespace-nowrap"
+                >
+                  {showAllThemes
+                    ? lang === 'tr' ? 'Daralt' : 'Less'
+                    : lang === 'tr' ? `Tümü (${THEME_PRESETS.length})` : `All (${THEME_PRESETS.length})`}
                 </button>
               </div>
             </div>
 
-            <div className="mt-5 flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold text-[var(--muted)]">{t('Themes', lang)}</p>
-              <button
-                type="button"
-                onClick={() => setShowAllThemes((v) => !v)}
-                className="min-h-[32px] rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2.5 text-[11px] font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] whitespace-nowrap"
-              >
-                {showAllThemes
-                  ? lang === 'tr'
-                    ? 'Şeride Daralt'
-                    : 'Compact Strip'
-                  : lang === 'tr'
-                    ? `Tümünü Gör (${THEME_PRESETS.length})`
-                    : `View All (${THEME_PRESETS.length})`}
-              </button>
-            </div>
             <div
               role="radiogroup"
               aria-label={t('Themes', lang)}
               className={
                 showAllThemes
-                  ? 'mt-3 grid grid-cols-3 gap-2.5 sm:grid-cols-4 sm:gap-3 md:grid-cols-6'
-                  : 'no-scrollbar mt-3 flex snap-x gap-2.5 overflow-x-auto pb-1.5'
+                  ? 'mt-3.5 grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-6'
+                  : 'no-scrollbar mt-3.5 flex snap-x gap-2.5 overflow-x-auto pb-1'
               }
             >
               {THEME_PRESETS.map((preset) => {
@@ -1058,8 +1027,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     aria-checked={selected}
                     title={presetLabel}
                     onClick={() => onChangePrefs((p) => ({...p, preset: preset.id}))}
-                    className={`group flex min-h-[44px] flex-col items-stretch text-left ${
-                      showAllThemes ? '' : 'w-[106px] shrink-0 snap-start'
+                    className={`group flex flex-col items-stretch text-left ${
+                      showAllThemes ? '' : 'w-[96px] shrink-0 snap-start'
                     }`}
                   >
                     <div
@@ -1071,67 +1040,44 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       }}
                     >
                       <div
-                        className="flex h-4 shrink-0 items-center justify-between border-b px-2 sm:h-5"
+                        className="flex h-3.5 shrink-0 items-center justify-between border-b px-1.5"
                         style={{borderColor: pal.line, backgroundColor: pal.paper}}
                       >
                         <div className="flex items-center gap-1">
                           <span
-                            className="h-2 w-2 rounded-sm"
-                            style={{
-                              background: `linear-gradient(135deg, ${pal.accent}, ${pal.accentEnd})`,
-                            }}
+                            className="h-1.5 w-1.5 rounded-sm"
+                            style={{background: `linear-gradient(135deg, ${pal.accent}, ${pal.accentEnd})`}}
                           />
-                          <span className="h-1 w-5 rounded-full" style={{backgroundColor: pal.ink, opacity: 0.75}} />
+                          <span className="h-1 w-4 rounded-full" style={{backgroundColor: pal.ink, opacity: 0.75}} />
                         </div>
-                        <span className="h-1 w-2.5 rounded-full" style={{backgroundColor: pal.muted, opacity: 0.5}} />
+                        <span className="h-1 w-2 rounded-full" style={{backgroundColor: pal.muted, opacity: 0.5}} />
                       </div>
 
-                      <div className="flex flex-1 flex-col justify-between p-2">
+                      <div className="flex flex-1 flex-col justify-between p-1.5">
                         <div className="space-y-1">
                           <div className="h-1.5 w-4/5 rounded-full" style={{backgroundColor: pal.ink, opacity: 0.85}} />
                           <div className="h-1 w-3/5 rounded-full" style={{backgroundColor: pal.muted, opacity: 0.55}} />
                         </div>
-
                         <div
-                          className="flex flex-col gap-1 rounded-lg border p-1.5"
-                          style={{backgroundColor: pal.surface, borderColor: pal.line}}
-                        >
-                          <div
-                            className="h-3.5 rounded border sm:h-4"
-                            style={{backgroundColor: pal.inset, borderColor: pal.line}}
-                          />
-                          <div
-                            className="h-2.5 w-full rounded-full sm:h-3"
-                            style={{
-                              background: `linear-gradient(135deg, ${pal.accent}, ${pal.accentEnd})`,
-                            }}
-                          />
-                        </div>
-                      </div>
-
-                      <div
-                        className="flex h-4 shrink-0 items-center justify-around border-t px-2"
-                        style={{backgroundColor: pal.sidebar, borderColor: pal.line}}
-                      >
-                        <span className="h-1 w-3 rounded-full" style={{backgroundColor: pal.accent}} />
-                        <span className="h-1 w-1 rounded-full" style={{backgroundColor: pal.muted, opacity: 0.55}} />
-                        <span className="h-1 w-1 rounded-full" style={{backgroundColor: pal.muted, opacity: 0.55}} />
+                          className="h-2.5 w-full rounded-full"
+                          style={{background: `linear-gradient(135deg, ${pal.accent}, ${pal.accentEnd})`}}
+                        />
                       </div>
 
                       {selected && (
                         <span
-                          className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full shadow"
+                          className="absolute right-1 top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full shadow"
                           style={{
                             backgroundColor: pal.accent,
                             color: preset.id === 'monochrome' && isDark ? '#0D1320' : '#FFFFFF',
                           }}
                         >
-                          <Check className="h-2.5 w-2.5" />
+                          <Check className="h-2 w-2" />
                         </span>
                       )}
                     </div>
                     <p
-                      className={`mt-1.5 line-clamp-1 text-center text-[11px] font-semibold leading-tight ${
+                      className={`mt-1 line-clamp-1 text-center text-[10.5px] font-semibold leading-tight ${
                         selected ? 'text-[var(--ink)]' : 'text-[var(--muted)]'
                       }`}
                     >
@@ -1143,17 +1089,502 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </div>
           </section>
 
-          {/* Interface Scale, Corner Radius, Wheel Corner & Interaction Preferences */}
+          {/* 2. Quick Wheel Appearance — Live Preview, Segmented Position, 8 Outer Shapes & 12 Inner Icons */}
+          {!simpleMode && (() => {
+            const legacyRoundInnerMap: Partial<Record<WheelIconStylePref, WheelInnerStylePref>> = {
+              morph: 'morph_m',
+              gear: 'gear_hub',
+              compass: 'polar_star',
+              hex: 'hex_core',
+            };
+            const isRoundOuter =
+              wheelIconStyle === 'wheel' ||
+              wheelIconStyle === 'morph' ||
+              wheelIconStyle === 'gear' ||
+              wheelIconStyle === 'compass' ||
+              wheelIconStyle === 'hex';
+            const activeOuterId: WheelIconStylePref = isRoundOuter ? 'wheel' : wheelIconStyle;
+            const effectiveInner: WheelInnerStylePref =
+              wheelInnerStyle !== 'auto'
+                ? wheelInnerStyle
+                : legacyRoundInnerMap[wheelIconStyle] ?? 'auto';
+            const activeOuterMeta = WHEEL_OUTER_SHAPES.find((s) => s.id === activeOuterId);
+            const activeInnerMeta = WHEEL_INNER_STYLES.find((m) => m.id === effectiveInner);
+            const wheelEnabled = prefs.showQuickWheel !== false;
+
+            const renderInnerSvg = (coreId: WheelInnerStylePref) => {
+              switch (coreId) {
+                case 'auto':
+                  return (
+                    <>
+                      <circle cx="14" cy="14" r="8.5" stroke="currentColor" strokeWidth="1.7" strokeDasharray="3 2.3" />
+                      <circle cx="14" cy="14" r="2.8" fill="currentColor" />
+                    </>
+                  );
+                case 'wheel_spokes':
+                  return (
+                    <>
+                      {[0, 60, 120, 180, 240, 300].map((deg) => {
+                        const a1 = ((deg - 82) * Math.PI) / 180;
+                        const a2 = ((deg - 38) * Math.PI) / 180;
+                        const r = 9.4;
+                        return (
+                          <path
+                            key={deg}
+                            d={`M ${14 + r * Math.cos(a1)} ${14 + r * Math.sin(a1)} A ${r} ${r} 0 0 1 ${14 + r * Math.cos(a2)} ${14 + r * Math.sin(a2)}`}
+                            stroke="currentColor"
+                            strokeWidth="2.1"
+                            strokeLinecap="round"
+                          />
+                        );
+                      })}
+                      <circle cx="14" cy="14" r="2.2" fill="currentColor" />
+                    </>
+                  );
+                case 'morph_m':
+                  return (
+                    <>
+                      <circle cx="14" cy="14" r="9.4" stroke="currentColor" strokeWidth="1.6" strokeOpacity="0.4" />
+                      <text x="14" y="18" textAnchor="middle" fontSize="13.5" fontWeight="800" fill="currentColor">
+                        m
+                      </text>
+                    </>
+                  );
+                case 'gear_hub':
+                  return (
+                    <>
+                      <circle cx="14" cy="14" r="6.8" stroke="currentColor" strokeWidth="2.4" strokeDasharray="3.1 2" />
+                      <circle cx="14" cy="14" r="2.8" fill="currentColor" />
+                    </>
+                  );
+                case 'polar_star':
+                  return (
+                    <path
+                      d="M14 4.5 L16.5 11.5 L23.5 14 L16.5 16.5 L14 23.5 L11.5 16.5 L4.5 14 L11.5 11.5 Z"
+                      fill="currentColor"
+                    />
+                  );
+                case 'hex_core':
+                  return (
+                    <>
+                      <polygon
+                        points="14,4.5 22,9 22,19 14,23.5 6,19 6,9"
+                        stroke="currentColor"
+                        strokeWidth="1.9"
+                        strokeLinejoin="round"
+                      />
+                      <circle cx="14" cy="14" r="2.6" fill="currentColor" />
+                    </>
+                  );
+                case 'turbine':
+                  return (
+                    <>
+                      {[0, 120, 240].map((deg) => (
+                        <path
+                          key={deg}
+                          d="M14 14 Q 18 7.5 22.8 10.5 Q 19.5 14.5 14 14 Z"
+                          fill="currentColor"
+                          transform={`rotate(${deg} 14 14)`}
+                        />
+                      ))}
+                      <circle cx="14" cy="14" r="2.4" fill="currentColor" />
+                    </>
+                  );
+                case 'orbit':
+                  return (
+                    <>
+                      <path
+                        d="M 8.2 10.2 A 6.9 6.9 0 0 1 19.8 10.2"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M 19.8 17.8 A 6.9 6.9 0 0 1 8.2 17.8"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeOpacity="0.8"
+                      />
+                      <circle cx="20" cy="10.4" r="1.5" fill="currentColor" />
+                      <circle cx="8" cy="17.6" r="1.5" fill="currentColor" fillOpacity="0.85" />
+                      <circle cx="14" cy="14" r="2.4" fill="currentColor" />
+                    </>
+                  );
+                case 'crosshair':
+                  return (
+                    <>
+                      <circle cx="14" cy="14" r="7.8" stroke="currentColor" strokeWidth="1.8" strokeOpacity="0.7" />
+                      <path d="M14 4v4.3M14 19.7V24M4 14h4.3M19.7 14H24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      <circle cx="14" cy="14" r="2.2" fill="currentColor" />
+                    </>
+                  );
+                case 'bolt':
+                  return (
+                    <>
+                      <circle cx="14" cy="14" r="9.6" stroke="currentColor" strokeWidth="1.5" strokeOpacity="0.38" />
+                      <path
+                        d="M15.4 5.4 L9.0 14.6 H13.6 L12.5 22.6 L19.0 13.2 H14.4 Z"
+                        fill="currentColor"
+                        strokeLinejoin="round"
+                      />
+                    </>
+                  );
+                case 'deadpool':
+                  return (
+                    <>
+                      <circle cx="14" cy="14" r="10.1" stroke="currentColor" strokeWidth="1.6" />
+                      <path
+                        d="M 12.4 5.7 A 8.4 8.4 0 0 0 12.4 22.3 Z M 6.9 11.7 L 11.2 14.7 L 10.6 16.1 L 7.9 15.2 Z"
+                        fill="currentColor"
+                        fillRule="evenodd"
+                      />
+                      <path
+                        d="M 15.6 5.7 A 8.4 8.4 0 0 1 15.6 22.3 Z M 21.1 11.7 L 16.8 14.7 L 17.4 16.1 L 20.1 15.2 Z"
+                        fill="currentColor"
+                        fillRule="evenodd"
+                      />
+                    </>
+                  );
+                case 'minimal_dot':
+                default:
+                  return (
+                    <>
+                      <circle cx="14" cy="14" r="8.5" stroke="currentColor" strokeWidth="1.8" strokeOpacity="0.55" />
+                      <circle cx="14" cy="14" r="3.4" fill="currentColor" />
+                    </>
+                  );
+              }
+            };
+
+            const previewBadgeStyle: React.CSSProperties =
+              activeOuterId === 'diamond'
+                ? {transform: 'rotate(45deg) scale(0.84)', borderRadius: '10px'}
+                : activeOuterId === 'squircle'
+                  ? {borderRadius: '12px'}
+                  : activeOuterId === 'pill_dock'
+                    ? {width: '50px', height: '32px', borderRadius: '999px'}
+                    : activeOuterId === 'octa_shield'
+                      ? {clipPath: 'polygon(29% 2%, 71% 2%, 98% 29%, 98% 71%, 71% 98%, 29% 98%, 2% 71%, 2% 29%)', borderRadius: 0}
+                      : activeOuterId === 'blade_hex'
+                        ? {clipPath: 'polygon(25% 4%, 75% 4%, 99% 50%, 75% 96%, 25% 96%, 1% 50%)', borderRadius: 0}
+                        : activeOuterId === 'star_prism'
+                          ? {clipPath: 'polygon(50% 2%, 67% 33%, 98% 50%, 67% 67%, 50% 98%, 33% 67%, 2% 50%, 33% 33%)', borderRadius: 0}
+                          : activeOuterId === 'shield_crest'
+                            ? {clipPath: 'polygon(50% 2%, 95% 26%, 88% 78%, 50% 99%, 12% 78%, 5% 26%)', borderRadius: 0}
+                            : {borderRadius: '999px'};
+
+            const effectivePreviewCore: WheelInnerStylePref =
+              effectiveInner !== 'auto'
+                ? effectiveInner
+                : activeOuterId === 'blade_hex'
+                  ? 'turbine'
+                  : activeOuterId === 'star_prism'
+                    ? 'orbit'
+                    : activeOuterId === 'wheel'
+                      ? 'wheel_spokes'
+                      : 'minimal_dot';
+
+            return (
+              <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4 sm:p-5">
+                {/* Header with Live Combined Preview + Visibility Switch */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-11 w-12 shrink-0 items-center justify-center">
+                      <span
+                        style={previewBadgeStyle}
+                        className={`morph-accent-btn flex h-10 w-10 items-center justify-center shadow-sm transition-all ${
+                          wheelEnabled ? 'opacity-100' : 'opacity-40 grayscale'
+                        }`}
+                      >
+                        <svg
+                          viewBox={activeOuterId === 'pill_dock' ? '0 0 48 24' : '0 0 28 28'}
+                          fill="none"
+                          className={activeOuterId === 'pill_dock' ? 'h-5 w-9' : 'h-5 w-5'}
+                          style={activeOuterId === 'diamond' ? {transform: 'rotate(-45deg)'} : undefined}
+                        >
+                          {activeOuterId === 'pill_dock' ? (
+                            <>
+                              <g transform="translate(14 12) scale(0.68) translate(-14 -14)">
+                                {renderInnerSvg(effectivePreviewCore)}
+                              </g>
+                              <rect x="26" y="7.5" width="13" height="2.4" rx="1.2" fill="currentColor" fillOpacity="0.92" />
+                              <rect x="26" y="12.2" width="9.5" height="2.4" rx="1.2" fill="currentColor" fillOpacity="0.65" />
+                            </>
+                          ) : (
+                            renderInnerSvg(effectivePreviewCore)
+                          )}
+                        </svg>
+                      </span>
+                    </div>
+                    <div className="min-w-0">
+                      <h2 className="text-sm font-bold leading-tight text-[var(--ink)] sm:text-base">
+                        {t('WheelFabSectionTitle', lang)}
+                      </h2>
+                      <p className="mt-0.5 truncate text-[11px] font-medium text-[var(--muted)]">
+                        {activeOuterMeta ? (lang === 'tr' ? activeOuterMeta.titleTr : activeOuterMeta.titleEn) : ''}
+                        {' · '}
+                        {activeInnerMeta ? (lang === 'tr' ? activeInnerMeta.titleTr : activeInnerMeta.titleEn) : ''}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={wheelEnabled}
+                    aria-label={t('ShowQuickWheelLabel', lang)}
+                    onClick={() => {
+                      const nextEnabled = !wheelEnabled;
+                      onChangePrefs((p) => ({...p, showQuickWheel: nextEnabled}));
+                      onShowToast?.(
+                        nextEnabled ? t('QuickWheelEnabledToast', lang) : t('QuickWheelDisabledToast', lang)
+                      );
+                    }}
+                    className="flex shrink-0 items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--inset)] py-1.5 pl-3 pr-2 transition-colors hover:border-[var(--accent)]/50"
+                  >
+                    <span className="text-[11px] font-semibold text-[var(--ink)]">
+                      {wheelEnabled ? (lang === 'tr' ? 'Açık' : 'On') : lang === 'tr' ? 'Gizli' : 'Off'}
+                    </span>
+                    <span className="morph-switch" data-checked={wheelEnabled ? 'true' : 'false'}>
+                      <span className="morph-switch-thumb" />
+                    </span>
+                  </button>
+                </div>
+
+                {prefs.expAltLauncher && prefs.expAltLauncherForMain === true && (
+                  <div className="mt-3.5 flex flex-col gap-2.5 rounded-2xl border border-[var(--accent)]/40 bg-[var(--accent)]/10 p-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="min-w-0 flex-1 text-[11px] font-medium leading-snug text-[var(--ink)]">
+                      {lang === 'tr'
+                        ? 'Ana Ekran Çark düğmesi aktif; dokunulduğunda deneysel başlatıcı açılır.'
+                        : 'Quick Wheel button stays active and opens your experimental launcher.'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => onChangePrefs((p) => ({...p, expAltLauncherForMain: false}))}
+                      className="min-h-[34px] w-full shrink-0 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)] whitespace-nowrap sm:w-auto"
+                    >
+                      {lang === 'tr' ? 'Klasik Çarka Dön' : 'Use Classic Wheel'}
+                    </button>
+                  </div>
+                )}
+
+                {/* Position Segmented Bar */}
+                {(() => {
+                  const sideSteps: readonly WheelSidePref[] = ['left', 'center', 'right'];
+                  const sideLabels = [
+                    t('WheelSideLeft', lang),
+                    t('WheelSideCenter', lang),
+                    t('WheelSideRight', lang),
+                  ];
+                  const idx = Math.max(0, sideSteps.indexOf(wheelSide));
+                  return (
+                    <div className="mt-4 flex items-center justify-between gap-3">
+                      <span className="shrink-0 text-xs font-semibold text-[var(--muted)]">
+                        {t('WheelSideLabel', lang)}
+                      </span>
+                      <div
+                        className="grid flex-1 max-w-[320px] grid-cols-3 gap-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] p-1"
+                        role="radiogroup"
+                        aria-label={t('WheelSideLabel', lang)}
+                      >
+                        {sideLabels.map((lbl, i) => (
+                          <button
+                            key={lbl}
+                            type="button"
+                            role="radio"
+                            aria-checked={i === idx}
+                            onClick={() =>
+                              onChangePrefs((p) => ({
+                                ...p,
+                                wheelSide: sideSteps[i] ?? 'right',
+                              }))
+                            }
+                            className={`min-h-[34px] rounded-lg px-2 text-xs font-semibold transition-colors ${
+                              i === idx
+                                ? 'bg-[var(--surface)] text-[var(--ink)] ring-1 ring-[var(--accent)]/60 shadow-sm'
+                                : 'text-[var(--muted)] hover:text-[var(--ink)]'
+                            }`}
+                          >
+                            {lbl}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Outer Shape (8 — 4x2 mobile, 8x1 desktop) */}
+                <div className="mt-4 border-t border-[var(--line)]/70 pt-3.5">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-[var(--ink)]">
+                      {t('WheelIconStyleLabel', lang)}
+                    </span>
+                    <span className="text-[11px] font-bold text-[var(--accent-text)]">
+                      {activeOuterMeta ? (lang === 'tr' ? activeOuterMeta.titleTr : activeOuterMeta.titleEn) : ''}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-8">
+                    {WHEEL_OUTER_SHAPES.map((shape) => {
+                      const selected = activeOuterId === shape.id;
+                      return (
+                        <button
+                          key={shape.id}
+                          type="button"
+                          onClick={() =>
+                            onChangePrefs((p) => {
+                              const migratedInner =
+                                p.wheelInnerStyle && p.wheelInnerStyle !== 'auto'
+                                  ? p.wheelInnerStyle
+                                  : (p.wheelIconStyle ? legacyRoundInnerMap[p.wheelIconStyle] : undefined) ?? 'auto';
+                              return {
+                                ...p,
+                                wheelIconStyle: shape.id,
+                                wheelInnerStyle: migratedInner,
+                                expWheelShape: null,
+                              };
+                            })
+                          }
+                          className={`flex flex-col items-center justify-center gap-1 rounded-xl border py-2 px-1 transition-colors active:scale-[0.97] ${
+                            selected
+                              ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--ink)]'
+                              : 'border-[var(--line)] bg-[var(--inset)]/70 text-[var(--muted)] hover:border-[var(--accent)]/45 hover:text-[var(--ink)]'
+                          }`}
+                        >
+                          <svg
+                            viewBox="0 0 28 28"
+                            fill="none"
+                            className={`h-5 w-5 ${selected ? 'text-[var(--accent-text)]' : ''}`}
+                          >
+                            {shape.id === 'wheel' && <circle cx="14" cy="14" r="9.5" stroke="currentColor" strokeWidth="2" />}
+                            {shape.id === 'squircle' && <rect x="4.5" y="4.5" width="19" height="19" rx="5.5" stroke="currentColor" strokeWidth="2" />}
+                            {shape.id === 'diamond' && (
+                              <rect x="7" y="7" width="14" height="14" rx="3.2" transform="rotate(45 14 14)" stroke="currentColor" strokeWidth="2" />
+                            )}
+                            {shape.id === 'pill_dock' && <rect x="2.5" y="8" width="23" height="12" rx="6" stroke="currentColor" strokeWidth="2" />}
+                            {shape.id === 'octa_shield' && (
+                              <polygon points="9.8,4 18.2,4 24,9.8 24,18.2 18.2,24 9.8,24 4,18.2 4,9.8" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+                            )}
+                            {shape.id === 'blade_hex' && (
+                              <polygon points="8.5,4.5 19.5,4.5 24.5,14 19.5,23.5 8.5,23.5 3.5,14" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+                            )}
+                            {shape.id === 'star_prism' && (
+                              <path d="M14 3.5L17.4 10.6L24.5 14L17.4 17.4L14 24.5L10.6 17.4L3.5 14L10.6 10.6Z" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" />
+                            )}
+                            {shape.id === 'shield_crest' && (
+                              <polygon points="14,3.8 23.2,8.8 21.4,19.4 14,24.2 6.6,19.4 4.8,8.8" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+                            )}
+                          </svg>
+                          <span className="max-w-full truncate text-[10px] font-semibold">
+                            {lang === 'tr' ? shape.titleTr : shape.titleEn}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Inner Design (12 — 4x3 mobile, 6x2 desktop) */}
+                <div className="mt-3.5 border-t border-[var(--line)]/70 pt-3.5">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-[var(--ink)]">
+                      {lang === 'tr' ? 'İç Tasarım' : 'Inner Icon'}
+                    </span>
+                    <span className="text-[11px] font-bold text-[var(--accent-text)]">
+                      {activeInnerMeta ? (lang === 'tr' ? activeInnerMeta.titleTr : activeInnerMeta.titleEn) : ''}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">
+                    {WHEEL_INNER_STYLES.map((core) => {
+                      const selected = effectiveInner === core.id;
+                      return (
+                        <button
+                          key={core.id}
+                          type="button"
+                          onClick={() =>
+                            onChangePrefs((p) => ({
+                              ...p,
+                              wheelIconStyle: activeOuterId,
+                              wheelInnerStyle: core.id,
+                              expWheelShape: null,
+                            }))
+                          }
+                          className={`flex flex-col items-center justify-center gap-1 rounded-xl border py-2 px-1 transition-colors active:scale-[0.97] ${
+                            selected
+                              ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--ink)]'
+                              : 'border-[var(--line)] bg-[var(--inset)]/70 text-[var(--muted)] hover:border-[var(--accent)]/45 hover:text-[var(--ink)]'
+                          }`}
+                        >
+                          <svg
+                            viewBox="0 0 28 28"
+                            fill="none"
+                            className={`h-5 w-5 ${selected ? 'text-[var(--accent-text)]' : ''}`}
+                          >
+                            {renderInnerSvg(core.id)}
+                          </svg>
+                          <span className="max-w-full truncate text-[10px] font-semibold">
+                            {lang === 'tr' ? core.titleTr : core.titleEn}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Compact Wheel Actions Footer */}
+                {(onOpenMainWheelCustomize || onOpenWheelCustomize) && (
+                  <div className="mt-4 border-t border-[var(--line)]/70 pt-3.5">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {onOpenMainWheelCustomize && (
+                        <button
+                          type="button"
+                          onClick={onOpenMainWheelCustomize}
+                          className="morph-tonal-btn flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-semibold whitespace-nowrap transition-transform active:scale-[0.98]"
+                        >
+                          <SlidersHorizontal className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                          <span>{t('MainWheelCustomizeBtn', lang)}</span>
+                        </button>
+                      )}
+                      {onOpenWheelCustomize && (
+                        <button
+                          type="button"
+                          onClick={onOpenWheelCustomize}
+                          className="morph-tonal-btn flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-semibold whitespace-nowrap transition-transform active:scale-[0.98]"
+                        >
+                          <SlidersHorizontal className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                          <span>{t('WheelCustomizeOpenBtn', lang)}</span>
+                          <span className="rounded bg-[var(--accent)]/18 px-1.5 py-0.5 text-[9.5px] font-bold text-[var(--accent-text)]">
+                            {prefs.wheelConfig?.mode === 'all'
+                              ? t('WheelModeAll', lang)
+                              : prefs.wheelConfig?.mode === 'pinned'
+                                ? t('WheelModePinned', lang)
+                                : t('WheelModeSmart', lang)}
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                    {onOpenWheelCustomize && (
+                      <p className="mt-2 text-center text-[10.5px] leading-snug text-[var(--muted)]">
+                        {t('WheelHoldHint', lang)}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </section>
+            );
+          })()}
+
+          {/* 3. Interface Scale, Corner Radius & Grouped Interaction Toggles */}
           {!simpleMode && (
-          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
-            <div className="flex items-center gap-2.5">
-              <SlidersHorizontal className="h-5 w-5 text-[var(--accent)]" />
-              <h2 className="text-base font-bold text-[var(--ink)]">
+          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4 sm:p-5">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal className="h-4.5 w-4.5 text-[var(--accent)]" />
+              <h2 className="text-sm font-bold text-[var(--ink)] sm:text-base">
                 {t('UiInterfaceSection', lang)}
               </h2>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="mt-3.5 grid grid-cols-1 gap-3 sm:grid-cols-2">
               {/* Text & UI Scale Control */}
               {(() => {
                 const scaleSteps: readonly UiScalePref[] = ['compact', 'default', 'large'];
@@ -1165,9 +1596,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 const idx = Math.max(0, scaleSteps.indexOf(uiScale));
                 const pct = (idx / (scaleSteps.length - 1)) * 100;
                 return (
-                  <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
-                    <div className="mb-2.5 flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-[var(--ink)]">
+                  <div>
+                    <div className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
+                      <span className="text-xs font-semibold text-[var(--muted)]">
                         {t('UiScaleLabel', lang)}
                       </span>
                       <span className="font-mono-num text-[11px] font-bold text-[var(--accent-text)]">
@@ -1191,10 +1622,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                         style={{
                           background: `linear-gradient(90deg, var(--accent) 0%, var(--accent-end) ${pct}%, var(--surface) ${pct}%)`,
                         }}
-                        className="morph-slider mb-2.5"
+                        className="morph-slider mb-2"
                       />
                     )}
-                    <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label={t('UiScaleLabel', lang)}>
+                    <div
+                      className="grid grid-cols-3 gap-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] p-1"
+                      role="radiogroup"
+                      aria-label={t('UiScaleLabel', lang)}
+                    >
                       {scaleLabels.map((lbl, i) => (
                         <button
                           key={lbl}
@@ -1207,10 +1642,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                               uiScale: scaleSteps[i] ?? 'default',
                             }))
                           }
-                          className={`min-h-[42px] rounded-xl px-1.5 text-xs font-semibold transition-colors ${
+                          className={`min-h-[36px] rounded-lg px-1.5 text-xs font-semibold transition-colors ${
                             i === idx
                               ? 'bg-[var(--surface)] text-[var(--ink)] ring-1 ring-[var(--accent)]/60 shadow-sm'
-                              : 'text-[var(--muted)] hover:bg-[var(--surface)]/60 hover:text-[var(--ink)]'
+                              : 'text-[var(--muted)] hover:text-[var(--ink)]'
                           }`}
                         >
                           {lbl}
@@ -1232,9 +1667,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 const idx = Math.max(0, cornerSteps.indexOf(cornerStyle));
                 const pct = (idx / (cornerSteps.length - 1)) * 100;
                 return (
-                  <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
-                    <div className="mb-2.5 flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-[var(--ink)]">
+                  <div>
+                    <div className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
+                      <span className="text-xs font-semibold text-[var(--muted)]">
                         {t('CornerStyleLabel', lang)}
                       </span>
                       <span className="font-mono-num text-[11px] font-bold text-[var(--accent-text)]">
@@ -1258,10 +1693,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                         style={{
                           background: `linear-gradient(90deg, var(--accent) 0%, var(--accent-end) ${pct}%, var(--surface) ${pct}%)`,
                         }}
-                        className="morph-slider mb-2.5"
+                        className="morph-slider mb-2"
                       />
                     )}
-                    <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label={t('CornerStyleLabel', lang)}>
+                    <div
+                      className="grid grid-cols-3 gap-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] p-1"
+                      role="radiogroup"
+                      aria-label={t('CornerStyleLabel', lang)}
+                    >
                       {cornerLabels.map((lbl, i) => (
                         <button
                           key={lbl}
@@ -1274,10 +1713,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                               cornerStyle: cornerSteps[i] ?? 'balanced',
                             }))
                           }
-                          className={`min-h-[42px] rounded-xl px-1.5 text-xs font-semibold transition-colors ${
+                          className={`min-h-[36px] rounded-lg px-1.5 text-xs font-semibold transition-colors ${
                             i === idx
                               ? 'bg-[var(--surface)] text-[var(--ink)] ring-1 ring-[var(--accent)]/60 shadow-sm'
-                              : 'text-[var(--muted)] hover:bg-[var(--surface)]/60 hover:text-[var(--ink)]'
+                              : 'text-[var(--muted)] hover:text-[var(--ink)]'
                           }`}
                         >
                           {lbl}
@@ -1289,22 +1728,18 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               })()}
             </div>
 
-            {/* Reduced Motion & Haptic Feedback Toggles */}
-            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {/* Clean Hairline-Divided Toggles List */}
+            <div className="mt-4 divide-y divide-[var(--line)] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--inset)]">
               <button
                 type="button"
                 onClick={() => onChangePrefs((p) => ({...p, reducedMotion: !p.reducedMotion}))}
-                className="flex min-h-[68px] items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
+                className="flex min-h-[54px] w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--surface)]/55"
               >
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-[var(--ink)]">
-                    {t('ReducedMotionLabel', lang)}
-                  </p>
-                  <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
-                    {t('ReducedMotionDesc', lang)}
-                  </p>
+                  <p className="text-xs font-bold text-[var(--ink)]">{t('ReducedMotionLabel', lang)}</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">{t('ReducedMotionDesc', lang)}</p>
                 </div>
-                <span className="morph-switch" data-checked={reducedMotion ? 'true' : 'false'}>
+                <span className="morph-switch shrink-0" data-checked={reducedMotion ? 'true' : 'false'}>
                   <span className="morph-switch-thumb" />
                 </span>
               </button>
@@ -1314,348 +1749,55 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 onClick={() =>
                   onChangePrefs((p) => ({...p, hapticsEnabled: p.hapticsEnabled === false}))
                 }
-                className="flex min-h-[68px] items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
+                className="flex min-h-[54px] w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--surface)]/55"
               >
                 <div className="min-w-0">
                   <p className="text-xs font-bold text-[var(--ink)]">{t('HapticsLabel', lang)}</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">{t('HapticsDesc', lang)}</p>
+                </div>
+                <span className="morph-switch shrink-0" data-checked={hapticsEnabled ? 'true' : 'false'}>
+                  <span className="morph-switch-thumb" />
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  onChangePrefs((p) => ({...p, showIntegratedEngines: !p.showIntegratedEngines}))
+                }
+                className="flex min-h-[54px] w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--surface)]/55"
+              >
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-[var(--ink)]">{t('ShowIntegratedEnginesLabel', lang)}</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">{t('ShowIntegratedEnginesDesc', lang)}</p>
+                </div>
+                <span className="morph-switch shrink-0" data-checked={showIntegratedEngines ? 'true' : 'false'}>
+                  <span className="morph-switch-thumb" />
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  onChangePrefs((p) => ({...p, showToolLabels: !p.showToolLabels}))
+                }
+                className="flex min-h-[54px] w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-[var(--surface)]/55"
+              >
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-[var(--ink)]">
+                    {lang === 'tr' ? 'Araçlarda Yazı & Açıklamalar' : 'Tool Labels & Descriptions'}
+                  </p>
                   <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
-                    {t('HapticsDesc', lang)}
+                    {lang === 'tr'
+                      ? 'Simge odaklı sade mod yerine uzun etiketleri gösterir.'
+                      : 'Show full tool descriptions and button text.'}
                   </p>
                 </div>
-                <span className="morph-switch" data-checked={hapticsEnabled ? 'true' : 'false'}>
+                <span className="morph-switch shrink-0" data-checked={showToolLabels ? 'true' : 'false'}>
                   <span className="morph-switch-thumb" />
                 </span>
               </button>
             </div>
-
-            {/* Integrated Engines Visibility Toggle (Home Screen) */}
-            <button
-              type="button"
-              onClick={() =>
-                onChangePrefs((p) => ({...p, showIntegratedEngines: !p.showIntegratedEngines}))
-              }
-              className="mt-3 flex min-h-[64px] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
-            >
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-[var(--ink)]">
-                  {t('ShowIntegratedEnginesLabel', lang)}
-                </p>
-                <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
-                  {t('ShowIntegratedEnginesDesc', lang)}
-                </p>
-              </div>
-              <span className="morph-switch" data-checked={showIntegratedEngines ? 'true' : 'false'}>
-                <span className="morph-switch-thumb" />
-              </span>
-            </button>
-
-            {/* Tool Labels & Descriptions Toggle (Icon-First vs Text Mode) */}
-            <button
-              type="button"
-              onClick={() =>
-                onChangePrefs((p) => ({...p, showToolLabels: !p.showToolLabels}))
-              }
-              className="mt-3 flex min-h-[64px] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
-            >
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-[var(--ink)]">
-                  {lang === 'tr'
-                    ? 'Araçlarda Yazı & Açıklamaları Göster'
-                    : 'Show Tool Labels & Descriptions'}
-                </p>
-                <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
-                  {lang === 'tr'
-                    ? 'Kapalıyken araçlar sade simge odaklı görünür; açıldığında uzun açıklamalar ve buton yazıları eklenir.'
-                    : 'Off uses a clean icon-first tool UI; turn on to show full descriptions and button labels.'}
-                </p>
-              </div>
-              <span className="morph-switch" data-checked={showToolLabels ? 'true' : 'false'}>
-                <span className="morph-switch-thumb" />
-              </span>
-            </button>
-          </section>
-          )}
-
-          {/* Dedicated Quick Wheel Visibility, Customization, Position & Icon Design Card */}
-          {!simpleMode && (
-          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
-                  <SlidersHorizontal className="h-4 w-4" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold leading-tight text-[var(--ink)]">
-                    {t('WheelFabSectionTitle', lang)}
-                  </h2>
-                  <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
-                    {t('WheelFabSectionDesc', lang)}
-                  </p>
-                </div>
-              </div>
-
-              {onOpenMainWheelCustomize && (
-                <button
-                  type="button"
-                  onClick={onOpenMainWheelCustomize}
-                  className="flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-full border border-[var(--accent)]/45 bg-[var(--accent)]/12 px-3.5 text-xs font-bold text-[var(--ink)] transition-colors hover:bg-[var(--accent)]/20 whitespace-nowrap"
-                >
-                  <SlidersHorizontal className="h-3.5 w-3.5 text-[var(--accent)]" />
-                  <span>{t('MainWheelCustomizeBtn', lang)}</span>
-                </button>
-              )}
-            </div>
-
-            {/* Notice only when Experimental Launcher is specifically assigned to the Main Wheel menu */}
-            {prefs.expAltLauncher && prefs.expAltLauncherForMain === true && (
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-[var(--accent)]/40 bg-[var(--accent)]/10 p-3.5">
-                <p className="min-w-0 flex-1 text-xs font-medium leading-snug text-[var(--ink)]">
-                  {lang === 'tr'
-                    ? 'Ana Ekran Çark düğmesi (ve 30 sn alev efekti) aktif kalır; dokunulduğunda seçili deneysel başlatıcı açılır.'
-                    : 'The Quick Wheel button (and 30s burn effect) stays active; tapping it opens your selected experimental launcher.'}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => onChangePrefs((p) => ({...p, expAltLauncherForMain: false}))}
-                  className="min-h-[36px] shrink-0 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)] whitespace-nowrap"
-                >
-                  {lang === 'tr' ? 'Klasik Çarka Dön' : 'Use Classic Wheel'}
-                </button>
-              </div>
-            )}
-
-            {/* Home Screen Quick Wheel Show / Hide Switch */}
-            <button
-              type="button"
-              onClick={() => {
-                const nextEnabled = prefs.showQuickWheel === false;
-                onChangePrefs((p) => ({...p, showQuickWheel: nextEnabled}));
-                onShowToast?.(
-                  nextEnabled ? t('QuickWheelEnabledToast', lang) : t('QuickWheelDisabledToast', lang)
-                );
-              }}
-              className="mt-4 flex min-h-[64px] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--accent)]">
-                  {prefs.showQuickWheel !== false ? (
-                    <Eye className="h-4 w-4" />
-                  ) : (
-                    <EyeOff className="h-4 w-4 text-[var(--muted)]" />
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-[var(--ink)]">
-                    {t('ShowQuickWheelLabel', lang)}
-                  </p>
-                  <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
-                    {t('ShowQuickWheelDesc', lang)}
-                  </p>
-                </div>
-              </div>
-              <span
-                className="morph-switch shrink-0"
-                data-checked={prefs.showQuickWheel !== false ? 'true' : 'false'}
-              >
-                <span className="morph-switch-thumb" />
-              </span>
-            </button>
-
-            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {/* 3-Step Position Control: Sol Alt | Orta Alt | Sağ Alt */}
-              {(() => {
-                const sideSteps: readonly WheelSidePref[] = ['left', 'center', 'right'];
-                const sideLabels = [
-                  t('WheelSideLeft', lang),
-                  t('WheelSideCenter', lang),
-                  t('WheelSideRight', lang),
-                ];
-                const idx = Math.max(0, sideSteps.indexOf(wheelSide));
-                const pct = (idx / (sideSteps.length - 1)) * 100;
-                return (
-                  <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
-                    <div className="mb-2.5 flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-[var(--ink)]">
-                        {t('WheelSideLabel', lang)}
-                      </span>
-                      <span className="font-mono-num text-[11px] font-bold text-[var(--accent-text)]">
-                        {sideLabels[idx]}
-                      </span>
-                    </div>
-                    {prefs.expLegacySliders && (
-                      <input
-                        type="range"
-                        min={0}
-                        max={sideSteps.length - 1}
-                        step={1}
-                        value={idx}
-                        aria-label={t('WheelSideLabel', lang)}
-                        onChange={(e) =>
-                          onChangePrefs((p) => ({
-                            ...p,
-                            wheelSide: sideSteps[Number(e.target.value)] ?? 'right',
-                          }))
-                        }
-                        style={{
-                          background: `linear-gradient(90deg, var(--accent) 0%, var(--accent-end) ${pct}%, var(--surface) ${pct}%)`,
-                        }}
-                        className="morph-slider mb-2.5"
-                      />
-                    )}
-                    <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label={t('WheelSideLabel', lang)}>
-                      {sideLabels.map((lbl, i) => (
-                        <button
-                          key={lbl}
-                          type="button"
-                          role="radio"
-                          aria-checked={i === idx}
-                          onClick={() =>
-                            onChangePrefs((p) => ({
-                              ...p,
-                              wheelSide: sideSteps[i] ?? 'right',
-                            }))
-                          }
-                          className={`min-h-[42px] rounded-xl px-1.5 text-xs font-semibold transition-colors ${
-                            i === idx
-                              ? 'bg-[var(--surface)] text-[var(--ink)] ring-1 ring-[var(--accent)]/60 shadow-sm'
-                              : 'text-[var(--muted)] hover:bg-[var(--surface)]/60 hover:text-[var(--ink)]'
-                          }`}
-                        >
-                          {lbl}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* 5 Selectable Quick Wheel Icon Designs */}
-              <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
-                <p className="mb-2.5 text-xs font-semibold text-[var(--ink)]">
-                  {t('WheelIconStyleLabel', lang)}
-                </p>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {(
-                    [
-                      {id: 'wheel', label: t('WheelIconWheel', lang)},
-                      {id: 'morph', label: t('WheelIconMorph', lang)},
-                      {id: 'gear', label: t('WheelIconGear', lang)},
-                      {id: 'compass', label: t('WheelIconCompass', lang)},
-                      {id: 'hex', label: t('WheelIconHex', lang)},
-                    ] as const
-                  ).map(({id, label}) => {
-                    const active = wheelIconStyle === id;
-                    return (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => onChangePrefs((p) => ({...p, wheelIconStyle: id, expWheelShape: null}))}
-                        className={`flex flex-col items-center justify-center gap-1 rounded-xl border py-2 text-[10px] font-semibold transition-colors ${
-                          active
-                            ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--ink)]'
-                            : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)]'
-                        }`}
-                      >
-                        <svg viewBox="0 0 28 28" fill="none" className="h-5 w-5">
-                          {id === 'wheel' && (
-                            <>
-                              {[0, 60, 120, 180, 240, 300].map((deg) => {
-                                const a1 = ((deg - 82) * Math.PI) / 180;
-                                const a2 = ((deg - 38) * Math.PI) / 180;
-                                const r = 10.2;
-                                return (
-                                  <path
-                                    key={deg}
-                                    d={`M ${14 + r * Math.cos(a1)} ${14 + r * Math.sin(a1)} A ${r} ${r} 0 0 1 ${14 + r * Math.cos(a2)} ${14 + r * Math.sin(a2)}`}
-                                    stroke="currentColor"
-                                    strokeWidth="2.2"
-                                    strokeLinecap="round"
-                                  />
-                                );
-                              })}
-                              <circle cx="14" cy="14" r="2.4" fill="currentColor" />
-                            </>
-                          )}
-                          {id === 'morph' && (
-                            <>
-                              <circle cx="14" cy="14" r="10" stroke="currentColor" strokeWidth="1.8" strokeOpacity="0.45" />
-                              <text
-                                x="14"
-                                y="18.2"
-                                textAnchor="middle"
-                                fontSize="14.5"
-                                fontWeight="800"
-                                fill="currentColor"
-                              >
-                                m
-                              </text>
-                            </>
-                          )}
-                          {id === 'gear' && (
-                            <>
-                              <circle cx="14" cy="14" r="6.8" stroke="currentColor" strokeWidth="2.4" strokeDasharray="3.2 2.1" />
-                              <circle cx="14" cy="14" r="3" fill="currentColor" />
-                            </>
-                          )}
-                          {id === 'compass' && (
-                            <>
-                              <circle cx="14" cy="14" r="9.5" stroke="currentColor" strokeWidth="1.6" strokeOpacity="0.4" />
-                              <path
-                                d="M14 4 L16.6 11.4 L24 14 L16.6 16.6 L14 24 L11.4 16.6 L4 14 L11.4 11.4 Z"
-                                fill="currentColor"
-                              />
-                            </>
-                          )}
-                          {id === 'hex' && (
-                            <>
-                              <polygon
-                                points="14,3.8 22.8,8.9 22.8,19.1 14,24.2 5.2,19.1 5.2,8.9"
-                                stroke="currentColor"
-                                strokeWidth="2.1"
-                                strokeLinejoin="round"
-                              />
-                              <circle cx="14" cy="14" r="3" fill="currentColor" />
-                            </>
-                          )}
-                        </svg>
-                        <span className="truncate max-w-full px-0.5">{label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* Unified Studio Radial Wheel Customization Row inside the same Wheel card */}
-            {onOpenWheelCustomize && (
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-xs font-bold text-[var(--ink)]">
-                      {t('WheelCustomizeTitle', lang)}
-                    </p>
-                    <span className="rounded-md bg-[var(--accent)]/15 px-1.5 py-0.5 text-[10px] font-bold text-[var(--accent-text)] whitespace-nowrap">
-                      {prefs.wheelConfig?.mode === 'all'
-                        ? t('WheelModeAll', lang)
-                        : prefs.wheelConfig?.mode === 'pinned'
-                          ? t('WheelModePinned', lang)
-                          : t('WheelModeSmart', lang)}
-                    </span>
-                  </div>
-                  <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
-                    {t('WheelHoldHint', lang)}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={onOpenWheelCustomize}
-                  className="morph-tonal-btn flex min-h-[40px] shrink-0 items-center justify-center gap-1.5 rounded-xl px-3.5 text-xs font-semibold whitespace-nowrap transition-transform active:scale-[0.98]"
-                >
-                  <SlidersHorizontal className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                  <span>{t('WheelCustomizeOpenBtn', lang)}</span>
-                </button>
-              </div>
-            )}
           </section>
           )}
         </div>
@@ -2481,14 +2623,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     prefs.expSpinningGear ||
                     prefs.expWheelBurnEffect ||
                     (prefs.expWheelBurnStyle && prefs.expWheelBurnStyle !== 'classic_fire') ||
-                    Boolean(prefs.expWheelShape) ||
                     prefs.expWheelSpinEnabled ||
                     (prefs.expWheelSpinMode && prefs.expWheelSpinMode !== 'outer_ccw_inner_cw') ||
                     (prefs.expWheelSpinTrigger && prefs.expWheelSpinTrigger !== 'always') ||
-                    (prefs.wheelIconStyle && EXP_WHEEL_SHAPES.some((s) => s.id === prefs.wheelIconStyle)) ||
                     prefs.expArmadilloReel === false ||
                     prefs.expArmadilloHideOnFullPreview === false ||
                     prefs.expArmadilloHideOnPlay === false ||
+                    prefs.expVideoMobileGridInHeader === false ||
+                    prefs.expVideoMobileMuteInTransport === false ||
                     prefs.expVideoExtraTimecodes ||
                     prefs.expWheelCenterHoldCustomize ||
                     prefs.expTouchTooltips ||
@@ -2519,16 +2661,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                           expSpinningGear: false,
                           expWheelBurnEffect: false,
                           expWheelBurnStyle: 'classic_fire',
-                          expWheelShape: null,
                           expWheelSpinEnabled: false,
                           expWheelSpinMode: 'outer_ccw_inner_cw',
                           expWheelSpinTrigger: 'always',
-                          wheelIconStyle: EXP_WHEEL_SHAPES.some((s) => s.id === p.wheelIconStyle)
-                            ? 'wheel'
-                            : p.wheelIconStyle,
                           expArmadilloReel: true,
                           expArmadilloHideOnFullPreview: true,
                           expArmadilloHideOnPlay: true,
+                          expVideoMobileGridInHeader: true,
+                          expVideoMobileMuteInTransport: true,
                           expVideoExtraTimecodes: false,
                           expWheelCenterHoldCustomize: false,
                           expTouchTooltips: false,
@@ -2657,57 +2797,105 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                           ? 'Kapalı bıraktığın menüler klasik çark olarak çalışmaya devam eder.'
                           : 'Any area left off keeps using the classic radial wheel.'}
                       </p>
-                      <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+                      <div className="mt-2 flex w-full items-stretch gap-1">
                         {(
                           [
                             {
                               key: 'expAltLauncherForMenus' as const,
                               checked: forMenus,
-                              titleTr: 'Dönüştür · Araçlar · İşlemler',
-                              titleEn: 'Convert · Tools · Actions',
+                              Icon: Layers,
+                              titleTr: 'Dönüştür · Araçlar',
+                              titleEn: 'Convert · Tools',
                             },
                             {
                               key: 'expAltLauncherForMain' as const,
                               checked: forMain,
+                              Icon: SlidersHorizontal,
                               titleTr: 'Ana Ekran Çarkı',
                               titleEn: 'Home Quick Wheel',
                             },
                             {
                               key: 'expAltLauncherForVideo' as const,
                               checked: forVideo,
+                              Icon: Play,
                               titleTr: 'Video Düzenleyici',
                               titleEn: 'Video Editor',
                             },
                           ] as const
-                        ).map((scope) => (
-                          <button
-                            key={scope.key}
-                            type="button"
-                            role="switch"
-                            aria-checked={scope.checked}
-                            onClick={() =>
-                              onChangePrefs((p) => ({
-                                ...p,
-                                [scope.key]: !scope.checked,
-                              }))
-                            }
-                            className={`flex min-h-[42px] items-center justify-between gap-2 rounded-xl border px-2.5 py-2 text-left transition-colors ${
-                              scope.checked
-                                ? 'border-[var(--accent)]/60 bg-[var(--surface)] text-[var(--ink)]'
-                                : 'border-[var(--line)] bg-[var(--surface)]/50 text-[var(--muted)] hover:border-[var(--accent)]/40'
-                            }`}
-                          >
-                            <span className="text-[11px] font-bold leading-tight">
-                              {lang === 'tr' ? scope.titleTr : scope.titleEn}
-                            </span>
-                            <span
-                              className="morph-switch shrink-0 scale-[0.86] origin-right"
-                              data-checked={scope.checked ? 'true' : 'false'}
+                        ).map((scope) => {
+                          const isExpanded = expLauncherFocusedScope === scope.key;
+                          const ScopeIcon = scope.Icon;
+                          return (
+                            <button
+                              key={scope.key}
+                              type="button"
+                              aria-expanded={isExpanded}
+                              aria-label={`${lang === 'tr' ? scope.titleTr : scope.titleEn}: ${
+                                scope.checked
+                                  ? lang === 'tr'
+                                    ? 'Açık'
+                                    : 'On'
+                                  : lang === 'tr'
+                                    ? 'Kapalı'
+                                    : 'Off'
+                              }`}
+                              title={lang === 'tr' ? scope.titleTr : scope.titleEn}
+                              onClick={() => {
+                                if (!isExpanded) {
+                                  setExpLauncherFocusedScope(scope.key);
+                                } else {
+                                  onChangePrefs((p) => ({
+                                    ...p,
+                                    [scope.key]: !scope.checked,
+                                  }));
+                                }
+                              }}
+                              className={`relative flex min-h-[44px] items-center overflow-hidden rounded-xl border transition-all duration-200 focus:outline-none ${
+                                isExpanded
+                                  ? 'flex-1 justify-between gap-1.5 px-2.5 py-1.5 text-left'
+                                  : 'w-[42px] shrink-0 justify-center p-1.5'
+                              } ${
+                                scope.checked
+                                  ? isExpanded
+                                    ? 'border-[var(--accent)]/65 bg-[var(--accent)]/[0.09] text-[var(--ink)]'
+                                    : 'border-[var(--accent)]/45 bg-[var(--surface)] text-[var(--accent-text)]'
+                                  : isExpanded
+                                    ? 'border-[var(--line)] bg-[var(--surface)] text-[var(--ink)]'
+                                    : 'border-[var(--line)] bg-[var(--surface)]/60 text-[var(--muted)] hover:border-[var(--accent)]/40 hover:text-[var(--ink)]'
+                              }`}
                             >
-                              <span className="morph-switch-thumb" />
-                            </span>
-                          </button>
-                        ))}
+                              {isExpanded ? (
+                                <>
+                                  <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                                    <ScopeIcon
+                                      className={`h-3.5 w-3.5 shrink-0 ${
+                                        scope.checked ? 'text-[var(--accent)]' : 'text-[var(--muted)]'
+                                      }`}
+                                    />
+                                    <span className="text-[11px] font-bold leading-[1.15] text-[var(--ink)]">
+                                      {lang === 'tr' ? scope.titleTr : scope.titleEn}
+                                    </span>
+                                  </div>
+                                  <span className="inline-flex w-[36px] shrink-0 items-center justify-end">
+                                    <span
+                                      className="morph-switch origin-right scale-[0.76]"
+                                      data-checked={scope.checked ? 'true' : 'false'}
+                                    >
+                                      <span className="morph-switch-thumb" />
+                                    </span>
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <ScopeIcon className="h-4 w-4 shrink-0" />
+                                  {scope.checked && (
+                                    <Check className="absolute right-1 top-1 h-2.5 w-2.5 text-[var(--accent)]" />
+                                  )}
+                                </>
+                              )}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -3022,77 +3210,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 );
               })()}
 
-              {/* Quick Wheel 30s Burn Effect (12 Designs) + 6 New Non-Circular Wheel Shapes */}
+              {/* Quick Wheel 30s Burn Effect (12 Designs) — Wheel shapes moved to Görünüm (Appearance) */}
               {(() => {
                 const burnEnabled = Boolean(prefs.expWheelBurnEffect);
                 const activeBurnStyle: WheelBurnStylePref = prefs.expWheelBurnStyle ?? 'classic_fire';
-                const activeExpShape: WheelIconStylePref | null =
-                  prefs.expWheelShape ??
-                  (prefs.wheelIconStyle && EXP_WHEEL_SHAPES.some((s) => s.id === prefs.wheelIconStyle)
-                    ? prefs.wheelIconStyle
-                    : null);
-                const isCustomExpShape = burnEnabled && Boolean(activeExpShape);
-
-                const renderShapeGlyph = (shapeId: WheelIconStylePref) => {
-                  switch (shapeId) {
-                    case 'squircle':
-                      return (
-                        <svg viewBox="0 0 28 28" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-                          <rect x="4" y="4" width="20" height="20" rx="6" />
-                          <rect x="9.5" y="9.5" width="9" height="9" rx="2.5" strokeOpacity="0.65" />
-                          <circle cx="14" cy="14" r="1.8" fill="currentColor" stroke="none" />
-                        </svg>
-                      );
-                    case 'diamond':
-                      return (
-                        <svg viewBox="0 0 28 28" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-                          <path d="M14 3.5L24.5 14L14 24.5L3.5 14Z" strokeLinejoin="round" />
-                          <path d="M14 8.5L19.5 14L14 19.5L8.5 14Z" strokeLinejoin="round" strokeOpacity="0.65" />
-                          <circle cx="14" cy="14" r="1.6" fill="currentColor" stroke="none" />
-                        </svg>
-                      );
-                    case 'pill_dock':
-                      return (
-                        <svg viewBox="0 0 28 28" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-                          <rect x="2.5" y="7.5" width="23" height="13" rx="6.5" />
-                          <circle cx="9.5" cy="14" r="2" fill="currentColor" stroke="none" />
-                          <circle cx="14" cy="14" r="1.3" fill="currentColor" fillOpacity="0.65" stroke="none" />
-                          <circle cx="18.5" cy="14" r="2" fill="currentColor" stroke="none" />
-                        </svg>
-                      );
-                    case 'octa_shield':
-                      return (
-                        <svg viewBox="0 0 28 28" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-                          <polygon points="9.5,3.5 18.5,3.5 24.5,9.5 24.5,18.5 18.5,24.5 9.5,24.5 3.5,18.5 3.5,9.5" strokeLinejoin="round" />
-                          <circle cx="14" cy="14" r="4.2" strokeDasharray="2.5 2" strokeOpacity="0.7" />
-                          <circle cx="14" cy="14" r="1.6" fill="currentColor" stroke="none" />
-                        </svg>
-                      );
-                    case 'blade_hex':
-                      return (
-                        <svg viewBox="0 0 28 28" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-                          <polygon points="8,4 20,4 25.5,14 20,24 8,24 2.5,14" strokeLinejoin="round" />
-                          <path d="M14 7.5v13M8.5 10.7l11 6.6M19.5 10.7l-11 6.6" strokeOpacity="0.6" strokeLinecap="round" />
-                          <circle cx="14" cy="14" r="2" fill="currentColor" stroke="none" />
-                        </svg>
-                      );
-                    case 'star_prism':
-                      return (
-                        <svg viewBox="0 0 28 28" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-                          <path d="M14 3L17.4 10.6L25 14L17.4 17.4L14 25L10.6 17.4L3 14L10.6 10.6Z" strokeLinejoin="round" />
-                          <circle cx="14" cy="14" r="3.8" strokeDasharray="5 3" strokeOpacity="0.72" />
-                          <circle cx="14" cy="14" r="1.7" fill="currentColor" stroke="none" />
-                        </svg>
-                      );
-                    default:
-                      return (
-                        <svg viewBox="0 0 28 28" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-                          <circle cx="14" cy="14" r="10" />
-                          <circle cx="14" cy="14" r="3" />
-                        </svg>
-                      );
-                  }
-                };
 
                 return (
                   <div
@@ -3107,113 +3228,29 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       role="switch"
                       aria-checked={burnEnabled}
                       onClick={() =>
-                        onChangePrefs((p) => {
-                          const nextOn = !p.expWheelBurnEffect;
-                          return {
-                            ...p,
-                            expWheelBurnEffect: nextOn,
-                            wheelIconStyle:
-                              !nextOn && EXP_WHEEL_SHAPES.some((s) => s.id === p.wheelIconStyle)
-                                ? 'wheel'
-                                : p.wheelIconStyle,
-                          };
-                        })
+                        onChangePrefs((p) => ({
+                          ...p,
+                          expWheelBurnEffect: !p.expWheelBurnEffect,
+                        }))
                       }
                       className="flex w-full items-center justify-between gap-3 text-left"
                     >
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-[var(--ink)]">
                           {lang === 'tr'
-                            ? 'Hızlı Çark 30 sn Yanma Efekti & Özel Tasarımlar'
-                            : 'Quick Wheel 30s Burn Effects & Custom Shapes'}
+                            ? 'Hızlı Çark 30 sn Yanma Efekti'
+                            : 'Quick Wheel 30s Burn Effects'}
                         </p>
                         <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
                           {lang === 'tr'
-                            ? 'Açıkken seçtiğin özel çark tasarımını ve 30 sn yanma efektini uygular; kapatıldığında Görünüm sekmesindeki çark simgesine geri döner.'
-                            : 'Applies your selected custom wheel shape and 30s burn effect; turning OFF restores your normal Appearance wheel icon.'}
+                            ? 'Açıkken seçtiğin çark şeklinin etrafında 30 saniyede bir yanma efekti oynatır. Çark şekillerini Görünüm sekmesinden seçebilirsin.'
+                            : 'Plays a periodic 30s burn effect around your chosen wheel shape. Wheel shapes are configured under Appearance.'}
                         </p>
                       </div>
                       <span className="morph-switch shrink-0" data-checked={burnEnabled ? 'true' : 'false'}>
                         <span className="morph-switch-thumb" />
                       </span>
                     </button>
-
-                    {/* 6 New Non-Circular Wheel Designs — Balanced 2x3 / 3x2 Grid, Zero Ellipsis */}
-                    <div className="mt-3.5 border-t border-[var(--line)]/75 pt-3">
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <p className="text-[11px] font-bold text-[var(--ink)]">
-                          {lang === 'tr' ? '6 Yeni Çark Tasarımı' : '6 New Wheel Shapes'}
-                        </p>
-                        {isCustomExpShape && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              onChangePrefs((p) => ({
-                                ...p,
-                                expWheelShape: null,
-                                wheelIconStyle: EXP_WHEEL_SHAPES.some((s) => s.id === p.wheelIconStyle)
-                                  ? 'wheel'
-                                  : p.wheelIconStyle,
-                              }))
-                            }
-                            className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2 py-0.5 text-[10px] font-semibold text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--ink)]"
-                          >
-                            {lang === 'tr' ? 'Görünüm Ayarına Dön' : 'Use Appearance Icon'}
-                          </button>
-                        )}
-                      </div>
-
-                      <div
-                        className={`grid grid-cols-2 gap-2 sm:grid-cols-3 transition-opacity ${
-                          burnEnabled ? 'opacity-100' : 'opacity-75'
-                        }`}
-                      >
-                        {EXP_WHEEL_SHAPES.map((shape) => {
-                          const selected = activeExpShape === shape.id && burnEnabled;
-                          return (
-                            <button
-                              key={shape.id}
-                              type="button"
-                              onClick={() =>
-                                onChangePrefs((p) => ({
-                                  ...p,
-                                  expWheelBurnEffect: true,
-                                  expWheelShape: shape.id,
-                                }))
-                              }
-                              className={`flex items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition-all active:scale-[0.98] ${
-                                selected
-                                  ? 'border-[var(--accent)] bg-[var(--accent)]/14 text-[var(--ink)]'
-                                  : 'border-[var(--line)] bg-[var(--surface)]/75 text-[var(--muted)] hover:border-[var(--accent)]/45 hover:text-[var(--ink)]'
-                              }`}
-                            >
-                              <span
-                                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                                  selected
-                                    ? 'bg-[var(--accent)] text-white'
-                                    : 'bg-[var(--inset)] text-[var(--accent-text)]'
-                                }`}
-                              >
-                                {renderShapeGlyph(shape.id)}
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center justify-between gap-1">
-                                  <p className="text-[11px] font-bold leading-tight text-[var(--ink)]">
-                                    {lang === 'tr' ? shape.titleTr : shape.titleEn}
-                                  </p>
-                                  {selected && (
-                                    <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent-text)]" />
-                                  )}
-                                </div>
-                                <p className="mt-0.5 text-[10px] leading-tight text-[var(--muted)]">
-                                  {lang === 'tr' ? shape.descTr : shape.descEn}
-                                </p>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
 
                     {/* 12 Distinct 30-Second Burn Effects — Balanced 2x6 / 3x4 Grid */}
                     <div className="mt-3.5 border-t border-[var(--line)]/75 pt-3">
@@ -3312,6 +3349,22 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                           <path d="M18 6l1 3-3 .5" />
                           <path d="M8 15a5 5 0 0 0 8 0" strokeOpacity="0.75" />
                           <path d="M15 17.5l1-2.5-2.5-.5" strokeOpacity="0.75" />
+                        </svg>
+                      );
+                    case 'outer_fixed_inner_cw':
+                      return (
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3.5" y="3.5" width="17" height="17" rx="5" strokeOpacity="0.42" />
+                          <path d="M15.2 14.8a4.2 4.2 0 1 1-1.7-6.4" />
+                          <path d="M13.5 6.4L15.4 8.4L12.9 9.6" />
+                        </svg>
+                      );
+                    case 'outer_fixed_inner_ccw':
+                      return (
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3.5" y="3.5" width="17" height="17" rx="5" strokeOpacity="0.42" />
+                          <path d="M8.8 14.8a4.2 4.2 0 1 0 1.7-6.4" />
+                          <path d="M10.5 6.4L8.6 8.4L11.1 9.6" />
                         </svg>
                       );
                     case 'pendulum_gyro':
@@ -3454,9 +3507,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                           })}
                         </div>
 
-                        {/* 6 Dual-Layer Spin Choreographies */}
+                        {/* 8 Dual-Layer Spin Choreographies */}
                         <div
-                          className={`grid grid-cols-2 gap-2 sm:grid-cols-3 transition-opacity ${
+                          className={`grid grid-cols-2 gap-2 sm:grid-cols-4 transition-opacity ${
                             spinEnabled ? 'opacity-100' : 'opacity-80'
                           }`}
                         >
@@ -3581,6 +3634,26 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       'Enabled by default. Automatically hides the corner Cinema Wheel during video playback and restores it as soon as playback pauses.',
                   },
                   {
+                    key: 'expVideoMobileGridInHeader' as const,
+                    defaultOn: true,
+                    titleTr: 'Mobilde Üst Çubukta Izgara (3×3) & Kıyaslama',
+                    titleEn: 'Mobile Header 3×3 Grid & Split Compare',
+                    descTr:
+                      'Varsayılan olarak açıktır. Mobil Video Düzenleyici üst çubuğunda 3×3 kadraj ızgarası ve bölünmüş önce/sonra kısayollarını gösterir. Kapatsan bile ızgara Kadraj sekmesinden, kıyaslama Renk sekmesinden açılabilir.',
+                    descEn:
+                      'Enabled by default. Shows 3×3 composition grid and split before/after shortcuts directly in the mobile Video Editor header (still accessible in Crop & Color tabs when off).',
+                  },
+                  {
+                    key: 'expVideoMobileMuteInTransport' as const,
+                    defaultOn: true,
+                    titleTr: 'Mobilde Oynatma Çubuğunda Sessize Al',
+                    titleEn: 'Mobile Transport Bar Mute Button',
+                    descTr:
+                      'Varsayılan olarak açıktır. Mobil oynatma çubuğunda tek dokunuşla ana sesi kapatıp açma (Mute) simgesini kompakt şekilde gösterir. Kapatıldığında oynatma çubuğu daha geniş kalır ve ses ayarı Ses sekmesinden yapılır.',
+                    descEn:
+                      'Enabled by default. Shows a compact Master Mute toggle directly in the mobile transport bar (when off, master mute stays available in the Audio tab).',
+                  },
+                  {
                     key: 'expVideoExtraTimecodes' as const,
                     defaultOn: false,
                     titleTr: 'Video Düzenleyici Ek Süre Göstergeleri',
@@ -3614,9 +3687,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     titleTr: 'Çark Ortasına 3 sn Basarak Özelleştir',
                     titleEn: '3s Center-Hold Wheel Customize',
                     descTr:
-                      'Açıkken çark üstündeki "Özelleştir" butonunu gizler; özelleştirme ekranını çarkın ortasındaki m logosuna 3 saniye basılı tutarak açarsın.',
+                      'Açıkken "Özelleştir" butonunu gizler; çarkta ortadaki m logosuna, 5 kademeli başlatıcıda ise sol üstteki m amblemine 3 saniye basılı tutarak özelleştirirsin.',
                     descEn:
-                      'Hides the top Customize button and opens customization by holding the center Morph hub for 3 seconds.',
+                      'Hides the Customize button; hold the center Morph hub on radial wheels or the top-left Morph mark on cascading launchers for 3 seconds to customize.',
                   },
                   {
                     key: 'expLegacySliders' as const,

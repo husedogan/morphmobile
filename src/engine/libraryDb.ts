@@ -35,6 +35,7 @@ export const DEFAULT_PREFS: Prefs = {
   mainWheelItems: DEFAULT_MAIN_WHEEL_ITEMS,
   wheelSide: 'right',
   wheelIconStyle: 'wheel',
+  wheelInnerStyle: 'auto',
   showIntegratedEngines: false,
   lastEngineAction: 'update',
   lastEngineSegment: null,

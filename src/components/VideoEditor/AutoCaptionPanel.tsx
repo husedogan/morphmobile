@@ -201,7 +201,7 @@ export const AutoCaptionPanel: React.FC<AutoCaptionPanelProps> = ({
               value={translateLang}
               disabled={isTranslating || isGenerating}
               onChange={(e) => onChangeTranslateLang(e.target.value)}
-              className="min-h-[38px] flex-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2.5 text-[11px] font-bold text-[var(--ink)] focus:border-[#38BDF8] focus:outline-none disabled:opacity-50"
+              className="min-h-[38px] min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2.5 text-[11px] font-bold text-[var(--ink)] focus:border-[#38BDF8] focus:outline-none disabled:opacity-50"
             >
               {CAPTION_TRANSLATE_LANGUAGES.map((opt) => (
                 <option key={opt.code} value={opt.code}>

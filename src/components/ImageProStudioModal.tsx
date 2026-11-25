@@ -347,12 +347,12 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
                 key={item.id}
                 type="button"
                 onClick={() => setTab(item.id)}
-                className={`flex min-h-[38px] items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-bold ${
+                className={`flex min-h-[40px] flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[10.5px] leading-tight font-bold sm:flex-row sm:gap-1.5 sm:px-2 sm:text-xs ${
                   active ? 'morph-accent-btn shadow-sm' : 'text-[var(--muted)] hover:text-[var(--ink)]'
                 }`}
               >
-                <Icon className="h-3.5 w-3.5" />
-                <span className="truncate">{isTr ? item.tr : item.en}</span>
+                <Icon className="h-3.5 w-3.5 shrink-0" />
+                <span className="max-w-full truncate">{isTr ? item.tr : item.en}</span>
               </button>
             );
           })}

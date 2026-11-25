@@ -757,6 +757,8 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
           expArmadilloReel={prefs?.expArmadilloReel !== false}
           expArmadilloHideOnFullPreview={prefs?.expArmadilloHideOnFullPreview !== false}
           expArmadilloHideOnPlay={prefs?.expArmadilloHideOnPlay !== false}
+          expVideoMobileGridInHeader={prefs?.expVideoMobileGridInHeader !== false}
+          expVideoMobileMuteInTransport={prefs?.expVideoMobileMuteInTransport !== false}
           expVideoExtraTimecodes={!simpleMode && Boolean(prefs?.expVideoExtraTimecodes)}
           expAltLauncher={!simpleMode && Boolean(prefs?.expAltLauncher) && prefs?.expAltLauncherForVideo !== false}
           expAltLauncherStyle={prefs?.expAltLauncherStyle ?? 'cascade_sheet'}

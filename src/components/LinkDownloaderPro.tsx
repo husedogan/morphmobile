@@ -275,23 +275,29 @@ export const LinkDownloaderPro: React.FC<LinkDownloaderProProps> = ({
     return opts;
   };
 
-  const triggerSingleDownload = (overridePostAction?: 'none' | 'video_editor' | 'audio_studio') => {
+  const triggerSingleDownload = (
+    overridePostAction?: 'none' | 'video_editor' | 'audio_studio',
+    overrideFormat?: 'video' | 'audio' | 'thumbnail',
+    overrideQuality?: string
+  ) => {
     const clean = url.trim();
     if (!clean) return;
+    const fmt = overrideFormat ?? format;
+    const q = overrideQuality ?? quality;
     if (prefs?.proDlSaveHistory !== false) {
       const platformInfo = detectPlatformFromUrl(clean);
       const updatedHistory = saveDownloadHistoryEntry({
         url: clean,
         title: meta?.title || clean.replace(/^https?:\/\/(www\.)?/, '').slice(0, 64),
         platform: meta?.platform || platformInfo.platform,
-        format,
-        quality,
+        format: fmt,
+        quality: q,
         thumbnailUrl: meta?.thumbnailUrl,
       });
       setHistory(updatedHistory);
     }
     if (cookieText.trim()) saveCookieProfile(cookieText);
-    const opts = buildDownloadOptions();
+    const opts = buildDownloadOptions(fmt, q);
     if (overridePostAction && overridePostAction !== 'none') {
       opts.postAction = overridePostAction;
     }
@@ -450,15 +456,13 @@ export const LinkDownloaderPro: React.FC<LinkDownloaderProProps> = ({
           <button
             type="button"
             disabled={!url.trim()}
-            onClick={() => {
-              const clean = url.trim();
-              if (!clean) return;
-              onRun(clean, {
-                format: simpleFmt,
-                quality: simpleFmt === 'audio' ? 'mp3_320' : '1080p',
-                engine: activeEngine,
-              });
-            }}
+            onClick={() =>
+              triggerSingleDownload(
+                'none',
+                simpleFmt,
+                simpleFmt === 'audio' ? 'mp3_320' : '1080p'
+              )
+            }
             className="morph-accent-btn flex min-h-[54px] w-full items-center justify-center gap-2 rounded-2xl text-sm font-extrabold shadow-sm disabled:opacity-45"
           >
             <Download className="h-4.5 w-4.5" />
@@ -772,7 +776,12 @@ export const LinkDownloaderPro: React.FC<LinkDownloaderProProps> = ({
                     onClick={() => {
                       const enabled = prefs?.proDlRangeAccel !== false;
                       if (!enabled) {
-                        onChangePrefs((p) => ({...p, proDlRangeAccel: true, proDlRangeConnections: 4}));
+                        onChangePrefs((p) => ({
+                          ...p,
+                          proDlRangeAccel: true,
+                          proDlRangeConnections: 4,
+                          concurrentFragments: 4,
+                        }));
                       } else {
                         const steps: Array<2 | 4 | 6 | 8> = [2, 4, 6, 8];
                         const cur = prefs?.proDlRangeConnections ?? 4;
@@ -780,7 +789,12 @@ export const LinkDownloaderPro: React.FC<LinkDownloaderProProps> = ({
                         if (idx === steps.length - 1) {
                           onChangePrefs((p) => ({...p, proDlRangeAccel: false}));
                         } else {
-                          onChangePrefs((p) => ({...p, proDlRangeConnections: steps[idx + 1]}));
+                          const nextConn = steps[idx + 1];
+                          onChangePrefs((p) => ({
+                            ...p,
+                            proDlRangeConnections: nextConn,
+                            concurrentFragments: nextConn,
+                          }));
                         }
                       }
                     }}
