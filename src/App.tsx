@@ -35,25 +35,36 @@ import {
   RotateCw,
   ScanLine,
   Scissors,
-  Search,
   Settings,
   Share2,
   SlidersHorizontal,
   Sparkles,
   Tag,
+  Terminal,
   Trash2,
   X,
 } from 'lucide-react';
-import {CommandPaletteItem, CommandPaletteModal} from './components/CommandPaletteModal';
+import {AudioProStudio, AudioStudioTab} from './components/AudioProStudio';
 import {ExperimentalFxLayer} from './components/ExperimentalFxLayer';
 import {FileActionsModal} from './components/FileActionsModal';
+import {ImageProStudioModal, ImageProTab} from './components/ImageProStudioModal';
 import {JobOverlay} from './components/JobOverlay';
 import {LibraryScreen} from './components/LibraryScreen';
+import {MorphTerminalModal} from './components/MorphTerminalModal';
 import {OfflineBanner} from './components/PWAInstallButton';
+import {PdfAndArchiveProModal, PdfArchiveTab} from './components/PdfAndArchiveProModal';
 import {ErrorView, ResultView} from './components/ResultView';
 import {SettingsCategory, SettingsScreen} from './components/SettingsScreen';
 import {StudioScreen} from './components/StudioScreen';
 import {ToolFlow} from './components/ToolFlow';
+import {isSupportedMediaUrl} from './engine/linkMetadata';
+import {
+  QuickToolEntry,
+  applyAutoCategorization,
+  loadPinnedTools,
+  loadRecentTools,
+  pushRecentTool,
+} from './engine/workspaceProStore';
 import {
   ExperimentalToolLauncher,
   LauncherCategoryNode,
@@ -403,26 +414,98 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [previewTarget, showMainWheelCustomize, customizeModal.open, showManageTools, showFileActions, wheelKind]);
 
-  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [showTerminal, setShowTerminal] = useState(false);
+  const [audioStudioModal, setAudioStudioModal] = useState<{
+    open: boolean;
+    tab: AudioStudioTab;
+    file: File | null;
+  }>({open: false, tab: 'waveform', file: null});
+  const [imageProModal, setImageProModal] = useState<{
+    open: boolean;
+    tab: ImageProTab;
+    file: File | null;
+  }>({open: false, tab: 'compare', file: null});
+  const [pdfArchiveModal, setPdfArchiveModal] = useState<{
+    open: boolean;
+    tab: PdfArchiveTab;
+  }>({open: false, tab: 'pdf_organize'});
+  const [initialLinkUrl, setInitialLinkUrl] = useState('');
+  const [clipboardUrlBanner, setClipboardUrlBanner] = useState<string | null>(null);
+  const lastDismissedClipUrlRef = useRef<string>('');
+  const [pinnedTools, setPinnedTools] = useState<QuickToolEntry[]>(() => loadPinnedTools());
+  const [recentTools, setRecentTools] = useState<QuickToolEntry[]>(() => loadRecentTools());
+
+  const recordRecentTool = useCallback((entry: QuickToolEntry) => {
+    setRecentTools(pushRecentTool(entry));
+  }, []);
+
+  const showClipboardBannerRef = useRef<boolean>(prefs.proShowClipboardBanner !== false);
+  showClipboardBannerRef.current = prefs.proShowClipboardBanner !== false;
 
   useEffect(() => {
-    if (!prefs.expCommandPalette) {
-      setShowCommandPalette(false);
-      return;
+    if (prefs.proShowClipboardBanner === false) {
+      setClipboardUrlBanner(null);
     }
-    const onCmdKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setShowCommandPalette((v) => !v);
+  }, [prefs.proShowClipboardBanner]);
+
+  // Item 8: Web Share Target (?url= / ?text=) & Smart Clipboard URL Detection
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const sharedRaw = params.get('url') || params.get('text') || '';
+      const matched = sharedRaw.match(/https?:\/\/\S+/i)?.[0];
+      if (matched && isSupportedMediaUrl(matched)) {
+        setInitialLinkUrl(matched);
+        setToolMode('web');
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    } catch {
+      // ignore
+    }
+
+    const checkClipboard = async () => {
+      if (!showClipboardBannerRef.current) return;
+      try {
+        if (!navigator.clipboard?.readText) return;
+        const txt = (await navigator.clipboard.readText()).trim();
+        if (txt && txt !== lastDismissedClipUrlRef.current && isSupportedMediaUrl(txt)) {
+          setClipboardUrlBanner(txt);
+        }
+      } catch {
+        // clipboard permission not granted yet
       }
     };
-    window.addEventListener('keydown', onCmdKey);
-    return () => window.removeEventListener('keydown', onCmdKey);
-  }, [prefs.expCommandPalette]);
+
+    const onFocus = () => {
+      void checkClipboard();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
+
+  useEffect(() => {
+    if (!prefs.expTerminal) {
+      setShowTerminal(false);
+      return;
+    }
+    const onTermKey = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      if (((e.ctrlKey || e.metaKey) && key === '`') || ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 't')) {
+        e.preventDefault();
+        setShowTerminal((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onTermKey);
+    return () => window.removeEventListener('keydown', onTermKey);
+  }, [prefs.expTerminal]);
 
   const hasDimmedOverlay =
     wheelKind !== null ||
-    showCommandPalette ||
+    showTerminal ||
+    audioStudioModal.open ||
+    imageProModal.open ||
+    pdfArchiveModal.open ||
     showFileActions ||
     showManageTools ||
     customizeModal.open ||
@@ -822,7 +905,8 @@ export default function App() {
       jobId: string,
       title: string,
       sourceBytes: number,
-      ctrl: AbortController
+      ctrl: AbortController,
+      autoCategorize = false
     ) => {
       activeServerJobIdRef.current = jobId;
       while (!ctrl.signal.aborted) {
@@ -859,6 +943,9 @@ export default function App() {
           if (items.length === 0) throw new Error('No output produced.');
           await saveExportItems(items);
           prependLibraryItems(items);
+          if (autoCategorize) {
+            applyAutoCategorization(items, true);
+          }
           activeServerJobIdRef.current = null;
           setJob({status: 'done', result: {items, tool: title, sourceBytes}});
           return;
@@ -939,7 +1026,15 @@ export default function App() {
       try {
         if (serverReady) {
           const jobId = await submitServerUrl(prefs.serverUrl, prefs.serverToken, url, options, ctrl.signal);
-          await pollAndFinishServerJob(prefs.serverUrl, prefs.serverToken, jobId, title, 0, ctrl);
+          await pollAndFinishServerJob(
+            prefs.serverUrl,
+            prefs.serverToken,
+            jobId,
+            title,
+            0,
+            ctrl,
+            prefs.proDlAutoCategorize !== false
+          );
           return;
         }
 
@@ -959,6 +1054,40 @@ export default function App() {
         );
         await saveExportItems([item]);
         prependLibraryItems([item]);
+        const autoCat = applyAutoCategorization([item], prefs.proDlAutoCategorize !== false);
+
+        // Item 7: Post-download direct chain to Video Editor or Audio Studio
+        if (options.postAction === 'audio_studio' && item.blob && item.blob.size > 0) {
+          const downloadedFile = new File([item.blob], item.name, {type: item.mime || 'audio/mpeg'});
+          setJob({status: 'idle'});
+          setAudioStudioModal({open: true, tab: 'waveform', file: downloadedFile});
+          showToast(lang === 'tr' ? 'İndirildi → Ses Stüdyosu’nda açıldı' : 'Downloaded → Opened in Audio Studio');
+          return;
+        }
+        if (options.postAction === 'video_editor' && item.blob && item.blob.size > 0) {
+          const downloadedFile = new File([item.blob], item.name, {type: item.mime || 'video/mp4'});
+          clearFiles();
+          addFiles([downloadedFile]);
+          setJob({status: 'idle'});
+          const videoStudioDef = SERVER_TOOLS.find((s) => s.id === 'video_studio') ?? null;
+          if (videoStudioDef) openToolMode('tools', {serverTool: videoStudioDef});
+          showToast(lang === 'tr' ? 'İndirildi → Video Düzenleyici’de açıldı' : 'Downloaded → Opened in Video Editor');
+          return;
+        }
+
+        if (options.queueMode === '1') {
+          setJob({status: 'idle'});
+          showToast(autoCat.folderName ? `✓ ${item.name} → ${autoCat.folderName}` : `✓ ${item.name}`);
+          return;
+        }
+
+        if (autoCat.folderName) {
+          showToast(
+            lang === 'tr'
+              ? `Kütüphane klasörüne eklendi: ${autoCat.folderName}`
+              : `Auto-categorized into: ${autoCat.folderName}`
+          );
+        }
         setJob({status: 'done', result: {items: [item], tool: title, sourceBytes: item.size}});
       } catch (err) {
         activeServerJobIdRef.current = null;
@@ -966,10 +1095,133 @@ export default function App() {
           setJob({status: 'idle'});
           return;
         }
+        if (options.queueMode === '1') {
+          setJob({status: 'idle'});
+          throw err;
+        }
         setJob({status: 'failed', message: err instanceof Error ? err.message : t('ProcessFailed', lang)});
       }
     },
-    [lang, prefs, pollAndFinishServerJob, serverReady]
+    [addFiles, clearFiles, lang, openToolMode, prefs, pollAndFinishServerJob, serverReady, showToast]
+  );
+
+  // Unified export saver for Audio Pro Studio, Image Pro Studio, PDF/Archive Pro, Pipelines & CLI
+  const handleProExportBlobs = useCallback(
+    async (outputs: Array<{blob: Blob; name: string}>, toolLabel: string) => {
+      if (outputs.length === 0) return;
+      const now = Date.now();
+      const exportItems: ExportItem[] = outputs.map((o, i) => {
+        const mime = o.blob.type || 'application/octet-stream';
+        const isPreviewable = mime.startsWith('image/');
+        return {
+          id: `pro_${now}_${i}_${Math.random().toString(36).slice(2, 6)}`,
+          name: o.name,
+          mime,
+          size: o.blob.size,
+          blob: o.blob,
+          previewUrl: isPreviewable ? URL.createObjectURL(o.blob) : undefined,
+          createdAt: now,
+          tool: toolLabel,
+        };
+      });
+      await saveExportItems(exportItems);
+      prependLibraryItems(exportItems);
+      const sourceBytes = files.reduce((s, f) => s + f.size, 0) || exportItems.reduce((s, x) => s + x.size, 0);
+      setJob({status: 'done', result: {items: exportItems, tool: toolLabel, sourceBytes}});
+      showToast(lang === 'tr' ? `${exportItems.length} çıktı kaydedildi` : `Saved ${exportItems.length} output(s)`);
+    },
+    [files, lang, showToast]
+  );
+
+  // Item 23: Chain finished ExportItems directly back into Studio or a Pro Studio
+  const handleChainExportItems = useCallback(
+    (items: ExportItem[], target: 'studio' | 'audio_studio' | 'image_pro' | 'pdf_pro' | 'video_editor' = 'studio') => {
+      const valid = items.filter((i) => i.blob && i.blob.size > 0);
+      if (valid.length === 0) return false;
+      const converted = valid.map((i) => new File([i.blob], i.name, {type: i.mime || i.blob.type}));
+      clearFiles();
+      addFiles(converted);
+      setJob({status: 'idle'});
+      resetNavigationFlow();
+
+      if (target === 'audio_studio') {
+        const firstAudio = converted[0];
+        setAudioStudioModal({open: true, tab: 'waveform', file: firstAudio});
+      } else if (target === 'image_pro') {
+        const firstImg = converted[0];
+        setImageProModal({open: true, tab: 'compare', file: firstImg});
+      } else if (target === 'pdf_pro') {
+        const isZip = /\.zip$/i.test(converted[0].name);
+        setPdfArchiveModal({open: true, tab: isZip ? 'archive' : 'pdf_organize'});
+      } else if (target === 'video_editor') {
+        const videoStudioDef = SERVER_TOOLS.find((s) => s.id === 'video_studio') ?? null;
+        if (videoStudioDef) openToolMode('tools', {serverTool: videoStudioDef});
+      } else {
+        setTab('studio');
+      }
+      showToast(
+        lang === 'tr'
+          ? `${converted.length} çıktı yeni işlem için aktarıldı`
+          : `Chained ${converted.length} output(s) to next tool`
+      );
+      return true;
+    },
+    [addFiles, clearFiles, lang, openToolMode, resetNavigationFlow, showToast]
+  );
+
+  const handleOpenProSuite = useCallback(
+    (suite: 'audio_studio' | 'image_pro' | 'pdf_organize' | 'pdf_sign' | 'archive' | 'pipeline') => {
+      if (suite === 'audio_studio') {
+        const f = files.find((x) => x.kind === 'audio' || x.kind === 'video')?.file ?? null;
+        setAudioStudioModal({open: true, tab: 'waveform', file: f});
+        recordRecentTool({id: 'pro:audio_studio', labelTr: 'Ses Stüdyosu', labelEn: 'Audio Studio'});
+      } else if (suite === 'image_pro') {
+        const f = files.find((x) => x.kind === 'image')?.file ?? null;
+        setImageProModal({open: true, tab: 'compare', file: f});
+        recordRecentTool({id: 'pro:image_pro', labelTr: 'Görsel Pro', labelEn: 'Image Pro'});
+      } else {
+        setPdfArchiveModal({open: true, tab: suite});
+        recordRecentTool({
+          id: `pro:${suite}`,
+          labelTr: suite === 'pipeline' ? 'Tarif Zinciri' : suite === 'archive' ? 'Arşiv Gezgini' : 'PDF Pro',
+          labelEn: suite === 'pipeline' ? 'Pipelines' : suite === 'archive' ? 'ZIP Explorer' : 'PDF Pro',
+        });
+      }
+    },
+    [files, recordRecentTool]
+  );
+
+  const handleQuickLaunchTool = useCallback(
+    (entryId: string) => {
+      if (entryId === 'nav:download') {
+        setJob({status: 'idle'});
+        openToolMode('web');
+      } else if (entryId === 'server:video_studio') {
+        const def = SERVER_TOOLS.find((s) => s.id === 'video_studio');
+        if (def) {
+          setJob({status: 'idle'});
+          openToolMode('tools', {serverTool: def});
+        }
+      } else if (entryId === 'pro:audio_studio') {
+        handleOpenProSuite('audio_studio');
+      } else if (entryId === 'pro:image_pro') {
+        handleOpenProSuite('image_pro');
+      } else if (entryId === 'pro:pipeline') {
+        handleOpenProSuite('pipeline');
+      } else if (entryId === 'pro:archive') {
+        handleOpenProSuite('archive');
+      } else if (entryId === 'pro:pdf_organize' || entryId === 'pro:pdf_sign') {
+        handleOpenProSuite(entryId.replace('pro:', '') as 'pdf_organize' | 'pdf_sign');
+      } else if (entryId.startsWith('local:')) {
+        const id = entryId.replace('local:', '') as ToolId;
+        openToolMode('tools', {tool: id});
+      } else if (entryId.startsWith('server:')) {
+        const id = entryId.replace('server:', '');
+        const def = SERVER_TOOLS.find((s) => s.id === id);
+        if (def) openToolMode('tools', {serverTool: def});
+      }
+    },
+    [handleOpenProSuite, openToolMode]
   );
 
   const handleCancelJob = useCallback(() => {
@@ -2141,17 +2393,17 @@ export default function App() {
             })}
           </nav>
 
-          {/* Zone 3: Optional Command Search + Settings Gear */}
+          {/* Zone 3: Optional Morph Terminal + Settings Gear */}
           <div className="flex items-center gap-2 shrink-0">
-            {prefs.expCommandPalette && (
+            {prefs.expTerminal && (
               <button
                 type="button"
-                onClick={() => setShowCommandPalette(true)}
-                aria-label={lang === 'tr' ? 'Hızlı Komut ve Araç Ara' : 'Quick Command Search'}
-                title={lang === 'tr' ? 'Hızlı Ara (Ctrl+K)' : 'Quick Search (Ctrl+K)'}
+                onClick={() => setShowTerminal(true)}
+                aria-label={lang === 'tr' ? 'Morph Terminali Aç' : 'Open Morph Terminal'}
+                title={lang === 'tr' ? 'Morph Terminal (Ctrl+`)' : 'Morph Terminal (Ctrl+`)'}
                 className="flex h-11 w-11 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
               >
-                <Search className="h-4.5 w-4.5" />
+                <Terminal className="h-4.5 w-4.5" />
               </button>
             )}
             <div
@@ -2228,6 +2480,13 @@ export default function App() {
               resetNavigationFlow();
               setTab('studio');
             }}
+            onChainToStudio={
+              prefs.proShowResultChainBar !== false
+                ? (target) => {
+                    handleChainExportItems(job.result.items, target ?? 'studio');
+                  }
+                : undefined
+            }
             onNewTask={() => {
               clearFiles();
               setJob({status: 'idle'});
@@ -2254,11 +2513,13 @@ export default function App() {
             initialTool={directTool}
             initialConvertFormat={directFormat}
             initialServerTool={directServerTool}
+            initialLinkUrl={initialLinkUrl}
             directEntry={Boolean(directTool || directFormat || directServerTool)}
             onBack={() => {
               setDirectTool(null);
               setDirectFormat(null);
               setDirectServerTool(null);
+              setInitialLinkUrl('');
               setToolMode(null);
             }}
             onRunLocal={handleRunLocal}
@@ -2277,6 +2538,8 @@ export default function App() {
           <LibraryScreen
             items={library}
             lang={lang}
+            showStorageSummary={prefs.proLibShowStorageSummary !== false}
+            showFoldersBar={prefs.proLibShowFoldersBar !== false}
             onDownload={handleSaveOrDownload}
             onShare={handleShareItem}
             onDelete={handleDeleteExport}
@@ -2302,39 +2565,104 @@ export default function App() {
             onApplyUpdate={handleApplyUpdate}
             onOpenWheelCustomize={() => setCustomizeModal({open: true, tab: 'tools'})}
             onOpenMainWheelCustomize={() => setShowMainWheelCustomize(true)}
+            onPinnedChanged={() => setPinnedTools(loadPinnedTools())}
             onShowToast={showToast}
           />
         ) : (
-          <StudioScreen
-            files={files}
-            exportCount={library.length}
-            lang={lang}
-            serverReady={serverReady}
-            updateInfo={updateInfo}
-            checkingUpdate={checkingUpdate}
-            apkReadyOnDevice={apkReadyOnDevice}
-            showIntegratedEngines={Boolean(prefs.showIntegratedEngines)}
-            activeEngineAction={prefs.lastEngineAction ?? 'update'}
-            activeEngineSegment={prefs.lastEngineSegment ?? null}
-            onChangeEngineAction={(action) =>
-              setPrefs((p) => (p.lastEngineAction === action ? p : {...p, lastEngineAction: action}))
-            }
-            onChangeEngineSegment={(seg) =>
-              setPrefs((p) => (p.lastEngineSegment === seg ? p : {...p, lastEngineSegment: seg}))
-            }
-            onAddFiles={addFiles}
-            onRemoveFile={removeFile}
-            onMoveFile={moveFile}
-            onClearFiles={clearFiles}
-            onOpenConvert={() => setWheelKind('convert')}
-            onOpenTools={() => setWheelKind('tools')}
-            onOpenFileActions={() => setWheelKind('actions')}
-            onOpenManageTools={() => setShowManageTools(true)}
-            onCheckUpdate={handleCheckUpdate}
-            onApplyUpdate={handleApplyUpdate}
-            onOpenLinkDownload={() => openToolMode('web')}
-            onOpenLibrary={() => setTab('library')}
-          />
+          <>
+            {/* Item 8: Smart Clipboard Media URL Banner */}
+            {prefs.proShowClipboardBanner !== false && clipboardUrlBanner && (
+              <div className="mx-auto mt-3 flex w-full max-w-4xl items-center gap-2.5 px-4 sm:px-6">
+                <div className="flex w-full items-center gap-2.5 rounded-2xl border border-[var(--accent)]/45 bg-[var(--surface)] px-3.5 py-2.5 shadow-sm">
+                  <Download className="h-4 w-4 shrink-0 text-[var(--accent-text)]" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-extrabold text-[var(--ink)]">
+                      {lang === 'tr' ? 'Panoda medya bağlantısı algılandı' : 'Media link detected in clipboard'}
+                    </p>
+                    <p className="truncate font-mono text-[10px] text-[var(--muted)]">{clipboardUrlBanner}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const u = clipboardUrlBanner;
+                      lastDismissedClipUrlRef.current = u;
+                      setClipboardUrlBanner(null);
+                      setInitialLinkUrl(u);
+                      openToolMode('web');
+                    }}
+                    className="morph-accent-btn shrink-0 rounded-xl px-3 py-1.5 text-xs font-bold"
+                  >
+                    {lang === 'tr' ? 'İndir' : 'Download'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      lastDismissedClipUrlRef.current = clipboardUrlBanner;
+                      setClipboardUrlBanner(null);
+                    }}
+                    className="p-1 text-[var(--muted)] hover:text-[var(--ink)]"
+                    aria-label="Dismiss"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+            <StudioScreen
+              files={files}
+              exportCount={library.length}
+              lang={lang}
+              serverReady={serverReady}
+              updateInfo={updateInfo}
+              checkingUpdate={checkingUpdate}
+              apkReadyOnDevice={apkReadyOnDevice}
+              showIntegratedEngines={Boolean(prefs.showIntegratedEngines)}
+              activeEngineAction={prefs.lastEngineAction ?? 'update'}
+              activeEngineSegment={prefs.lastEngineSegment ?? null}
+              onChangeEngineAction={(action) =>
+                setPrefs((p) => (p.lastEngineAction === action ? p : {...p, lastEngineAction: action}))
+              }
+              onChangeEngineSegment={(seg) =>
+                setPrefs((p) => (p.lastEngineSegment === seg ? p : {...p, lastEngineSegment: seg}))
+              }
+              onAddFiles={addFiles}
+              onRemoveFile={removeFile}
+              onMoveFile={moveFile}
+              onClearFiles={clearFiles}
+              onOpenConvert={() => setWheelKind('convert')}
+              onOpenTools={() => setWheelKind('tools')}
+              onOpenFileActions={() => setWheelKind('actions')}
+              onOpenManageTools={() => setShowManageTools(true)}
+              onCheckUpdate={handleCheckUpdate}
+              onApplyUpdate={handleApplyUpdate}
+              onOpenLinkDownload={() => openToolMode('web')}
+              onOpenLibrary={() => setTab('library')}
+              pinnedTools={pinnedTools}
+              recentTools={recentTools}
+              onQuickLaunchTool={handleQuickLaunchTool}
+              onOpenProSuite={handleOpenProSuite}
+              showSuitesBar={prefs.proShowStudioSuitesBar !== false}
+              suitesOrder={prefs.proSuitesOrder}
+              hiddenSuites={prefs.proHiddenSuites}
+              showPinnedStrip={prefs.proShowPinnedRecentStrip !== false}
+              onHideSuitesBar={() => {
+                setPrefs((p) => ({...p, proShowStudioSuitesBar: false}));
+                showToast(
+                  lang === 'tr'
+                    ? 'Pro araç çubuğu gizlendi. Ayarlar → Görünüm veya Pro Modüller’den açabilirsin.'
+                    : 'Pro tools bar hidden. Re-enable anytime in Settings.'
+                );
+              }}
+              onHidePinnedStrip={() => {
+                setPrefs((p) => ({...p, proShowPinnedRecentStrip: false}));
+                showToast(
+                  lang === 'tr'
+                    ? 'Sabitlenen kısayol şeridi gizlendi. Ayarlar → Görünüm veya Pro Modüller’den açabilirsin.'
+                    : 'Pinned shortcuts strip hidden. Re-enable anytime in Settings.'
+                );
+              }}
+            />
+          </>
         )}
       </main>
 
@@ -2772,156 +3100,128 @@ export default function App() {
         );
       })()}
 
-      {/* Experimental Spotlight-Style Command & Tool Search Palette */}
-      {prefs.expCommandPalette && (
-        <CommandPaletteModal
-          open={showCommandPalette}
-          lang={lang}
-          onClose={() => setShowCommandPalette(false)}
-          items={(() => {
-            const isTr = lang === 'tr';
-            const tr = (a: string, b: string) => (isTr ? a : b);
-            const list: CommandPaletteItem[] = [
-              {
-                id: 'nav:video_studio',
-                title: tr('Video Düzenleyici', 'Video Editor'),
-                subtitle: tr('Çok kanallı kurgu, kesme, metin, ses ve dışa aktarım', 'Multi-track timeline, trim, text, audio & export'),
-                category: tr('Medya', 'Media'),
-                keywords: 'video editor kurgu kes kirp montaj timeline',
-                icon: Film,
-                onRun: () => {
-                  const videoStudioDef = SERVER_TOOLS.find((s) => s.id === 'video_studio') ?? null;
-                  if (videoStudioDef) {
-                    setJob({status: 'idle'});
-                    openToolMode('tools', {serverTool: videoStudioDef});
-                  }
-                },
-              },
-              {
-                id: 'nav:web_download',
-                title: tr('Bağlantıdan Medya İndirici', 'Link Media Downloader'),
-                subtitle: tr('YouTube, Instagram, X, TikTok ve bağlantılardan indir', 'Download from YouTube, Instagram, X, TikTok & URLs'),
-                category: tr('İndir', 'Download'),
-                keywords: 'indir download youtube instagram tiktok link url mp4 mp3',
-                icon: Download,
-                onRun: () => {
-                  setJob({status: 'idle'});
-                  openToolMode('web');
-                },
-              },
-              {
-                id: 'nav:convert',
-                title: tr('Dosya Dönüştürücü', 'File Converter'),
-                subtitle: tr('Görsel, PDF, ses, video ve belge formatı dönüştür', 'Convert image, PDF, audio, video & document formats'),
-                category: tr('Dönüştür', 'Convert'),
-                keywords: 'convert donustur jpg png webp pdf mp3 mp4 docx',
-                icon: RefreshCw,
-                onRun: () => {
-                  setJob({status: 'idle'});
-                  openToolMode('convert');
-                },
-              },
-              {
-                id: 'nav:quick_wheel',
-                title: tr('Hızlı Çarkı Aç', 'Open Quick Wheel'),
-                subtitle: tr('Ana radyal araç menüsünü açar', 'Opens the main radial tool menu'),
-                category: tr('Uygulama', 'App'),
-                keywords: 'cark wheel menu araclar',
-                icon: Sparkles,
-                onRun: () => setWheelKind('main'),
-              },
-              {
-                id: 'nav:toggle_theme',
-                title: isDark ? tr('Açık Temaya Geç', 'Switch to Light Theme') : tr('Koyu Temaya Geç', 'Switch to Dark Theme'),
-                subtitle: tr('Gündüz / gece görünümünü anında değiştirir', 'Instantly switches between light and dark mode'),
-                category: tr('Uygulama', 'App'),
-                keywords: 'tema theme dark light koyu acik gece gunduz',
-                icon: Contrast,
-                onRun: () =>
-                  setPrefs((p) => ({
-                    ...p,
-                    theme: isDark ? 'light' : 'dark',
-                  })),
-              },
-              {
-                id: 'nav:studio',
-                title: t('Studio', lang),
-                subtitle: tr('Ana çalışma alanına git', 'Go to main Studio workspace'),
-                category: tr('Uygulama', 'App'),
-                keywords: 'ana ekran home studio studyo',
-                icon: LayoutGrid,
-                onRun: () => {
-                  setJob({status: 'idle'});
-                  resetNavigationFlow();
-                  setTab('studio');
-                },
-              },
-              {
-                id: 'nav:library',
-                title: t('Library', lang),
-                subtitle: tr('Kaydedilen ve işlenen dosyalarını gör', 'View saved and processed files'),
-                category: tr('Uygulama', 'App'),
-                keywords: 'kitaplik library dosyalar gecmis',
-                icon: Package,
-                onRun: () => {
-                  setJob({status: 'idle'});
-                  resetNavigationFlow();
-                  setTab('library');
-                },
-              },
-              {
-                id: 'nav:settings',
-                title: t('Settings', lang),
-                subtitle: tr('Tema, çark, indirme motoru ve uygulama ayarları', 'Theme, wheel, download engine & app preferences'),
-                category: tr('Uygulama', 'App'),
-                keywords: 'ayarlar settings tema izinler guncelleme',
-                icon: Settings,
-                onRun: () => {
-                  setJob({status: 'idle'});
-                  resetNavigationFlow();
-                  setSettingsCategory('appearance');
-                  setTab('settings');
-                },
-              },
-            ];
+      {/* Pro Studio Modals (Items 9-19) */}
+      <AudioProStudio
+        open={audioStudioModal.open}
+        lang={lang}
+        prefs={prefs}
+        initialFile={audioStudioModal.file}
+        initialTab={audioStudioModal.tab}
+        onClose={() => setAudioStudioModal((p) => ({...p, open: false}))}
+        onExportBlob={(blob, fileName, toolLabel) => {
+          void handleProExportBlobs([{blob, name: fileName}], toolLabel);
+        }}
+      />
 
-            for (const def of Object.values(ALL_TOOLS)) {
-              list.push({
-                id: `tool:${def.id}`,
-                title: t(def.titleKey, lang),
-                subtitle: t(def.descKey, lang),
-                category: tr('Araç', 'Tool'),
-                keywords: def.id.replace(/_/g, ' '),
-                icon: wheelIconForLocalTool(def.id),
-                onRun: () => {
-                  setJob({status: 'idle'});
-                  openToolMode('tools', {tool: def.id});
-                },
+      <ImageProStudioModal
+        open={imageProModal.open}
+        lang={lang}
+        prefs={prefs}
+        initialFile={imageProModal.file}
+        initialTab={imageProModal.tab}
+        onClose={() => setImageProModal((p) => ({...p, open: false}))}
+        onExportBlob={(blob, fileName, toolLabel) => {
+          void handleProExportBlobs([{blob, name: fileName}], toolLabel);
+        }}
+        onShowToast={showToast}
+      />
+
+      <PdfAndArchiveProModal
+        open={pdfArchiveModal.open}
+        lang={lang}
+        initialTab={pdfArchiveModal.tab}
+        studioFiles={files}
+        onClose={() => setPdfArchiveModal((p) => ({...p, open: false}))}
+        onExportBlobs={(outputs, toolLabel) => {
+          void handleProExportBlobs(outputs, toolLabel);
+        }}
+        onShowToast={showToast}
+      />
+
+      {/* Experimental Termux-Style Morph Terminal */}
+      {prefs.expTerminal && (
+        <MorphTerminalModal
+          open={showTerminal}
+          onClose={() => setShowTerminal(false)}
+          ctx={{
+            lang,
+            prefs,
+            isDark,
+            files,
+            libraryCount: library.length,
+            libraryItems: library,
+            onChangePrefs: (updater) => setPrefs(updater),
+            onNavigate: (dest) => {
+              setJob({status: 'idle'});
+              if (dest === 'studio') {
+                resetNavigationFlow();
+                setTab('studio');
+              } else if (dest === 'library') {
+                resetNavigationFlow();
+                setTab('library');
+              } else if (dest === 'settings') {
+                resetNavigationFlow();
+                setSettingsCategory('appearance');
+                setTab('settings');
+              } else if (dest === 'video') {
+                const videoStudioDef = SERVER_TOOLS.find((s) => s.id === 'video_studio') ?? null;
+                if (videoStudioDef) {
+                  openToolMode('tools', {serverTool: videoStudioDef});
+                }
+              } else if (dest === 'download') {
+                openToolMode('web');
+              } else if (dest === 'convert') {
+                openToolMode('convert');
+              } else if (dest === 'wheel') {
+                setWheelKind('main');
+              }
+            },
+            onOpenLocalTool: (toolId) => {
+              setJob({status: 'idle'});
+              openToolMode('tools', {tool: toolId});
+            },
+            onOpenServerTool: (serverId) => {
+              const srv = SERVER_TOOLS.find((s) => s.id === serverId);
+              if (srv) {
+                setJob({status: 'idle'});
+                openToolMode('tools', {serverTool: srv});
+              }
+            },
+            onRunLink: (url, format, extraOptions) => {
+              void handleRunLink(url, {
+                format,
+                engine: prefs.downloadEngine ?? 'builtin',
+                ...(extraOptions ?? {}),
               });
-            }
-
-            for (const srv of SERVER_TOOLS) {
-              if (srv.id === 'video_studio') continue;
-              list.push({
-                id: `srv:${srv.id}`,
-                title: isTr ? srv.titleTr : srv.titleEn,
-                subtitle: isTr ? srv.descTr : srv.descEn,
-                category: tr('Medya', 'Media'),
-                keywords: `${srv.id} ${srv.titleTr} ${srv.titleEn}`,
-                icon: srv.id.startsWith('video')
-                  ? Film
-                  : srv.id.startsWith('audio')
-                    ? Music
-                    : FileText,
-                onRun: () => {
-                  setJob({status: 'idle'});
-                  openToolMode('tools', {serverTool: srv});
-                },
-              });
-            }
-
-            return list;
-          })()}
+            },
+            onOpenAudioStudio: (tab) => {
+              const f = files.find((x) => x.kind === 'audio' || x.kind === 'video')?.file ?? null;
+              setAudioStudioModal({open: true, tab: tab ?? 'waveform', file: f});
+            },
+            onOpenImagePro: (tab) => {
+              const f = files.find((x) => x.kind === 'image')?.file ?? null;
+              setImageProModal({open: true, tab: tab ?? 'compare', file: f});
+            },
+            onOpenPdfArchivePro: (tab) => {
+              setPdfArchiveModal({open: true, tab: tab ?? 'pdf_organize'});
+            },
+            onExportBlobs: (outputs, toolLabel) => {
+              void handleProExportBlobs(outputs, toolLabel);
+            },
+            onDeleteLibraryIds: (ids) => {
+              ids.forEach((id) => handleDeleteExport(id));
+            },
+            onChainLastResult: () => {
+              if (job.status === 'done') {
+                return handleChainExportItems(job.result.items, 'studio');
+              }
+              if (library.length > 0) {
+                return handleChainExportItems([library[0]], 'studio');
+              }
+              return false;
+            },
+            onShowToast: showToast,
+          }}
         />
       )}
     </div>

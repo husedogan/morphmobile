@@ -7,21 +7,29 @@ import {
   ChevronRight,
   Cpu,
   Download,
+  EyeOff,
   FileText,
   Film,
+  FolderArchive,
   FolderOpen,
   Image as ImageIcon,
   MoreHorizontal,
+  Music,
+  Pin,
   Plus,
   RefreshCw,
   SlidersHorizontal,
+  Sparkles,
   Trash2,
+  Workflow,
   X,
 } from 'lucide-react';
 import {Lang, t} from '../data/i18n';
 import {PickedFile, formatBytes} from '../data/models';
 import {GithubUpdateInfo, isUpdateApkDownloaded} from '../engine/githubUpdater';
+import {QuickToolEntry} from '../engine/workspaceProStore';
 import {FileThumb} from './FileThumb';
+import {DEFAULT_PRO_SUITES_ORDER, ProSuiteId} from './SettingsProTab';
 
 interface StudioScreenProps {
   files: PickedFile[];
@@ -48,6 +56,16 @@ interface StudioScreenProps {
   onApplyUpdate?: () => void;
   onOpenLinkDownload: () => void;
   onOpenLibrary: () => void;
+  pinnedTools?: QuickToolEntry[];
+  recentTools?: QuickToolEntry[];
+  onQuickLaunchTool?: (toolEntryId: string) => void;
+  onOpenProSuite?: (suite: 'audio_studio' | 'image_pro' | 'pdf_organize' | 'pdf_sign' | 'archive' | 'pipeline') => void;
+  showSuitesBar?: boolean;
+  suitesOrder?: ProSuiteId[];
+  hiddenSuites?: string[];
+  showPinnedStrip?: boolean;
+  onHideSuitesBar?: () => void;
+  onHidePinnedStrip?: () => void;
 }
 
 export const StudioScreen: React.FC<StudioScreenProps> = ({
@@ -75,6 +93,16 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   onApplyUpdate,
   onOpenLinkDownload,
   onOpenLibrary,
+  pinnedTools = [],
+  recentTools = [],
+  onQuickLaunchTool,
+  onOpenProSuite,
+  showSuitesBar = true,
+  suitesOrder = DEFAULT_PRO_SUITES_ORDER,
+  hiddenSuites = [],
+  showPinnedStrip = true,
+  onHideSuitesBar,
+  onHidePinnedStrip,
 }) => {
   const docInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -172,6 +200,100 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
           })()}
         </p>
       </div>
+
+      {/* Pinned & Recent Tools + Pro Suites Strip (Item 24) */}
+      {(() => {
+        const suiteCatalog: Record<
+          ProSuiteId,
+          {id: ProSuiteId; icon: React.FC<{className?: string}>; tr: string; en: string; color: string}
+        > = {
+          audio_studio: {id: 'audio_studio', icon: Music, tr: 'Ses Stüdyosu', en: 'Audio Studio', color: 'text-emerald-400'},
+          image_pro: {id: 'image_pro', icon: Sparkles, tr: 'Görsel Kıyasla & KB', en: 'Image Pro', color: 'text-sky-400'},
+          pdf_organize: {id: 'pdf_organize', icon: FileText, tr: 'PDF Sayfa & İmza', en: 'PDF Pro', color: 'text-amber-400'},
+          archive: {id: 'archive', icon: FolderArchive, tr: 'Arşiv Gezgini', en: 'ZIP Explorer', color: 'text-violet-400'},
+          pipeline: {id: 'pipeline', icon: Workflow, tr: 'Tarif Zinciri', en: 'Pipelines', color: 'text-rose-400'},
+        };
+        const orderedIds: ProSuiteId[] = [
+          ...suitesOrder.filter((id): id is ProSuiteId => id in suiteCatalog),
+          ...DEFAULT_PRO_SUITES_ORDER.filter((id) => !suitesOrder.includes(id)),
+        ];
+        const visibleSuites = orderedIds
+          .filter((id) => !hiddenSuites.includes(id))
+          .map((id) => suiteCatalog[id]);
+
+        const renderSuites = Boolean(onOpenProSuite && showSuitesBar && visibleSuites.length > 0);
+        const renderPinned = Boolean(
+          showPinnedStrip && onQuickLaunchTool && (pinnedTools.length > 0 || recentTools.length > 0)
+        );
+        if (!renderSuites && !renderPinned) return null;
+
+        return (
+          <div className="mb-4 space-y-2">
+            {renderSuites && onOpenProSuite && (
+              <div className="flex items-center gap-1.5">
+                <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pb-0.5">
+                  {visibleSuites.map((suite) => {
+                    const Icon = suite.icon;
+                    return (
+                      <button
+                        key={suite.id}
+                        type="button"
+                        onClick={() => onOpenProSuite(suite.id)}
+                        className="flex min-h-[38px] shrink-0 items-center gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-3 text-xs font-bold text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
+                      >
+                        <Icon className={`h-3.5 w-3.5 ${suite.color}`} />
+                        <span>{lang === 'tr' ? suite.tr : suite.en}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {onHideSuitesBar && (
+                  <button
+                    type="button"
+                    onClick={onHideSuitesBar}
+                    title={lang === 'tr' ? 'Pro araç çubuğunu gizle' : 'Hide Pro tools bar'}
+                    aria-label={lang === 'tr' ? 'Pro araç çubuğunu gizle' : 'Hide Pro tools bar'}
+                    className="flex h-[38px] w-[34px] shrink-0 items-center justify-center rounded-2xl border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--ink)]"
+                  >
+                    <EyeOff className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {renderPinned && onQuickLaunchTool && (
+              <div className="flex items-center gap-1.5">
+                <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
+                  <Pin className="h-3 w-3 shrink-0 text-[var(--muted)]" />
+                  {[...pinnedTools, ...recentTools.filter((r) => !pinnedTools.some((p) => p.id === r.id))]
+                    .slice(0, 7)
+                    .map((entry) => (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        onClick={() => onQuickLaunchTool(entry.id)}
+                        className="shrink-0 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2.5 py-1 text-[11px] font-semibold text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--ink)]"
+                      >
+                        {lang === 'tr' ? entry.labelTr : entry.labelEn}
+                      </button>
+                    ))}
+                </div>
+                {onHidePinnedStrip && (
+                  <button
+                    type="button"
+                    onClick={onHidePinnedStrip}
+                    title={lang === 'tr' ? 'Kısayol şeridini gizle' : 'Hide shortcuts strip'}
+                    aria-label={lang === 'tr' ? 'Kısayol şeridini gizle' : 'Hide shortcuts strip'}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--ink)]"
+                  >
+                    <EyeOff className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Unified Equal-Width Outer Cards Stack */}
       <div className="space-y-4">

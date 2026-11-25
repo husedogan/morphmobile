@@ -11,6 +11,8 @@ import {
   FileText,
   Film,
   FolderOpen,
+  FolderPlus,
+  HardDrive,
   Image as ImageIcon,
   LayoutGrid,
   Loader2,
@@ -18,17 +20,28 @@ import {
   Search,
   Share2,
   ShieldCheck,
+  Tag,
   Trash2,
   X,
 } from 'lucide-react';
 import {Lang, t} from '../data/i18n';
 import {ExportItem, detectFileKind, formatBytes, formatDate} from '../data/models';
 import {saveOrDownloadBlob} from '../engine/nativeBridge';
+import {
+  LibraryFolder,
+  computeLibraryStorage,
+  loadLibraryFolders,
+  loadLibraryItemTags,
+  saveLibraryFolders,
+  setLibraryItemFolder,
+} from '../engine/workspaceProStore';
 import {FileThumb} from './FileThumb';
 
 interface LibraryScreenProps {
   items: ExportItem[];
   lang: Lang;
+  showStorageSummary?: boolean;
+  showFoldersBar?: boolean;
   onDownload: (item: ExportItem) => void;
   onShare: (item: ExportItem) => void;
   onDelete: (id: string) => void;
@@ -42,6 +55,8 @@ type SortKind = 'newest' | 'oldest' | 'largest' | 'smallest';
 export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   items,
   lang,
+  showStorageSummary = true,
+  showFoldersBar = true,
   onDownload,
   onShare,
   onDelete,
@@ -57,6 +72,18 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   const [confirmClear, setConfirmClear] = useState(false);
   const [previewItem, setPreviewItem] = useState<{item: ExportItem; url: string} | null>(null);
   const ownedPreviewUrlRef = useRef<string | null>(null);
+  const [folders, setFolders] = useState<LibraryFolder[]>(() => loadLibraryFolders());
+  const [itemTags, setItemTags] = useState<Record<string, string>>(() => loadLibraryItemTags());
+  const [activeFolder, setActiveFolder] = useState<string>('all');
+  const [addingFolder, setAddingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+
+  useEffect(() => {
+    setFolders(loadLibraryFolders());
+    setItemTags(loadLibraryItemTags());
+  }, [showFoldersBar, items.length]);
+
+  const storage = useMemo(() => computeLibraryStorage(items), [items]);
 
   const isExpiredItem = (item: ExportItem) =>
     !item.nativeUri && item.size > 0 && (!item.blob || item.blob.size === 0);
@@ -72,6 +99,9 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
           return false;
         }
       }
+      if (activeFolder !== 'all' && itemTags[item.id] !== activeFolder) {
+        return false;
+      }
       if (q && !item.name.toLowerCase().includes(q) && !(item.tool || '').toLowerCase().includes(q)) {
         return false;
       }
@@ -86,7 +116,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
       return b.createdAt - a.createdAt;
     });
     return sorted;
-  }, [items, filter, searchQuery, sortBy]);
+  }, [items, filter, searchQuery, sortBy, activeFolder, itemTags]);
 
   useEffect(() => {
     // Prune deleted IDs from selection
@@ -254,9 +284,164 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
         )}
       </div>
 
+      {/* Visual Storage Breakdown & 1-Tap Cleanup + Project Folders Strip (Item 25) */}
+      {items.length > 0 && (showStorageSummary || showFoldersBar) && (
+        <div className="mt-4 space-y-2.5">
+          {showStorageSummary && (
+          <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <HardDrive className="h-4 w-4 text-[var(--accent-text)]" />
+                <span className="text-xs font-extrabold text-[var(--ink)]">
+                  {lang === 'tr' ? 'Depolama Özeti:' : 'Storage Summary:'}{' '}
+                  <span className="font-mono-num text-[var(--accent-text)]">{formatBytes(storage.totalBytes)}</span>
+                </span>
+              </div>
+              {storage.olderThan7DaysIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    storage.olderThan7DaysIds.forEach((id) => onDelete(id));
+                    onShowToast?.(
+                      lang === 'tr'
+                        ? `7 günden eski ${storage.olderThan7DaysIds.length} dosya temizlendi.`
+                        : `Cleaned ${storage.olderThan7DaysIds.length} files older than 7 days.`
+                    );
+                  }}
+                  className="rounded-lg border border-amber-500/40 bg-amber-500/12 px-2.5 py-1 text-[11px] font-bold text-amber-400 hover:bg-amber-500/20"
+                >
+                  {lang === 'tr'
+                    ? `7+ Gün Eskileri Temizle (${storage.olderThan7DaysIds.length})`
+                    : `Clean 7d+ Old (${storage.olderThan7DaysIds.length})`}
+                </button>
+              )}
+            </div>
+            {storage.totalBytes > 0 && (
+              <>
+                <div className="mt-2.5 flex h-2 w-full overflow-hidden rounded-full bg-[var(--inset)]">
+                  {storage.videoBytes > 0 && (
+                    <div
+                      className="h-full bg-rose-500"
+                      style={{width: `${Math.max(2, (storage.videoBytes / storage.totalBytes) * 100)}%`}}
+                    />
+                  )}
+                  {storage.audioBytes > 0 && (
+                    <div
+                      className="h-full bg-emerald-500"
+                      style={{width: `${Math.max(2, (storage.audioBytes / storage.totalBytes) * 100)}%`}}
+                    />
+                  )}
+                  {storage.imageBytes > 0 && (
+                    <div
+                      className="h-full bg-sky-500"
+                      style={{width: `${Math.max(2, (storage.imageBytes / storage.totalBytes) * 100)}%`}}
+                    />
+                  )}
+                  {storage.pdfBytes > 0 && (
+                    <div
+                      className="h-full bg-amber-500"
+                      style={{width: `${Math.max(2, (storage.pdfBytes / storage.totalBytes) * 100)}%`}}
+                    />
+                  )}
+                  {storage.otherBytes > 0 && (
+                    <div
+                      className="h-full bg-violet-500"
+                      style={{width: `${Math.max(2, (storage.otherBytes / storage.totalBytes) * 100)}%`}}
+                    />
+                  )}
+                </div>
+                <div className="font-mono-num mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-semibold text-[var(--muted)]">
+                  {storage.videoBytes > 0 && <span className="text-rose-400">● Video {formatBytes(storage.videoBytes)}</span>}
+                  {storage.audioBytes > 0 && <span className="text-emerald-400">● {lang === 'tr' ? 'Ses' : 'Audio'} {formatBytes(storage.audioBytes)}</span>}
+                  {storage.imageBytes > 0 && <span className="text-sky-400">● {lang === 'tr' ? 'Görsel' : 'Image'} {formatBytes(storage.imageBytes)}</span>}
+                  {storage.pdfBytes > 0 && <span className="text-amber-400">● PDF {formatBytes(storage.pdfBytes)}</span>}
+                  {storage.otherBytes > 0 && <span className="text-violet-400">● {lang === 'tr' ? 'Diğer' : 'Other'} {formatBytes(storage.otherBytes)}</span>}
+                </div>
+              </>
+            )}
+          </div>
+          )}
+
+          {/* Folder / Tag Filter Bar */}
+          {showFoldersBar && (
+          <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto pb-0.5">
+            <button
+              type="button"
+              onClick={() => setActiveFolder('all')}
+              className={`shrink-0 rounded-xl border px-3 py-1.5 text-[11px] font-bold ${
+                activeFolder === 'all'
+                  ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
+                  : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]'
+              }`}
+            >
+              {lang === 'tr' ? 'Tüm Klasörler' : 'All Folders'}
+            </button>
+            {folders.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setActiveFolder(activeFolder === f.id ? 'all' : f.id)}
+                className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-bold ${
+                  activeFolder === f.id
+                    ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--ink)]'
+                    : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]'
+                }`}
+              >
+                <span className="h-2 w-2 rounded-full" style={{backgroundColor: f.color}} />
+                <span>{f.name}</span>
+              </button>
+            ))}
+            {addingFolder ? (
+              <div className="flex shrink-0 items-center gap-1">
+                <input
+                  type="text"
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newFolderName.trim()) {
+                      const palette = ['#06B6D4', '#8B5CF6', '#F97316', '#EC4899', '#22C55E'];
+                      const created: LibraryFolder = {
+                        id: `fld_${Date.now()}`,
+                        name: newFolderName.trim(),
+                        color: palette[folders.length % palette.length],
+                      };
+                      const next = [...folders, created];
+                      setFolders(next);
+                      saveLibraryFolders(next);
+                      setNewFolderName('');
+                      setAddingFolder(false);
+                    }
+                  }}
+                  placeholder={lang === 'tr' ? 'Klasör adı…' : 'Folder…'}
+                  className="w-28 rounded-xl border border-[var(--accent)] bg-[var(--surface)] px-2.5 py-1 text-[11px] text-[var(--ink)] focus:outline-none"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setAddingFolder(false)}
+                  className="p-1 text-[var(--muted)]"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setAddingFolder(true)}
+                className="flex shrink-0 items-center gap-1 rounded-xl border border-dashed border-[var(--line)] px-2.5 py-1.5 text-[11px] font-bold text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]"
+              >
+                <FolderPlus className="h-3.5 w-3.5" />
+                <span>{lang === 'tr' ? 'Klasör' : 'Folder'}</span>
+              </button>
+            )}
+          </div>
+          )}
+        </div>
+      )}
+
       {/* Filter Tabs + Search + Sort Bar */}
       {items.length > 0 && (
-        <div className="mt-4 space-y-2.5">
+        <div className="mt-3 space-y-2.5">
           <div className="no-scrollbar flex w-full flex-nowrap items-center gap-1 overflow-x-auto rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-1.5 sm:inline-flex sm:w-auto sm:gap-1.5">
             {filterTabs.map(({id, label, Icon}) => {
               const active = filter === id;
@@ -435,7 +620,21 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                   )}
                   <FileThumb previewUrl={item.previewUrl} kind={kind} alt={item.name} sizeClass="h-11 w-11 sm:h-12 sm:w-12" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-[var(--ink)]">{item.name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="truncate text-sm font-semibold text-[var(--ink)]">{item.name}</p>
+                      {itemTags[item.id] && (() => {
+                        const fld = folders.find((f) => f.id === itemTags[item.id]);
+                        if (!fld) return null;
+                        return (
+                          <span
+                            className="shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-bold text-white"
+                            style={{backgroundColor: fld.color}}
+                          >
+                            {fld.name}
+                          </span>
+                        );
+                      })()}
+                    </div>
                     <p className="font-mono-num mt-0.5 flex items-center gap-1 truncate text-[11px] whitespace-nowrap text-[var(--muted)] sm:text-xs">
                       <span>{formatBytes(item.size)}</span>
                       <span>·</span>
@@ -453,6 +652,19 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                   </div>
                   {!selectMode && (
                     <div className="flex shrink-0 items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const curId = itemTags[item.id];
+                          const idx = curId ? folders.findIndex((f) => f.id === curId) : -1;
+                          const nextFolder = idx + 1 < folders.length ? folders[idx + 1] : null;
+                          setItemTags(setLibraryItemFolder(item.id, nextFolder ? nextFolder.id : null));
+                        }}
+                        title={lang === 'tr' ? 'Klasör / Etiket Değiştir' : 'Assign Folder Tag'}
+                        className="flex h-9 w-9 items-center justify-center rounded-xl text-[var(--muted)] transition-colors hover:bg-[var(--inset)] hover:text-[var(--accent-text)]"
+                      >
+                        <Tag className="h-3.5 w-3.5" />
+                      </button>
                       {canPreview && (
                         <button
                           type="button"

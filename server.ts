@@ -277,6 +277,201 @@ async function startServer() {
     }
   });
 
+  // Probe remote file for HTTP Range support, total size, ETag & filename (for parallel chunked accelerator)
+  app.post('/api/probe-link', express.json({limit: '16kb'}), async (req, res) => {
+    const rawUrl = String(req.body?.url || '').trim();
+    const extraHeaders =
+      req.body?.headers && typeof req.body.headers === 'object'
+        ? (req.body.headers as Record<string, string>)
+        : {};
+    if (!rawUrl) {
+      res.status(400).json({ok: false, detail: 'Empty URL'});
+      return;
+    }
+
+    let parsed: URL;
+    try {
+      const withProto = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+      parsed = new URL(rewriteCloudDirectUrl(withProto));
+      if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || isBlockedHost(parsed.hostname)) {
+        res.status(400).json({ok: false, detail: 'Blocked URL'});
+        return;
+      }
+    } catch {
+      res.status(400).json({ok: false, detail: 'Invalid URL'});
+      return;
+    }
+
+    const safeForwardHeaders: Record<string, string> = {
+      'User-Agent': BROWSER_USER_AGENT,
+      Accept: '*/*',
+      'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+    };
+    if (typeof extraHeaders.Referer === 'string') safeForwardHeaders.Referer = extraHeaders.Referer;
+    if (typeof extraHeaders.Origin === 'string') safeForwardHeaders.Origin = extraHeaders.Origin;
+
+    const extractDispName = (disp: string | null): string => {
+      if (!disp) return '';
+      const utf8 = disp.match(/filename\*=UTF-8''([^;\r\n]+)/i);
+      if (utf8?.[1]) {
+        try {
+          return decodeURIComponent(utf8[1].trim().replace(/^"|"$/g, ''));
+        } catch {
+          return utf8[1].trim().replace(/^"|"$/g, '');
+        }
+      }
+      const basic = disp.match(/filename="?([^";\r\n]+)"?/i);
+      return basic?.[1]?.trim() || '';
+    };
+
+    try {
+      // Use a tiny 1-byte Range GET probe: universally verifies true 206 Partial Content support & total size
+      const probeRes = await safeFetch(parsed.toString(), {
+        method: 'GET',
+        headers: {
+          ...safeForwardHeaders,
+          Range: 'bytes=0-0',
+        },
+        signal: AbortSignal.timeout(12_000),
+      });
+      // Immediately cancel body so we never waste bandwidth
+      await probeRes.body?.cancel().catch(() => {});
+
+      const ct = (probeRes.headers.get('content-type') || 'application/octet-stream').split(';')[0].trim().toLowerCase();
+      if (!probeRes.ok && probeRes.status !== 206) {
+        res.json({ok: false, status: probeRes.status, acceptRanges: false, contentLength: 0, contentType: ct});
+        return;
+      }
+
+      const isHtml = ct.includes('text/html') || ct.includes('application/xhtml');
+      let totalLength = 0;
+      let acceptRanges = false;
+
+      const contentRange = probeRes.headers.get('content-range') || '';
+      const rangeMatch = contentRange.match(/bytes\s+\d+-\d+\/(\d+)/i);
+      if (probeRes.status === 206 && rangeMatch?.[1]) {
+        totalLength = Number(rangeMatch[1]) || 0;
+        acceptRanges = totalLength > 0;
+      } else {
+        totalLength = Number(probeRes.headers.get('content-length') || 0) || 0;
+        acceptRanges =
+          (probeRes.headers.get('accept-ranges') || '').toLowerCase().includes('bytes') && totalLength > 0;
+      }
+
+      const finalUrl = probeRes.url || parsed.toString();
+      const dispName = extractDispName(probeRes.headers.get('content-disposition'));
+      const pathName = (() => {
+        try {
+          return decodeURIComponent(path.basename(new URL(finalUrl).pathname));
+        } catch {
+          return '';
+        }
+      })();
+      const filename = dispName || (pathName && pathName.includes('.') ? pathName : '');
+
+      res.json({
+        ok: true,
+        finalUrl,
+        contentLength: totalLength,
+        acceptRanges: !isHtml && acceptRanges,
+        isHtml,
+        contentType: ct,
+        filename,
+        etag: probeRes.headers.get('etag') || '',
+        lastModified: probeRes.headers.get('last-modified') || '',
+      });
+    } catch (error) {
+      res.json({
+        ok: false,
+        acceptRanges: false,
+        contentLength: 0,
+        detail: error instanceof Error ? error.message : 'Probe failed',
+      });
+    }
+  });
+
+  // SSRF-safe single HTTP Range chunk proxy (max 16 MB per chunk) for parallel chunked accelerator
+  app.post('/api/download-range', express.json({limit: '16kb'}), async (req, res) => {
+    const rawUrl = String(req.body?.url || '').trim();
+    const start = Number(req.body?.start);
+    const end = Number(req.body?.end);
+    const extraHeaders =
+      req.body?.headers && typeof req.body.headers === 'object'
+        ? (req.body.headers as Record<string, string>)
+        : {};
+
+    if (
+      !rawUrl ||
+      !Number.isInteger(start) ||
+      !Number.isInteger(end) ||
+      start < 0 ||
+      end < start ||
+      end - start > 16 * 1024 * 1024
+    ) {
+      res.status(400).json({detail: 'Invalid range parameters'});
+      return;
+    }
+
+    let parsed: URL;
+    try {
+      const withProto = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+      parsed = new URL(rewriteCloudDirectUrl(withProto));
+      if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || isBlockedHost(parsed.hostname)) {
+        res.status(400).json({detail: 'Blocked URL'});
+        return;
+      }
+    } catch {
+      res.status(400).json({detail: 'Invalid URL'});
+      return;
+    }
+
+    const abort = new AbortController();
+    res.on('close', () => {
+      if (!res.writableEnded) abort.abort();
+    });
+
+    const safeForwardHeaders: Record<string, string> = {
+      'User-Agent': BROWSER_USER_AGENT,
+      Accept: '*/*',
+      Range: `bytes=${start}-${end}`,
+    };
+    if (typeof extraHeaders.Referer === 'string') safeForwardHeaders.Referer = extraHeaders.Referer;
+    if (typeof extraHeaders.Origin === 'string') safeForwardHeaders.Origin = extraHeaders.Origin;
+
+    try {
+      const upstream = await safeFetch(parsed.toString(), {
+        method: 'GET',
+        headers: safeForwardHeaders,
+        signal: abort.signal,
+      });
+
+      if (upstream.status !== 206 && upstream.status !== 200) {
+        await upstream.body?.cancel().catch(() => {});
+        res.status(502).json({detail: `Upstream HTTP ${upstream.status}`});
+        return;
+      }
+
+      res.status(upstream.status);
+      const ct = upstream.headers.get('content-type');
+      const cl = upstream.headers.get('content-length');
+      const cr = upstream.headers.get('content-range');
+      if (ct) res.setHeader('Content-Type', ct);
+      if (cl) res.setHeader('Content-Length', cl);
+      if (cr) res.setHeader('Content-Range', cr);
+
+      if (!upstream.body) {
+        res.end();
+        return;
+      }
+      Readable.fromWeb(upstream.body as unknown as import('stream/web').ReadableStream).pipe(res);
+    } catch (error) {
+      if (abort.signal.aborted) return;
+      if (!res.headersSent) {
+        res.status(502).json({detail: error instanceof Error ? error.message : 'Range fetch failed'});
+      }
+    }
+  });
+
   // Safe proxy for user-configured Cobalt API instances (v10 POST / and v7 POST /api/json)
   app.post('/api/cobalt-proxy', express.json({limit: '32kb'}), async (req, res) => {
     const rawCobalt = String(req.body?.cobaltUrl || '').trim();

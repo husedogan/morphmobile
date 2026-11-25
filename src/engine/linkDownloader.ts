@@ -31,6 +31,7 @@ import {
   resolveViaCobaltEngine,
 } from './morphEnginesBridge';
 import {ensureStoragePermission, isNativeApp, writeBlobToNativeChunked} from './nativeBridge';
+import {downloadWithParallelRange} from './rangeChunkDownloader';
 
 // Thresholds to prevent 32-bit WASM / mobile WebView Out-Of-Memory crashes on 2-hour videos
 const MAX_FFMPEG_WASM_INPUT_BYTES = 150 * 1024 * 1024; // 150 MB max for in-browser FFmpeg.wasm transcode
@@ -346,6 +347,68 @@ async function finalizeNativeDiskDownload(
   const initialName = guessFilename(targetUrl, initialGuessMime, resolved?.suggestedName);
   onProgress(0.24, initialName);
 
+  // Try parallel HTTP Range chunked accelerator on native Android for direct files <= 80 MB
+  if (prefs.proDlRangeAccel !== false && !extractYouTubeId(targetUrl)) {
+    try {
+      const rangeConns = prefs.proDlRangeConnections ?? prefs.concurrentFragments ?? 4;
+      const rangeRes = await downloadWithParallelRange({
+        url: targetUrl,
+        headers: resolved?.headers,
+        connections: rangeConns,
+        enableResumeCache: prefs.proDlRangeResumeCache !== false,
+        maxBytes: 80 * 1024 * 1024,
+        lang,
+        signal,
+        onProbeReady: (probe) => {
+          if (probe.contentLength > 0) {
+            checkNetworkPolicyAgainstStatus(net, prefs, probe.contentLength, lang);
+          }
+        },
+        onProgress,
+      });
+      if (rangeRes) {
+        const finalName = guessFilename(targetUrl, rangeRes.contentType, resolved?.suggestedName || rangeRes.filename);
+        const finalExt = finalName.includes('.') ? finalName.split('.').pop()!.toLowerCase() : '';
+        const finalMime = rangeRes.contentType || mimeFromExt(finalExt) || initialGuessMime;
+        const finalMedia = await convertVideoBlobToMp3IfRequested(
+          rangeRes.blob,
+          finalName,
+          finalMime,
+          mode,
+          onProgress,
+          signal
+        );
+        await ensureStoragePermission(true);
+        const relPath = `Morph/${sanitizeNativeFilename(finalMedia.filename)}`;
+        const nativeUri = await writeBlobToNativeChunked(finalMedia.blob, relPath, Directory.Documents);
+        onProgress(0.98, finalMedia.filename);
+        return {
+          id: createId(),
+          name: finalMedia.filename,
+          mime: finalMedia.mime,
+          size: finalMedia.blob.size,
+          createdAt: Date.now(),
+          tool: title,
+          blob: finalMedia.mime.startsWith('image/') && finalMedia.blob.size <= MAX_NATIVE_IMAGE_PREVIEW_BYTES
+            ? finalMedia.blob
+            : new Blob([], {type: finalMedia.mime}),
+          previewUrl:
+            finalMedia.mime.startsWith('image/') && finalMedia.blob.size <= MAX_NATIVE_IMAGE_PREVIEW_BYTES
+              ? URL.createObjectURL(finalMedia.blob)
+              : undefined,
+          nativeUri,
+          nativePath: relPath,
+          nativeDirectory: Directory.Documents,
+        };
+      }
+    } catch (err) {
+      if (err instanceof NetworkPolicyBlockedError || (err instanceof Error && err.message === 'Cancelled')) {
+        throw err;
+      }
+      // Fall back cleanly to native disk streaming
+    }
+  }
+
   let diskFile = await streamNativeUrlToDisk(
     targetUrl,
     initialName,
@@ -597,6 +660,51 @@ async function runSingleEngineAttempt(
       return finalizeNativeDiskDownload(cobaltTarget, normalized, mode, title, net, prefs, onProgress, signal);
     }
 
+    // Try parallel HTTP Range chunked accelerator first when enabled
+    if (prefs.proDlRangeAccel !== false) {
+      const rangeConns = prefs.proDlRangeConnections ?? prefs.concurrentFragments ?? 4;
+      const rangeRes = await downloadWithParallelRange({
+        url: cobaltTarget.url,
+        headers: cobaltTarget.headers,
+        connections: rangeConns,
+        enableResumeCache: prefs.proDlRangeResumeCache !== false,
+        lang,
+        signal,
+        onProbeReady: (probe) => {
+          if (probe.contentLength > 0) {
+            checkNetworkPolicyAgainstStatus(net, prefs, probe.contentLength, lang);
+          }
+        },
+        onProgress,
+      });
+      if (rangeRes) {
+        const fname = guessFilename(cobaltTarget.url, rangeRes.contentType, cobaltTarget.suggestedName || rangeRes.filename);
+        diag.step(
+          'cobalt',
+          `Paralel Range hızlandırıcı (${rangeRes.connectionsUsed}×, ${rangeRes.totalChunks} parça${rangeRes.resumedChunks > 0 ? `, ${rangeRes.resumedChunks} devam` : ''})`
+        );
+        const finalMedia = await convertVideoBlobToMp3IfRequested(
+          rangeRes.blob,
+          fname,
+          rangeRes.contentType,
+          mode,
+          onProgress,
+          signal
+        );
+        onProgress(0.98, finalMedia.filename);
+        return {
+          id: createId(),
+          name: finalMedia.filename,
+          mime: finalMedia.mime,
+          size: finalMedia.blob.size,
+          createdAt: Date.now(),
+          tool: title,
+          blob: finalMedia.blob,
+          previewUrl: finalMedia.mime.startsWith('image/') ? URL.createObjectURL(finalMedia.blob) : undefined,
+        };
+      }
+    }
+
     const r = await fetch(cobaltTarget.url, {signal});
     if (!r.ok) {
       throw new Error(`Cobalt medya akışı indirilemedi (HTTP ${r.status}).`);
@@ -644,7 +752,54 @@ async function runSingleEngineAttempt(
     return finalizeNativeDiskDownload(resolvedPlatform, normalized, mode, title, net, prefs, onProgress, signal);
   }
 
-  // Built-in Web mode via Express /api/download-link
+  // Built-in Web mode: try Parallel HTTP Range Chunked Accelerator first for direct files (>= 1.5 MB)
+  if (prefs.proDlRangeAccel !== false && !ytId) {
+    const rangeConns = prefs.proDlRangeConnections ?? prefs.concurrentFragments ?? 4;
+    const rangeRes = await downloadWithParallelRange({
+      url: normalized,
+      connections: rangeConns,
+      enableResumeCache: prefs.proDlRangeResumeCache !== false,
+      lang,
+      signal,
+      onProbeReady: (probe) => {
+        if (probe.contentLength > 0) {
+          checkNetworkPolicyAgainstStatus(net, prefs, probe.contentLength, lang);
+        }
+      },
+      onProgress,
+    });
+    if (rangeRes) {
+      const rawFilename = guessFilename(normalized, rangeRes.contentType, rangeRes.filename);
+      const rawExt = rawFilename.includes('.') ? rawFilename.split('.').pop()! : '';
+      const rawMime = rangeRes.contentType || mimeFromExt(rawExt);
+      const speedMb = (rangeRes.avgSpeedBps / (1024 * 1024)).toFixed(1);
+      diag.step(
+        'builtin',
+        `Paralel Range hızlandırıcı tamamlandı (${rangeRes.connectionsUsed}×, ${rangeRes.totalChunks} parça, ~${speedMb} MB/s${rangeRes.resumedChunks > 0 ? `, ${rangeRes.resumedChunks} parça devam` : ''})`
+      );
+      const finalMedia = await convertVideoBlobToMp3IfRequested(
+        rangeRes.blob,
+        rawFilename,
+        rawMime,
+        mode,
+        onProgress,
+        signal
+      );
+      onProgress(0.97, finalMedia.filename);
+      return {
+        id: createId(),
+        name: finalMedia.filename,
+        mime: finalMedia.mime,
+        size: finalMedia.blob.size,
+        createdAt: Date.now(),
+        tool: title,
+        blob: finalMedia.blob,
+        previewUrl: finalMedia.mime.startsWith('image/') ? URL.createObjectURL(finalMedia.blob) : undefined,
+      };
+    }
+  }
+
+  // Built-in Web mode fallback via Express /api/download-link (handles HTML social extraction & non-Range servers)
   const res = await fetch('/api/download-link', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},

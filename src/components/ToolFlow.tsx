@@ -73,6 +73,7 @@ import {
   toolsForSelection,
 } from '../data/models';
 import {BatchRenameRules, computeBatchRenamedNames} from '../engine/fileInspector';
+import {LinkDownloaderPro} from './LinkDownloaderPro';
 import {
   DecodedImage,
   FilterPreset,
@@ -376,6 +377,7 @@ interface ToolFlowProps {
   initialTool?: ToolId | null;
   initialConvertFormat?: string | null;
   initialServerTool?: ServerToolDef | null;
+  initialLinkUrl?: string;
   directEntry?: boolean;
   onBack: () => void;
   onRunLocal: (tool: ToolId, title: string, options: ToolOptions) => void;
@@ -545,6 +547,7 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
   initialTool = null,
   initialConvertFormat = null,
   initialServerTool = null,
+  initialLinkUrl = '',
   directEntry = false,
   onBack,
   onRunLocal,
@@ -635,9 +638,10 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
 
   if (mode === 'web') {
     return (
-      <WebLinkConfig
+      <LinkDownloaderPro
         lang={lang}
         prefs={prefs}
+        initialUrl={initialLinkUrl}
         onChangePrefs={onChangePrefs}
         onOpenSettings={onOpenSettings}
         onBack={onBack}

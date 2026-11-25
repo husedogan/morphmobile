@@ -1,5 +1,5 @@
 import React, {useEffect, useRef, useState} from 'react';
-import {AlertTriangle, Check, ChevronDown, Download, Eye, Grid, Music, Share2, X} from 'lucide-react';
+import {AlertTriangle, ArrowRight, Check, ChevronDown, Download, Eye, Grid, Music, Share2, Sparkles, X} from 'lucide-react';
 import {Lang, t} from '../data/i18n';
 import {ExportItem, ExportResult, detectFileKind, formatBytes} from '../data/models';
 import {isNativeApp} from '../engine/nativeBridge';
@@ -14,6 +14,7 @@ interface ResultViewProps {
   onOpenLibrary: () => void;
   onNewTask: () => void;
   onKeepFiles?: () => void;
+  onChainToStudio?: (target?: 'studio' | 'audio_studio' | 'image_pro' | 'pdf_pro' | 'video_editor') => void;
 }
 
 const WEB_PERSIST_LIMIT_BYTES = 100 * 1024 * 1024;
@@ -27,6 +28,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
   onOpenLibrary,
   onNewTask,
   onKeepFiles,
+  onChainToStudio,
 }) => {
   const [visibleCount, setVisibleCount] = useState(24);
   const [previewItem, setPreviewItem] = useState<{item: ExportItem; url: string} | null>(null);
@@ -244,6 +246,70 @@ export const ResultView: React.FC<ResultViewProps> = ({
               {lang === 'tr' ? `Tümü (${result.items.length})` : `Show All (${result.items.length})`}
             </button>
           )}
+        </div>
+      )}
+
+      {/* Output-to-Tool Chaining Strip (Item 23) */}
+      {onChainToStudio && result.items.some((i) => i.blob && i.blob.size > 0) && (
+        <div className="mt-5 rounded-3xl border border-[var(--accent)]/35 bg-[var(--surface)] p-3.5">
+          <div className="mb-2.5 flex items-center gap-1.5">
+            <Sparkles className="h-3.5 w-3.5 text-[var(--accent-text)]" />
+            <span className="text-xs font-extrabold text-[var(--ink)]">
+              {lang === 'tr' ? 'Çıktıyı Başka Araca Gönder (Zincirle)' : 'Chain Output to Another Tool'}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={() => onChainToStudio('studio')}
+              className="flex items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 py-1.5 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)]"
+            >
+              <span>{lang === 'tr' ? 'Stüdyo’da Kullan' : 'Use in Studio'}</span>
+              <ArrowRight className="h-3 w-3 text-[var(--accent-text)]" />
+            </button>
+            {result.items.some((i) => detectFileKind(i.name, i.mime) === 'image') && (
+              <button
+                type="button"
+                onClick={() => onChainToStudio('image_pro')}
+                className="rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 py-1.5 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)]"
+              >
+                {lang === 'tr' ? 'Görsel Pro’da Aç' : 'Open Image Pro'}
+              </button>
+            )}
+            {result.items.some((i) => {
+              const k = detectFileKind(i.name, i.mime);
+              return k === 'audio' || k === 'video';
+            }) && (
+              <button
+                type="button"
+                onClick={() => onChainToStudio('audio_studio')}
+                className="rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 py-1.5 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)]"
+              >
+                {lang === 'tr' ? 'Ses Stüdyosu’na Al' : 'Send to Audio Studio'}
+              </button>
+            )}
+            {result.items.some((i) => detectFileKind(i.name, i.mime) === 'video') && (
+              <button
+                type="button"
+                onClick={() => onChainToStudio('video_editor')}
+                className="rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 py-1.5 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)]"
+              >
+                {lang === 'tr' ? 'Video Editör’de Aç' : 'Open in Video Editor'}
+              </button>
+            )}
+            {result.items.some((i) => {
+              const k = detectFileKind(i.name, i.mime);
+              return k === 'pdf' || k === 'archive';
+            }) && (
+              <button
+                type="button"
+                onClick={() => onChainToStudio('pdf_pro')}
+                className="rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 py-1.5 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)]"
+              >
+                {lang === 'tr' ? 'PDF / Arşiv Pro’da Aç' : 'Open PDF / ZIP Pro'}
+              </button>
+            )}
+          </div>
         </div>
       )}
 

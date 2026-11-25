@@ -19,6 +19,7 @@ import {
   HardDrive,
   Image as ImageIcon,
   Info,
+  Layers,
   Lock,
   Minus,
   Moon,
@@ -105,8 +106,9 @@ import {
 } from '../engine/nativeBridge';
 import {deleteNleProjectIdb, listNleProjectsIdb} from '../engine/projectStorage';
 import {PWAInstallButton} from './PWAInstallButton';
+import {SettingsProTab} from './SettingsProTab';
 
-export type SettingsCategory = 'appearance' | 'downloads' | 'permissions' | 'experimental' | 'about';
+export type SettingsCategory = 'appearance' | 'pro' | 'downloads' | 'permissions' | 'experimental' | 'about';
 
 interface SettingsScreenProps {
   prefs: Prefs;
@@ -126,6 +128,7 @@ interface SettingsScreenProps {
   onClearLibrary?: () => void;
   onOpenWheelCustomize?: () => void;
   onOpenMainWheelCustomize?: () => void;
+  onPinnedChanged?: () => void;
   onShowToast?: (msg: string) => void;
 }
 
@@ -147,6 +150,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onClearLibrary,
   onOpenWheelCustomize,
   onOpenMainWheelCustomize,
+  onPinnedChanged,
   onShowToast,
 }) => {
   const lang: Lang = prefs.lang;
@@ -560,6 +564,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     Icon: React.FC<{className?: string}>;
   }> = [
     {id: 'appearance', label: t('SetCatAppearance', lang), Icon: Palette},
+    {id: 'pro', label: lang === 'tr' ? 'Pro Modüller' : 'Pro Modules', Icon: Layers},
     {id: 'downloads', label: t('SetCatDownloads', lang), Icon: Download},
     {id: 'permissions', label: t('SetCatPermissions', lang), Icon: ShieldCheck},
     ...(expTabVisible
@@ -650,6 +655,17 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           );
         })}
       </div>
+
+      {/* CATEGORY PRO: PRO MODULES, ORDERING, DEFAULTS & DATA MANAGEMENT */}
+      {category === 'pro' && (
+        <SettingsProTab
+          prefs={prefs}
+          lang={lang}
+          onChangePrefs={onChangePrefs}
+          onShowToast={onShowToast}
+          onPinnedChanged={onPinnedChanged}
+        />
+      )}
 
       {/* CATEGORY 1: APPEARANCE, THEMES, INTERFACE CONTROLS & RADIAL WHEELS */}
       {category === 'appearance' && (
@@ -1057,6 +1073,62 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 </p>
               </div>
               <span className="morph-switch" data-checked={showIntegratedEngines ? 'true' : 'false'}>
+                <span className="morph-switch-thumb" />
+              </span>
+            </button>
+
+            {/* Studio Pro Suites Bar Visibility Toggle (Home Screen) */}
+            <button
+              type="button"
+              onClick={() =>
+                onChangePrefs((p) => ({...p, proShowStudioSuitesBar: p.proShowStudioSuitesBar === false}))
+              }
+              className="mt-3 flex min-h-[64px] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
+            >
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-[var(--ink)]">
+                  {lang === 'tr'
+                    ? 'Ana Ekranda Pro Araç Çubuğunu Göster'
+                    : 'Show Pro Tools Bar on Home'}
+                </p>
+                <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
+                  {lang === 'tr'
+                    ? 'Ses Stüdyosu, Görsel Kıyasla, PDF, Arşiv ve Tarif Zinciri butonlarını ana ekranda göster veya gizle.'
+                    : 'Show or hide Audio Studio, Image Pro, PDF, ZIP and Pipeline pills on Studio.'}
+                </p>
+              </div>
+              <span
+                className="morph-switch"
+                data-checked={prefs.proShowStudioSuitesBar !== false ? 'true' : 'false'}
+              >
+                <span className="morph-switch-thumb" />
+              </span>
+            </button>
+
+            {/* Studio Pinned & Recent Shortcuts Strip Visibility Toggle (Home Screen) */}
+            <button
+              type="button"
+              onClick={() =>
+                onChangePrefs((p) => ({...p, proShowPinnedRecentStrip: p.proShowPinnedRecentStrip === false}))
+              }
+              className="mt-3 flex min-h-[64px] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
+            >
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-[var(--ink)]">
+                  {lang === 'tr'
+                    ? 'Sabitlenen & Son Araçlar Şeridini Göster'
+                    : 'Show Pinned & Recent Shortcuts Strip'}
+                </p>
+                <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
+                  {lang === 'tr'
+                    ? 'Ana ekrandaki iğneli hızlı kısayol (📌) satırını göster veya gizle.'
+                    : 'Show or hide the pinned quick-access shortcuts row on Studio.'}
+                </p>
+              </div>
+              <span
+                className="morph-switch"
+                data-checked={prefs.proShowPinnedRecentStrip !== false ? 'true' : 'false'}
+              >
                 <span className="morph-switch-thumb" />
               </span>
             </button>
@@ -2376,7 +2448,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     prefs.expTouchTooltips ||
                     prefs.expLegacySliders ||
                     prefs.expAmbientAurora ||
-                    prefs.expCommandPalette ||
+                    prefs.expTerminal ||
                     prefs.expUiSounds ||
                     prefs.expWheelShockwave) && (
                     <button
@@ -2409,7 +2481,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                           expTouchTooltips: false,
                           expLegacySliders: false,
                           expAmbientAurora: false,
-                          expCommandPalette: false,
+                          expTerminal: false,
                           expUiSounds: false,
                           expWheelShockwave: false,
                         }));
@@ -3390,14 +3462,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       'Adds a gentle, slow-drifting ambient glow in the background tinted dynamically to your active Morph theme.',
                   },
                   {
-                    key: 'expCommandPalette' as const,
+                    key: 'expTerminal' as const,
                     defaultOn: false,
-                    titleTr: 'Hızlı Komut & Araç Arama',
-                    titleEn: 'Quick Command & Tool Search',
+                    titleTr: 'Termux Tarzı Morph Terminali',
+                    titleEn: 'Termux-Style Morph Terminal',
                     descTr:
-                      'Üst çubuğa anlık arama butonu (ve Ctrl+K kısayolu) ekler; tüm Morph araçlarına, video düzenleyiciye ve ayarlara tek dokunuşla ulaşırsın.',
+                      'Üst çubuğa Termux benzeri etkileşimli komut satırı (ve Ctrl+` kısayolu) ekler. Komutlarla (help, neofetch, ls, tools, open, dl/yt-dlp, theme, engine) uygulamayı doğrudan kontrol edebilirsin.',
                     descEn:
-                      'Adds a top-bar instant search button (and Ctrl+K shortcut) to jump directly to any Morph tool, video editor, or app action.',
+                      'Adds a Termux-style interactive command shell to the top bar (and Ctrl+` shortcut) to control tools, themes, download engines, and URL downloads via CLI commands.',
                   },
                   {
                     key: 'expUiSounds' as const,

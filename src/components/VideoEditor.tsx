@@ -130,6 +130,7 @@ import {
   registerAudioClipBlob,
   removeAudioClipBlob,
 } from '../engine/audioEngine';
+import {decodeAudioBlob, detectAudioBeats} from '../engine/audioProOps';
 import {interpolateClipKeyframes} from '../engine/keyframeEngine';
 import {
   deleteNleProjectIdb,
@@ -689,6 +690,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const [kfPosY, setKfPosY] = useState(0);
   const [kfRotation, setKfRotation] = useState(0);
   const [kfEasing, setKfEasing] = useState<KeyframeEasingType>('easeInOut');
+  const [beatMarkers, setBeatMarkers] = useState<number[]>([]);
+  const [isScanningBeats, setIsScanningBeats] = useState(false);
   const [isPortraitMode, setIsPortraitMode] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerHeight >= window.innerWidth : false
   );
@@ -5447,7 +5450,58 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                       : tr('Otomatik Sessizliği Kes', 'Auto Silence Cut')}
                   </span>
                 </button>
+
+                <button
+                  type="button"
+                  disabled={isScanningBeats}
+                  onClick={async () => {
+                    if (!file?.file) return;
+                    setIsScanningBeats(true);
+                    try {
+                      const decoded = await decodeAudioBlob(file.file);
+                      const beats = detectAudioBeats(decoded, 0.58);
+                      setBeatMarkers(beats.slice(0, 64));
+                      notifyStatus(
+                        beats.length > 0
+                          ? tr(
+                              `${beats.length} ritim işareti (Beat Sync) bulundu. Atlama için işarete dokun.`,
+                              `Detected ${beats.length} beat sync markers. Tap any beat to jump.`
+                            )
+                          : tr('Belirgin ritim vuruşu bulunamadı.', 'No prominent beats detected.')
+                      );
+                    } catch {
+                      notifyStatus(tr('Ses akışı ritim analizi için çözümlenemedi.', 'Could not decode audio for beat sync.'));
+                    } finally {
+                      setIsScanningBeats(false);
+                    }
+                  }}
+                  className="flex items-center gap-1 rounded-lg border border-amber-400/50 bg-amber-500/12 px-2.5 py-1 text-[11px] font-bold text-amber-400 transition-colors hover:bg-amber-500/20 disabled:opacity-50"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  <span>
+                    {isScanningBeats
+                      ? tr('Ritim Taranıyor…', 'Scanning Beats…')
+                      : tr(`Ritim İşaretleri (Beat Sync${beatMarkers.length ? `: ${beatMarkers.length}` : ''})`, `Beat Sync${beatMarkers.length ? ` (${beatMarkers.length})` : ''}`)}
+                  </span>
+                </button>
               </div>
+              {beatMarkers.length > 0 && (
+                <div className="mt-2 flex flex-wrap items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2">
+                  <span className="mr-1 text-[10px] font-extrabold uppercase text-amber-400">
+                    {tr('Ritimler:', 'Beats:')}
+                  </span>
+                  {beatMarkers.slice(0, 24).map((bt, idx) => (
+                    <button
+                      key={`${bt}_${idx}`}
+                      type="button"
+                      onClick={() => seekTimelineTo(bt)}
+                      className="font-mono-num rounded-md border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-300 hover:bg-amber-500/30"
+                    >
+                      ♪ {bt.toFixed(1)}s
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Pro Master Audio DSP: 3-Band EQ + Compressor + Limiter (FFmpeg equalizer/acompressor/alimiter) */}
@@ -6905,6 +6959,77 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                   />
                 </div>
 
+                {/* 1-Tap Keyframe Motion Presets */}
+                {selectedClip && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[10px] font-bold uppercase text-[var(--muted)]">
+                      {tr('Hazır Hareket:', 'Motion Preset:')}
+                    </span>
+                    {(
+                      [
+                        {
+                          id: 'kenburns',
+                          tr: 'Ken Burns Zoom',
+                          en: 'Ken Burns Zoom',
+                          build: (dur: number) => [
+                            {id: `kf_${Date.now()}_a`, timeOffsetSec: 0, zoom: 1, opacity: 1, posX: 0, posY: 0, rotation: 0, easing: 'easeInOut' as KeyframeEasingType},
+                            {id: `kf_${Date.now()}_b`, timeOffsetSec: Math.max(0.5, dur), zoom: 1.24, opacity: 1, posX: 4, posY: -3, rotation: 0, easing: 'easeInOut' as KeyframeEasingType},
+                          ],
+                        },
+                        {
+                          id: 'slidein',
+                          tr: 'Yandan Kayış',
+                          en: 'Slide In',
+                          build: (dur: number) => [
+                            {id: `kf_${Date.now()}_a`, timeOffsetSec: 0, zoom: 1.05, opacity: 0.1, posX: -35, posY: 0, rotation: 0, easing: 'easeOut' as KeyframeEasingType},
+                            {id: `kf_${Date.now()}_b`, timeOffsetSec: Math.min(1.0, Math.max(0.3, dur * 0.35)), zoom: 1, opacity: 1, posX: 0, posY: 0, rotation: 0, easing: 'easeOut' as KeyframeEasingType},
+                          ],
+                        },
+                        {
+                          id: 'pulse',
+                          tr: 'Nabız / Vurgu',
+                          en: 'Pulse Zoom',
+                          build: (dur: number) => [
+                            {id: `kf_${Date.now()}_a`, timeOffsetSec: 0, zoom: 1, opacity: 1, posX: 0, posY: 0, rotation: 0, easing: 'easeInOut' as KeyframeEasingType},
+                            {id: `kf_${Date.now()}_b`, timeOffsetSec: Math.max(0.4, dur * 0.5), zoom: 1.18, opacity: 1, posX: 0, posY: 0, rotation: 3, easing: 'easeInOut' as KeyframeEasingType},
+                            {id: `kf_${Date.now()}_c`, timeOffsetSec: Math.max(0.8, dur), zoom: 1, opacity: 1, posX: 0, posY: 0, rotation: 0, easing: 'easeInOut' as KeyframeEasingType},
+                          ],
+                        },
+                        {
+                          id: 'fadeinout',
+                          tr: 'Yumuşak Geçiş',
+                          en: 'Fade In/Out',
+                          build: (dur: number) => [
+                            {id: `kf_${Date.now()}_a`, timeOffsetSec: 0, zoom: 1, opacity: 0, posX: 0, posY: 0, rotation: 0, easing: 'easeInOut' as KeyframeEasingType},
+                            {id: `kf_${Date.now()}_b`, timeOffsetSec: Math.min(0.8, dur * 0.25), zoom: 1, opacity: 1, posX: 0, posY: 0, rotation: 0, easing: 'easeInOut' as KeyframeEasingType},
+                            {id: `kf_${Date.now()}_c`, timeOffsetSec: Math.max(0.9, dur - Math.min(0.8, dur * 0.25)), zoom: 1, opacity: 1, posX: 0, posY: 0, rotation: 0, easing: 'easeInOut' as KeyframeEasingType},
+                            {id: `kf_${Date.now()}_d`, timeOffsetSec: Math.max(1.0, dur), zoom: 1, opacity: 0, posX: 0, posY: 0, rotation: 0, easing: 'easeInOut' as KeyframeEasingType},
+                          ],
+                        },
+                      ] as const
+                    ).map((mp) => (
+                      <button
+                        key={mp.id}
+                        type="button"
+                        onClick={() => {
+                          const clipDur = Math.max(0.8, selectedClip.sourceEnd - selectedClip.sourceStart);
+                          const kfs = mp.build(clipDur);
+                          commitProject((prev) => ({
+                            ...prev,
+                            videoClips: prev.videoClips.map((c) =>
+                              c.id === selectedClip.id ? {...c, keyframes: kfs} : c
+                            ),
+                          }));
+                          notifyStatus(tr(`${mp.tr} animasyonu uygulandı.`, `Applied ${mp.en} keyframes.`));
+                        }}
+                        className="rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2 py-1 text-[10px] font-bold text-[var(--ink)] hover:border-[#FF8A3D]"
+                      >
+                        {isTr ? mp.tr : mp.en}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {selectedClip && selectedClip.keyframes.length > 0 && (
                   <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                     {[...selectedClip.keyframes]
@@ -6973,19 +7098,32 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
               <div className="text-[10.5px] font-bold uppercase tracking-wider text-[var(--muted)]">
                 {tr('Hazır Platform Profilleri', 'One-Tap Platform Presets')}
               </div>
-              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                 {(
                   [
                     {
                       id: 'reels',
-                      labelTr: 'Reels / TikTok',
-                      labelEn: 'Reels / TikTok',
+                      labelTr: 'Instagram Reels',
+                      labelEn: 'Instagram Reels',
                       sub: '9:16 · 1080p · 30',
                       aspect: '9:16' as AspectRatioPreset,
                       res: '1080' as ExportResolution,
                       fps: 30,
                       crf: '23' as ExportQualityCrf,
                       bitrate: '192k' as const,
+                      fmt: 'mp4' as const,
+                    },
+                    {
+                      id: 'tiktok60',
+                      labelTr: 'TikTok 60fps',
+                      labelEn: 'TikTok 60fps',
+                      sub: '9:16 · 1080p · 60',
+                      aspect: '9:16' as AspectRatioPreset,
+                      res: '1080' as ExportResolution,
+                      fps: 60,
+                      crf: '23' as ExportQualityCrf,
+                      bitrate: '192k' as const,
+                      fmt: 'mp4' as const,
                     },
                     {
                       id: 'youtube',
@@ -6997,32 +7135,48 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                       fps: 30,
                       crf: '18' as ExportQualityCrf,
                       bitrate: '256k' as const,
+                      fmt: 'mp4' as const,
                     },
                     {
                       id: 'whatsapp',
-                      labelTr: 'WhatsApp',
-                      labelEn: 'WhatsApp',
-                      sub: '720p · 24 · <16 MB',
+                      labelTr: 'WhatsApp (<16MB)',
+                      labelEn: 'WhatsApp (<16MB)',
+                      sub: '720p · 24 · Hafif',
                       aspect: null,
                       res: '720' as ExportResolution,
                       fps: 24,
                       crf: '28' as ExportQualityCrf,
                       bitrate: '128k' as const,
+                      fmt: 'mp4' as const,
                     },
                     {
                       id: '4k',
-                      labelTr: '4K Sinema',
-                      labelEn: '4K Cinema',
+                      labelTr: 'YouTube 4K',
+                      labelEn: 'YouTube 4K',
                       sub: '2160p · 30 · HQ',
-                      aspect: null,
+                      aspect: '16:9' as AspectRatioPreset,
                       res: '2160' as ExportResolution,
                       fps: 30,
                       crf: '18' as ExportQualityCrf,
                       bitrate: '320k' as const,
+                      fmt: 'mp4' as const,
+                    },
+                    {
+                      id: 'gif',
+                      labelTr: 'GIF Döngüsü',
+                      labelEn: 'GIF Loop',
+                      sub: '480p · 15fps · GIF',
+                      aspect: null,
+                      res: '720' as ExportResolution,
+                      fps: 15,
+                      crf: '28' as ExportQualityCrf,
+                      bitrate: '128k' as const,
+                      fmt: 'gif' as const,
                     },
                   ] as const
                 ).map((preset) => {
                   const isActive =
+                    project.exportSettings.format === preset.fmt &&
                     project.exportSettings.resolution === preset.res &&
                     project.exportSettings.fps === preset.fps &&
                     project.exportSettings.qualityCrf === preset.crf &&
@@ -7042,7 +7196,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                             fps: preset.fps,
                             qualityCrf: preset.crf,
                             audioBitrate: preset.bitrate,
-                            format: 'mp4',
+                            format: preset.fmt,
                           },
                         }));
                         notifyStatus(

@@ -432,12 +432,41 @@ export interface Prefs {
   expAltLauncherTextSize?: ExpLauncherTextSize;
   /** Experimental: Living theme-tinted aurora background glow */
   expAmbientAurora?: boolean;
-  /** Experimental: Spotlight-style instant command & tool search palette (Header button + Ctrl+K) */
-  expCommandPalette?: boolean;
+  /** Experimental: Termux-style interactive Morph Shell terminal (Header button + Ctrl+`) */
+  expTerminal?: boolean;
   /** Experimental: Synthesized mechanical micro-sounds on UI clicks/switches */
   expUiSounds?: boolean;
   /** Experimental: Expanding accent shockwave ring & bounce on Quick Wheel tap/snap */
   expWheelShockwave?: boolean;
+  // Pro Modules & Features Settings (Visibility, Ordering, Defaults)
+  proShowStudioSuitesBar?: boolean;
+  proSuitesOrder?: Array<'audio_studio' | 'image_pro' | 'pdf_organize' | 'archive' | 'pipeline'>;
+  proHiddenSuites?: string[];
+  proShowPinnedRecentStrip?: boolean;
+  proShowResultChainBar?: boolean;
+  proShowClipboardBanner?: boolean;
+  proDlLivePreview?: boolean;
+  proDlDefaultQuality?: string;
+  proDlDefaultAudioQuality?: string;
+  proDlSponsorBlockDefault?: boolean;
+  proDlSponsorBlockCats?: string[];
+  proDlDefaultSubtitles?: 'off' | 'tr' | 'en' | 'auto';
+  proDlEmbedMetadata?: boolean;
+  proDlSaveHistory?: boolean;
+  proDlRangeAccel?: boolean;
+  proDlRangeConnections?: 2 | 4 | 6 | 8;
+  proDlRangeResumeCache?: boolean;
+  proDlAutoCategorize?: boolean;
+  proAudioDefaultEq?: string;
+  proAudioNormalizeDefault?: boolean;
+  proAudioCompressorDefault?: boolean;
+  proAudioSilenceThresholdDb?: number;
+  proImageDefaultFormat?: 'webp' | 'jpeg' | 'avif' | 'png';
+  proImageDefaultQuality?: number;
+  proImageDefaultTargetKb?: number;
+  proImageBgTolerance?: number;
+  proLibShowStorageSummary?: boolean;
+  proLibShowFoldersBar?: boolean;
 }
 
 export interface VideoEditorSizingPrefs {
