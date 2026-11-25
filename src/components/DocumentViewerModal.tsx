@@ -4,18 +4,22 @@ import {
   Code2,
   Copy,
   Edit3,
+  ExternalLink,
   Eye,
   FileCode2,
   FileSpreadsheet,
   FileText,
   Film,
+  ImagePlus,
   Loader2,
   Palette,
   Save,
   Subtitles,
+  Sun,
   Wand2,
   X,
 } from 'lucide-react';
+import lutReferencePhotoUrl from '../assets/images/lut_reference_scene_1795636727554.jpg';
 import {Lang} from '../data/i18n';
 import {PickedFile, formatBytes} from '../data/models';
 import {extractDocumentText, parseCsvRows} from '../engine/officeOps';
@@ -83,10 +87,18 @@ function renderInlineMd(line: string): React.ReactNode[] {
         </em>
       );
     } else if (match[2] && match[3]) {
+      const safeHref = match[3];
       tokens.push(
-        <span key={`l-${k++}`} className="underline decoration-[var(--accent)] underline-offset-2 text-[var(--accent-text)]">
-          {match[2]}
-        </span>
+        <a
+          key={`l-${k++}`}
+          href={safeHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-0.5 font-medium text-[var(--accent-text)] underline decoration-[var(--accent)] underline-offset-2 hover:opacity-85"
+        >
+          <span>{match[2]}</span>
+          <ExternalLink className="inline h-3 w-3 shrink-0" />
+        </a>
       );
     }
     lastIndex = pattern.lastIndex;
@@ -215,12 +227,39 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
     sampleCount: number;
     grading: ColorGradingSettings;
   } | null>(null);
+  const [lutImgUrl, setLutImgUrl] = useState<string>(lutReferencePhotoUrl);
+  const [lutLoadedImg, setLutLoadedImg] = useState<HTMLImageElement | null>(null);
+  const [htmlLightPaper, setHtmlLightPaper] = useState(false);
   const [morphSummary, setMorphSummary] = useState<MorphPackageSummary | null>(null);
   const [srtQuery, setSrtQuery] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [copied, setCopied] = useState(false);
 
   const lutCanvasRef = useRef<HTMLCanvasElement>(null);
+  const lutPhotoInputRef = useRef<HTMLInputElement>(null);
+  const customLutObjUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!open || ext !== 'cube') return;
+    let active = true;
+    const img = new Image();
+    img.onload = () => {
+      if (active) setLutLoadedImg(img);
+    };
+    img.src = lutImgUrl;
+    return () => {
+      active = false;
+    };
+  }, [open, ext, lutImgUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (customLutObjUrlRef.current) {
+        URL.revokeObjectURL(customLutObjUrlRef.current);
+        customLutObjUrlRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!open || !file) return;
@@ -294,7 +333,13 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
   useEffect(() => {
     if (!open || ext !== 'cube' || !rawText || !lutCanvasRef.current) return;
     try {
-      const meta = renderCubeLutSampleScene(lutCanvasRef.current, rawText, fileName, lutApply);
+      const meta = renderCubeLutSampleScene(
+        lutCanvasRef.current,
+        rawText,
+        fileName,
+        lutApply,
+        lutLoadedImg
+      );
       setLutMeta(meta);
     } catch (err) {
       setErrorMsg(
@@ -305,7 +350,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
             : 'Failed to parse .cube LUT.'
       );
     }
-  }, [open, ext, rawText, fileName, lutApply, isTr]);
+  }, [open, ext, rawText, fileName, lutApply, lutLoadedImg, isTr]);
 
   const csvRows = useMemo(() => {
     if (ext !== 'csv' && ext !== 'tsv') return [];
@@ -338,8 +383,26 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
 
   const sanitizedHtml = useMemo(() => {
     if (ext !== 'html' && ext !== 'htm') return '';
-    return sanitizeHtmlForSandbox(draftText);
-  }, [ext, draftText]);
+    if (htmlLightPaper) {
+      return sanitizeHtmlForSandbox(draftText, {
+        bg: '#ffffff',
+        text: '#111827',
+        border: '#d1d5db',
+        codeBg: '#f3f4f6',
+        link: '#2563eb',
+      });
+    }
+    const cs =
+      typeof window !== 'undefined' ? getComputedStyle(document.documentElement) : null;
+    const themePalette = {
+      bg: cs?.getPropertyValue('--inset').trim() || '#131d2b',
+      text: cs?.getPropertyValue('--ink').trim() || '#f4f7fc',
+      border: cs?.getPropertyValue('--line').trim() || '#283648',
+      codeBg: cs?.getPropertyValue('--sidebar').trim() || '#0b111b',
+      link: cs?.getPropertyValue('--accent-text').trim() || '#f27c9b',
+    };
+    return sanitizeHtmlForSandbox(draftText, themePalette);
+  }, [ext, draftText, htmlLightPaper]);
 
   const handleFormatContent = () => {
     try {
@@ -520,6 +583,16 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
             </div>
 
             <div className="flex items-center gap-1.5">
+              {(ext === 'html' || ext === 'htm') && viewMode === 'preview' && (
+                <button
+                  type="button"
+                  onClick={() => setHtmlLightPaper((v) => !v)}
+                  className="flex min-h-[36px] items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-2.5 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)]"
+                >
+                  <Sun className="h-3.5 w-3.5 text-[var(--accent-text)]" />
+                  <span>{htmlLightPaper ? (isTr ? 'Tema' : 'Theme') : isTr ? 'Açık Sayfa' : 'Light Paper'}</span>
+                </button>
+              )}
               {(ext === 'json' || ext === 'xml') && (
                 <button
                   type="button"
@@ -631,7 +704,25 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
             </div>
           ) : ext === 'cube' ? (
             <div className="space-y-3.5">
-              <div className="flex items-center justify-between gap-2">
+              <input
+                ref={lutPhotoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const picked = e.target.files?.[0];
+                  if (picked) {
+                    if (customLutObjUrlRef.current) {
+                      URL.revokeObjectURL(customLutObjUrlRef.current);
+                    }
+                    const nextUrl = URL.createObjectURL(picked);
+                    customLutObjUrlRef.current = nextUrl;
+                    setLutImgUrl(nextUrl);
+                  }
+                  e.target.value = '';
+                }}
+              />
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-extrabold text-[var(--ink)]">
                     {lutMeta?.title ?? fileName}
@@ -640,28 +731,38 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
                     {lutMeta ? `${lutMeta.sampleCount} ${isTr ? 'renk noktası' : 'LUT points'}` : '3D LUT'}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setLutApply((v) => !v)}
-                  className={`flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-xs font-bold ${
-                    lutApply
-                      ? 'morph-accent-btn shadow-sm'
-                      : 'border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)]'
-                  }`}
-                >
-                  <Palette className="h-3.5 w-3.5" />
-                  <span>
-                    {lutApply
-                      ? isTr
-                        ? 'LUT Aktif (Karşılaştır)'
-                        : 'LUT On (Compare)'
-                      : isTr
-                        ? 'Orijinal Sahne'
-                        : 'Original Scene'}
-                  </span>
-                </button>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => lutPhotoInputRef.current?.click()}
+                    className="flex min-h-[40px] items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)]"
+                  >
+                    <ImagePlus className="h-3.5 w-3.5 text-[var(--accent-text)]" />
+                    <span>{isTr ? 'Foto Seç' : 'Custom Photo'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLutApply((v) => !v)}
+                    className={`flex min-h-[40px] items-center gap-1.5 rounded-xl px-3.5 text-xs font-bold ${
+                      lutApply
+                        ? 'morph-accent-btn shadow-sm'
+                        : 'border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)]'
+                    }`}
+                  >
+                    <Palette className="h-3.5 w-3.5" />
+                    <span>
+                      {lutApply
+                        ? isTr
+                          ? 'LUT Aktif'
+                          : 'LUT On'
+                        : isTr
+                          ? 'Orijinal'
+                          : 'Original'}
+                    </span>
+                  </button>
+                </div>
               </div>
-              <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/40 p-2">
+              <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-2">
                 <canvas
                   ref={lutCanvasRef}
                   className="mx-auto aspect-[480/280] w-full max-w-lg rounded-xl object-contain"
@@ -773,12 +874,16 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
               <SafeMarkdownView text={draftText} />
             </div>
           ) : (ext === 'html' || ext === 'htm') && viewMode === 'preview' ? (
-            <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-white">
+            <div
+              className={`overflow-hidden rounded-2xl border border-[var(--line)] ${
+                htmlLightPaper ? 'bg-white' : 'bg-[var(--inset)]'
+              }`}
+            >
               <iframe
                 title={fileName}
                 sandbox=""
                 srcDoc={sanitizedHtml}
-                className="h-[58vh] w-full border-0 bg-white"
+                className={`h-[58vh] w-full border-0 ${htmlLightPaper ? 'bg-white' : 'bg-transparent'}`}
               />
             </div>
           ) : isQuickViewOfficeExt(ext) ? (

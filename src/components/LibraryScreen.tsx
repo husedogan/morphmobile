@@ -382,7 +382,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                         : `Cleaned ${storage.olderThan7DaysIds.length} files older than 7 days.`
                     );
                   }}
-                  className="rounded-lg border border-amber-500/40 bg-amber-500/12 px-2.5 py-1 text-[11px] font-bold text-amber-400 hover:bg-amber-500/20"
+                  className="min-h-[36px] rounded-xl border border-[var(--accent)]/45 bg-[var(--accent)]/12 px-3 py-1 text-[11px] font-bold text-[var(--accent-text)] transition-colors hover:bg-[var(--accent)]/20"
                 >
                   {lang === 'tr'
                     ? `7+ Gün Eskileri Temizle (${storage.olderThan7DaysIds.length})`
@@ -395,41 +395,66 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                 <div className="mt-2.5 flex h-2 w-full overflow-hidden rounded-full bg-[var(--inset)]">
                   {storage.videoBytes > 0 && (
                     <div
-                      className="h-full bg-rose-500"
+                      className="h-full bg-[var(--accent)]"
                       style={{width: `${Math.max(2, (storage.videoBytes / storage.totalBytes) * 100)}%`}}
                     />
                   )}
                   {storage.audioBytes > 0 && (
                     <div
-                      className="h-full bg-emerald-500"
+                      className="h-full bg-[var(--accent)]/75"
                       style={{width: `${Math.max(2, (storage.audioBytes / storage.totalBytes) * 100)}%`}}
                     />
                   )}
                   {storage.imageBytes > 0 && (
                     <div
-                      className="h-full bg-sky-500"
+                      className="h-full bg-[var(--accent)]/55"
                       style={{width: `${Math.max(2, (storage.imageBytes / storage.totalBytes) * 100)}%`}}
                     />
                   )}
                   {storage.pdfBytes > 0 && (
                     <div
-                      className="h-full bg-amber-500"
+                      className="h-full bg-[var(--accent)]/35"
                       style={{width: `${Math.max(2, (storage.pdfBytes / storage.totalBytes) * 100)}%`}}
                     />
                   )}
                   {storage.otherBytes > 0 && (
                     <div
-                      className="h-full bg-violet-500"
+                      className="h-full bg-[var(--muted)]/55"
                       style={{width: `${Math.max(2, (storage.otherBytes / storage.totalBytes) * 100)}%`}}
                     />
                   )}
                 </div>
                 <div className="font-mono-num mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-semibold text-[var(--muted)]">
-                  {storage.videoBytes > 0 && <span className="text-rose-400">● Video {formatBytes(storage.videoBytes)}</span>}
-                  {storage.audioBytes > 0 && <span className="text-emerald-400">● {lang === 'tr' ? 'Ses' : 'Audio'} {formatBytes(storage.audioBytes)}</span>}
-                  {storage.imageBytes > 0 && <span className="text-sky-400">● {lang === 'tr' ? 'Görsel' : 'Image'} {formatBytes(storage.imageBytes)}</span>}
-                  {storage.pdfBytes > 0 && <span className="text-amber-400">● PDF {formatBytes(storage.pdfBytes)}</span>}
-                  {storage.otherBytes > 0 && <span className="text-violet-400">● {lang === 'tr' ? 'Diğer' : 'Other'} {formatBytes(storage.otherBytes)}</span>}
+                  {storage.videoBytes > 0 && (
+                    <span className="inline-flex items-center gap-1 text-[var(--ink)]">
+                      <span className="h-2 w-2 rounded-full bg-[var(--accent)]" />
+                      Video {formatBytes(storage.videoBytes)}
+                    </span>
+                  )}
+                  {storage.audioBytes > 0 && (
+                    <span className="inline-flex items-center gap-1 text-[var(--ink)]">
+                      <span className="h-2 w-2 rounded-full bg-[var(--accent)]/75" />
+                      {lang === 'tr' ? 'Ses' : 'Audio'} {formatBytes(storage.audioBytes)}
+                    </span>
+                  )}
+                  {storage.imageBytes > 0 && (
+                    <span className="inline-flex items-center gap-1 text-[var(--ink)]">
+                      <span className="h-2 w-2 rounded-full bg-[var(--accent)]/55" />
+                      {lang === 'tr' ? 'Görsel' : 'Image'} {formatBytes(storage.imageBytes)}
+                    </span>
+                  )}
+                  {storage.pdfBytes > 0 && (
+                    <span className="inline-flex items-center gap-1 text-[var(--muted)]">
+                      <span className="h-2 w-2 rounded-full bg-[var(--accent)]/35" />
+                      PDF {formatBytes(storage.pdfBytes)}
+                    </span>
+                  )}
+                  {storage.otherBytes > 0 && (
+                    <span className="inline-flex items-center gap-1 text-[var(--muted)]">
+                      <span className="h-2 w-2 rounded-full bg-[var(--muted)]/55" />
+                      {lang === 'tr' ? 'Diğer' : 'Other'} {formatBytes(storage.otherBytes)}
+                    </span>
+                  )}
                 </div>
               </>
             )}
@@ -485,9 +510,9 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                   disabled={!newFolderName.trim()}
                   onClick={commitNewFolder}
                   aria-label={lang === 'tr' ? 'Klasörü Onayla' : 'Confirm Folder'}
-                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--accent)]/50 bg-[var(--accent)]/15 text-[var(--accent-text)] disabled:opacity-35"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--accent)]/50 bg-[var(--accent)]/15 text-[var(--accent-text)] disabled:opacity-35"
                 >
-                  <Check className="h-3.5 w-3.5" />
+                  <Check className="h-4 w-4" />
                 </button>
                 <button
                   type="button"
@@ -496,9 +521,9 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                     setAddingFolder(false);
                   }}
                   aria-label={t('Cancel', lang)}
-                  className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted)] hover:text-[var(--ink)]"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)]"
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <X className="h-4 w-4" />
                 </button>
               </div>
             ) : (

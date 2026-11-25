@@ -13,7 +13,6 @@ import {
   FileText,
   FolderArchive,
   Loader2,
-  Lock,
   Move,
   PenTool,
   Play,
@@ -122,7 +121,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
   const [addPageNumbers, setAddPageNumbers] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
 
-  // ---- PDF Visual Sign, Multi-Redact, Watermark & Lock State ----
+  // ---- PDF Visual Sign, Multi-Redact, Watermark & Subject Metadata State ----
   const [signPageNum, setSignPageNum] = useState(1);
   const [signPageLoading, setSignPageLoading] = useState(false);
   const [signPageSize, setSignPageSize] = useState<{w: number; h: number}>({w: 595, h: 842});
@@ -147,7 +146,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
     color: '#DC2626',
     diagonal: true,
   });
-  const [lockPassword, setLockPassword] = useState('');
+  const [subjectNote, setSubjectNote] = useState('');
   const sigCanvasRef = useRef<HTMLCanvasElement>(null);
   const signPageCanvasRef = useRef<HTMLCanvasElement>(null);
   const signStageRef = useRef<HTMLDivElement>(null);
@@ -487,10 +486,9 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
         });
       }
 
-      // Mark lock metadata / creator note if password set
-      if (lockPassword.trim()) {
-        doc.setSubject(`Morph Protected Document`);
-        doc.setKeywords(['morph-locked', `pin-len-${lockPassword.trim().length}`]);
+      // Write standard PDF Subject metadata if provided
+      if (subjectNote.trim()) {
+        doc.setSubject(subjectNote.trim());
       }
 
       const bytes = await doc.save();
@@ -779,7 +777,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
 
               {pages.length > 0 && !pdfLoading && (
                 <>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
                     {pages.map((p, idx) => (
                       <div
                         key={`${p.origIndex}_${idx}`}
@@ -813,8 +811,9 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                               [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
                               setPages(next);
                             }}
-                            className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] disabled:opacity-30"
+                            className="flex h-9 min-w-0 flex-1 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] disabled:opacity-30"
                             title={isTr ? 'Sola Taşı' : 'Move Left'}
+                            aria-label={isTr ? 'Sola Taşı' : 'Move Left'}
                           >
                             <ArrowLeft className="h-3.5 w-3.5" />
                           </button>
@@ -825,8 +824,9 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                                 prev.map((x, i) => (i === idx ? {...x, rotation: (x.rotation + 90) % 360} : x))
                               )
                             }
-                            className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)]"
+                            className="flex h-9 min-w-0 flex-1 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)]"
                             title={isTr ? '90° Döndür' : 'Rotate 90°'}
+                            aria-label={isTr ? '90° Döndür' : 'Rotate 90°'}
                           >
                             <RotateCw className="h-3.5 w-3.5" />
                           </button>
@@ -837,12 +837,13 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                                 prev.map((x, i) => (i === idx ? {...x, deleted: !x.deleted} : x))
                               )
                             }
-                            className={`flex h-7 w-7 items-center justify-center rounded-lg border ${
+                            className={`flex h-9 min-w-0 flex-1 items-center justify-center rounded-xl border ${
                               p.deleted
                                 ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400'
                                 : 'border-red-500/30 bg-red-500/10 text-red-400'
                             }`}
                             title={p.deleted ? (isTr ? 'Geri Al' : 'Restore') : isTr ? 'Sil' : 'Delete'}
+                            aria-label={p.deleted ? (isTr ? 'Geri Al' : 'Restore') : isTr ? 'Sil' : 'Delete'}
                           >
                             {p.deleted ? <Undo2 className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
                           </button>
@@ -854,8 +855,9 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                               [next[idx + 1], next[idx]] = [next[idx], next[idx + 1]];
                               setPages(next);
                             }}
-                            className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] disabled:opacity-30"
+                            className="flex h-9 min-w-0 flex-1 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] disabled:opacity-30"
                             title={isTr ? 'Sağa Taşı' : 'Move Right'}
+                            aria-label={isTr ? 'Sağa Taşı' : 'Move Right'}
                           >
                             <ArrowRight className="h-3.5 w-3.5" />
                           </button>
@@ -1165,9 +1167,9 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                                   setSelectedRedactId(null);
                                 }}
                                 aria-label={isTr ? 'Sil' : 'Delete'}
-                                className="absolute -right-2.5 -top-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-rose-500 text-white shadow-md"
+                                className="absolute -right-3 -top-3 flex h-9 w-9 items-center justify-center rounded-full bg-rose-500 text-white shadow-md"
                               >
-                                <X className="h-3.5 w-3.5" />
+                                <X className="h-4 w-4" />
                               </button>
                               <div
                                 onPointerDown={(e) => {
@@ -1187,9 +1189,9 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                                   };
                                   stage.setPointerCapture(e.pointerId);
                                 }}
-                                className="absolute -bottom-2.5 -right-2.5 flex h-7 w-7 cursor-nwse-resize items-center justify-center rounded-full border-2 border-white bg-[var(--accent)] text-white shadow-md"
+                                className="absolute -bottom-3 -right-3 flex h-9 w-9 cursor-nwse-resize items-center justify-center rounded-full border-2 border-white bg-[var(--accent)] text-white shadow-md"
                               >
-                                <Move className="h-3 w-3" />
+                                <Move className="h-3.5 w-3.5" />
                               </div>
                             </>
                           )}
@@ -1244,9 +1246,9 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                               };
                               stage.setPointerCapture(e.pointerId);
                             }}
-                            className="absolute -bottom-2.5 -right-2.5 flex h-7 w-7 cursor-nwse-resize items-center justify-center rounded-full border-2 border-white bg-[var(--accent)] text-white shadow-md"
+                            className="absolute -bottom-3 -right-3 flex h-9 w-9 cursor-nwse-resize items-center justify-center rounded-full border-2 border-white bg-[var(--accent)] text-white shadow-md"
                           >
-                            <Move className="h-3 w-3" />
+                            <Move className="h-3.5 w-3.5" />
                           </div>
                         )}
                       </div>
@@ -1300,10 +1302,10 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                               };
                               stage.setPointerCapture(e.pointerId);
                             }}
-                            className="absolute -bottom-3 -right-3 flex h-7 w-7 cursor-nwse-resize items-center justify-center rounded-full border-2 border-white bg-[var(--accent)] text-white shadow-md"
+                            className="absolute -bottom-3 -right-3 flex h-9 w-9 cursor-nwse-resize items-center justify-center rounded-full border-2 border-white bg-[var(--accent)] text-white shadow-md"
                             style={{opacity: 1}}
                           >
-                            <Move className="h-3 w-3" />
+                            <Move className="h-3.5 w-3.5" />
                           </div>
                         )}
                       </div>
@@ -1457,23 +1459,23 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                 )}
               </div>
 
-              {/* Document Protection Metadata Tag */}
+              {/* PDF Subject Metadata Note */}
               <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
                 <label className="flex items-center gap-1.5 text-xs font-bold text-[var(--ink)]">
-                  <Lock className="h-3.5 w-3.5 text-amber-400" />
-                  {isTr ? 'Belge Koruma Etiketi / Notu (Metadata)' : 'Document Protection Tag (Metadata)'}
+                  <FileText className="h-3.5 w-3.5 text-[var(--accent-text)]" />
+                  {isTr ? 'PDF Konu / Üstveri Notu (Metadata)' : 'PDF Subject / Metadata Note'}
                 </label>
                 <input
                   type="text"
-                  value={lockPassword}
-                  onChange={(e) => setLockPassword(e.target.value)}
-                  placeholder={isTr ? 'Örn: Gizli — Sadece Dahili Kullanım' : 'e.g. Confidential — Internal Use Only'}
+                  value={subjectNote}
+                  onChange={(e) => setSubjectNote(e.target.value)}
+                  placeholder={isTr ? 'Örn: Dahili Belge — İnceleme Kopyası' : 'e.g. Internal Document — Review Copy'}
                   className="mt-2 min-h-[40px] w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-xs text-[var(--ink)]"
                 />
                 <p className="mt-1.5 text-[10px] leading-snug text-[var(--muted)]">
                   {isTr
-                    ? 'Not: Tarayıcı içi PDF motoru belge üstverisine koruma etiketi ekler; gerçek AES şifreleme yapmaz.'
-                    : 'Note: In-browser PDF engine writes a protection metadata tag; it does not apply AES encryption.'}
+                    ? 'İsteğe bağlı olarak PDF belge özelliklerindeki Konu (Subject) alanına standart üstveri notu yazar.'
+                    : 'Optionally writes a standard Subject metadata field to the PDF document properties.'}
                 </p>
               </div>
 
@@ -1568,10 +1570,11 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                         <button
                           type="button"
                           onClick={() => void handlePreviewZipEntry(row.path)}
-                          className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)]"
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)]"
                           title={isTr ? 'Önizle' : 'Preview'}
+                          aria-label={isTr ? 'Önizle' : 'Preview'}
                         >
-                          <Eye className="h-3.5 w-3.5" />
+                          <Eye className="h-4 w-4" />
                         </button>
                         <button
                           type="button"
@@ -1579,10 +1582,11 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                             zipObj.remove(row.path);
                             setZipEntries((prev) => prev.filter((r) => r.path !== row.path));
                           }}
-                          className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-red-400"
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-red-400"
                           title={isTr ? 'Arşivden Sil' : 'Remove from ZIP'}
+                          aria-label={isTr ? 'Arşivden Sil' : 'Remove from ZIP'}
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
                     ))}
@@ -1699,9 +1703,10 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setNewPipeSteps((prev) => prev.filter((x) => x.id !== st.id))}
-                          className="text-[var(--muted)] hover:text-red-400"
+                          aria-label={isTr ? 'Adımı sil' : 'Delete step'}
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-red-400"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
                     ))}
@@ -1785,9 +1790,10 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                           setPipelines(next);
                           savePipelines(next);
                         }}
-                        className="text-[var(--muted)] hover:text-red-400"
+                        aria-label={isTr ? 'Tarifi sil' : 'Delete recipe'}
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-red-400"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     )}
                   </div>

@@ -168,10 +168,10 @@ function rangesStringToCuts(ranges: string, total: number): Set<number> {
 }
 
 const PART_RING_COLORS = [
-  'border-[var(--accent)] bg-[var(--accent)]/12',
-  'border-sky-400/75 bg-sky-500/12',
-  'border-emerald-400/75 bg-emerald-500/12',
-  'border-amber-400/75 bg-amber-500/12',
+  'border-[var(--accent)] bg-[var(--accent)]/14',
+  'border-[var(--ink)]/35 bg-[var(--surface)]',
+  'border-[var(--accent)]/55 bg-[var(--accent)]/8',
+  'border-[var(--muted)]/55 bg-[var(--inset)]',
 ];
 
 export const PdfSplitVisualPicker: React.FC<{
@@ -196,6 +196,13 @@ export const PdfSplitVisualPicker: React.FC<{
   const {pages, totalPages, loading, error} = usePdfPagePreviews(file, {maxPages: 60, targetWidth: 160});
   const effectiveTotal = Math.max(totalPages, pages.length);
 
+  // Sync a real initial cut into `ranges` as soon as a multi-page PDF loads so visual cuts match export 1:1
+  useEffect(() => {
+    if (splitMode === 'ranges' && !ranges.trim() && effectiveTotal >= 2) {
+      onChangeRanges(effectiveTotal === 2 ? '1, 2' : `1, 2-${effectiveTotal}`);
+    }
+  }, [splitMode, ranges, effectiveTotal, onChangeRanges]);
+
   const activeCuts = useMemo(() => {
     if (effectiveTotal <= 1) return new Set<number>();
     if (splitMode === 'every') {
@@ -207,8 +214,7 @@ export const PdfSplitVisualPicker: React.FC<{
       return s;
     }
     if (!ranges.trim()) {
-      // Default single cut after page 1 if 2+ pages exist and user just entered visual scissor mode
-      return new Set<number>([1]);
+      return new Set<number>();
     }
     return rangesStringToCuts(ranges, effectiveTotal);
   }, [splitMode, everyN, ranges, effectiveTotal]);
@@ -263,7 +269,7 @@ export const PdfSplitVisualPicker: React.FC<{
           }}
           className={`min-h-[40px] rounded-xl px-3 text-xs font-semibold transition-colors ${
             splitMode === 'ranges'
-              ? 'bg-[var(--accent)] text-white shadow-sm'
+              ? 'bg-[var(--accent)] text-[var(--accent-ink)] shadow-sm'
               : 'text-[var(--muted)] hover:text-[var(--ink)]'
           }`}
         >
@@ -274,7 +280,7 @@ export const PdfSplitVisualPicker: React.FC<{
           onClick={() => onChangeMode('every')}
           className={`min-h-[40px] rounded-xl px-3 text-xs font-semibold transition-colors ${
             splitMode === 'every'
-              ? 'bg-[var(--accent)] text-white shadow-sm'
+              ? 'bg-[var(--accent)] text-[var(--accent-ink)] shadow-sm'
               : 'text-[var(--muted)] hover:text-[var(--ink)]'
           }`}
         >
@@ -354,11 +360,11 @@ export const PdfSplitVisualPicker: React.FC<{
         </div>
 
         {error && (
-          <p className="rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-400">{error}</p>
+          <p className="rounded-xl bg-[var(--danger)]/10 px-3 py-2 text-xs text-[var(--danger)]">{error}</p>
         )}
 
         {pages.length > 0 && (
-          <div className="flex flex-wrap items-center gap-y-3">
+          <div className="no-scrollbar flex items-stretch gap-1 overflow-x-auto pb-1.5 snap-x snap-mandatory">
             {pages.map((pg, idx) => {
               const partIdx = (pagePartMap.map.get(pg.pageNum) ?? 1) - 1;
               const ringClass = PART_RING_COLORS[partIdx % PART_RING_COLORS.length];
@@ -367,34 +373,41 @@ export const PdfSplitVisualPicker: React.FC<{
               return (
                 <React.Fragment key={pg.pageNum}>
                   <div
-                    className={`flex w-[72px] flex-col items-center rounded-xl border p-1.5 transition-colors ${ringClass}`}
+                    className={`flex w-[84px] shrink-0 snap-start flex-col items-center rounded-2xl border p-1.5 transition-colors ${ringClass}`}
                   >
-                    <div className="relative h-[86px] w-full overflow-hidden rounded-lg bg-white">
+                    <div className="relative aspect-[3/4] w-full overflow-hidden rounded-xl border border-[var(--line)]/50 bg-white shadow-xs">
                       <img
                         src={pg.url}
                         alt={`S.${pg.pageNum}`}
                         className="h-full w-full object-contain"
                       />
                     </div>
-                    <div className="mt-1 flex w-full items-center justify-between px-0.5 text-[10px] font-semibold">
-                      <span className="font-mono-num text-[var(--ink)]">{pg.pageNum}</span>
-                      <span className="font-mono-num text-[var(--muted)]">P{partIdx + 1}</span>
+                    <div className="mt-1.5 flex w-full items-center justify-between px-1 text-[10px] font-bold">
+                      <span className="font-mono-num text-[var(--ink)]">S.{pg.pageNum}</span>
+                      <span className="font-mono-num text-[var(--accent-text)]">P{partIdx + 1}</span>
                     </div>
                   </div>
 
                   {showGapAfter && (
-                    <button
-                      type="button"
-                      onClick={() => toggleCutAfter(pg.pageNum)}
-                      aria-label={`Sayfa ${pg.pageNum} sonrası böl`}
-                      className={`mx-0.5 flex min-h-[44px] min-w-[36px] flex-col items-center justify-center rounded-xl border transition-all active:scale-95 ${
-                        isCutAfter
-                          ? 'border-rose-400 bg-rose-500 text-white shadow-sm'
-                          : 'border-dashed border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]'
-                      }`}
-                    >
-                      <Scissors className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="relative flex shrink-0 flex-col items-center justify-center px-0.5">
+                      <div
+                        className={`pointer-events-none absolute inset-y-2 w-px border-l ${
+                          isCutAfter ? 'border-solid border-[var(--accent)]' : 'border-dashed border-[var(--line)]'
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => toggleCutAfter(pg.pageNum)}
+                        aria-label={`Sayfa ${pg.pageNum} sonrası böl`}
+                        className={`relative z-10 flex h-11 w-10 flex-col items-center justify-center rounded-xl border transition-all active:scale-95 ${
+                          isCutAfter
+                            ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-ink)] shadow-md'
+                            : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]'
+                        }`}
+                      >
+                        <Scissors className="h-4 w-4" />
+                      </button>
+                    </div>
                   )}
                 </React.Fragment>
               );
@@ -518,7 +531,7 @@ export const PdfRemoveVisualPicker: React.FC<{
       </div>
 
       {guardMsg && (
-        <p className="rounded-xl border border-amber-400/40 bg-amber-500/12 px-3 py-2 text-xs text-amber-300">
+        <p className="rounded-xl border border-[var(--warn-border)] bg-[var(--warn-bg)] px-3 py-2 text-xs text-[var(--warn-text)]">
           {guardMsg}
         </p>
       )}
@@ -529,7 +542,7 @@ export const PdfRemoveVisualPicker: React.FC<{
         </div>
       )}
       {error && (
-        <p className="rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-400">{error}</p>
+        <p className="rounded-xl bg-[var(--danger)]/10 px-3 py-2 text-xs text-[var(--danger)]">{error}</p>
       )}
 
       {pages.length > 0 && (
@@ -543,11 +556,11 @@ export const PdfRemoveVisualPicker: React.FC<{
                 onClick={() => togglePage(pg.pageNum)}
                 className={`group relative flex min-h-[44px] flex-col items-center rounded-2xl border p-1.5 transition-all active:scale-[0.97] ${
                   marked
-                    ? 'border-rose-500 bg-rose-500/15'
+                    ? 'border-[var(--danger)] bg-[var(--danger)]/15'
                     : 'border-[var(--line)] bg-[var(--surface)] hover:border-[var(--accent)]/60'
                 }`}
               >
-                <div className="relative aspect-[3/4] w-full overflow-hidden rounded-xl bg-white">
+                <div className="relative aspect-[3/4] w-full overflow-hidden rounded-xl bg-[var(--inset)]">
                   <img
                     src={pg.url}
                     alt={`Sayfa ${pg.pageNum}`}
@@ -556,8 +569,8 @@ export const PdfRemoveVisualPicker: React.FC<{
                     }`}
                   />
                   {marked && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-rose-950/35">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-600 text-white shadow">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/35">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--danger)] text-white shadow">
                         <Trash2 className="h-4 w-4" />
                       </span>
                     </div>
@@ -565,7 +578,7 @@ export const PdfRemoveVisualPicker: React.FC<{
                 </div>
                 <div className="mt-1.5 flex w-full items-center justify-between px-1 text-[11px] font-semibold">
                   <span className="font-mono-num text-[var(--ink)]">{pg.pageNum}</span>
-                  <span className={marked ? 'text-rose-400' : 'text-[var(--muted)]'}>
+                  <span className={marked ? 'text-[var(--danger)]' : 'text-[var(--muted)]'}>
                     {marked ? (lang === 'tr' ? 'Sil' : 'Del') : lang === 'tr' ? 'Kalır' : 'Keep'}
                   </span>
                 </div>
@@ -650,7 +663,7 @@ export const PdfExtractVisualPicker: React.FC<{
           onClick={() => onChangeMode('custom')}
           className={`min-h-[40px] rounded-xl px-3 text-xs font-semibold transition-colors ${
             mode === 'custom'
-              ? 'bg-[var(--accent)] text-white shadow-sm'
+              ? 'bg-[var(--accent)] text-[var(--accent-ink)] shadow-sm'
               : 'text-[var(--muted)] hover:text-[var(--ink)]'
           }`}
         >
@@ -661,7 +674,7 @@ export const PdfExtractVisualPicker: React.FC<{
           onClick={() => onChangeMode('reverse')}
           className={`min-h-[40px] rounded-xl px-3 text-xs font-semibold transition-colors ${
             mode === 'reverse'
-              ? 'bg-[var(--accent)] text-white shadow-sm'
+              ? 'bg-[var(--accent)] text-[var(--accent-ink)] shadow-sm'
               : 'text-[var(--muted)] hover:text-[var(--ink)]'
           }`}
         >
@@ -675,7 +688,7 @@ export const PdfExtractVisualPicker: React.FC<{
         </div>
       )}
       {error && (
-        <p className="rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-400">{error}</p>
+        <p className="rounded-xl bg-[var(--danger)]/10 px-3 py-2 text-xs text-[var(--danger)]">{error}</p>
       )}
 
       {mode === 'reverse' ? (
@@ -691,7 +704,7 @@ export const PdfExtractVisualPicker: React.FC<{
                 key={`rev-${pg.pageNum}`}
                 className="flex flex-col items-center rounded-xl border border-[var(--line)] bg-[var(--surface)] p-1.5"
               >
-                <div className="aspect-[3/4] w-full overflow-hidden rounded-lg bg-white">
+                <div className="aspect-[3/4] w-full overflow-hidden rounded-lg bg-[var(--inset)]">
                   <img src={pg.url} alt={`S.${pg.pageNum}`} className="h-full w-full object-contain" />
                 </div>
                 <div className="mt-1 flex w-full items-center justify-between px-0.5 text-[10px] font-semibold">
@@ -749,14 +762,14 @@ export const PdfExtractVisualPicker: React.FC<{
                 {selectedOrder.map((p, idx) => (
                   <div
                     key={`q-${idx}-${p}`}
-                    className="flex shrink-0 items-center gap-1 rounded-xl border border-[var(--accent)]/50 bg-[var(--surface)] px-2 py-1"
+                    className="flex shrink-0 items-center gap-1 rounded-xl border border-[var(--accent)]/50 bg-[var(--surface)] px-1.5 py-1"
                   >
                     <button
                       type="button"
                       onClick={() => moveItem(idx, -1)}
                       disabled={idx === 0}
                       aria-label="Sola taşı"
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)] disabled:opacity-30"
+                      className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)] disabled:opacity-30"
                     >
                       <ArrowLeft className="h-3.5 w-3.5" />
                     </button>
@@ -768,7 +781,7 @@ export const PdfExtractVisualPicker: React.FC<{
                       onClick={() => moveItem(idx, 1)}
                       disabled={idx === selectedOrder.length - 1}
                       aria-label="Sağa taşı"
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)] disabled:opacity-30"
+                      className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)] disabled:opacity-30"
                     >
                       <ArrowRight className="h-3.5 w-3.5" />
                     </button>
@@ -780,7 +793,7 @@ export const PdfExtractVisualPicker: React.FC<{
                         commitOrder(next);
                       }}
                       aria-label="Çıkar"
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-rose-400 hover:bg-rose-500/15"
+                      className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--danger)] hover:bg-[var(--danger)]/15"
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>
@@ -810,7 +823,7 @@ export const PdfExtractVisualPicker: React.FC<{
                     <div className="relative aspect-[3/4] w-full overflow-hidden rounded-xl bg-white">
                       <img src={pg.url} alt={`S.${pg.pageNum}`} className="h-full w-full object-contain" />
                       {selected && (
-                        <span className="font-mono-num absolute top-1.5 right-1.5 flex h-6 min-w-[24px] items-center justify-center rounded-full bg-[var(--accent)] px-1.5 text-[11px] font-bold text-white shadow">
+                        <span className="font-mono-num absolute top-1.5 right-1.5 flex h-6 min-w-[24px] items-center justify-center rounded-full bg-[var(--accent)] px-1.5 text-[11px] font-bold text-[var(--accent-ink)] shadow">
                           #{orderIdx + 1}
                         </span>
                       )}
@@ -919,7 +932,7 @@ export const PdfRotateVisualPicker: React.FC<{
         </div>
       )}
       {error && (
-        <p className="rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-400">{error}</p>
+        <p className="rounded-xl bg-[var(--danger)]/10 px-3 py-2 text-xs text-[var(--danger)]">{error}</p>
       )}
 
       {pages.length > 0 && (
@@ -1152,7 +1165,7 @@ export const PdfStampVisualPreview: React.FC<{
           </div>
         ) : (
           <div
-            className="relative w-full max-w-[260px] overflow-hidden rounded-xl border border-[var(--line)] bg-white shadow-md"
+            className="relative w-full max-w-[260px] overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] shadow-md"
             style={{
               aspectRatio:
                 pages[0] && pages[0].width > 0 && pages[0].height > 0
@@ -1172,26 +1185,38 @@ export const PdfStampVisualPreview: React.FC<{
             <button
               type="button"
               onClick={() => onChangePosition('top')}
-              className={`absolute inset-x-0 top-0 flex min-h-[40px] items-center justify-center px-3 text-[11px] font-bold transition-colors ${
+              className={`absolute inset-x-2 top-2 flex min-h-[38px] items-center justify-center rounded-xl border px-3 text-[11px] font-bold transition-colors ${
                 position === 'top'
-                  ? 'bg-slate-900/12 text-slate-800 ring-2 ring-inset ring-[var(--accent)]'
-                  : 'text-transparent hover:bg-slate-900/5 hover:text-slate-400'
+                  ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-ink)] shadow-sm'
+                  : 'border-dashed border-[var(--line)] bg-[var(--surface)]/92 text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]'
               }`}
             >
-              <span className="truncate">{position === 'top' ? previewLabel : lang === 'tr' ? 'Üste Yerleştir' : 'Place Top'}</span>
+              <span className="truncate">
+                {position === 'top'
+                  ? previewLabel
+                  : lang === 'tr'
+                    ? 'Üst Bölge · Dokun'
+                    : 'Top Edge · Tap'}
+              </span>
             </button>
 
             {/* Tappable Bottom Stamp Zone */}
             <button
               type="button"
               onClick={() => onChangePosition('bottom')}
-              className={`absolute inset-x-0 bottom-0 flex min-h-[40px] items-center justify-center px-3 text-[11px] font-bold transition-colors ${
+              className={`absolute inset-x-2 bottom-2 flex min-h-[38px] items-center justify-center rounded-xl border px-3 text-[11px] font-bold transition-colors ${
                 position === 'bottom'
-                  ? 'bg-slate-900/12 text-slate-800 ring-2 ring-inset ring-[var(--accent)]'
-                  : 'text-transparent hover:bg-slate-900/5 hover:text-slate-400'
+                  ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-ink)] shadow-sm'
+                  : 'border-dashed border-[var(--line)] bg-[var(--surface)]/92 text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]'
               }`}
             >
-              <span className="truncate">{position === 'bottom' ? previewLabel : lang === 'tr' ? 'Alta Yerleştir' : 'Place Bottom'}</span>
+              <span className="truncate">
+                {position === 'bottom'
+                  ? previewLabel
+                  : lang === 'tr'
+                    ? 'Alt Bölge · Dokun'
+                    : 'Bottom Edge · Tap'}
+              </span>
             </button>
           </div>
         )}
@@ -1238,7 +1263,7 @@ export const PdfNupVisualPreview: React.FC<{
           </div>
         ) : (
           <div
-            className={`grid w-full gap-2 rounded-xl border border-slate-300 bg-white p-2.5 shadow-md ${
+            className={`grid w-full gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-2.5 shadow-md ${
               pagesPerSheet === 2 ? 'max-w-[300px] grid-cols-2' : 'max-w-[230px] grid-cols-2 grid-rows-2'
             }`}
             style={{
@@ -1248,7 +1273,7 @@ export const PdfNupVisualPreview: React.FC<{
             {slots.map((pg, idx) => (
               <div
                 key={idx}
-                className="relative flex items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-50"
+                className="relative flex items-center justify-center overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--inset)]"
               >
                 {pg ? (
                   <img
@@ -1257,11 +1282,11 @@ export const PdfNupVisualPreview: React.FC<{
                     className="h-full w-full object-contain"
                   />
                 ) : (
-                  <span className="font-mono-num text-[10px] font-medium text-slate-400">
+                  <span className="font-mono-num text-[10px] font-semibold text-[var(--muted)]">
                     {idx + 1}
                   </span>
                 )}
-                <span className="font-mono-num absolute bottom-1 right-1 rounded bg-slate-900/70 px-1 text-[9px] font-bold text-white">
+                <span className="font-mono-num absolute bottom-1 right-1 rounded bg-[var(--accent)] px-1.5 py-0.5 text-[9px] font-bold text-[var(--accent-ink)]">
                   {idx + 1}
                 </span>
               </div>

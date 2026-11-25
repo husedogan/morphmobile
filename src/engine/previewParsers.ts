@@ -123,7 +123,22 @@ export function formatXmlPretty(xmlText: string): string {
  * Strips scripts, active embeds, event handlers, and javascript: URIs so HTML can be safely
  * displayed inside `<iframe sandbox="" srcDoc={...}>`.
  */
-export function sanitizeHtmlForSandbox(rawHtml: string): string {
+export interface HtmlPreviewTheme {
+  bg: string;
+  text: string;
+  border: string;
+  codeBg: string;
+  link: string;
+}
+
+export function sanitizeHtmlForSandbox(rawHtml: string, theme?: HtmlPreviewTheme): string {
+  const palette: HtmlPreviewTheme = theme ?? {
+    bg: '#131d2b',
+    text: '#f4f7fc',
+    border: '#283648',
+    codeBg: '#0b111b',
+    link: '#f27c9b',
+  };
   try {
     const parser = new DOMParser();
     const doc = parser.parseFromString(rawHtml, 'text/html');
@@ -152,18 +167,19 @@ export function sanitizeHtmlForSandbox(rawHtml: string): string {
       <style>
         html, body {
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-          line-height: 1.55;
-          color: #111827;
-          background: #ffffff;
+          line-height: 1.6;
+          color: ${palette.text};
+          background: ${palette.bg};
           margin: 0;
           padding: 16px;
           word-wrap: break-word;
           overflow-x: auto;
         }
+        a { color: ${palette.link}; }
         img, video, table { max-width: 100%; height: auto; }
         table { border-collapse: collapse; width: 100%; }
-        th, td { border: 1px solid #d1d5db; padding: 6px 8px; text-align: left; font-size: 13px; }
-        pre, code { background: #f3f4f6; border-radius: 6px; padding: 2px 5px; font-family: monospace; }
+        th, td { border: 1px solid ${palette.border}; padding: 6px 8px; text-align: left; font-size: 13px; }
+        pre, code { background: ${palette.codeBg}; border: 1px solid ${palette.border}; border-radius: 6px; padding: 2px 5px; font-family: monospace; color: ${palette.text}; }
         pre { padding: 10px; overflow-x: auto; }
       </style>
     `;
@@ -174,7 +190,7 @@ export function sanitizeHtmlForSandbox(rawHtml: string): string {
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
-    return `<!doctype html><html><body style="font-family:monospace;padding:16px;white-space:pre-wrap;">${escaped}</body></html>`;
+    return `<!doctype html><html><body style="font-family:monospace;padding:16px;white-space:pre-wrap;background:${palette.bg};color:${palette.text};">${escaped}</body></html>`;
   }
 }
 
@@ -229,7 +245,8 @@ export function renderCubeLutSampleScene(
   canvas: HTMLCanvasElement,
   cubeText: string,
   fileName: string,
-  applyLut: boolean
+  applyLut: boolean,
+  sourceImage?: HTMLImageElement | HTMLCanvasElement | ImageBitmap | null
 ): {title: string; grading: ColorGradingSettings; sampleCount: number} {
   const parsed = parseCubeLutToGrading(cubeText, fileName);
   const w = 480;
@@ -239,50 +256,39 @@ export function renderCubeLutSampleScene(
   const ctx = canvas.getContext('2d');
   if (!ctx) return parsed;
 
-  // Draw an offline rich procedural reference landscape + portrait/color swatch bar (zero external assets)
-  const sky = ctx.createLinearGradient(0, 0, 0, h * 0.62);
-  sky.addColorStop(0, '#1e3a8a');
-  sky.addColorStop(0.55, '#3b82f6');
-  sky.addColorStop(1, '#fb923c');
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, w, h * 0.65);
+  if (sourceImage) {
+    const srcW =
+      sourceImage instanceof HTMLImageElement
+        ? sourceImage.naturalWidth || sourceImage.width
+        : sourceImage.width;
+    const srcH =
+      sourceImage instanceof HTMLImageElement
+        ? sourceImage.naturalHeight || sourceImage.height
+        : sourceImage.height;
+    if (srcW > 0 && srcH > 0) {
+      const scale = Math.max(w / srcW, h / srcH);
+      const dw = srcW * scale;
+      const dh = srcH * scale;
+      ctx.drawImage(sourceImage, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    }
+  } else {
+    // Clean neutral photographic gray & spectral ramp while reference image loads
+    const ramp = ctx.createLinearGradient(0, 0, w, 0);
+    ramp.addColorStop(0, '#090d14');
+    ramp.addColorStop(0.5, '#64748b');
+    ramp.addColorStop(1, '#f8fafc');
+    ctx.fillStyle = ramp;
+    ctx.fillRect(0, 0, w, h);
+  }
 
-  // Warm sun disc
-  const sun = ctx.createRadialGradient(w * 0.72, h * 0.34, 4, w * 0.72, h * 0.34, 72);
-  sun.addColorStop(0, '#fef08a');
-  sun.addColorStop(0.4, 'rgba(253, 186, 116, 0.7)');
-  sun.addColorStop(1, 'rgba(251, 146, 60, 0)');
-  ctx.fillStyle = sun;
-  ctx.fillRect(0, 0, w, h * 0.65);
-
-  // Distant mountain range
-  ctx.fillStyle = '#334155';
-  ctx.beginPath();
-  ctx.moveTo(0, h * 0.6);
-  ctx.lineTo(w * 0.18, h * 0.38);
-  ctx.lineTo(w * 0.38, h * 0.54);
-  ctx.lineTo(w * 0.62, h * 0.34);
-  ctx.lineTo(w * 0.84, h * 0.52);
-  ctx.lineTo(w, h * 0.42);
-  ctx.lineTo(w, h * 0.65);
-  ctx.lineTo(0, h * 0.65);
-  ctx.closePath();
-  ctx.fill();
-
-  // Foreground emerald meadow & coastal reflection
-  const ground = ctx.createLinearGradient(0, h * 0.58, 0, h);
-  ground.addColorStop(0, '#15803d');
-  ground.addColorStop(0.5, '#0f766e');
-  ground.addColorStop(1, '#0f172a');
-  ctx.fillStyle = ground;
-  ctx.fillRect(0, h * 0.58, w, h * 0.42);
-
-  // Skin-tone + primary calibration patches along bottom bar for LUT visual clarity
-  const swatches = ['#f5d0c5', '#d97757', '#ef4444', '#f59e0b', '#22c55e', '#06b6d4', '#3b82f6', '#ffffff', '#94a3b8', '#0f172a'];
-  const swW = (w - 32) / swatches.length;
+  // Subtle calibration strip along the bottom edge for precision skin/primary tone inspection
+  const swatches = ['#f5d0c5', '#d97757', '#ef4444', '#f59e0b', '#22c55e', '#06b6d4', '#3b82f6', '#ffffff', '#64748b', '#0f172a'];
+  const swW = (w - 24) / swatches.length;
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+  ctx.fillRect(10, h - 24, w - 20, 16);
   swatches.forEach((col, i) => {
     ctx.fillStyle = col;
-    ctx.fillRect(16 + i * swW, h - 42, swW - 3, 24);
+    ctx.fillRect(12 + i * swW, h - 22, swW - 2, 12);
   });
 
   if (!applyLut) return parsed;

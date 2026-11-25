@@ -485,6 +485,7 @@ interface ToolFlowProps {
   onRunLink: (url: string, options: Record<string, string>) => void;
   onOpenSettings: () => void;
   onOpenDocumentPreview?: (file: PickedFile) => void;
+  onOpenPdfPro?: (tab: 'pdf_organize' | 'pdf_sign', file?: PickedFile) => void;
 }
 
 const FRAME_SWATCHES = [
@@ -657,6 +658,7 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
   onRunLink,
   onOpenSettings,
   onOpenDocumentPreview,
+  onOpenPdfPro,
 }) => {
   const [selectedTool, setSelectedTool] = useState<ToolId | null>(initialTool);
   const [convertFormat, setConvertFormat] = useState<string | null>(initialConvertFormat);
@@ -767,6 +769,7 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
             ? () => openVideoEditorStudio(convertFormat)
             : undefined
         }
+        onOpenDocumentPreview={onOpenDocumentPreview}
         onExport={(opts) => {
           const kind = files[0]?.kind;
           if (kind === 'pdf' && (convertFormat === 'docx' || convertFormat === 'txt' || convertFormat === 'html')) {
@@ -934,6 +937,7 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
         showToolLabels={showToolLabels}
         onToggleToolLabels={toggleToolLabels}
         onBack={() => (directEntry ? onBack() : setSelectedTool(null))}
+        onOpenPdfPro={onOpenPdfPro}
         onExport={(opts) => {
           const def = ALL_TOOLS[selectedTool];
           const title = def ? t(def.titleKey, lang) : selectedTool;
@@ -1574,8 +1578,9 @@ const LocalToolConfig: React.FC<{
   showToolLabels?: boolean;
   onToggleToolLabels?: () => void;
   onBack: () => void;
+  onOpenPdfPro?: (tab: 'pdf_organize' | 'pdf_sign', file?: PickedFile) => void;
   onExport: (opts: ToolOptions) => void;
-}> = ({toolId, files, lang, showToolLabels = false, onToggleToolLabels, onBack, onExport}) => {
+}> = ({toolId, files, lang, showToolLabels = false, onToggleToolLabels, onBack, onOpenPdfPro, onExport}) => {
   // Compress
   const [quality, setQuality] = useState(82);
   const [maxDim, setMaxDim] = useState('0');
@@ -3027,6 +3032,19 @@ const LocalToolConfig: React.FC<{
           onChangeEveryN={setEveryN}
           onChangeRanges={setRanges}
         />
+        {onOpenPdfPro && (
+          <button
+            type="button"
+            onClick={() => onOpenPdfPro('pdf_organize', files[0])}
+            className="flex min-h-[42px] w-full items-center justify-between rounded-2xl border border-[var(--accent)]/35 bg-[var(--accent)]/10 px-4 text-xs font-bold text-[var(--accent-text)] transition-colors hover:bg-[var(--accent)]/15"
+          >
+            <span className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              <span>{lang === 'tr' ? 'PDF Stüdyosu (Sayfa Sırala & İmza/Sansür)' : 'Open in PDF Studio (Organize & Sign)'}</span>
+            </span>
+            <span>→</span>
+          </button>
+        )}
       </ConfigShell>
     );
   }
@@ -3058,6 +3076,19 @@ const LocalToolConfig: React.FC<{
           ranges={pdfDeleteRanges}
           onChangeRanges={setPdfDeleteRanges}
         />
+        {onOpenPdfPro && (
+          <button
+            type="button"
+            onClick={() => onOpenPdfPro('pdf_organize', files[0])}
+            className="flex min-h-[42px] w-full items-center justify-between rounded-2xl border border-[var(--accent)]/35 bg-[var(--accent)]/10 px-4 text-xs font-bold text-[var(--accent-text)] transition-colors hover:bg-[var(--accent)]/15"
+          >
+            <span className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              <span>{lang === 'tr' ? 'PDF Stüdyosu’nda Düzenle (Sırala / Döndür / Sil)' : 'Edit in PDF Studio (Reorder / Rotate / Delete)'}</span>
+            </span>
+            <span>→</span>
+          </button>
+        )}
       </ConfigShell>
     );
   }
@@ -3087,6 +3118,19 @@ const LocalToolConfig: React.FC<{
           onChangeMode={setPdfExtractMode}
           onChangeRanges={setPdfExtractOrder}
         />
+        {onOpenPdfPro && (
+          <button
+            type="button"
+            onClick={() => onOpenPdfPro('pdf_organize', files[0])}
+            className="flex min-h-[42px] w-full items-center justify-between rounded-2xl border border-[var(--accent)]/35 bg-[var(--accent)]/10 px-4 text-xs font-bold text-[var(--accent-text)] transition-colors hover:bg-[var(--accent)]/15"
+          >
+            <span className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              <span>{lang === 'tr' ? 'PDF Stüdyosu’nda Aç' : 'Open in PDF Studio'}</span>
+            </span>
+            <span>→</span>
+          </button>
+        )}
       </ConfigShell>
     );
   }
@@ -3116,6 +3160,19 @@ const LocalToolConfig: React.FC<{
           onChangeDegrees={(d) => setPdfDeg(String(d))}
           onChangePageRotations={setPdfPageRotations}
         />
+        {onOpenPdfPro && (
+          <button
+            type="button"
+            onClick={() => onOpenPdfPro('pdf_organize', files[0])}
+            className="flex min-h-[42px] w-full items-center justify-between rounded-2xl border border-[var(--accent)]/35 bg-[var(--accent)]/10 px-4 text-xs font-bold text-[var(--accent-text)] transition-colors hover:bg-[var(--accent)]/15"
+          >
+            <span className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              <span>{lang === 'tr' ? 'PDF Stüdyosu’nda Düzenle (Sayfa Sırala & Döndür)' : 'Edit in PDF Studio (Reorder & Rotate)'}</span>
+            </span>
+            <span>→</span>
+          </button>
+        )}
       </ConfigShell>
     );
   }
@@ -3170,13 +3227,13 @@ const LocalToolConfig: React.FC<{
           />
         </div>
         <div>
-          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('Position', lang)}</p>
+          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{lang === 'tr' ? 'Açı / Yön' : 'Orientation'}</p>
           <OptionPills
             selected={pdfWmPos}
             onSelect={(v) => setPdfWmPos(v as 'diagonal' | 'center')}
             options={[
-              {value: 'diagonal', label: t('PosTile', lang)},
-              {value: 'center', label: t('PosCenter', lang)},
+              {value: 'diagonal', label: lang === 'tr' ? 'Çapraz (-34°)' : 'Diagonal (-34°)'},
+              {value: 'center', label: lang === 'tr' ? 'Yatay (0°)' : 'Horizontal (0°)'},
             ]}
           />
         </div>
@@ -3204,6 +3261,19 @@ const LocalToolConfig: React.FC<{
             ))}
           </div>
         </div>
+        {onOpenPdfPro && (
+          <button
+            type="button"
+            onClick={() => onOpenPdfPro('pdf_sign', files[0])}
+            className="flex min-h-[42px] w-full items-center justify-between rounded-2xl border border-[var(--accent)]/35 bg-[var(--accent)]/10 px-4 text-xs font-bold text-[var(--accent-text)] transition-colors hover:bg-[var(--accent)]/15"
+          >
+            <span className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              <span>{lang === 'tr' ? 'PDF Stüdyosu (İmza & Sansür + Filigran)' : 'Open in PDF Studio (Sign & Redact + Watermark)'}</span>
+            </span>
+            <span>→</span>
+          </button>
+        )}
       </ConfigShell>
     );
   }
@@ -3506,17 +3576,6 @@ const LocalToolConfig: React.FC<{
             <span className="morph-switch-thumb" />
           </span>
         </button>
-        <div>
-          <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('Position', lang)}</p>
-          <OptionPills
-            selected={stampPos}
-            onSelect={(v) => setStampPos(v as 'bottom' | 'top')}
-            options={[
-              {value: 'bottom', label: t('PosBottom', lang)},
-              {value: 'top', label: t('PosTop', lang)},
-            ]}
-          />
-        </div>
       </ConfigShell>
     );
   }

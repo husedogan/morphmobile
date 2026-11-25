@@ -385,11 +385,11 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
           ProSuiteId,
           {id: ProSuiteId; icon: React.FC<{className?: string}>; tr: string; en: string; color: string}
         > = {
-          audio_studio: {id: 'audio_studio', icon: Music, tr: 'Ses Stüdyosu', en: 'Audio Studio', color: 'text-emerald-400'},
-          image_pro: {id: 'image_pro', icon: Sparkles, tr: 'Görsel Kıyasla & KB', en: 'Image Studio', color: 'text-sky-400'},
-          pdf_organize: {id: 'pdf_organize', icon: FileText, tr: 'PDF Sayfa & İmza', en: 'PDF Studio', color: 'text-amber-400'},
-          archive: {id: 'archive', icon: FolderArchive, tr: 'Arşiv Gezgini', en: 'ZIP Explorer', color: 'text-violet-400'},
-          pipeline: {id: 'pipeline', icon: Workflow, tr: 'Tarif Zinciri', en: 'Pipelines', color: 'text-rose-400'},
+          audio_studio: {id: 'audio_studio', icon: Music, tr: 'Ses Stüdyosu', en: 'Audio Studio', color: 'text-[var(--accent-text)]'},
+          image_pro: {id: 'image_pro', icon: Sparkles, tr: 'Görsel Kıyasla & KB', en: 'Image Studio', color: 'text-[var(--accent-text)]'},
+          pdf_organize: {id: 'pdf_organize', icon: FileText, tr: 'PDF Sayfa & İmza', en: 'PDF Studio', color: 'text-[var(--accent-text)]'},
+          archive: {id: 'archive', icon: FolderArchive, tr: 'Arşiv Gezgini', en: 'ZIP Explorer', color: 'text-[var(--accent-text)]'},
+          pipeline: {id: 'pipeline', icon: Workflow, tr: 'Tarif Zinciri', en: 'Pipelines', color: 'text-[var(--accent-text)]'},
         };
         const orderedIds: ProSuiteId[] = [
           ...suitesOrder.filter((id): id is ProSuiteId => id in suiteCatalog),
@@ -431,7 +431,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
                     onClick={onHideSuitesBar}
                     title={lang === 'tr' ? 'Stüdyo araç çubuğunu gizle' : 'Hide studio tools bar'}
                     aria-label={lang === 'tr' ? 'Stüdyo araç çubuğunu gizle' : 'Hide studio tools bar'}
-                    className="flex h-[38px] w-[34px] shrink-0 items-center justify-center rounded-2xl border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--ink)]"
+                    className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-2xl border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--ink)]"
                   >
                     <EyeOff className="h-3.5 w-3.5" />
                   </button>
@@ -462,9 +462,9 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
                     onClick={onHidePinnedStrip}
                     title={lang === 'tr' ? 'Kısayol şeridini gizle' : 'Hide shortcuts strip'}
                     aria-label={lang === 'tr' ? 'Kısayol şeridini gizle' : 'Hide shortcuts strip'}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--ink)]"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--ink)]"
                   >
-                    <EyeOff className="h-3 w-3" />
+                    <EyeOff className="h-3.5 w-3.5" />
                   </button>
                 )}
               </div>

@@ -471,6 +471,7 @@ export default function App() {
     audioStudioModal.open,
     imageProModal.open,
     pdfArchiveModal.open,
+    docViewerModal.open,
     previewTarget,
     showMainWheelCustomize,
     customizeModal.open,
@@ -684,6 +685,7 @@ export default function App() {
     audioStudioModal.open,
     imageProModal.open,
     pdfArchiveModal.open,
+    docViewerModal.open,
     previewTarget,
     showMainWheelCustomize,
     customizeModal.open,
@@ -2640,6 +2642,22 @@ export default function App() {
             onRunLink={handleRunLink}
             onOpenDocumentPreview={(f) => {
               void handleOpenSourcePreview(f);
+            }}
+            onOpenPdfPro={(proTab, f) => {
+              const sourceFile = f ?? files.find((x) => x.kind === 'pdf');
+              const pdfObj =
+                sourceFile?.file instanceof File
+                  ? sourceFile.file
+                  : null;
+              setDirectTool(null);
+              setDirectFormat(null);
+              setDirectServerTool(null);
+              setToolMode(null);
+              setPdfArchiveModal({
+                open: true,
+                tab: proTab,
+                initialPdfFile: pdfObj,
+              });
             }}
             onOpenSettings={() => {
               setDirectTool(null);
