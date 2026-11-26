@@ -23,9 +23,38 @@ export function normalizeImageFormat(format: string): string {
 export async function decodeImage(file: Blob, maxDim?: number): Promise<DecodedImage> {
   let bitmap: ImageBitmap;
   try {
+    if (file.type === 'image/svg+xml') {
+      throw new Error('SVG_FALLBACK');
+    }
     bitmap = await createImageBitmap(file, {imageOrientation: 'from-image'});
   } catch {
-    bitmap = await createImageBitmap(file);
+    try {
+      if (file.type === 'image/svg+xml') {
+        throw new Error('SVG_FALLBACK');
+      }
+      bitmap = await createImageBitmap(file);
+    } catch {
+      const url = URL.createObjectURL(file);
+      try {
+        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const el = new Image();
+          el.onload = () => resolve(el);
+          el.onerror = () => reject(new Error('Image decode failed'));
+          el.src = url;
+        });
+        const w = Math.max(1, img.naturalWidth || 512);
+        const h = Math.max(1, img.naturalHeight || 512);
+        const c = document.createElement('canvas');
+        c.width = w;
+        c.height = h;
+        const ctx = c.getContext('2d');
+        if (!ctx) throw new Error('Canvas unavailable');
+        ctx.drawImage(img, 0, 0, w, h);
+        bitmap = await createImageBitmap(c);
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    }
   }
 
   let target = bitmap;
@@ -246,7 +275,7 @@ export async function editImageBlob(
 ): Promise<{blob: Blob; format: string}> {
   const rawFmt = ENCODABLE_IMAGE_FORMATS.includes(ext.toLowerCase()) ? normalizeImageFormat(ext) : 'jpg';
   const format = ['ico', 'svg'].includes(rawFmt) ? 'png' : rawFmt;
-  const decoded = await decodeImage(file);
+  const decoded = await decodeImage(file, 4096);
   try {
     const edited = renderEditedToCanvas(decoded.bitmap, opts);
     if (needsWhiteBackdrop(format)) {
@@ -268,7 +297,7 @@ export async function cropImageBlob(
 ): Promise<{blob: Blob; format: string}> {
   const rawFmt = ENCODABLE_IMAGE_FORMATS.includes(ext.toLowerCase()) ? normalizeImageFormat(ext) : 'jpg';
   const format = ['ico', 'svg'].includes(rawFmt) ? 'png' : rawFmt;
-  const decoded = await decodeImage(file);
+  const decoded = await decodeImage(file, 4096);
   try {
     const sx = Math.max(0, Math.min(decoded.width - 1, Math.round(rect.left * decoded.width)));
     const sy = Math.max(0, Math.min(decoded.height - 1, Math.round(rect.top * decoded.height)));

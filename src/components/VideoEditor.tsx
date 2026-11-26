@@ -4134,10 +4134,18 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
           );
           if (!v1Fallback) return;
           initStartSec = v1Fallback.timelineStart;
-          initSpanSec = clipTimelineDuration(v1Fallback);
           initSourceStart = v1Fallback.sourceStart;
           initSourceEnd = v1Fallback.sourceEnd;
-          initRow = 0;
+          initSpanSec = Math.max(0.25, initSourceEnd - initSourceStart);
+          initRow = findAvailableAudioRow(
+            project.audioClips,
+            project.videoClips.map((c) =>
+              c.id === v1Fallback.id ? {...c, audioDetached: true, muted: true} : c
+            ),
+            initStartSec,
+            initStartSec + initSpanSec,
+            0
+          );
         } else {
           initStartSec = ac.timelineStart;
           initSpanSec = Math.max(0.25, ac.sourceEnd - ac.sourceStart);

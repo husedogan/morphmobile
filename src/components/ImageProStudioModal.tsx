@@ -267,7 +267,7 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
     try {
       if (tab === 'compare' && cmpPreview) {
         const ext = cmpFormat === 'jpeg' ? 'jpg' : cmpFormat;
-        onExportBlob(cmpPreview.blob, `${stem}_q${cmpQuality}.${ext}`, isTr ? 'Canlı Sıkıştırma (Squoosh)' : 'Live Compare Compress');
+        onExportBlob(cmpPreview.blob, `${stem}_q${cmpQuality}.${ext}`, isTr ? 'Canlı Sıkıştırma' : 'Live Compare Compress');
         onClose();
       } else if (tab === 'target_kb') {
         const res = targetResult ?? (await compressImageToTargetKb(file, targetKb, targetFmt));
@@ -284,7 +284,8 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
           onExportBlob(ico, `${stem}.ico`, isTr ? 'ICO Dönüştürücü' : 'ICO Generator');
         } else {
           const res = await renderLiveImagePreview(file, modernFmt, 0.88, 0);
-          onExportBlob(res.blob, `${stem}.${modernFmt}`, isTr ? 'Modern Format Dönüştürücü' : 'Modern Image Export');
+          const actualExt = res.mime === 'image/webp' ? 'webp' : res.mime === 'image/png' ? 'png' : modernFmt;
+          onExportBlob(res.blob, `${stem}.${actualExt}`, isTr ? 'Modern Format Dönüştürücü' : 'Modern Image Export');
         }
         onClose();
       }

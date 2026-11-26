@@ -1725,7 +1725,7 @@ const LocalToolConfig: React.FC<{
   const [ranges, setRanges] = useState('');
   const [pdfDeg, setPdfDeg] = useState('90');
   const [pdfPageRotations, setPdfPageRotations] = useState<number[]>([]);
-  const [pdfDeleteRanges, setPdfDeleteRanges] = useState('1');
+  const [pdfDeleteRanges, setPdfDeleteRanges] = useState('');
   const [pdfExtractMode, setPdfExtractMode] = useState<'reverse' | 'custom'>('custom');
   const [pdfExtractOrder, setPdfExtractOrder] = useState('1');
   const [pdfWmText, setPdfWmText] = useState(lang === 'tr' ? 'ÖRNEK' : 'CONFIDENTIAL');
@@ -3155,7 +3155,7 @@ const LocalToolConfig: React.FC<{
         onExport={() =>
           onExport({
             kind: 'pdfSplit',
-            everyN,
+            everyN: splitMode === 'ranges' && !ranges.trim() ? 1 : everyN,
             ranges: splitMode === 'ranges' ? ranges : '',
           })
         }
@@ -3292,7 +3292,7 @@ const LocalToolConfig: React.FC<{
         onExport={() =>
           onExport({
             kind: 'pdfRotate',
-            degrees: Number(pdfDeg) || 90,
+            degrees: Number.isFinite(Number(pdfDeg)) ? Number(pdfDeg) : 90,
             pageRotations: pdfPageRotations.length > 0 ? pdfPageRotations : undefined,
           })
         }

@@ -393,10 +393,14 @@ export async function encodeIcoFromImage(blob: Blob, sizes = [16, 32, 48, 64, 12
       canvas.height = s;
       const ctx = canvas.getContext('2d')!;
       ctx.clearRect(0, 0, s, s);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
       // Center-contain square fit
-      const scale = Math.min(s / img.naturalWidth, s / img.naturalHeight);
-      const dw = img.naturalWidth * scale;
-      const dh = img.naturalHeight * scale;
+      const natW = Math.max(1, img.naturalWidth || 512);
+      const natH = Math.max(1, img.naturalHeight || 512);
+      const scale = Math.min(s / natW, s / natH);
+      const dw = natW * scale;
+      const dh = natH * scale;
       ctx.drawImage(img, (s - dw) / 2, (s - dh) / 2, dw, dh);
       const pngBlob = await canvasToBlob(canvas, 'image/png');
       pngBuffers.push({size: s, bytes: new Uint8Array(await pngBlob.arrayBuffer())});

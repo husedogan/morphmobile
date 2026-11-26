@@ -1024,13 +1024,13 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
       </div>
 
       {/* Minimalist Transport Bar — Safe 390px Touch Targets & Optional Mobile Mute */}
-      <div className="relative z-30 flex min-h-12 shrink-0 items-center justify-between gap-1 border-y border-white/[0.07] bg-[#0D0D10] px-1.5 py-1 sm:gap-1.5 sm:px-3.5">
+      <div className="relative z-30 flex min-h-12 shrink-0 items-center justify-between gap-0.5 border-y border-white/[0.07] bg-[#0D0D10] px-1.5 py-1 sm:gap-1.5 sm:px-3.5">
         <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
           <StudioTooltipBtn
             tooltip={isPlaying ? tr('Duraklat', 'Pause') : tr('Oynat', 'Play')}
             align="left"
             onClick={onTogglePlay}
-            className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.09] text-white transition-transform hover:bg-white/[0.15] active:scale-95 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)]"
+            className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/[0.09] text-white transition-transform hover:bg-white/[0.15] active:scale-95 min-[420px]:h-9 min-[420px]:w-9 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)]"
           >
             {isPlaying ? (
               <Pause className="h-4 w-4 fill-current" />
@@ -1042,7 +1042,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
           <StudioTooltipBtn
             tooltip={tr('1 Kare Geri', 'Step Back 1 Frame')}
             onClick={() => onStepFrame(-1)}
-            className="flex h-9 w-9 items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)]"
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white min-[420px]:h-9 min-[420px]:w-9 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)]"
           >
             <ChevronLeft className="h-4 w-4" />
           </StudioTooltipBtn>
@@ -1050,17 +1050,17 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
           <StudioTooltipBtn
             tooltip={tr('1 Kare İleri', 'Step Forward 1 Frame')}
             onClick={() => onStepFrame(1)}
-            className="flex h-9 w-9 items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)]"
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white min-[420px]:h-9 min-[420px]:w-9 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)]"
           >
             <ChevronRight className="h-4 w-4" />
           </StudioTooltipBtn>
         </div>
 
         {/* Center: Crisp Tabular Timecode */}
-        <div className="font-mono-num flex min-w-0 shrink-0 items-baseline gap-0.5 whitespace-nowrap text-[11px] font-bold tracking-tight sm:gap-1 sm:text-xs">
+        <div className="font-mono-num flex min-w-0 shrink-0 items-baseline gap-0.5 whitespace-nowrap text-[10.5px] font-bold tracking-tight min-[420px]:text-[11px] sm:gap-1 sm:text-xs">
           <span className="text-white">{formatSmpteTimecode(playhead, project.fps)}</span>
           <span className="text-white/25">/</span>
-          <span className="text-[10px] font-medium text-white/45 sm:text-[11px]">
+          <span className="text-[9.5px] font-medium text-white/45 min-[420px]:text-[10px] sm:text-[11px]">
             {formatSmpteTimecode(safeTotalDur, project.fps)}
           </span>
         </div>
@@ -1071,7 +1071,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
             tooltip={tr('Geri Al', 'Undo')}
             onClick={onUndo}
             disabled={!canUndo}
-            className="flex h-9 w-9 items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-25 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)]"
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-25 min-[420px]:h-9 min-[420px]:w-9 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)]"
           >
             <Undo2 className="h-4 w-4" />
           </StudioTooltipBtn>
@@ -1080,7 +1080,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
             tooltip={tr('İleri Al', 'Redo')}
             onClick={onRedo}
             disabled={!canRedo}
-            className="flex h-9 w-9 items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-25 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)]"
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-25 min-[420px]:h-9 min-[420px]:w-9 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)]"
           >
             <Redo2 className="h-4 w-4" />
           </StudioTooltipBtn>
@@ -1092,7 +1092,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
                 : tr('Bu Kareye Keyframe Ekle (◆)', 'Add Keyframe at Playhead (◆)')
             }
             onClick={onQuickToggleKeyframe}
-            className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] ${
+            className={`flex h-8 w-8 items-center justify-center rounded-xl transition-colors min-[420px]:h-9 min-[420px]:w-9 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] ${
               hasKeyframeAtPlayhead
                 ? 'bg-[#F43F5E]/20 text-[#FB7185]'
                 : 'text-white/65 hover:bg-white/[0.06] hover:text-[#FB7185]'
@@ -1104,7 +1104,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
           <StudioTooltipBtn
             tooltip={project.masterMuted ? tr('Sesi Aç', 'Unmute') : tr('Sesi Kapat', 'Mute')}
             onClick={onToggleMute}
-            className={`${showMobileMuteBtn ? 'flex' : 'hidden sm:flex'} h-9 w-9 items-center justify-center rounded-xl transition-colors sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] ${
+            className={`${showMobileMuteBtn ? 'flex' : 'hidden sm:flex'} h-8 w-8 items-center justify-center rounded-xl transition-colors min-[420px]:h-9 min-[420px]:w-9 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] ${
               project.masterMuted
                 ? 'text-rose-400'
                 : 'text-white/65 hover:bg-white/[0.06] hover:text-white'
@@ -1121,7 +1121,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
             tooltip={tr('Kare Yakala (Fotoğraf)', 'Capture Frame Snapshot')}
             align="right"
             onClick={onCaptureSnapshot}
-            className="flex h-9 w-9 items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)]"
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white min-[420px]:h-9 min-[420px]:w-9 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)]"
           >
             <Camera className="h-4 w-4" />
           </StudioTooltipBtn>

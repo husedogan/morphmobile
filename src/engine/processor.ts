@@ -475,7 +475,11 @@ export async function runLocalTool(
           format: 'jpg',
           quality: 95,
         });
-        const pdfBlob = await imagesToPdfBlob([sheetJpg]);
+        const pdfBlob = await imagesToPdfBlob(
+          [sheetJpg],
+          undefined,
+          opts.paper === 'a4' ? 'a4' : '10x15'
+        );
         outputs.push({name: `${files[0].baseName}-id-print-${opts.paper}.pdf`, blob: pdfBlob});
       } else {
         const fmt = normalizeImageFormat(opts.format);

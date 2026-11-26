@@ -192,7 +192,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [storageEstimate, setStorageEstimate] = useState<{usage: number; quota: number} | null>(null);
 
   useEffect(() => {
-    if (category !== 'system') return;
+    if (category !== 'system' && category !== 'storage') return;
     let alive = true;
     listNleProjectsIdb()
       .then((list) => {

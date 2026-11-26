@@ -259,6 +259,8 @@ const LazyPdfPage: React.FC<PageCanvasProps> = ({
   const [renderedKey, setRenderedKey] = useState('');
   const [aspectRatio, setAspectRatio] = useState(210 / 297);
   const [rendering, setRendering] = useState(false);
+  const [renderError, setRenderError] = useState<string | null>(null);
+  const [retryTick, setRetryTick] = useState(0);
 
   const [draftStroke, setDraftStroke] = useState<PdfAnnotStroke | null>(null);
   const [draftRedact, setDraftRedact] = useState<{x0: number; y0: number; x1: number; y1: number} | null>(null);
@@ -277,13 +279,13 @@ const LazyPdfPage: React.FC<PageCanvasProps> = ({
         for (const entry of entries) {
           if (entry.isIntersecting) {
             setInView(true);
-            if (entry.intersectionRatio >= 0.35) {
+            if (entry.intersectionRatio >= 0.2 || entry.intersectionRect.height >= 160) {
               onBecomeVisible(pageNum);
             }
           }
         }
       },
-      {rootMargin: '360px 0px', threshold: [0.05, 0.35, 0.7]}
+      {rootMargin: '360px 0px', threshold: [0.05, 0.2, 0.5]}
     );
     io.observe(el);
     return () => io.disconnect();
@@ -292,12 +294,13 @@ const LazyPdfPage: React.FC<PageCanvasProps> = ({
   useEffect(() => {
     if (!inView) return;
     const renderWidth = Math.round(Math.max(260, baseViewportWidth * zoom));
-    const key = `${pageNum}-${renderWidth}`;
+    const key = `${pageNum}-${renderWidth}-${retryTick}`;
     if (renderedKey === key) return;
 
     let cancelled = false;
     let renderTask: pdfjsLib.RenderTask | null = null;
     setRendering(true);
+    setRenderError(null);
 
     (async () => {
       try {
@@ -311,30 +314,38 @@ const LazyPdfPage: React.FC<PageCanvasProps> = ({
           setAspectRatio(vp1.width / vp1.height);
         }
 
-        const dpr = Math.min(2, window.devicePixelRatio || 1);
-        const maxPixelWidth = 1900;
+        const dpr = Math.min(3, window.devicePixelRatio || 1);
+        const maxPixelWidth = 2800;
         const desiredPixelWidth = Math.min(maxPixelWidth, Math.round(renderWidth * dpr));
         const renderScale = Math.max(0.25, desiredPixelWidth / Math.max(1, vp1.width));
         const vp = page.getViewport({scale: renderScale});
 
-        const canvas = canvasRef.current;
-        if (canvas) {
-          canvas.width = Math.max(1, Math.round(vp.width));
-          canvas.height = Math.max(1, Math.round(vp.height));
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.fillStyle = '#FFFFFF';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            renderTask = page.render({canvasContext: ctx, viewport: vp, canvas});
-            await renderTask.promise;
-            if (!cancelled) {
-              setRenderedKey(key);
+        const offscreen = document.createElement('canvas');
+        offscreen.width = Math.max(1, Math.round(vp.width));
+        offscreen.height = Math.max(1, Math.round(vp.height));
+        const offCtx = offscreen.getContext('2d');
+        if (offCtx) {
+          offCtx.fillStyle = '#FFFFFF';
+          offCtx.fillRect(0, 0, offscreen.width, offscreen.height);
+          renderTask = page.render({canvasContext: offCtx, viewport: vp, canvas: offscreen});
+          await renderTask.promise;
+          const canvas = canvasRef.current;
+          if (!cancelled && canvas) {
+            canvas.width = offscreen.width;
+            canvas.height = offscreen.height;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(offscreen, 0, 0);
             }
+            setRenderedKey(key);
           }
         }
         page.cleanup();
-      } catch {
-        // Ignore cancelled render tasks during rapid zoom/scroll
+      } catch (err) {
+        const name = (err as {name?: string} | null)?.name ?? '';
+        if (!cancelled && name !== 'RenderingCancelledException') {
+          setRenderError(err instanceof Error ? err.message : 'Render failed');
+        }
       } finally {
         if (!cancelled) setRendering(false);
       }
@@ -344,7 +355,7 @@ const LazyPdfPage: React.FC<PageCanvasProps> = ({
       cancelled = true;
       renderTask?.cancel();
     };
-  }, [inView, pdf, pageNum, zoom, baseViewportWidth, renderedKey]);
+  }, [inView, pdf, pageNum, zoom, baseViewportWidth, renderedKey, retryTick]);
 
   // Repaint annotation overlay whenever annotations, draft, or page dimensions change
   useEffect(() => {
@@ -524,6 +535,23 @@ const LazyPdfPage: React.FC<PageCanvasProps> = ({
         {rendering && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/5">
             <Loader2 className="h-5 w-5 animate-spin text-[var(--accent)]" />
+          </div>
+        )}
+
+        {renderError && !rendering && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/75 p-4 text-center text-white">
+            <p className="text-xs font-semibold text-rose-300">{renderError}</p>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setRenderedKey('');
+                setRetryTick((t) => t + 1);
+              }}
+              className="rounded-xl bg-[var(--accent)] px-3 py-1.5 text-xs font-bold text-white"
+            >
+              Tekrar Dene
+            </button>
           </div>
         )}
       </div>
@@ -1251,12 +1279,14 @@ export const PdfCanvasViewer: React.FC<PdfCanvasViewerProps> = ({
         onTouchEnd={handleTouchEnd}
         onWheel={handleWheel}
         className={`h-full w-full flex-1 overflow-auto transition-colors duration-200 ${backdropStyle} ${
-          flowMode === 'single' ? 'flex items-start justify-center' : ''
+          flowMode === 'single' && zoom <= 1 ? 'flex items-start justify-center' : ''
         }`}
       >
         <div
-          className={`mx-auto w-full ${
-            flowMode === 'single' ? 'my-auto py-16 px-1 sm:px-4' : 'space-y-2.5 pt-16 pb-28 px-1 sm:px-3.5'
+          className={`mx-auto ${zoom > 1 ? 'w-max min-w-full' : 'w-full'} ${
+            flowMode === 'single'
+              ? 'my-auto pt-24 pb-28 px-1 sm:px-4'
+              : 'space-y-2.5 pt-24 pb-28 px-1 sm:px-3.5'
           }`}
         >
           {visiblePages.map((pageNum) => (
