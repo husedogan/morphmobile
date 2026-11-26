@@ -696,6 +696,13 @@ export const PdfCanvasViewer: React.FC<PdfCanvasViewerProps> = ({
               </button>
             </div>
           )}
+          {totalPages > 120 && (
+            <p className="w-full text-[10.5px] text-[var(--muted)]">
+              {isTr
+                ? `Performans için metin araması ilk 120 sayfayı tarar (toplam ${totalPages} sayfa).`
+                : `For performance, text search scans the first 120 pages (${totalPages} pages total).`}
+            </p>
+          )}
         </div>
       )}
 
@@ -746,6 +753,13 @@ export const PdfCanvasViewer: React.FC<PdfCanvasViewerProps> = ({
                 <X className="h-4 w-4" />
               </button>
             </div>
+            {totalPages > 60 && (
+              <div className="shrink-0 border-b border-[var(--line)] bg-[var(--inset)] px-3.5 py-2 text-[11px] text-[var(--muted)]">
+                {isTr
+                  ? `İlk 60 sayfa küçük resim olarak listeleniyor (${totalPages} sayfadan). İleri sayfalara alt çubuktaki sayfa numarasından doğrudan atlayabilirsin.`
+                  : `Showing thumbnails for the first 60 of ${totalPages} pages. Tap the bottom page counter to jump directly to any later page.`}
+              </div>
+            )}
             <div className="grid flex-1 grid-cols-2 gap-3 overflow-y-auto p-3.5 sm:grid-cols-3 md:grid-cols-4">
               {pageNumbers.slice(0, 60).map((p) => {
                 const thumb = thumbs.find((t) => t.pageNum === p);

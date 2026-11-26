@@ -11,6 +11,7 @@ import {
   Download,
   Droplets,
   ExternalLink,
+  Eye,
   EyeOff,
   FileArchive,
   FileCheck2,
@@ -183,6 +184,8 @@ function wheelIconForLocalTool(id: ToolId) {
       return Contact;
     case 'ICON_PACK':
       return Package;
+    case 'PDF_VIEWER':
+      return Eye;
     case 'PDF_CREATE':
     case 'PDF_MERGE':
     case 'PDF_TO_IMAGES':
@@ -1077,11 +1080,20 @@ export default function App() {
           return;
         }
 
+        const effectiveOptions =
+          tool.id === 'video_studio'
+            ? {
+                ...options,
+                expExportPipAudio: prefs.expExportPipAudio === false ? '0' : '1',
+                expExportOverlapNormalVideo: prefs.expExportOverlapNormalVideo === false ? '0' : '1',
+              }
+            : options;
+
         const result = await runEmbeddedMediaTool(
           tool,
           title,
           files,
-          options,
+          effectiveOptions,
           (progress, step) => {
             if (!ctrl.signal.aborted) {
               setJob({status: 'running', title, progress, step, canCancel: true});
@@ -1101,7 +1113,16 @@ export default function App() {
         setJob({status: 'failed', message: err instanceof Error ? err.message : t('ProcessFailed', lang)});
       }
     },
-    [files, lang, prefs.serverToken, prefs.serverUrl, pollAndFinishServerJob, serverReady]
+    [
+      files,
+      lang,
+      prefs.expExportOverlapNormalVideo,
+      prefs.expExportPipAudio,
+      prefs.serverToken,
+      prefs.serverUrl,
+      pollAndFinishServerJob,
+      serverReady,
+    ]
   );
 
   const handleRunLink = useCallback(
@@ -2063,6 +2084,7 @@ export default function App() {
             icon: FileText,
             accent: '#F43F5E',
             items: [
+              mkLocalItem('PDF_VIEWER', '#38BDF8'),
               mkLocalItem('PDF_MERGE', '#F43F5E'),
               mkLocalItem('PDF_SPLIT', '#FB7185'),
               mkLocalItem('PDF_EXTRACT_PAGES', '#F97316'),

@@ -3,6 +3,7 @@ import {
   ArrowDown,
   ArrowUp,
   Check,
+  ChevronDown,
   Cookie,
   Download,
   Eye,
@@ -136,6 +137,92 @@ const SB_CATS = [
   {id: 'selfpromo', tr: 'Öz Tanıtım', en: 'Self-Promo'},
 ];
 
+/**
+ * Shared collapsible accordion section used across all reorganized Settings tabs
+ * for clean visual hierarchy and tight mobile scrolling.
+ */
+export const SettingsAccordionCard: React.FC<{
+  icon: React.ReactNode;
+  title: string;
+  subtitle?: string;
+  badge?: string;
+  rightSlot?: React.ReactNode;
+  defaultOpen?: boolean;
+  accentBorder?: boolean;
+  children: React.ReactNode;
+}> = ({
+  icon,
+  title,
+  subtitle,
+  badge,
+  rightSlot,
+  defaultOpen = false,
+  accentBorder = false,
+  children,
+}) => {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <section
+      className={`overflow-hidden rounded-3xl border bg-[var(--surface)] transition-colors ${
+        accentBorder ? 'border-[var(--accent)]/45' : 'border-[var(--line)]'
+      }`}
+    >
+      <div className="flex items-center gap-2 px-4 py-3.5 sm:px-5">
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          className="flex min-h-[42px] min-w-0 flex-1 items-center gap-3 text-left transition-opacity hover:opacity-90"
+        >
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
+            {icon}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <h2 className="truncate text-sm font-bold leading-tight text-[var(--ink)] sm:text-[15px]">
+                {title}
+              </h2>
+              {badge && (
+                <span className="truncate text-[11px] font-semibold text-[var(--accent-text)]">
+                  · {badge}
+                </span>
+              )}
+            </div>
+            {subtitle && (
+              <p className="mt-0.5 line-clamp-1 text-[11px] leading-snug text-[var(--muted)]">
+                {subtitle}
+              </p>
+            )}
+          </div>
+        </button>
+
+        {rightSlot && <div className="shrink-0">{rightSlot}</div>}
+
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-label={title}
+          onClick={() => setOpen((v) => !v)}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[var(--muted)] transition-colors hover:bg-[var(--inset)] hover:text-[var(--ink)]"
+        >
+          <ChevronDown
+            className={`h-4 w-4 transition-transform duration-200 ${
+              open ? 'rotate-180 text-[var(--accent-text)]' : ''
+            }`}
+          />
+        </button>
+      </div>
+
+      {open && (
+        <div className="border-t border-[var(--line)]/75 px-4 pb-4 pt-3.5 sm:px-5 sm:pb-5">
+          {children}
+        </div>
+      )}
+    </section>
+  );
+};
+
 interface SettingsProTabProps {
   prefs: Prefs;
   lang: Lang;
@@ -153,8 +240,9 @@ const ToggleRow: React.FC<{
   <button
     type="button"
     onClick={onToggle}
-    aria-pressed={checked}
-    className="flex w-full items-center justify-between gap-3 py-2.5 text-left"
+    role="switch"
+    aria-checked={checked}
+    className="flex min-h-[52px] w-full items-center justify-between gap-3 py-2.5 text-left"
   >
     <div className="min-w-0">
       <p className="text-xs font-bold text-[var(--ink)]">{title}</p>
@@ -167,8 +255,8 @@ const ToggleRow: React.FC<{
 );
 
 /**
- * Extra Link Downloader, Parallel Range Accelerator & Auto-Categorization cards
- * rendered directly inside the Settings -> Downloads (İndirmeler) tab.
+ * Collapsible Parallel Range Accelerator, Auto-Categorization & Link Downloader Defaults
+ * rendered inside Settings -> Downloads (İndirmeler).
  */
 export const SettingsDownloadsExtra: React.FC<{
   prefs: Prefs;
@@ -191,351 +279,361 @@ export const SettingsDownloadsExtra: React.FC<{
   }, []);
 
   const sbCats = prefs.proDlSponsorBlockCats ?? ['sponsor', 'intro', 'outro'];
+  const rangeOn = prefs.proDlRangeAccel !== false;
+  const autoCatOn = prefs.proDlAutoCategorize !== false;
+  const enabledRulesCount = autoCatRules.filter((r) => r.enabled).length;
+
+  const accelBadge = [
+    rangeOn ? (isTr ? 'Hızlandırıcı Açık' : 'Accel On') : isTr ? 'Kapalı' : 'Off',
+    autoCatOn ? `${enabledRulesCount} ${isTr ? 'kural' : 'rules'}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  const audioQualityLabel = (prefs.proDlDefaultAudioQuality || 'mp3_320').toUpperCase().replace('_', ' ');
+  const defaultsBadge = [
+    audioQualityLabel,
+    prefs.proDlSponsorBlockDefault ? 'SponsorBlock' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3.5">
       {/* Parallel Range Accelerator & Auto-Categorization */}
-      <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5 space-y-3">
-        <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
-            <Zap className="h-5 w-5" />
+      <SettingsAccordionCard
+        icon={<Zap className="h-4.5 w-4.5" />}
+        title={isTr ? 'Paralel Hızlandırıcı & Otomatik Klasörleme' : 'Parallel Accelerator & Auto-Categorize'}
+        subtitle={
+          isTr
+            ? 'HTTP Range parçalı indirme, devam önbelleği ve uzantıya göre klasörleme'
+            : 'HTTP Range chunking, resume cache & automatic Library folder sorting'
+        }
+        badge={accelBadge}
+        defaultOpen={false}
+      >
+        <div className="space-y-3">
+          <div className="divide-y divide-[var(--line)]">
+            <ToggleRow
+              title={isTr ? 'Paralel Parçalı Hızlandırıcı (HTTP Range)' : 'Parallel Chunked Accelerator (HTTP Range)'}
+              desc={
+                isTr
+                  ? 'Doğrudan büyük dosyaları (.mp4, .zip, .apk) çoklu bağlantı ile hızlandır ve kopan parçayı otomatik tekrar dene'
+                  : 'Accelerate direct files (.mp4, .zip, .apk) over parallel connections with shaky-network auto-retry'
+              }
+              checked={rangeOn}
+              onToggle={() =>
+                onChangePrefs((p) => ({...p, proDlRangeAccel: p.proDlRangeAccel === false}))
+              }
+            />
+            <ToggleRow
+              title={isTr ? 'Kaldığı Yerden Devam Önbelleği' : 'Resume Checkpoint Cache'}
+              desc={
+                isTr
+                  ? 'Yarıda kesilen büyük indirmelerin biten parçalarını 24 saat sakla, tekrar denemede baştan indirme'
+                  : 'Keep completed chunks of interrupted downloads for 24h to resume without restarting'
+              }
+              checked={prefs.proDlRangeResumeCache !== false}
+              onToggle={() =>
+                onChangePrefs((p) => ({...p, proDlRangeResumeCache: p.proDlRangeResumeCache === false}))
+              }
+            />
+            <ToggleRow
+              title={isTr ? 'İndirilenleri Otomatik Kategorile' : 'Auto-Categorize Downloads'}
+              desc={
+                isTr
+                  ? 'İndirilen dosyaları uzantısına göre (Video, Müzik, Görsel, Arşiv/APK, Belge) Kitaplık klasörlerine otomatik yerleştir'
+                  : 'Automatically sort downloaded files into Library folders by extension/type'
+              }
+              checked={autoCatOn}
+              onToggle={() =>
+                onChangePrefs((p) => ({...p, proDlAutoCategorize: p.proDlAutoCategorize === false}))
+              }
+            />
           </div>
-          <div>
-            <h2 className="text-base font-bold leading-tight text-[var(--ink)]">
-              {isTr ? 'Paralel Hızlandırıcı & Otomatik Klasörleme' : 'Parallel Accelerator & Auto-Categorize'}
-            </h2>
-            <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
-              {isTr
-                ? 'Doğrudan dosya indirmelerinde çoklu parça hızlandırma, kaldığı yerden devam ve otomatik kitaplık sıralama.'
-                : 'Multi-connection HTTP Range chunking, resume checkpoint cache, and automatic Library folder sorting.'}
-            </p>
-          </div>
-        </div>
 
-        <div className="divide-y divide-[var(--line)]">
-          <ToggleRow
-            title={isTr ? 'Paralel Parçalı Hızlandırıcı (HTTP Range)' : 'Parallel Chunked Accelerator (HTTP Range)'}
-            desc={
-              isTr
-                ? 'Doğrudan büyük dosyaları (.mp4, .zip, .apk) çoklu bağlantı ile hızlandır ve kopan parçayı otomatik tekrar dene'
-                : 'Accelerate direct files (.mp4, .zip, .apk) over parallel connections with shaky-network auto-retry'
-            }
-            checked={prefs.proDlRangeAccel !== false}
-            onToggle={() =>
-              onChangePrefs((p) => ({...p, proDlRangeAccel: p.proDlRangeAccel === false}))
-            }
-          />
-          <ToggleRow
-            title={isTr ? 'Kaldığı Yerden Devam Önbelleği' : 'Resume Checkpoint Cache'}
-            desc={
-              isTr
-                ? 'Yarıda kesilen büyük indirmelerin biten parçalarını 24 saat sakla, tekrar denemede baştan indirme'
-                : 'Keep completed chunks of interrupted downloads for 24h to resume without restarting'
-            }
-            checked={prefs.proDlRangeResumeCache !== false}
-            onToggle={() =>
-              onChangePrefs((p) => ({...p, proDlRangeResumeCache: p.proDlRangeResumeCache === false}))
-            }
-          />
-          <ToggleRow
-            title={isTr ? 'İndirilenleri Otomatik Kategorile' : 'Auto-Categorize Downloads'}
-            desc={
-              isTr
-                ? 'İndirilen dosyaları uzantısına göre (Video, Müzik, Görsel, Arşiv/APK, Belge) Kitaplık klasörlerine otomatik yerleştir'
-                : 'Automatically sort downloaded files into Library folders by extension/type'
-            }
-            checked={prefs.proDlAutoCategorize !== false}
-            onToggle={() =>
-              onChangePrefs((p) => ({...p, proDlAutoCategorize: p.proDlAutoCategorize === false}))
-            }
-          />
-        </div>
-
-        {prefs.proDlRangeAccel !== false && resumeCacheCount > 0 && (
-          <div className="flex items-center justify-between gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3.5 py-2.5">
-            <span className="text-[11px] font-medium text-[var(--muted)]">
-              {isTr
-                ? `${resumeCacheCount} yarım kalmış indirme önbellekte`
-                : `${resumeCacheCount} paused download(s) in resume cache`}
-            </span>
-            <button
-              type="button"
-              onClick={async () => {
-                await clearResumeCheckpoints();
-                setResumeCacheCount(0);
-                onShowToast?.(isTr ? 'Yarım kalan önbellek temizlendi.' : 'Resume cache cleared.');
-              }}
-              className="text-[11px] font-bold text-[var(--danger)] hover:underline"
-            >
-              {isTr ? 'Temizle' : 'Clear'}
-            </button>
-          </div>
-        )}
-
-        {prefs.proDlAutoCategorize !== false && (
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-xs font-bold text-[var(--ink)]">
-                <FolderOpen className="h-3.5 w-3.5 text-[var(--accent-text)]" />
-                {isTr ? 'Otomatik Kategori Kuralları' : 'Auto-Categorization Rules'}
+          {rangeOn && resumeCacheCount > 0 && (
+            <div className="flex items-center justify-between gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3.5 py-2.5">
+              <span className="text-[11px] font-medium text-[var(--muted)]">
+                {isTr
+                  ? `${resumeCacheCount} yarım kalmış indirme önbellekte`
+                  : `${resumeCacheCount} paused download(s) in resume cache`}
               </span>
               <button
                 type="button"
-                onClick={() => {
-                  const next = resetAutoCategoryRules();
-                  setAutoCatRules(next);
-                  onShowToast?.(isTr ? 'Kategori kuralları sıfırlandı.' : 'Category rules reset.');
+                onClick={async () => {
+                  await clearResumeCheckpoints();
+                  setResumeCacheCount(0);
+                  onShowToast?.(isTr ? 'Yarım kalan önbellek temizlendi.' : 'Resume cache cleared.');
                 }}
-                className="text-[11px] font-bold text-[var(--accent-text)] hover:underline"
+                className="text-[11px] font-bold text-[var(--danger)] hover:underline"
               >
-                {isTr ? 'Kuralları Sıfırla' : 'Reset Rules'}
+                {isTr ? 'Temizle' : 'Clear'}
               </button>
             </div>
-            <div className="space-y-1.5">
-              {autoCatRules.map((rule) => (
-                <div
-                  key={rule.bucket}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-2.5 py-2"
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const next = autoCatRules.map((r) =>
-                        r.bucket === rule.bucket ? {...r, enabled: !r.enabled} : r
-                      );
-                      setAutoCatRules(next);
-                      saveAutoCategoryRules(next);
-                    }}
-                    className={`flex items-center gap-2 text-left ${rule.enabled ? '' : 'opacity-45'}`}
-                  >
-                    <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-full"
-                      style={{backgroundColor: rule.folderColor}}
-                    />
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-bold text-[var(--ink)]">
-                        {isTr ? rule.labelTr : rule.labelEn}
-                      </p>
-                      <p className="font-mono text-[9px] text-[var(--muted)]">
-                        .{rule.extensions.slice(0, 6).join(', .')}
-                        {rule.extensions.length > 6 ? '…' : ''}
-                      </p>
-                    </div>
-                  </button>
-                  <select
-                    value={rule.folderId}
-                    disabled={!rule.enabled}
-                    onChange={(e) => {
-                      const chosenId = e.target.value;
-                      const foundFolder = folders.find((f) => f.id === chosenId);
-                      const next = autoCatRules.map((r) =>
-                        r.bucket === rule.bucket
-                          ? {
-                              ...r,
-                              folderId: chosenId,
-                              folderName: foundFolder?.name || r.folderName,
-                              folderColor: foundFolder?.color || r.folderColor,
-                            }
-                          : r
-                      );
-                      setAutoCatRules(next);
-                      saveAutoCategoryRules(next);
-                    }}
-                    className="rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2 py-1 text-[11px] font-bold text-[var(--ink)] disabled:opacity-40"
-                  >
-                    {!folders.some((f) => f.id === rule.folderId) && (
-                      <option value={rule.folderId}>{rule.folderName}</option>
-                    )}
-                    {folders.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        → {f.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </section>
+          )}
 
-      {/* Link Downloader Defaults, SponsorBlock, Cookies & History */}
-      <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5 space-y-3">
-        <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
-            <Download className="h-5 w-5" />
-          </div>
-          <div>
-            <h2 className="text-base font-bold leading-tight text-[var(--ink)]">
-              {isTr ? 'Bağlantı İndirici Varsayılanları & Veri' : 'Link Downloader Defaults & Data'}
-            </h2>
-            <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
-              {isTr
-                ? 'Canlı önizleme, SponsorBlock, ses/altyazı varsayılanları, çerez profili ve geçmiş temizliği.'
-                : 'Live preview, SponsorBlock, audio/subtitle defaults, cookie profile, and history cleanup.'}
-            </p>
-          </div>
-        </div>
-
-        <div className="divide-y divide-[var(--line)]">
-          <ToggleRow
-            title={isTr ? 'Otomatik Canlı Önizleme Kartı' : 'Auto Live Preview Card'}
-            desc={isTr ? 'Link yapıştırıldığında kapak, başlık ve tahmini boyutu otomatik getir' : 'Fetch cover, title & size estimate automatically on URL paste'}
-            checked={prefs.proDlLivePreview !== false}
-            onToggle={() => onChangePrefs((p) => ({...p, proDlLivePreview: p.proDlLivePreview === false}))}
-          />
-          <ToggleRow
-            title={isTr ? 'SponsorBlock Varsayılan Açık' : 'SponsorBlock On by Default'}
-            desc={isTr ? 'YouTube indirmelerinde sponsor/giriş/çıkış atlama varsayılan açık gelsin' : 'Enable SponsorBlock skipping automatically for YouTube links'}
-            checked={Boolean(prefs.proDlSponsorBlockDefault)}
-            onToggle={() =>
-              onChangePrefs((p) => ({...p, proDlSponsorBlockDefault: !p.proDlSponsorBlockDefault}))
-            }
-          />
-          <ToggleRow
-            title={isTr ? 'Kapak, Bölüm & ID3 Etiketi Gömme' : 'Embed Cover, Chapters & ID3'}
-            desc={isTr ? 'İndirilen video ve seslere otomatik kapak ve meta etiket ekle' : 'Auto-embed thumbnails, chapters & music tags'}
-            checked={prefs.proDlEmbedMetadata !== false}
-            onToggle={() => onChangePrefs((p) => ({...p, proDlEmbedMetadata: p.proDlEmbedMetadata === false}))}
-          />
-          <ToggleRow
-            title={isTr ? 'İndirme Geçmişini Kaydet' : 'Save Download History'}
-            desc={isTr ? 'Son indirilen bağlantıları tek tıkla tekrar yüklemek için sakla' : 'Keep recent links for one-tap reload'}
-            checked={prefs.proDlSaveHistory !== false}
-            onToggle={() => onChangePrefs((p) => ({...p, proDlSaveHistory: p.proDlSaveHistory === false}))}
-          />
-        </div>
-
-        {/* Default Audio Quality & Subtitles (Video Quality is unified in the slider at top of Downloads) */}
-        <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
-          <div>
-            <label className="text-[11px] font-bold text-[var(--muted)]">
-              {isTr ? 'Varsayılan Ses Kalitesi' : 'Default Audio Quality'}
-            </label>
-            <select
-              value={prefs.proDlDefaultAudioQuality || 'mp3_320'}
-              onChange={(e) => onChangePrefs((p) => ({...p, proDlDefaultAudioQuality: e.target.value}))}
-              className="mt-1 w-full rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2.5 py-2 text-xs font-bold text-[var(--ink)]"
-            >
-              <option value="mp3_320">MP3 320k</option>
-              <option value="m4a_256">M4A 256k</option>
-              <option value="opus_160">Opus 160k</option>
-              <option value="mp3_192">MP3 192k</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-[11px] font-bold text-[var(--muted)]">
-              {isTr ? 'Varsayılan Altyazı' : 'Default Subtitles'}
-            </label>
-            <select
-              value={prefs.proDlDefaultSubtitles || 'off'}
-              onChange={(e) =>
-                onChangePrefs((p) => ({
-                  ...p,
-                  proDlDefaultSubtitles: e.target.value as 'off' | 'tr' | 'en' | 'auto',
-                }))
-              }
-              className="mt-1 w-full rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2.5 py-2 text-xs font-bold text-[var(--ink)]"
-            >
-              <option value="off">{isTr ? 'Kapalı' : 'Off'}</option>
-              <option value="tr">Türkçe (TR)</option>
-              <option value="en">English (EN)</option>
-              <option value="auto">{isTr ? 'Otomatik' : 'Auto'}</option>
-            </select>
-          </div>
-        </div>
-
-        {/* SponsorBlock Default Categories */}
-        <div>
-          <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold text-[var(--muted)]">
-            <Shield className="h-3.5 w-3.5 text-[var(--accent-text)]" />
-            {isTr ? 'Varsayılan SponsorBlock Kategorileri' : 'Default SponsorBlock Categories'}
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {SB_CATS.map((c) => {
-              const on = sbCats.includes(c.id);
-              return (
+          {autoCatOn && (
+            <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-[var(--ink)]">
+                  <FolderOpen className="h-3.5 w-3.5 text-[var(--accent-text)]" />
+                  {isTr ? 'Otomatik Kategori Kuralları' : 'Auto-Categorization Rules'}
+                </span>
                 <button
-                  key={c.id}
                   type="button"
                   onClick={() => {
-                    const next = on ? sbCats.filter((x) => x !== c.id) : [...sbCats, c.id];
-                    onChangePrefs((p) => ({...p, proDlSponsorBlockCats: next}));
+                    const next = resetAutoCategoryRules();
+                    setAutoCatRules(next);
+                    onShowToast?.(isTr ? 'Kategori kuralları sıfırlandı.' : 'Category rules reset.');
                   }}
-                  className={`rounded-xl border px-2.5 py-1.5 text-[11px] font-bold transition-colors ${
-                    on
-                      ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
-                      : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
-                  }`}
+                  className="text-[11px] font-bold text-[var(--accent-text)] hover:underline"
                 >
-                  {isTr ? c.tr : c.en}
+                  {isTr ? 'Kuralları Sıfırla' : 'Reset Rules'}
                 </button>
-              );
-            })}
-          </div>
+              </div>
+              <div className="space-y-1.5">
+                {autoCatRules.map((rule) => (
+                  <div
+                    key={rule.bucket}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-2.5 py-2"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = autoCatRules.map((r) =>
+                          r.bucket === rule.bucket ? {...r, enabled: !r.enabled} : r
+                        );
+                        setAutoCatRules(next);
+                        saveAutoCategoryRules(next);
+                      }}
+                      className={`flex min-w-0 items-center gap-2 text-left ${rule.enabled ? '' : 'opacity-45'}`}
+                    >
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{backgroundColor: rule.folderColor}}
+                      />
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-bold text-[var(--ink)]">
+                          {isTr ? rule.labelTr : rule.labelEn}
+                        </p>
+                        <p className="truncate font-mono text-[9px] text-[var(--muted)]">
+                          .{rule.extensions.slice(0, 6).join(', .')}
+                          {rule.extensions.length > 6 ? '…' : ''}
+                        </p>
+                      </div>
+                    </button>
+                    <select
+                      value={rule.folderId}
+                      disabled={!rule.enabled}
+                      onChange={(e) => {
+                        const chosenId = e.target.value;
+                        const foundFolder = folders.find((f) => f.id === chosenId);
+                        const next = autoCatRules.map((r) =>
+                          r.bucket === rule.bucket
+                            ? {
+                                ...r,
+                                folderId: chosenId,
+                                folderName: foundFolder?.name || r.folderName,
+                                folderColor: foundFolder?.color || r.folderColor,
+                              }
+                            : r
+                        );
+                        setAutoCatRules(next);
+                        saveAutoCategoryRules(next);
+                      }}
+                      className="min-w-0 rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2 py-1 text-[11px] font-bold text-[var(--ink)] disabled:opacity-40"
+                    >
+                      {!folders.some((f) => f.id === rule.folderId) && (
+                        <option value={rule.folderId}>{rule.folderName}</option>
+                      )}
+                      {folders.map((f) => (
+                        <option key={f.id} value={f.id}>
+                          → {f.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
+      </SettingsAccordionCard>
 
-        {/* Saved Cookie Profile + Queue & History Cleanup */}
-        <div className="space-y-2 border-t border-[var(--line)] pt-3">
-          <label className="flex items-center gap-1.5 text-[11px] font-bold text-[var(--muted)]">
-            <Cookie className="h-3.5 w-3.5 text-[var(--accent-text)]" />
-            {isTr ? 'Kayıtlı Çerez (Cookie) Profili' : 'Saved Cookie Profile'}
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="password"
-              value={cookieDraft}
-              onChange={(e) => setCookieDraft(e.target.value)}
-              placeholder="sessionid=...; csrftoken=..."
-              className="min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 py-2 font-mono text-xs text-[var(--ink)]"
+      {/* Link Downloader Defaults, SponsorBlock, Cookies & History */}
+      <SettingsAccordionCard
+        icon={<Download className="h-4.5 w-4.5" />}
+        title={isTr ? 'Bağlantı İndirici Varsayılanları & Veri' : 'Link Downloader Defaults & Data'}
+        subtitle={
+          isTr
+            ? 'Canlı önizleme, SponsorBlock, ses/altyazı, çerez profili ve geçmiş temizliği'
+            : 'Live preview, SponsorBlock, audio/subtitles, cookies & history cleanup'
+        }
+        badge={defaultsBadge}
+        defaultOpen={false}
+      >
+        <div className="space-y-3">
+          <div className="divide-y divide-[var(--line)]">
+            <ToggleRow
+              title={isTr ? 'Otomatik Canlı Önizleme Kartı' : 'Auto Live Preview Card'}
+              desc={isTr ? 'Link yapıştırıldığında kapak, başlık ve tahmini boyutu otomatik getir' : 'Fetch cover, title & size estimate automatically on URL paste'}
+              checked={prefs.proDlLivePreview !== false}
+              onToggle={() => onChangePrefs((p) => ({...p, proDlLivePreview: p.proDlLivePreview === false}))}
             />
-            <button
-              type="button"
-              onClick={() => {
-                saveCookieProfile(cookieDraft);
-                onShowToast?.(isTr ? 'Çerez profili kaydedildi.' : 'Cookie profile saved.');
-              }}
-              className="morph-accent-btn rounded-xl px-3.5 text-xs font-bold"
-            >
-              {isTr ? 'Kaydet' : 'Save'}
-            </button>
+            <ToggleRow
+              title={isTr ? 'SponsorBlock Varsayılan Açık' : 'SponsorBlock On by Default'}
+              desc={isTr ? 'YouTube indirmelerinde sponsor/giriş/çıkış atlama varsayılan açık gelsin' : 'Enable SponsorBlock skipping automatically for YouTube links'}
+              checked={Boolean(prefs.proDlSponsorBlockDefault)}
+              onToggle={() =>
+                onChangePrefs((p) => ({...p, proDlSponsorBlockDefault: !p.proDlSponsorBlockDefault}))
+              }
+            />
+            <ToggleRow
+              title={isTr ? 'Kapak, Bölüm & ID3 Etiketi Gömme' : 'Embed Cover, Chapters & ID3'}
+              desc={isTr ? 'İndirilen video ve seslere otomatik kapak ve meta etiket ekle' : 'Auto-embed thumbnails, chapters & music tags'}
+              checked={prefs.proDlEmbedMetadata !== false}
+              onToggle={() => onChangePrefs((p) => ({...p, proDlEmbedMetadata: p.proDlEmbedMetadata === false}))}
+            />
+            <ToggleRow
+              title={isTr ? 'İndirme Geçmişini Kaydet' : 'Save Download History'}
+              desc={isTr ? 'Son indirilen bağlantıları tek tıkla tekrar yüklemek için sakla' : 'Keep recent links for one-tap reload'}
+              checked={prefs.proDlSaveHistory !== false}
+              onToggle={() => onChangePrefs((p) => ({...p, proDlSaveHistory: p.proDlSaveHistory === false}))}
+            />
           </div>
 
-          <div className="grid grid-cols-2 gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => {
-                clearDownloadHistory();
-                setHistoryCount(0);
-                onShowToast?.(isTr ? 'İndirme geçmişi temizlendi.' : 'Download history cleared.');
-              }}
-              className="flex min-h-[38px] items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-bold text-[var(--ink)] hover:border-[var(--danger)] hover:text-[var(--danger)]"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              <span>{isTr ? `Geçmişi Temizle (${historyCount})` : `Clear History (${historyCount})`}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                saveDownloadQueue([]);
-                setQueueCount(0);
-                onShowToast?.(isTr ? 'İndirme kuyruğu temizlendi.' : 'Download queue cleared.');
-              }}
-              className="flex min-h-[38px] items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-bold text-[var(--ink)] hover:border-[var(--danger)] hover:text-[var(--danger)]"
-            >
-              <ListVideo className="h-3.5 w-3.5" />
-              <span>{isTr ? `Kuyruğu Temizle (${queueCount})` : `Clear Queue (${queueCount})`}</span>
-            </button>
+          {/* Default Audio Quality & Subtitles */}
+          <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
+            <div className="min-w-0">
+              <label className="text-[11px] font-bold text-[var(--muted)]">
+                {isTr ? 'Varsayılan Ses Kalitesi' : 'Default Audio Quality'}
+              </label>
+              <select
+                value={prefs.proDlDefaultAudioQuality || 'mp3_320'}
+                onChange={(e) => onChangePrefs((p) => ({...p, proDlDefaultAudioQuality: e.target.value}))}
+                className="mt-1 min-h-[40px] w-full rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2.5 py-2 text-xs font-bold text-[var(--ink)]"
+              >
+                <option value="mp3_320">MP3 320k</option>
+                <option value="m4a_256">M4A 256k</option>
+                <option value="opus_160">Opus 160k</option>
+                <option value="mp3_192">MP3 192k</option>
+              </select>
+            </div>
+            <div className="min-w-0">
+              <label className="text-[11px] font-bold text-[var(--muted)]">
+                {isTr ? 'Varsayılan Altyazı' : 'Default Subtitles'}
+              </label>
+              <select
+                value={prefs.proDlDefaultSubtitles || 'off'}
+                onChange={(e) =>
+                  onChangePrefs((p) => ({
+                    ...p,
+                    proDlDefaultSubtitles: e.target.value as 'off' | 'tr' | 'en' | 'auto',
+                  }))
+                }
+                className="mt-1 min-h-[40px] w-full rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2.5 py-2 text-xs font-bold text-[var(--ink)]"
+              >
+                <option value="off">{isTr ? 'Kapalı' : 'Off'}</option>
+                <option value="tr">Türkçe (TR)</option>
+                <option value="en">English (EN)</option>
+                <option value="auto">{isTr ? 'Otomatik' : 'Auto'}</option>
+              </select>
+            </div>
+          </div>
+
+          {/* SponsorBlock Default Categories */}
+          <div>
+            <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold text-[var(--muted)]">
+              <Shield className="h-3.5 w-3.5 text-[var(--accent-text)]" />
+              {isTr ? 'Varsayılan SponsorBlock Kategorileri' : 'Default SponsorBlock Categories'}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {SB_CATS.map((c) => {
+                const on = sbCats.includes(c.id);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => {
+                      const next = on ? sbCats.filter((x) => x !== c.id) : [...sbCats, c.id];
+                      onChangePrefs((p) => ({...p, proDlSponsorBlockCats: next}));
+                    }}
+                    className={`min-h-[34px] rounded-xl border px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                      on
+                        ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
+                        : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
+                    }`}
+                  >
+                    {isTr ? c.tr : c.en}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Saved Cookie Profile + Queue & History Cleanup */}
+          <div className="space-y-2 border-t border-[var(--line)] pt-3">
+            <label className="flex items-center gap-1.5 text-[11px] font-bold text-[var(--muted)]">
+              <Cookie className="h-3.5 w-3.5 text-[var(--accent-text)]" />
+              {isTr ? 'Kayıtlı Çerez (Cookie) Profili' : 'Saved Cookie Profile'}
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={cookieDraft}
+                onChange={(e) => setCookieDraft(e.target.value)}
+                placeholder="sessionid=...; csrftoken=..."
+                className="min-h-[40px] min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 py-2 font-mono text-xs text-[var(--ink)]"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  saveCookieProfile(cookieDraft);
+                  onShowToast?.(isTr ? 'Çerez profili kaydedildi.' : 'Cookie profile saved.');
+                }}
+                className="morph-accent-btn min-h-[40px] shrink-0 rounded-xl px-3.5 text-xs font-bold"
+              >
+                {isTr ? 'Kaydet' : 'Save'}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  clearDownloadHistory();
+                  setHistoryCount(0);
+                  onShowToast?.(isTr ? 'İndirme geçmişi temizlendi.' : 'Download history cleared.');
+                }}
+                className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2.5 text-xs font-bold text-[var(--ink)] hover:border-[var(--danger)] hover:text-[var(--danger)]"
+              >
+                <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{isTr ? `Geçmişi Sil (${historyCount})` : `Clear History (${historyCount})`}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  saveDownloadQueue([]);
+                  setQueueCount(0);
+                  onShowToast?.(isTr ? 'İndirme kuyruğu temizlendi.' : 'Download queue cleared.');
+                }}
+                className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2.5 text-xs font-bold text-[var(--ink)] hover:border-[var(--danger)] hover:text-[var(--danger)]"
+              >
+                <ListVideo className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{isTr ? `Kuyruğu Sil (${queueCount})` : `Clear Queue (${queueCount})`}</span>
+              </button>
+            </div>
           </div>
         </div>
-      </section>
+      </SettingsAccordionCard>
     </div>
   );
 };
 
 /**
- * Studio Layout, Visibility & Ordering controls (opt-in, all OFF by default),
- * rendered inside Settings -> Experimental (Deneysel).
+ * Consolidated Studio & Library Visibility, Strip Ordering & Project Folders card
+ * rendered inside Settings -> Appearance (Görünüm).
  */
 export const SettingsStudioLayoutCard: React.FC<{
   prefs: Prefs;
@@ -543,11 +641,22 @@ export const SettingsStudioLayoutCard: React.FC<{
   onChangePrefs: (updater: (prev: Prefs) => Prefs) => void;
 }> = ({prefs, lang, onChangePrefs}) => {
   const isTr = lang === 'tr';
+  const [folders, setFolders] = useState<LibraryFolder[]>(() => loadLibraryFolders());
+  const [newFolderName, setNewFolderName] = useState('');
+
   const suitesOrder: ProSuiteId[] =
     prefs.proSuitesOrder && prefs.proSuitesOrder.length === DEFAULT_PRO_SUITES_ORDER.length
       ? prefs.proSuitesOrder
       : DEFAULT_PRO_SUITES_ORDER;
   const hiddenSuites = prefs.proHiddenSuites ?? [];
+
+  const activeStripCount =
+    Number(Boolean(prefs.proShowStudioSuitesBar)) +
+    Number(Boolean(prefs.proShowPinnedRecentStrip)) +
+    Number(Boolean(prefs.proShowResultChainBar)) +
+    Number(Boolean(prefs.proShowClipboardBanner)) +
+    Number(prefs.proLibShowStorageSummary !== false) +
+    Number(prefs.proLibShowFoldersBar !== false);
 
   const moveSuite = (idx: number, delta: -1 | 1) => {
     const nextIdx = idx + delta;
@@ -566,139 +675,258 @@ export const SettingsStudioLayoutCard: React.FC<{
   };
 
   return (
-    <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5 space-y-3">
-      <div className="flex items-center gap-2.5">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
-          <Sparkles className="h-4 w-4" />
-        </div>
+    <SettingsAccordionCard
+      icon={<Sparkles className="h-4.5 w-4.5" />}
+      title={isTr ? 'Stüdyo & Kitaplık Görünümü' : 'Studio & Library Layout'}
+      subtitle={
+        isTr
+          ? 'Üst araç şeritleri, sonuç zinciri, depolama çubuğu ve proje klasörleri'
+          : 'Top studio strips, output chaining, storage bar & project folders'
+      }
+      badge={`${activeStripCount}/6 ${isTr ? 'aktif' : 'active'}`}
+      defaultOpen={false}
+    >
+      <div className="space-y-4">
+        {/* Studio Strips */}
         <div>
-          <h3 className="text-sm font-bold leading-tight text-[var(--ink)]">
-            {isTr ? 'Stüdyo Yerleşimi, Görünürlük & Sıralama' : 'Studio Layout, Visibility & Order'}
-          </h3>
-          <p className="mt-0.5 text-[11px] text-[var(--muted)]">
-            {isTr
-              ? 'Varsayılan olarak kapalıdır. İstersen ek şeritleri ve stüdyo kısayollarını buradan açabilirsin.'
-              : 'Off by default. Enable extra studio bars, chaining, and module ordering here.'}
+          <p className="mb-1 text-[11px] font-extrabold uppercase tracking-wider text-[var(--muted)]">
+            {isTr ? 'Stüdyo Şeritleri' : 'Studio Strips'}
           </p>
+          <div className="divide-y divide-[var(--line)]">
+            <ToggleRow
+              title={isTr ? 'Stüdyo Üst Araç Şeridi' : 'Studio Top Tools Bar'}
+              desc={
+                isTr
+                  ? 'Ses, Görsel, PDF, Arşiv ve Tarif kısayollarını Stüdyo üstünde göster'
+                  : 'Show Audio, Image, PDF, Archive & Pipeline buttons on Studio'
+              }
+              checked={Boolean(prefs.proShowStudioSuitesBar)}
+              onToggle={() =>
+                onChangePrefs((p) => ({...p, proShowStudioSuitesBar: !p.proShowStudioSuitesBar}))
+              }
+            />
+            <ToggleRow
+              title={isTr ? 'Sabitlenenler & Son Kullanılanlar Şeridi' : 'Pinned & Recent Tools Strip'}
+              desc={
+                isTr
+                  ? 'En sık ve son kullandığın araçları tek dokunuşla üstte tut'
+                  : 'Keep pinned and recently used tools in a quick strip'
+              }
+              checked={Boolean(prefs.proShowPinnedRecentStrip)}
+              onToggle={() =>
+                onChangePrefs((p) => ({...p, proShowPinnedRecentStrip: !p.proShowPinnedRecentStrip}))
+              }
+            />
+            <ToggleRow
+              title={isTr ? 'Sonuç Ekranı Zincirleme Paneli' : 'Result Screen Output Chaining'}
+              desc={
+                isTr
+                  ? 'İşlem bitince çıktıyı tek dokunuşla başka araca gönderme butonları'
+                  : 'One-tap send output to another tool on completion'
+              }
+              checked={Boolean(prefs.proShowResultChainBar)}
+              onToggle={() =>
+                onChangePrefs((p) => ({...p, proShowResultChainBar: !p.proShowResultChainBar}))
+              }
+            />
+            <ToggleRow
+              title={isTr ? 'Akıllı Pano Bağlantı Algılama Şeridi' : 'Smart Clipboard Link Banner'}
+              desc={
+                isTr
+                  ? 'Panoda video/müzik linki varsa Stüdyo üstünde hızlı İndir çubuğu çıkar'
+                  : 'Show quick Download bar when clipboard holds a media URL'
+              }
+              checked={Boolean(prefs.proShowClipboardBanner)}
+              onToggle={() =>
+                onChangePrefs((p) => ({...p, proShowClipboardBanner: !p.proShowClipboardBanner}))
+              }
+            />
+          </div>
         </div>
-      </div>
 
-      <div className="divide-y divide-[var(--line)]">
-        <ToggleRow
-          title={isTr ? 'Stüdyo Üst Araç Şeridi' : 'Studio Top Tools Bar'}
-          desc={
-            isTr
-              ? 'Ses, Görsel, PDF, Arşiv ve Tarif kısayollarını Stüdyo üstünde göster'
-              : 'Show Audio, Image, PDF, Archive & Pipeline buttons on Studio'
-          }
-          checked={Boolean(prefs.proShowStudioSuitesBar)}
-          onToggle={() =>
-            onChangePrefs((p) => ({...p, proShowStudioSuitesBar: !p.proShowStudioSuitesBar}))
-          }
-        />
-        <ToggleRow
-          title={isTr ? 'Sabitlenenler & Son Kullanılanlar Şeridi' : 'Pinned & Recent Tools Strip'}
-          desc={
-            isTr
-              ? 'En sık ve son kullandığın araçları tek dokunuşla üstte tut'
-              : 'Keep pinned and recently used tools in a quick strip'
-          }
-          checked={Boolean(prefs.proShowPinnedRecentStrip)}
-          onToggle={() =>
-            onChangePrefs((p) => ({...p, proShowPinnedRecentStrip: !p.proShowPinnedRecentStrip}))
-          }
-        />
-        <ToggleRow
-          title={isTr ? 'Sonuç Ekranı Zincirleme Paneli' : 'Result Screen Output Chaining'}
-          desc={
-            isTr
-              ? 'İşlem bitince çıktıyı tek dokunuşla başka araca gönderme butonları'
-              : 'One-tap send output to another tool on completion'
-          }
-          checked={Boolean(prefs.proShowResultChainBar)}
-          onToggle={() =>
-            onChangePrefs((p) => ({...p, proShowResultChainBar: !p.proShowResultChainBar}))
-          }
-        />
-        <ToggleRow
-          title={isTr ? 'Akıllı Pano Bağlantı Algılama Şeridi' : 'Smart Clipboard Link Banner'}
-          desc={
-            isTr
-              ? 'Panoda video/müzik linki varsa Stüdyo üstünde hızlı İndir çubuğu çıkar'
-              : 'Show quick Download bar when clipboard holds a media URL'
-          }
-          checked={Boolean(prefs.proShowClipboardBanner)}
-          onToggle={() =>
-            onChangePrefs((p) => ({...p, proShowClipboardBanner: !p.proShowClipboardBanner}))
-          }
-        />
-      </div>
+        {/* Reorder & Show/Hide Individual Studio Suite Buttons */}
+        <div className="border-t border-[var(--line)] pt-3">
+          <p className="mb-2 text-[11px] font-bold text-[var(--muted)]">
+            {isTr ? 'Stüdyo Şerit Modüllerini Sırala veya Gizle' : 'Reorder or Hide Studio Bar Modules'}
+          </p>
+          <div className="space-y-1.5">
+            {suitesOrder.map((id, idx) => {
+              const meta = SUITE_META[id];
+              const Icon = meta.icon;
+              const isHidden = hiddenSuites.includes(id);
+              return (
+                <div
+                  key={id}
+                  className={`flex items-center gap-2.5 rounded-2xl border px-3 py-2 transition-opacity ${
+                    isHidden
+                      ? 'border-[var(--line)] bg-[var(--inset)]/60 opacity-55'
+                      : 'border-[var(--line)] bg-[var(--inset)]'
+                  }`}
+                >
+                  <Icon className="h-4 w-4 shrink-0 text-[var(--accent-text)]" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-bold text-[var(--ink)]">{isTr ? meta.tr : meta.en}</p>
+                    <p className="truncate text-[10px] text-[var(--muted)]">{isTr ? meta.descTr : meta.descEn}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      disabled={idx === 0}
+                      onClick={() => moveSuite(idx, -1)}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] disabled:opacity-30"
+                      aria-label="Move Up"
+                    >
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={idx === suitesOrder.length - 1}
+                      onClick={() => moveSuite(idx, 1)}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] disabled:opacity-30"
+                      aria-label="Move Down"
+                    >
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleSuiteHidden(id)}
+                      className={`flex h-8 w-8 items-center justify-center rounded-lg border ${
+                        isHidden
+                          ? 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]'
+                          : 'border-[var(--accent)]/50 bg-[var(--accent)]/15 text-[var(--accent-text)]'
+                      }`}
+                      title={isHidden ? (isTr ? 'Göster' : 'Show') : isTr ? 'Gizle' : 'Hide'}
+                    >
+                      {isHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
-      {/* Reorder & Show/Hide Individual Studio Suite Buttons */}
-      <div className="pt-2">
-        <p className="mb-2 text-[11px] font-bold text-[var(--muted)]">
-          {isTr ? 'Stüdyo Şerit Modüllerini Sırala veya Gizle' : 'Reorder or Hide Studio Bar Modules'}
-        </p>
-        <div className="space-y-1.5">
-          {suitesOrder.map((id, idx) => {
-            const meta = SUITE_META[id];
-            const Icon = meta.icon;
-            const isHidden = hiddenSuites.includes(id);
-            return (
-              <div
-                key={id}
-                className={`flex items-center gap-2.5 rounded-2xl border px-3 py-2 transition-opacity ${
-                  isHidden
-                    ? 'border-[var(--line)] bg-[var(--inset)]/60 opacity-55'
-                    : 'border-[var(--line)] bg-[var(--inset)]'
-                }`}
+        {/* Library View & Project Folders */}
+        <div className="border-t border-[var(--line)] pt-3 space-y-2.5">
+          <div className="flex items-center gap-1.5">
+            <HardDrive className="h-3.5 w-3.5 text-[var(--accent-text)]" />
+            <p className="text-[11px] font-extrabold uppercase tracking-wider text-[var(--muted)]">
+              {isTr ? 'Kitaplık Görünümü & Proje Klasörleri' : 'Library View & Project Folders'}
+            </p>
+          </div>
+
+          <div className="divide-y divide-[var(--line)]">
+            <ToggleRow
+              title={isTr ? 'Görsel Depolama Özet Çubuğu' : 'Visual Storage Breakdown Bar'}
+              desc={isTr ? 'Kitaplık üstünde Video/Ses/Görsel/PDF boyut dağılımı ve 7+ gün temizlik butonu' : 'Show media storage breakdown & 7d+ cleanup button'}
+              checked={prefs.proLibShowStorageSummary !== false}
+              onToggle={() =>
+                onChangePrefs((p) => ({...p, proLibShowStorageSummary: p.proLibShowStorageSummary === false}))
+              }
+            />
+            <ToggleRow
+              title={isTr ? 'Proje Klasörleri & Renkli Etiketler' : 'Project Folders & Color Tags'}
+              desc={isTr ? 'Kitaplık dosyalarını klasör etiketlerine göre grupla ve filtrele' : 'Group and filter Library exports by custom folder tags'}
+              checked={prefs.proLibShowFoldersBar !== false}
+              onToggle={() =>
+                onChangePrefs((p) => ({...p, proLibShowFoldersBar: p.proLibShowFoldersBar === false}))
+              }
+            />
+          </div>
+
+          <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-bold text-[var(--muted)]">
+                {isTr ? `Kayıtlı Proje Klasörleri (${folders.length})` : `Saved Project Folders (${folders.length})`}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  saveLibraryFolders(DEFAULT_LIB_FOLDERS);
+                  setFolders(DEFAULT_LIB_FOLDERS);
+                }}
+                className="text-[11px] font-bold text-[var(--accent-text)] hover:underline"
               >
-                <Icon className="h-4 w-4 shrink-0 text-[var(--accent-text)]" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-bold text-[var(--ink)]">{isTr ? meta.tr : meta.en}</p>
-                  <p className="truncate text-[10px] text-[var(--muted)]">{isTr ? meta.descTr : meta.descEn}</p>
+                {isTr ? 'Varsayılanlar' : 'Defaults'}
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {folders.map((f) => (
+                <div
+                  key={f.id}
+                  className="flex items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1 text-xs font-bold text-[var(--ink)]"
+                >
+                  <span className="h-2.5 w-2.5 rounded-full" style={{backgroundColor: f.color}} />
+                  <span>{f.name}</span>
+                  {folders.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = folders.filter((x) => x.id !== f.id);
+                        saveLibraryFolders(next);
+                        setFolders(next);
+                        const fallbackId = next[0]?.id ?? '';
+                        const nextRules = loadAutoCategoryRules().map((r) =>
+                          r.folderId === f.id ? {...r, folderId: fallbackId, enabled: Boolean(fallbackId) && r.enabled} : r
+                        );
+                        saveAutoCategoryRules(nextRules);
+                        const tags = loadLibraryItemTags();
+                        for (const [itemId, folderId] of Object.entries(tags)) {
+                          if (folderId === f.id) {
+                            setLibraryItemFolder(itemId, null);
+                          }
+                        }
+                      }}
+                      className="ml-0.5 text-[var(--muted)] hover:text-[var(--danger)]"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <button
-                    type="button"
-                    disabled={idx === 0}
-                    onClick={() => moveSuite(idx, -1)}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] disabled:opacity-30"
-                    aria-label="Move Up"
-                  >
-                    <ArrowUp className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={idx === suitesOrder.length - 1}
-                    onClick={() => moveSuite(idx, 1)}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] disabled:opacity-30"
-                    aria-label="Move Down"
-                  >
-                    <ArrowDown className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => toggleSuiteHidden(id)}
-                    className={`flex h-7 w-7 items-center justify-center rounded-lg border ${
-                      isHidden
-                        ? 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]'
-                        : 'border-[var(--accent)]/50 bg-[var(--accent)]/15 text-[var(--accent-text)]'
-                    }`}
-                    title={isHidden ? (isTr ? 'Göster' : 'Show') : isTr ? 'Gizle' : 'Hide'}
-                  >
-                    {isHidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                placeholder={isTr ? 'Yeni klasör adı…' : 'New folder name…'}
+                className="min-h-[38px] min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--ink)]"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (!newFolderName.trim()) return;
+                  const colors = ['#06B6D4', '#8B5CF6', '#F97316', '#EC4899', '#22C55E', '#3B82F6'];
+                  const next = [
+                    ...folders,
+                    {
+                      id: `fld_${Date.now()}`,
+                      name: newFolderName.trim(),
+                      color: colors[folders.length % colors.length],
+                    },
+                  ];
+                  saveLibraryFolders(next);
+                  setFolders(next);
+                  setNewFolderName('');
+                }}
+                className="morph-accent-btn flex min-h-[38px] shrink-0 items-center gap-1 rounded-xl px-3.5 text-xs font-bold"
+              >
+                <FolderPlus className="h-3.5 w-3.5" />
+                <span>{isTr ? 'Ekle' : 'Add'}</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
-    </section>
+    </SettingsAccordionCard>
   );
 };
 
+/**
+ * Reorganized Studio Tab (Stüdyo) — Video Editor (including graduated mobile controls & sizing),
+ * Audio Studio defaults, Image Studio defaults, and Pinned Tools & Automation Pipelines.
+ */
 export const SettingsProTab: React.FC<SettingsProTabProps> = ({
   prefs,
   lang,
@@ -710,12 +938,15 @@ export const SettingsProTab: React.FC<SettingsProTabProps> = ({
 
   const [pipelines, setPipelines] = useState<MorphPipeline[]>(() => loadPipelines());
   const [pinned, setPinned] = useState<QuickToolEntry[]>(() => loadPinnedTools());
-  const [folders, setFolders] = useState<LibraryFolder[]>(() => loadLibraryFolders());
-  const [newFolderName, setNewFolderName] = useState('');
 
   const handleResetAllStudioPrefs = () => {
     onChangePrefs((p) => ({
       ...p,
+      expArmadilloReel: true,
+      expArmadilloHideOnFullPreview: true,
+      expArmadilloHideOnPlay: true,
+      expVideoMobileGridInHeader: true,
+      expVideoMobileMuteInTransport: true,
       proAudioDefaultEq: 'flat',
       proAudioNormalizeDefault: true,
       proAudioCompressorDefault: false,
@@ -724,12 +955,10 @@ export const SettingsProTab: React.FC<SettingsProTabProps> = ({
       proImageDefaultQuality: 78,
       proImageDefaultTargetKb: 500,
       proImageBgTolerance: 34,
-      proLibShowStorageSummary: true,
-      proLibShowFoldersBar: true,
       videoEditorSizing: DEFAULT_VE_SIZING,
     }));
     onShowToast?.(
-      isTr ? 'Tüm gelişmiş modül ayarları varsayılana döndürüldü.' : 'All advanced module settings restored to defaults.'
+      isTr ? 'Tüm stüdyo varsayılanları sıfırlandı.' : 'All studio defaults restored.'
     );
   };
 
@@ -740,142 +969,166 @@ export const SettingsProTab: React.FC<SettingsProTabProps> = ({
   const bgTol = prefs.proImageBgTolerance ?? 34;
   const bgTolPct = ((bgTol - 10) / 70) * 100;
 
+  const veSizing = clampVideoEditorSizing(prefs.videoEditorSizing);
+  const isCustomSizing =
+    veSizing.dockTabHeight !== DEFAULT_VE_SIZING.dockTabHeight ||
+    veSizing.controlBtnSize !== DEFAULT_VE_SIZING.controlBtnSize ||
+    veSizing.colorSwatchSize !== DEFAULT_VE_SIZING.colorSwatchSize ||
+    veSizing.watermarkGridHeight !== DEFAULT_VE_SIZING.watermarkGridHeight;
+  const patchSizing = (patch: Partial<VideoEditorSizingPrefs>) =>
+    onChangePrefs((p) => ({
+      ...p,
+      videoEditorSizing: {...p.videoEditorSizing, ...patch},
+    }));
+
+  const activeEqPreset = EQ_PRESETS[prefs.proAudioDefaultEq || 'flat'] ?? EQ_PRESETS.flat;
+  const audioBadge = [
+    isTr ? activeEqPreset.labelTr : activeEqPreset.labelEn,
+    prefs.proAudioNormalizeDefault !== false ? 'Normalize' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  const imgFormat = (prefs.proImageDefaultFormat || 'webp').toUpperCase();
+  const imgTargetKb = prefs.proImageDefaultTargetKb ?? 500;
+  const imageBadge = `${imgFormat} · %${imgQuality} · ${imgTargetKb >= 1024 ? `${imgTargetKb / 1024}MB` : `${imgTargetKb}KB`}`;
+
+  const videoBadge = prefs.expArmadilloReel !== false
+    ? isTr ? 'Sinema Çarkı Açık' : 'Cinema Wheel On'
+    : isTr ? 'Düz Alt Çubuk' : 'Flat Bottom Bar';
+
+  const workflowBadge = `${pinned.length} ${isTr ? 'sabit' : 'pinned'} · ${pipelines.length} ${isTr ? 'tarif' : 'recipes'}`;
+
   return (
-    <div className="mt-5 space-y-4">
-      {/* Top Banner + Reset */}
-      <div className="flex items-center justify-between gap-3 rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[var(--accent)]/15 text-[var(--accent-text)]">
-            <Layers className="h-5 w-5" />
+    <div className="mt-4 space-y-3.5">
+      {/* Compact Studio Header + Reset */}
+      <div className="flex items-center justify-between gap-3 rounded-3xl border border-[var(--line)] bg-[var(--surface)] px-4 py-3.5 sm:px-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
+            <Layers className="h-4.5 w-4.5" />
           </div>
           <div className="min-w-0">
             <h2 className="truncate text-sm font-extrabold text-[var(--ink)]">
-              {isTr ? 'Gelişmiş Modüller & İş Akışı' : 'Advanced Modules & Workflow'}
+              {isTr ? 'Stüdyo & İş Akışı Varsayılanları' : 'Studio & Workflow Defaults'}
             </h2>
-            <p className="text-[11px] text-[var(--muted)]">
+            <p className="truncate text-[11px] text-[var(--muted)]">
               {isTr
-                ? 'Tüm stüdyo modüllerinin varsayılanlarını seç ve kayıtlı verilerini yönet.'
-                : 'Configure defaults and manage data for all studios & tools.'}
+                ? 'Video, Ses, Görsel stüdyoları ve kayıtlı kısayollar.'
+                : 'Video, Audio, Image studios and saved workflow shortcuts.'}
             </p>
           </div>
         </div>
         <button
           type="button"
           onClick={handleResetAllStudioPrefs}
-          title={isTr ? 'Gelişmiş Ayarları Sıfırla' : 'Reset Advanced Settings'}
+          title={isTr ? 'Stüdyo Ayarlarını Sıfırla' : 'Reset Studio Settings'}
+          aria-label={isTr ? 'Stüdyo Ayarlarını Sıfırla' : 'Reset Studio Settings'}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent-text)] hover:border-[var(--accent)]"
         >
           <RotateCcw className="h-4 w-4" />
         </button>
       </div>
 
-      {/* 1. PINNED TOOLS & SAVED PIPELINES MANAGER */}
-      <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4 space-y-3.5">
-        <div className="flex items-center gap-2">
-          <Pin className="h-4 w-4 text-[var(--accent-text)]" />
-          <h3 className="text-xs font-extrabold uppercase tracking-wider text-[var(--ink)]">
-            {isTr ? '1. Sabitlenen Araçlar & Otomasyon Tarifleri' : '1. Pinned Tools & Saved Pipelines'}
-          </h3>
-        </div>
-
-        <div>
-          <p className="mb-1.5 text-[11px] font-bold text-[var(--muted)]">
-            {isTr ? 'Stüdyo’da Sabitlenen Kısayolları Seç' : 'Toggle Pinned Studio Shortcuts'}
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {PINNABLE_CATALOG.map((item) => {
-              const isPinned = pinned.some((p) => p.id === item.id);
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => {
-                    const next = togglePinnedTool(item);
-                    setPinned(next);
-                    onPinnedChanged?.();
-                  }}
-                  className={`flex items-center gap-1 rounded-xl border px-2.5 py-1.5 text-[11px] font-bold transition-colors ${
-                    isPinned
-                      ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
-                      : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
-                  }`}
-                >
-                  <Check className={`h-3 w-3 ${isPinned ? 'opacity-100' : 'opacity-20'}`} />
-                  <span>{isTr ? item.labelTr : item.labelEn}</span>
-                </button>
-              );
-            })}
+      {/* 1. VIDEO EDITOR (Mobile UI + Control Sizes) — Default Open */}
+      <SettingsAccordionCard
+        icon={<Film className="h-4.5 w-4.5" />}
+        title={isTr ? 'Video Düzenleyici' : 'Video Editor'}
+        subtitle={
+          isTr
+            ? 'Sinema çarkı, mobil üst/oynatma çubuğu ve dokunma boyutları'
+            : 'Cinema wheel, mobile header/transport bar & control sizes'
+        }
+        badge={videoBadge}
+        defaultOpen={true}
+      >
+        <div className="space-y-4">
+          {/* Graduated Stable Mobile Video Editor Controls */}
+          <div>
+            <p className="mb-1 text-[11px] font-extrabold uppercase tracking-wider text-[var(--muted)]">
+              {isTr ? 'Mobil Arayüz & Sinema Çarkı' : 'Mobile UI & Cinema Wheel'}
+            </p>
+            <div className="divide-y divide-[var(--line)]">
+              <ToggleRow
+                title={isTr ? 'Katlanan Armadillo Sinema Çarkı' : 'Armadillo Fold Cinema Wheel'}
+                desc={
+                  isTr
+                    ? 'Dikey mobil düzenleyicide 3B katlanan sinema çarkı kullanır; kapatıldığında sabit alt çubuk gelir.'
+                    : 'Uses the 3D folding cinema reel in portrait editor; turn off for a flat bottom dock.'
+                }
+                checked={prefs.expArmadilloReel !== false}
+                onToggle={() =>
+                  onChangePrefs((p) => ({...p, expArmadilloReel: p.expArmadilloReel === false}))
+                }
+              />
+              <ToggleRow
+                title={isTr ? 'Tam Önizlemede Sinema Çarkını Gizle' : 'Hide Cinema Wheel in Full Preview'}
+                desc={
+                  isTr
+                    ? 'Önizlemeyi en alta çekip tam görünüm açtığında köşedeki çark otomatik gizlenir.'
+                    : 'Automatically hides the corner wheel when expanding preview all the way down.'
+                }
+                checked={prefs.expArmadilloHideOnFullPreview !== false}
+                onToggle={() =>
+                  onChangePrefs((p) => ({
+                    ...p,
+                    expArmadilloHideOnFullPreview: p.expArmadilloHideOnFullPreview === false,
+                  }))
+                }
+              />
+              <ToggleRow
+                title={isTr ? 'Video Oynatırken Sinema Çarkını Gizle' : 'Hide Cinema Wheel While Playing'}
+                desc={
+                  isTr
+                    ? 'Oynatma sırasında çark gizlenir, duraklattığında anında geri görünür.'
+                    : 'Hides the corner wheel during playback and restores it on pause.'
+                }
+                checked={prefs.expArmadilloHideOnPlay !== false}
+                onToggle={() =>
+                  onChangePrefs((p) => ({
+                    ...p,
+                    expArmadilloHideOnPlay: p.expArmadilloHideOnPlay === false,
+                  }))
+                }
+              />
+              <ToggleRow
+                title={isTr ? 'Üst Çubukta 3×3 Izgara & Kıyaslama' : 'Header 3×3 Grid & Split Compare'}
+                desc={
+                  isTr
+                    ? 'Mobil üst çubukta kadraj ızgarası ve önce/sonra kısayollarını gösterir.'
+                    : 'Shows 3×3 grid and split before/after shortcuts in the mobile header.'
+                }
+                checked={prefs.expVideoMobileGridInHeader !== false}
+                onToggle={() =>
+                  onChangePrefs((p) => ({
+                    ...p,
+                    expVideoMobileGridInHeader: p.expVideoMobileGridInHeader === false,
+                  }))
+                }
+              />
+              <ToggleRow
+                title={isTr ? 'Oynatma Çubuğunda Sessize Al (Mute)' : 'Transport Bar Master Mute'}
+                desc={
+                  isTr
+                    ? 'Mobil oynatma çubuğunda kompakt tek dokunuş ana ses kapatma düğmesi gösterir.'
+                    : 'Shows a compact Master Mute toggle directly in the mobile transport bar.'
+                }
+                checked={prefs.expVideoMobileMuteInTransport !== false}
+                onToggle={() =>
+                  onChangePrefs((p) => ({
+                    ...p,
+                    expVideoMobileMuteInTransport: p.expVideoMobileMuteInTransport === false,
+                  }))
+                }
+              />
+            </div>
           </div>
-        </div>
 
-        <div className="border-t border-[var(--line)] pt-3">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[var(--muted)]">
-              {isTr ? `Kayıtlı Otomasyon Tarifleri (${pipelines.length})` : `Saved Automation Pipelines (${pipelines.length})`}
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                savePipelines(DEFAULT_PIPELINES);
-                setPipelines(DEFAULT_PIPELINES);
-                onShowToast?.(isTr ? 'Varsayılan tarifler geri yüklendi.' : 'Default pipelines restored.');
-              }}
-              className="text-[11px] font-bold text-[var(--accent-text)] hover:underline"
-            >
-              {isTr ? 'Varsayılanları Yükle' : 'Restore Defaults'}
-            </button>
-          </div>
-          <div className="space-y-1.5">
-            {pipelines.map((pipe) => (
-              <div
-                key={pipe.id}
-                className="flex items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 py-2"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-bold text-[var(--ink)]">{pipe.name}</p>
-                  <p className="truncate text-[10px] text-[var(--muted)]">{pipe.description}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = pipelines.filter((x) => x.id !== pipe.id);
-                    const safe = next.length > 0 ? next : DEFAULT_PIPELINES;
-                    savePipelines(safe);
-                    setPipelines(safe);
-                  }}
-                  className="text-[var(--muted)] hover:text-[var(--danger)]"
-                  title={isTr ? 'Tarifi Sil' : 'Delete Pipeline'}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 3. VIDEO EDITOR CONTROL SIZING */}
-      {(() => {
-        const veSizing = clampVideoEditorSizing(prefs.videoEditorSizing);
-        const isCustomSizing =
-          veSizing.dockTabHeight !== DEFAULT_VE_SIZING.dockTabHeight ||
-          veSizing.controlBtnSize !== DEFAULT_VE_SIZING.controlBtnSize ||
-          veSizing.colorSwatchSize !== DEFAULT_VE_SIZING.colorSwatchSize ||
-          veSizing.watermarkGridHeight !== DEFAULT_VE_SIZING.watermarkGridHeight;
-        const patchSizing = (patch: Partial<VideoEditorSizingPrefs>) =>
-          onChangePrefs((p) => ({
-            ...p,
-            videoEditorSizing: {...p.videoEditorSizing, ...patch},
-          }));
-        return (
-          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4 space-y-3">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Film className="h-4 w-4 text-[var(--accent-text)]" />
-                <h3 className="text-xs font-extrabold uppercase tracking-wider text-[var(--ink)]">
-                  {isTr ? '2. Video Düzenleyici Kontrol Boyutları' : '2. Video Editor Control Sizes'}
-                </h3>
-              </div>
+          {/* Control Sizing */}
+          <div className="border-t border-[var(--line)] pt-3.5 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[11px] font-extrabold uppercase tracking-wider text-[var(--muted)]">
+                {isTr ? 'Kontrol Boyutları' : 'Control Sizes'}
+              </p>
               {isCustomSizing && (
                 <button
                   type="button"
@@ -887,11 +1140,6 @@ export const SettingsProTab: React.FC<SettingsProTabProps> = ({
                 </button>
               )}
             </div>
-            <p className="text-[11px] leading-snug text-[var(--muted)]">
-              {isTr
-                ? 'Alt stüdyo simgeleri, FPS/kapatma butonları, renk noktaları ve filigran ızgarasını düzeni bozmadan büyüt veya küçült.'
-                : 'Resize bottom dock icons, buttons, color swatches, and watermark grid safely without breaking layout.'}
-            </p>
 
             {/* Quick Size Presets */}
             <div className="grid grid-cols-3 gap-1.5">
@@ -993,320 +1241,306 @@ export const SettingsProTab: React.FC<SettingsProTabProps> = ({
                 );
               })}
             </div>
-          </section>
-        );
-      })()}
-
-      {/* 4. AUDIO STUDIO DEFAULTS */}
-      <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <Sliders className="h-4 w-4 text-[var(--accent-text)]" />
-          <h3 className="text-xs font-extrabold uppercase tracking-wider text-[var(--ink)]">
-            {isTr ? '3. Ses Stüdyosu Varsayılanları' : '3. Audio Studio Defaults'}
-          </h3>
-        </div>
-
-        <div>
-          <label className="text-[11px] font-bold text-[var(--muted)]">
-            {isTr ? 'Varsayılan 10-Bant EQ Profili' : 'Default 10-Band EQ Preset'}
-          </label>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {Object.entries(EQ_PRESETS).map(([k, preset]) => {
-              const active = (prefs.proAudioDefaultEq || 'flat') === k;
-              return (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => onChangePrefs((p) => ({...p, proAudioDefaultEq: k}))}
-                  className={`rounded-xl border px-2.5 py-1.5 text-[11px] font-bold transition-colors ${
-                    active
-                      ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
-                      : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
-                  }`}
-                >
-                  {isTr ? preset.labelTr : preset.labelEn}
-                </button>
-              );
-            })}
           </div>
         </div>
+      </SettingsAccordionCard>
 
-        <div className="divide-y divide-[var(--line)]">
-          <ToggleRow
-            title={isTr ? 'Ses Dengeleme (-1 dB Normalize) Varsayılan Açık' : 'Peak Normalize (-1 dB) On by Default'}
-            desc={isTr ? 'Dışa aktarılan sesleri otomatik olarak dengeli ses düzeyine çıkarır' : 'Automatically normalize rendered audio peak loudness'}
-            checked={prefs.proAudioNormalizeDefault !== false}
-            onToggle={() =>
-              onChangePrefs((p) => ({...p, proAudioNormalizeDefault: p.proAudioNormalizeDefault === false}))
-            }
-          />
-          <ToggleRow
-            title={isTr ? 'Dinamik Kompresör Varsayılan Açık' : 'Dynamics Compressor On by Default'}
-            desc={isTr ? 'Konuşma ve vokal kayıtlarında ani ses patlamalarını dengeler' : 'Even out loud/quiet dynamics automatically'}
-            checked={Boolean(prefs.proAudioCompressorDefault)}
-            onToggle={() =>
-              onChangePrefs((p) => ({...p, proAudioCompressorDefault: !p.proAudioCompressorDefault}))
-            }
-          />
-        </div>
-
-        <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
-          <div className="mb-2.5 flex items-center justify-between gap-2">
-            <span className="text-xs font-semibold text-[var(--ink)]">
-              {isTr ? 'Sessizlik Temizleyici Eşiği' : 'Auto-Silence Threshold'}
-            </span>
-            <span className="font-mono-num text-[11px] font-bold text-[var(--accent-text)]">
-              {silenceDb} dB
-            </span>
-          </div>
-          <input
-            type="range"
-            min={-55}
-            max={-18}
-            step={1}
-            value={silenceDb}
-            aria-label={isTr ? 'Sessizlik Temizleyici Eşiği' : 'Auto-Silence Threshold'}
-            onChange={(e) =>
-              onChangePrefs((p) => ({...p, proAudioSilenceThresholdDb: Number(e.target.value)}))
-            }
-            style={{'--slider-pct': `${silencePct}%`} as React.CSSProperties}
-            className="morph-slider"
-          />
-          <div className="mt-2 flex items-center justify-between font-mono-num text-[10px] font-semibold text-[var(--muted)]">
-            <span>-55 dB</span>
-            <span>-36 dB</span>
-            <span>-18 dB</span>
-          </div>
-        </div>
-      </section>
-
-      {/* 5. IMAGE STUDIO DEFAULTS */}
-      <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <ImageIcon className="h-4 w-4 text-[var(--accent-text)]" />
-          <h3 className="text-xs font-extrabold uppercase tracking-wider text-[var(--ink)]">
-            {isTr ? '4. Görsel Stüdyosu Varsayılanları' : '4. Image Studio Defaults'}
-          </h3>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {/* 2. AUDIO STUDIO DEFAULTS */}
+      <SettingsAccordionCard
+        icon={<Sliders className="h-4.5 w-4.5" />}
+        title={isTr ? 'Ses Stüdyosu Varsayılanları' : 'Audio Studio Defaults'}
+        subtitle={
+          isTr
+            ? '10-bant EQ profili, ses dengeleme, kompresör ve sessizlik eşiği'
+            : '10-band EQ preset, normalize, compressor & silence threshold'
+        }
+        badge={audioBadge}
+        defaultOpen={false}
+      >
+        <div className="space-y-3">
           <div>
-            <p className="mb-1.5 text-[11px] font-bold text-[var(--muted)]">
-              {isTr ? 'Canlı Kıyaslama Çıktı Formatı' : 'Default Compare Format'}
-            </p>
-            <div className="grid grid-cols-4 gap-1.5">
-              {(['webp', 'jpeg', 'avif', 'png'] as const).map((fmt) => (
-                <button
-                  key={fmt}
-                  type="button"
-                  onClick={() => onChangePrefs((p) => ({...p, proImageDefaultFormat: fmt}))}
-                  className={`rounded-xl border py-1.5 text-xs font-bold uppercase transition-colors ${
-                    (prefs.proImageDefaultFormat || 'webp') === fmt
-                      ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
-                      : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
-                  }`}
-                >
-                  {fmt}
-                </button>
-              ))}
+            <label className="text-[11px] font-bold text-[var(--muted)]">
+              {isTr ? 'Varsayılan 10-Bant EQ Profili' : 'Default 10-Band EQ Preset'}
+            </label>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {Object.entries(EQ_PRESETS).map(([k, preset]) => {
+                const active = (prefs.proAudioDefaultEq || 'flat') === k;
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => onChangePrefs((p) => ({...p, proAudioDefaultEq: k}))}
+                    className={`min-h-[34px] rounded-xl border px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                      active
+                        ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
+                        : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
+                    }`}
+                  >
+                    {isTr ? preset.labelTr : preset.labelEn}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
+          <div className="divide-y divide-[var(--line)]">
+            <ToggleRow
+              title={isTr ? 'Ses Dengeleme (-1 dB Normalize) Varsayılan Açık' : 'Peak Normalize (-1 dB) On by Default'}
+              desc={isTr ? 'Dışa aktarılan sesleri otomatik olarak dengeli ses düzeyine çıkarır' : 'Automatically normalize rendered audio peak loudness'}
+              checked={prefs.proAudioNormalizeDefault !== false}
+              onToggle={() =>
+                onChangePrefs((p) => ({...p, proAudioNormalizeDefault: p.proAudioNormalizeDefault === false}))
+              }
+            />
+            <ToggleRow
+              title={isTr ? 'Dinamik Kompresör Varsayılan Açık' : 'Dynamics Compressor On by Default'}
+              desc={isTr ? 'Konuşma ve vokal kayıtlarında ani ses patlamalarını dengeler' : 'Even out loud/quiet dynamics automatically'}
+              checked={Boolean(prefs.proAudioCompressorDefault)}
+              onToggle={() =>
+                onChangePrefs((p) => ({...p, proAudioCompressorDefault: !p.proAudioCompressorDefault}))
+              }
+            />
+          </div>
+
+          <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
+            <div className="mb-2.5 flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-[var(--ink)]">
+                {isTr ? 'Sessizlik Temizleyici Eşiği' : 'Auto-Silence Threshold'}
+              </span>
+              <span className="font-mono-num text-[11px] font-bold text-[var(--accent-text)]">
+                {silenceDb} dB
+              </span>
+            </div>
+            <input
+              type="range"
+              min={-55}
+              max={-18}
+              step={1}
+              value={silenceDb}
+              aria-label={isTr ? 'Sessizlik Temizleyici Eşiği' : 'Auto-Silence Threshold'}
+              onChange={(e) =>
+                onChangePrefs((p) => ({...p, proAudioSilenceThresholdDb: Number(e.target.value)}))
+              }
+              style={{'--slider-pct': `${silencePct}%`} as React.CSSProperties}
+              className="morph-slider"
+            />
+            <div className="mt-2 flex items-center justify-between font-mono-num text-[10px] font-semibold text-[var(--muted)]">
+              <span>-55 dB</span>
+              <span>-36 dB</span>
+              <span>-18 dB</span>
+            </div>
+          </div>
+        </div>
+      </SettingsAccordionCard>
+
+      {/* 3. IMAGE STUDIO DEFAULTS */}
+      <SettingsAccordionCard
+        icon={<ImageIcon className="h-4.5 w-4.5" />}
+        title={isTr ? 'Görsel Stüdyosu Varsayılanları' : 'Image Studio Defaults'}
+        subtitle={
+          isTr
+            ? 'Çıktı formatı, hedef boyut (KB), kalite ve arka plan silme toleransı'
+            : 'Compare format, target KB, quality & background remover tolerance'
+        }
+        badge={imageBadge}
+        defaultOpen={false}
+      >
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <p className="mb-1.5 text-[11px] font-bold text-[var(--muted)]">
+                {isTr ? 'Canlı Kıyaslama Çıktı Formatı' : 'Default Compare Format'}
+              </p>
+              <div className="grid grid-cols-4 gap-1.5">
+                {(['webp', 'jpeg', 'avif', 'png'] as const).map((fmt) => (
+                  <button
+                    key={fmt}
+                    type="button"
+                    onClick={() => onChangePrefs((p) => ({...p, proImageDefaultFormat: fmt}))}
+                    className={`min-h-[36px] rounded-xl border py-1.5 text-xs font-bold uppercase transition-colors ${
+                      (prefs.proImageDefaultFormat || 'webp') === fmt
+                        ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
+                        : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
+                    }`}
+                  >
+                    {fmt}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1.5 text-[11px] font-bold text-[var(--muted)]">
+                {isTr ? 'Varsayılan Hedef Sıkıştırma (KB)' : 'Default Target Size (KB)'}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {[150, 300, 500, 1024, 2048].map((kb) => (
+                  <button
+                    key={kb}
+                    type="button"
+                    onClick={() => onChangePrefs((p) => ({...p, proImageDefaultTargetKb: kb}))}
+                    className={`min-h-[36px] rounded-xl border px-2.5 py-1.5 font-mono text-[11px] font-bold transition-colors ${
+                      (prefs.proImageDefaultTargetKb ?? 500) === kb
+                        ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
+                        : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
+                    }`}
+                  >
+                    {kb >= 1024 ? `${kb / 1024}MB` : `${kb}KB`}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
+              <div className="mb-2.5 flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-[var(--ink)]">
+                  {isTr ? 'Varsayılan Kalite' : 'Default Quality'}
+                </span>
+                <span className="font-mono-num text-[11px] font-bold text-[var(--accent-text)]">
+                  %{imgQuality}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={25}
+                max={100}
+                value={imgQuality}
+                aria-label={isTr ? 'Varsayılan Kalite' : 'Default Quality'}
+                onChange={(e) =>
+                  onChangePrefs((p) => ({...p, proImageDefaultQuality: Number(e.target.value)}))
+                }
+                style={{'--slider-pct': `${imgQualityPct}%`} as React.CSSProperties}
+                className="morph-slider"
+              />
+              <div className="mt-2 flex items-center justify-between font-mono-num text-[10px] font-semibold text-[var(--muted)]">
+                <span>%25</span>
+                <span>%75</span>
+                <span>%100</span>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
+              <div className="mb-2.5 flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-[var(--ink)]">
+                  {isTr ? 'Arka Plan Silme Toleransı' : 'BG Remover Tolerance'}
+                </span>
+                <span className="font-mono-num text-[11px] font-bold text-[var(--accent-text)]">
+                  {bgTol}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={10}
+                max={80}
+                value={bgTol}
+                aria-label={isTr ? 'Arka Plan Silme Toleransı' : 'BG Remover Tolerance'}
+                onChange={(e) =>
+                  onChangePrefs((p) => ({...p, proImageBgTolerance: Number(e.target.value)}))
+                }
+                style={{'--slider-pct': `${bgTolPct}%`} as React.CSSProperties}
+                className="morph-slider"
+              />
+              <div className="mt-2 flex items-center justify-between font-mono-num text-[10px] font-semibold text-[var(--muted)]">
+                <span>10</span>
+                <span>45</span>
+                <span>80</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </SettingsAccordionCard>
+
+      {/* 4. PINNED TOOLS & SAVED PIPELINES MANAGER */}
+      <SettingsAccordionCard
+        icon={<Pin className="h-4.5 w-4.5" />}
+        title={isTr ? 'Kısayollar & Otomasyon Tarifleri' : 'Pinned Shortcuts & Pipelines'}
+        subtitle={
+          isTr
+            ? 'Sabitlenen stüdyo kısayollarını ve kayıtlı çok adımlı tarifleri yönet'
+            : 'Toggle pinned shortcuts and manage saved multi-step pipelines'
+        }
+        badge={workflowBadge}
+        defaultOpen={false}
+      >
+        <div className="space-y-3.5">
           <div>
             <p className="mb-1.5 text-[11px] font-bold text-[var(--muted)]">
-              {isTr ? 'Varsayılan Hedef Sıkıştırma (KB)' : 'Default Target Size (KB)'}
+              {isTr ? 'Stüdyo’da Sabitlenen Kısayolları Seç' : 'Toggle Pinned Studio Shortcuts'}
             </p>
             <div className="flex flex-wrap gap-1.5">
-              {[150, 300, 500, 1024, 2048].map((kb) => (
-                <button
-                  key={kb}
-                  type="button"
-                  onClick={() => onChangePrefs((p) => ({...p, proImageDefaultTargetKb: kb}))}
-                  className={`rounded-xl border px-2.5 py-1.5 font-mono text-[11px] font-bold transition-colors ${
-                    (prefs.proImageDefaultTargetKb ?? 500) === kb
-                      ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
-                      : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
-                  }`}
-                >
-                  {kb >= 1024 ? `${kb / 1024}MB` : `${kb}KB`}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
-            <div className="mb-2.5 flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold text-[var(--ink)]">
-                {isTr ? 'Varsayılan Kalite' : 'Default Quality'}
-              </span>
-              <span className="font-mono-num text-[11px] font-bold text-[var(--accent-text)]">
-                %{imgQuality}
-              </span>
-            </div>
-            <input
-              type="range"
-              min={25}
-              max={100}
-              value={imgQuality}
-              aria-label={isTr ? 'Varsayılan Kalite' : 'Default Quality'}
-              onChange={(e) =>
-                onChangePrefs((p) => ({...p, proImageDefaultQuality: Number(e.target.value)}))
-              }
-              style={{'--slider-pct': `${imgQualityPct}%`} as React.CSSProperties}
-              className="morph-slider"
-            />
-            <div className="mt-2 flex items-center justify-between font-mono-num text-[10px] font-semibold text-[var(--muted)]">
-              <span>%25</span>
-              <span>%75</span>
-              <span>%100</span>
+              {PINNABLE_CATALOG.map((item) => {
+                const isPinned = pinned.some((p) => p.id === item.id);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      const next = togglePinnedTool(item);
+                      setPinned(next);
+                      onPinnedChanged?.();
+                    }}
+                    className={`flex min-h-[34px] items-center gap-1 rounded-xl border px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                      isPinned
+                        ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
+                        : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
+                    }`}
+                  >
+                    <Check className={`h-3 w-3 ${isPinned ? 'opacity-100' : 'opacity-20'}`} />
+                    <span>{isTr ? item.labelTr : item.labelEn}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5">
-            <div className="mb-2.5 flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold text-[var(--ink)]">
-                {isTr ? 'Arka Plan Silme Toleransı' : 'BG Remover Tolerance'}
+          <div className="border-t border-[var(--line)] pt-3">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[11px] font-bold text-[var(--muted)]">
+                {isTr ? `Kayıtlı Otomasyon Tarifleri (${pipelines.length})` : `Saved Automation Pipelines (${pipelines.length})`}
               </span>
-              <span className="font-mono-num text-[11px] font-bold text-[var(--accent-text)]">
-                {bgTol}
-              </span>
-            </div>
-            <input
-              type="range"
-              min={10}
-              max={80}
-              value={bgTol}
-              aria-label={isTr ? 'Arka Plan Silme Toleransı' : 'BG Remover Tolerance'}
-              onChange={(e) =>
-                onChangePrefs((p) => ({...p, proImageBgTolerance: Number(e.target.value)}))
-              }
-              style={{'--slider-pct': `${bgTolPct}%`} as React.CSSProperties}
-              className="morph-slider"
-            />
-            <div className="mt-2 flex items-center justify-between font-mono-num text-[10px] font-semibold text-[var(--muted)]">
-              <span>10</span>
-              <span>45</span>
-              <span>80</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 6. LIBRARY FOLDERS & STORAGE CONTROLS */}
-      <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <HardDrive className="h-4 w-4 text-[var(--accent-text)]" />
-          <h3 className="text-xs font-extrabold uppercase tracking-wider text-[var(--ink)]">
-            {isTr ? '5. Kitaplık Klasörleri & Depolama Görünümü' : '5. Library Folders & Storage UI'}
-          </h3>
-        </div>
-
-        <div className="divide-y divide-[var(--line)]">
-          <ToggleRow
-            title={isTr ? 'Görsel Depolama Özet Çubuğu' : 'Visual Storage Breakdown Bar'}
-            desc={isTr ? 'Kitaplık üstünde Video/Ses/Görsel/PDF boyut dağılımı ve 7+ gün temizlik butonu' : 'Show media storage breakdown & 7d+ cleanup button'}
-            checked={prefs.proLibShowStorageSummary !== false}
-            onToggle={() =>
-              onChangePrefs((p) => ({...p, proLibShowStorageSummary: p.proLibShowStorageSummary === false}))
-            }
-          />
-          <ToggleRow
-            title={isTr ? 'Proje Klasörleri & Renkli Etiketler' : 'Project Folders & Color Tags'}
-            desc={isTr ? 'Kitaplık dosyalarını klasör etiketlerine göre grupla ve filtrele' : 'Group and filter Library exports by custom folder tags'}
-            checked={prefs.proLibShowFoldersBar !== false}
-            onToggle={() =>
-              onChangePrefs((p) => ({...p, proLibShowFoldersBar: p.proLibShowFoldersBar === false}))
-            }
-          />
-        </div>
-
-        {/* Manage Library Folders directly from Settings */}
-        <div className="border-t border-[var(--line)] pt-3 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-[var(--muted)]">
-              {isTr ? `Kayıtlı Proje Klasörleri (${folders.length})` : `Saved Project Folders (${folders.length})`}
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                saveLibraryFolders(DEFAULT_LIB_FOLDERS);
-                setFolders(DEFAULT_LIB_FOLDERS);
-              }}
-              className="text-[11px] font-bold text-[var(--accent-text)] hover:underline"
-            >
-              {isTr ? 'Varsayılanlar' : 'Defaults'}
-            </button>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {folders.map((f) => (
-              <div
-                key={f.id}
-                className="flex items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2.5 py-1 text-xs font-bold text-[var(--ink)]"
+              <button
+                type="button"
+                onClick={() => {
+                  savePipelines(DEFAULT_PIPELINES);
+                  setPipelines(DEFAULT_PIPELINES);
+                  onShowToast?.(isTr ? 'Varsayılan tarifler geri yüklendi.' : 'Default pipelines restored.');
+                }}
+                className="text-[11px] font-bold text-[var(--accent-text)] hover:underline"
               >
-                <span className="h-2.5 w-2.5 rounded-full" style={{backgroundColor: f.color}} />
-                <span>{f.name}</span>
-                {folders.length > 1 && (
+                {isTr ? 'Varsayılanları Yükle' : 'Restore Defaults'}
+              </button>
+            </div>
+            <div className="space-y-1.5">
+              {pipelines.map((pipe) => (
+                <div
+                  key={pipe.id}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-bold text-[var(--ink)]">{pipe.name}</p>
+                    <p className="truncate text-[10px] text-[var(--muted)]">{pipe.description}</p>
+                  </div>
                   <button
                     type="button"
                     onClick={() => {
-                      const next = folders.filter((x) => x.id !== f.id);
-                      saveLibraryFolders(next);
-                      setFolders(next);
-                      const fallbackId = next[0]?.id ?? '';
-                      const nextRules = loadAutoCategoryRules().map((r) =>
-                        r.folderId === f.id ? {...r, folderId: fallbackId, enabled: Boolean(fallbackId) && r.enabled} : r
-                      );
-                      saveAutoCategoryRules(nextRules);
-                      const tags = loadLibraryItemTags();
-                      for (const [itemId, folderId] of Object.entries(tags)) {
-                        if (folderId === f.id) {
-                          setLibraryItemFolder(itemId, null);
-                        }
-                      }
+                      const next = pipelines.filter((x) => x.id !== pipe.id);
+                      const safe = next.length > 0 ? next : DEFAULT_PIPELINES;
+                      savePipelines(safe);
+                      setPipelines(safe);
                     }}
-                    className="ml-0.5 text-[var(--muted)] hover:text-[var(--danger)]"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] hover:text-[var(--danger)]"
+                    title={isTr ? 'Tarifi Sil' : 'Delete Pipeline'}
                   >
-                    ×
+                    <Trash2 className="h-3.5 w-3.5" />
                   </button>
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
-              placeholder={isTr ? 'Yeni klasör adı…' : 'New folder name…'}
-              className="min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 py-2 text-xs text-[var(--ink)]"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                if (!newFolderName.trim()) return;
-                const colors = ['#06B6D4', '#8B5CF6', '#F97316', '#EC4899', '#22C55E', '#3B82F6'];
-                const next = [
-                  ...folders,
-                  {
-                    id: `fld_${Date.now()}`,
-                    name: newFolderName.trim(),
-                    color: colors[folders.length % colors.length],
-                  },
-                ];
-                saveLibraryFolders(next);
-                setFolders(next);
-                setNewFolderName('');
-              }}
-              className="morph-accent-btn flex items-center gap-1 rounded-xl px-3.5 text-xs font-bold"
-            >
-              <FolderPlus className="h-3.5 w-3.5" />
-              <span>{isTr ? 'Ekle' : 'Add'}</span>
-            </button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      </section>
+      </SettingsAccordionCard>
     </div>
   );
 };

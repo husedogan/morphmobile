@@ -250,6 +250,31 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
   const wheelBoxRef = useRef<HTMLDivElement | null>(null);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [hoveredDockTab, setHoveredDockTab] = useState<VideoEditorTab | null>(null);
+  const [ghostClickShield, setGhostClickShield] = useState(false);
+  const ghostShieldTimerRef = useRef<number | null>(null);
+  const suppressFabTimerRef = useRef<number | null>(null);
+
+  const armGhostClickShield = useCallback(() => {
+    setGhostClickShield(true);
+    if (ghostShieldTimerRef.current !== null) {
+      window.clearTimeout(ghostShieldTimerRef.current);
+    }
+    ghostShieldTimerRef.current = window.setTimeout(() => {
+      setGhostClickShield(false);
+      ghostShieldTimerRef.current = null;
+    }, 320);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (ghostShieldTimerRef.current !== null) window.clearTimeout(ghostShieldTimerRef.current);
+      if (suppressFabTimerRef.current !== null) window.clearTimeout(suppressFabTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!wheelOpen) setHoveredIdx(null);
+  }, [wheelOpen]);
 
   useEffect(() => {
     if (!isFlat) setHoveredDockTab(null);
@@ -403,6 +428,22 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
         setFabDragPos(null);
         onChangeWheelSide(latestSide);
         hapticPulse(14);
+        suppressFabClickRef.current = true;
+        if (suppressFabTimerRef.current !== null) window.clearTimeout(suppressFabTimerRef.current);
+        suppressFabTimerRef.current = window.setTimeout(() => {
+          suppressFabClickRef.current = false;
+          suppressFabTimerRef.current = null;
+        }, 360);
+      } else if (ev.type !== 'pointercancel') {
+        // Because touch calls e.preventDefault(), native click may not fire — open the wheel directly here
+        suppressFabClickRef.current = true;
+        if (suppressFabTimerRef.current !== null) window.clearTimeout(suppressFabTimerRef.current);
+        suppressFabTimerRef.current = window.setTimeout(() => {
+          suppressFabClickRef.current = false;
+          suppressFabTimerRef.current = null;
+        }, 360);
+        hapticPulse(12);
+        onSetWheelOpen(true);
       }
     };
 
@@ -663,10 +704,17 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => {
               e.stopPropagation();
+              try {
+                e.currentTarget.setPointerCapture(e.pointerId);
+              } catch {
+                // Ignore unsupported pointer capture
+              }
               const idx = resolveSliceIndexFromClient(e.clientX, e.clientY);
               if (idx !== null) {
                 setHoveredIdx(idx);
                 hapticPulse(8);
+              } else {
+                setHoveredIdx(null);
               }
             }}
             onPointerMove={(e) => {
@@ -677,14 +725,33 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
               }
             }}
             onPointerUp={(e) => {
+              e.stopPropagation();
+              try {
+                if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+                  e.currentTarget.releasePointerCapture(e.pointerId);
+                }
+              } catch {
+                // Ignore
+              }
               const idx = resolveSliceIndexFromClient(e.clientX, e.clientY);
+              setHoveredIdx(null);
               if (idx !== null) {
                 const picked = EDITOR_TOOL_SLICES[idx];
                 hapticPulse(14);
-                setHoveredIdx(null);
+                armGhostClickShield();
                 onSetWheelOpen(false);
                 onSelectTab(picked.id);
               }
+            }}
+            onPointerCancel={(e) => {
+              try {
+                if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+                  e.currentTarget.releasePointerCapture(e.pointerId);
+                }
+              } catch {
+                // Ignore
+              }
+              setHoveredIdx(null);
             }}
             className="morph-wheel-aperture relative aspect-square w-[min(352px,92vw)] touch-none select-none"
           >
@@ -848,6 +915,22 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
             )}
           </p>
         </div>
+      )}
+
+      {/* Brief transparent ghost-click shield so touch release after wheel selection never clicks panels underneath */}
+      {ghostClickShield && (
+        <div
+          aria-hidden="true"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          className="fixed inset-0 z-[75] bg-transparent pointer-events-auto"
+        />
       )}
     </>
   );

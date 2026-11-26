@@ -545,22 +545,31 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
       {/* Filter Tabs + Search + Sort Bar */}
       {!simpleMode && items.length > 0 && (
         <div className="mt-3 space-y-2.5">
-          <div className="no-scrollbar flex w-full flex-nowrap items-center gap-1 overflow-x-auto rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-1.5 sm:inline-flex sm:w-auto sm:gap-1.5">
+          {/* Expanding Icon Tab Bar — matches Settings so active filter label never clips on mobile */}
+          <div
+            role="tablist"
+            aria-label={t('Library', lang)}
+            className="no-scrollbar flex w-full items-center gap-1 overflow-x-auto rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-1.5 sm:inline-flex sm:w-auto sm:gap-1.5"
+          >
             {filterTabs.map(({id, label, Icon}) => {
               const active = filter === id;
               return (
                 <button
                   key={id}
                   type="button"
+                  role="tab"
+                  aria-selected={active}
+                  aria-label={label}
+                  title={label}
                   onClick={() => setFilter(id)}
-                  className={`flex min-h-[40px] flex-1 items-center justify-center gap-1.5 rounded-xl px-2.5 text-xs font-semibold whitespace-nowrap transition-colors shrink-0 sm:flex-initial sm:px-3.5 ${
+                  className={`flex min-h-[44px] items-center justify-center rounded-xl text-xs font-semibold whitespace-nowrap transition-colors duration-200 ${
                     active
-                      ? 'morph-accent-solid shadow-sm'
-                      : 'text-[var(--muted)] hover:bg-[var(--inset)]/60 hover:text-[var(--ink)]'
+                      ? 'morph-accent-solid shrink-0 gap-1.5 px-3.5 shadow-sm sm:gap-2 sm:px-4'
+                      : 'min-w-[34px] flex-1 px-0 text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)] sm:w-11 sm:flex-none'
                   }`}
                 >
-                  <Icon className="h-3.5 w-3.5 shrink-0" />
-                  <span>{label}</span>
+                  <Icon className="h-4 w-4 shrink-0" />
+                  {active && <span className="whitespace-nowrap">{label}</span>}
                 </button>
               );
             })}

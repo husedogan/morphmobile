@@ -122,7 +122,7 @@ import {
   PdfStampVisualPreview,
   PdfWatermarkVisualPreview,
 } from './PdfVisualTools';
-import {PdfReaderModal} from './PdfCanvasViewer';
+import {PdfCanvasViewer, PdfReaderModal} from './PdfCanvasViewer';
 import type {VideoEditorState, VideoEditorTab} from './VideoEditor';
 
 const AUDIO_EFFECT_TOOL_IDS = new Set<AudioEffectToolId>([
@@ -539,6 +539,8 @@ function iconForTool(id: ToolId) {
       return Contact;
     case 'ICON_PACK':
       return Package;
+    case 'PDF_VIEWER':
+      return Eye;
     case 'PDF_CREATE':
     case 'PDF_MERGE':
     case 'PDF_TO_IMAGES':
@@ -910,6 +912,39 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
     );
   }
 
+  if (selectedTool === 'PDF_VIEWER' && files[0]?.kind === 'pdf') {
+    const activePdf = files[0];
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-[var(--bg)]">
+        <div className="flex shrink-0 items-center justify-between gap-2.5 border-b border-[var(--line)] bg-[var(--surface)] px-3 py-2.5 sm:px-4">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => (directEntry ? onBack() : setSelectedTool(null))}
+              aria-label={t('Back', lang)}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
+            >
+              <ArrowLeft className="h-4.5 w-4.5" />
+            </button>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-extrabold text-[var(--ink)]">{activePdf.name}</p>
+              <p className="truncate text-[11px] text-[var(--muted)]">
+                {t('ToolPdfViewer', lang)} · {formatBytes(activePdf.size)}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 p-2 sm:p-3">
+          <PdfCanvasViewer
+            file={activePdf.file}
+            lang={lang}
+            fileName={activePdf.name}
+          />
+        </div>
+      </div>
+    );
+  }
+
   if (selectedTool === 'CROP' && files[0]) {
     return (
       <CropEditor
@@ -1121,6 +1156,7 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
               'CROP',
               'FILTERS',
               'SCAN_DOC',
+              'PDF_VIEWER',
               'PDF_CREATE',
               'PDF_MERGE',
               'PDF_SPLIT',
@@ -2026,6 +2062,7 @@ const LocalToolConfig: React.FC<{
         showToolLabels={showToolLabels}
         onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
+        pdfFile={firstIsPdf ? files[0] : null}
         onExport={() =>
           onExport({
             kind: 'compress',
@@ -2084,6 +2121,7 @@ const LocalToolConfig: React.FC<{
         showToolLabels={showToolLabels}
         onToggleToolLabels={onToggleToolLabels}
         onBack={onBack}
+        pdfFile={firstIsPdf ? files[0] : null}
         onExport={() => onExport({kind: 'strip', format: firstIsPdf ? 'pdf' : format, quality})}
       >
         {showToolLabels && (

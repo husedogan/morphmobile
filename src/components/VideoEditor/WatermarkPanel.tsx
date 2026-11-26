@@ -229,7 +229,7 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
           {/* Text or Logo Source Configuration */}
           {watermark.mode === 'text' ? (
             <div className="space-y-2.5 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3">
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-0 items-center gap-2">
                 <input
                   type="text"
                   value={watermark.text}
@@ -240,7 +240,7 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
                 <select
                   value={watermark.fontFamily}
                   onChange={(e) => onChange({fontFamily: e.target.value})}
-                  className="min-h-[38px] rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2 text-[11px] font-bold text-[var(--ink)]"
+                  className="min-h-[38px] min-w-0 max-w-[136px] shrink-0 rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2 text-[11px] font-bold text-[var(--ink)]"
                 >
                   {WATERMARK_FONTS.map((f) => (
                     <option key={f.id} value={f.id}>
@@ -295,8 +295,8 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
               </div>
             </div>
           ) : (
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3">
-              <div className="flex items-center gap-2.5">
+            <div className="flex min-w-0 items-center justify-between gap-2.5 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3">
+              <div className="flex min-w-0 flex-1 items-center gap-2.5">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-[#0A0A0D] p-1.5">
                   <img
                     src={watermark.imageDataUrl || '/morph-mark.png'}
@@ -304,13 +304,13 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
                     className="max-h-full max-w-full object-contain"
                   />
                 </div>
-                <div>
-                  <p className="text-xs font-bold text-[var(--ink)]">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-bold text-[var(--ink)]">
                     {watermark.imagePreset === 'morph'
                       ? tr('Morph Marka Logosu', 'Morph Brand Logo')
                       : tr('Özel Logo Görseli', 'Custom Logo Image')}
                   </p>
-                  <p className="text-[10px] text-[var(--muted)]">
+                  <p className="line-clamp-2 text-[10px] text-[var(--muted)]">
                     {tr('Şeffaf PNG logolar en net sonucu verir.', 'Transparent PNG logos yield crisp overlays.')}
                   </p>
                 </div>
@@ -318,7 +318,7 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
               <button
                 type="button"
                 onClick={() => logoInputRef.current?.click()}
-                className="flex items-center gap-1 rounded-lg border border-[#38BDF8]/40 bg-[#38BDF8]/12 px-2.5 py-1.5 text-[11px] font-bold text-[#38BDF8] hover:bg-[#38BDF8]/20"
+                className="flex min-h-[36px] shrink-0 items-center gap-1 rounded-lg border border-[#38BDF8]/40 bg-[#38BDF8]/12 px-2.5 py-1.5 text-[11px] font-bold text-[#38BDF8] hover:bg-[#38BDF8]/20"
               >
                 <Upload className="h-3.5 w-3.5" />
                 <span>{tr('Değiştir', 'Replace')}</span>

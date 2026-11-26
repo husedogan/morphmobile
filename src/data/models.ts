@@ -29,6 +29,7 @@ export type ToolId =
   | 'GIF_MAKE'
   | 'PASSPORT_GRID'
   | 'ICON_PACK'
+  | 'PDF_VIEWER'
   | 'PDF_CREATE'
   | 'PDF_MERGE'
   | 'PDF_SPLIT'
@@ -125,6 +126,7 @@ export const DEFAULT_WHEEL_CONFIG: WheelConfigPrefs = {
     'local:COMPRESS',
     'local:SCAN_DOC',
     'local:CROP',
+    'local:PDF_VIEWER',
     'local:PDF_CREATE',
     'local:PDF_MERGE',
     'local:PDF_SPLIT',
@@ -518,6 +520,14 @@ export interface Prefs {
   expUiSounds?: boolean;
   /** Experimental: Expanding accent shockwave ring & bounce on Quick Wheel tap/snap */
   expWheelShockwave?: boolean;
+  /** Experimental (default true): Mix non-muted V2–V5 PiP clip audio into Video Editor exports using adelay + amix */
+  expExportPipAudio?: boolean;
+  /** Experimental (default true): Composite overlapping normal V2–V5 clips over V1 during overlap windows when allowVideoLayerOverlap is enabled */
+  expExportOverlapNormalVideo?: boolean;
+  /** Experimental (default true): Live Web Audio Fade, Mute Region, Noise Reduction & Compressor preview in Audio Pro Studio */
+  expAudioLiveDspPreview?: boolean;
+  /** Experimental (default true): Export Audio Pro Studio output as WAV, MP3, M4A, or OGG via FFmpeg */
+  expAudioMultiFormatExport?: boolean;
   // Pro Modules & Features Settings (Visibility, Ordering, Defaults)
   proShowStudioSuitesBar?: boolean;
   proSuitesOrder?: Array<'audio_studio' | 'image_pro' | 'pdf_organize' | 'archive' | 'pipeline'>;
@@ -604,6 +614,7 @@ export const ALL_TOOLS: Record<ToolId, ToolDef> = {
   GIF_MAKE: {id: 'GIF_MAKE', titleKey: 'ToolGifMake', descKey: 'ToolGifMakeDesc'},
   PASSPORT_GRID: {id: 'PASSPORT_GRID', titleKey: 'ToolPassportGrid', descKey: 'ToolPassportGridDesc'},
   ICON_PACK: {id: 'ICON_PACK', titleKey: 'ToolIconPack', descKey: 'ToolIconPackDesc'},
+  PDF_VIEWER: {id: 'PDF_VIEWER', titleKey: 'ToolPdfViewer', descKey: 'ToolPdfViewerDesc'},
   PDF_CREATE: {id: 'PDF_CREATE', titleKey: 'ToolPdfCreate', descKey: 'ToolPdfCreateDesc'},
   PDF_MERGE: {id: 'PDF_MERGE', titleKey: 'ToolPdfMerge', descKey: 'ToolPdfMergeDesc'},
   PDF_SPLIT: {id: 'PDF_SPLIT', titleKey: 'ToolPdfSplit', descKey: 'ToolPdfSplitDesc'},
@@ -1238,6 +1249,7 @@ export function toolsForSelection(files: PickedFile[]): ToolDef[] {
       if (files.length > 1) result.push('PDF_MERGE');
       if (files.length === 1) {
         result.push(
+          'PDF_VIEWER',
           'PDF_SPLIT',
           'PDF_REMOVE_PAGES',
           'PDF_EXTRACT_PAGES',
@@ -1303,6 +1315,7 @@ const WHEEL_TOOL_LABELS: Record<string, {tr: string; en: string}> = {
   GIF_MAKE: {tr: 'GIF Yap', en: 'Make GIF'},
   PASSPORT_GRID: {tr: 'Vesikalık', en: 'ID Print'},
   ICON_PACK: {tr: 'İkon Yap', en: 'Icons'},
+  PDF_VIEWER: {tr: 'PDF Oku', en: 'PDF Reader'},
   PDF_CREATE: {tr: 'PDF Yap', en: 'Make PDF'},
   PDF_MERGE: {tr: 'Birleştir', en: 'Merge'},
   PDF_SPLIT: {tr: 'PDF Böl', en: 'Split'},
@@ -1556,6 +1569,7 @@ export function smartToolIdsForSelection(files: PickedFile[]): string[] {
         ];
       } else {
         priority = [
+          'local:PDF_VIEWER',
           'local:PDF_SPLIT',
           'local:PDF_REMOVE_PAGES',
           'server:pdf_to_docx',

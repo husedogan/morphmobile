@@ -252,7 +252,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
 
     (async () => {
       try {
-        ensurePdfWorker();
+        await ensurePdfWorker();
         const ab = await pdfFile.arrayBuffer();
         const task = pdfjsLib.getDocument({data: new Uint8Array(ab)});
         const doc = await task.promise;
@@ -312,7 +312,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
     setSignPageLoading(true);
     (async () => {
       try {
-        ensurePdfWorker();
+        await ensurePdfWorker();
         const ab = await pdfFile.arrayBuffer();
         const doc = await pdfjsLib.getDocument({data: new Uint8Array(ab)}).promise;
         const pageNum = Math.max(1, Math.min(doc.numPages, signPageNum));

@@ -226,6 +226,11 @@ const DICT: Record<string, {tr: string; en: string}> = {
   ToolFrameDesc: {tr: 'Renkli arka plan, köşe yuvarlama ve gölge ekle.', en: 'Add background, padding, rounded corners, and shadow.'},
   ToolCollage: {tr: 'Kolaj Oluştur', en: 'Create Collage'},
   ToolCollageDesc: {tr: 'Birden fazla görseli düzenli ızgarada birleştir.', en: 'Combine multiple photos into a clean grid.'},
+  ToolPdfViewer: {tr: 'PDF Görüntüleyici', en: 'PDF Viewer'},
+  ToolPdfViewerDesc: {
+    tr: 'Yakınlaştırma, metin arama, sayfa ızgarası ve gece okuma moduyla tam ekran PDF okuyucu.',
+    en: 'Full-screen PDF reader with zoom, text search, page grid, and night reading mode.',
+  },
   ToolPdfCreate: {tr: 'PDF Oluştur', en: 'Create PDF'},
   ToolPdfCreateDesc: {tr: 'Seçili görselleri tek bir PDF belgesine dönüştür.', en: 'Combine selected images into one PDF.'},
   ToolPdfMerge: {tr: 'PDF Birleştir', en: 'Merge PDFs'},

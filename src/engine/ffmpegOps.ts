@@ -239,6 +239,32 @@ function buildAudioEncodeArgs(inName: string, targetFmt: string, outName: string
   return ['-i', inName, '-vn', '-y', outName];
 }
 
+export async function transcodeAudioBlob(
+  wavBlob: Blob,
+  targetFmt: 'mp3' | 'm4a' | 'ogg',
+  onStatus?: (msg: string) => void,
+  signal?: AbortSignal
+): Promise<Blob> {
+  return enqueueFfmpegJob(async () => {
+    const ffmpeg = await getFFmpeg(onStatus);
+    if (signal?.aborted) throw new Error('Cancelled');
+    const inName = `studio_in_${Date.now()}.wav`;
+    const outName = `studio_out_${Date.now()}.${targetFmt}`;
+    const args = buildAudioEncodeArgs(inName, targetFmt, outName);
+    const results = await execSingle(
+      ffmpeg,
+      args,
+      [{name: inName, blob: wavBlob}],
+      [outName],
+      undefined,
+      signal
+    );
+    const out = results[0]?.blob;
+    if (!out) throw new Error('Audio transcoding failed');
+    return out;
+  });
+}
+
 export async function runLocalFfmpegTool(
   toolId: string,
   files: PickedFile[],
@@ -1381,6 +1407,7 @@ async function runLocalFfmpegToolInternal(
         mediaId: string;
         trackIndex: number;
         layerMode: 'video' | 'pip';
+        fullFrameOverlay?: boolean;
         isFreezeFrame: boolean;
         pipRect?: {x: number; y: number; w: number; h: number};
         opacity: number;
@@ -1477,13 +1504,53 @@ async function runLocalFfmpegToolInternal(
               })
               .filter((c) => c.sourceEnd - c.sourceStart >= 0.08);
 
-            // Normal full-frame videos across V1-V5 belong to main timeline; only explicit PiP clips go to overlay pass
-            const mainSegs = parsedAll
-              .filter((c) => !(c.trackIndex >= 1 && c.layerMode === 'pip'))
-              .sort((a, b) => a.timelineStart - b.timelineStart || b.trackIndex - a.trackIndex);
-            v2OverlaySegments = parsedAll
-              .filter((c) => c.trackIndex >= 1 && c.layerMode === 'pip')
-              .sort((a, b) => a.trackIndex - b.trackIndex || a.timelineStart - b.timelineStart);
+            const allowVideoLayerOverlap = options.allowVideoLayerOverlap === '1';
+            const expExportOverlapNormalVideo = options.expExportOverlapNormalVideo !== '0';
+
+            const explicitPipSegs = parsedAll.filter((c) => c.trackIndex >= 1 && c.layerMode === 'pip');
+            const normalSegs = parsedAll.filter((c) => !(c.trackIndex >= 1 && c.layerMode === 'pip'));
+
+            let mainSegs: ParsedSeg[] = [];
+            const overlapNormalOverlaySegs: ParsedSeg[] = [];
+
+            if (expExportOverlapNormalVideo && (allowVideoLayerOverlap || normalSegs.some((c) => c.trackIndex >= 1))) {
+              // Place V1 clips on the base timeline first, then place non-overlapping V2–V5 normal clips on base
+              // and route time-overlapping upper-track normal clips to full-frame overlay pass (higher track wins on top)
+              const byTrackThenTime = [...normalSegs].sort(
+                (a, b) => a.trackIndex - b.trackIndex || a.timelineStart - b.timelineStart
+              );
+              const segSpan = (s: ParsedSeg) => {
+                const dur = Math.max(0.08, s.sourceEnd - s.sourceStart);
+                const tDur = s.isFreezeFrame ? dur : dur / s.speed;
+                return {start: s.timelineStart, end: s.timelineStart + tDur};
+              };
+              for (const seg of byTrackThenTime) {
+                if (seg.trackIndex === 0) {
+                  mainSegs.push(seg);
+                  continue;
+                }
+                const span = segSpan(seg);
+                const overlapsBase = mainSegs.some((base) => {
+                  const bSpan = segSpan(base);
+                  return Math.min(span.end, bSpan.end) - Math.max(span.start, bSpan.start) > 0.04;
+                });
+                if (overlapsBase) {
+                  overlapNormalOverlaySegs.push({...seg, fullFrameOverlay: true});
+                } else {
+                  mainSegs.push(seg);
+                }
+              }
+              mainSegs.sort((a, b) => a.timelineStart - b.timelineStart || b.trackIndex - a.trackIndex);
+            } else {
+              // Legacy sequential timeline behavior when expExportOverlapNormalVideo is disabled
+              mainSegs = normalSegs.sort(
+                (a, b) => a.timelineStart - b.timelineStart || b.trackIndex - a.trackIndex
+              );
+            }
+
+            v2OverlaySegments = [...overlapNormalOverlaySegs, ...explicitPipSegs].sort(
+              (a, b) => a.trackIndex - b.trackIndex || a.timelineStart - b.timelineStart
+            );
             primaryClipMeta = mainSegs[0] ?? null;
 
             const hasSecondarySource = mainSegs.some((c) => c.mediaId !== PRIMARY_MEDIA_ID);
@@ -2114,22 +2181,27 @@ async function runLocalFfmpegToolInternal(
           }
         }
 
-        // Real Multi-Layer V2 Overlay / Picture-in-Picture Compositing Pass
+        // Real Multi-Layer V2–V5 Overlay / Picture-in-Picture & Overlapping Normal Layer Compositing Pass
         if (!isGif && v2OverlaySegments.length > 0) {
           onProgress(0.82, outFile);
+          const expExportPipAudio = options.expExportPipAudio !== '0';
           const pipInputs: string[] = ['-i', outFile];
           const pipChains: string[] = [];
+          const pipAudioPads: string[] = [];
           let curVidPad = '0:v';
 
           v2OverlaySegments.forEach((ov, ovIdx) => {
-            const ovSrc = mediaVfsMap.get(ov.mediaId)?.vfsName ?? inName;
+            const ovMeta = mediaVfsMap.get(ov.mediaId);
+            const ovSrc = ovMeta?.vfsName ?? inName;
+            const ovHasAudio = ovMeta?.hasAudio ?? info.hasAudio;
             const ovDur = Math.max(0.1, Number((ov.sourceEnd - ov.sourceStart).toFixed(3)));
             const ovTimelineDur = ov.isFreezeFrame ? ovDur : ovDur / ov.speed;
+            const isFullFrame = Boolean(ov.fullFrameOverlay);
             const rect = ov.pipRect ?? {x: 0.62, y: 0.06, w: 0.34, h: 0.34};
-            const pipW = makeEven(Math.max(48, Math.round(outW * rect.w)));
-            const pipH = makeEven(Math.max(48, Math.round(outH * rect.h)));
-            const pipX = Math.max(0, Math.min(outW - pipW, Math.round(outW * rect.x)));
-            const pipY = Math.max(0, Math.min(outH - pipH, Math.round(outH * rect.y)));
+            const pipW = isFullFrame ? outW : makeEven(Math.max(48, Math.round(outW * rect.w)));
+            const pipH = isFullFrame ? outH : makeEven(Math.max(48, Math.round(outH * rect.h)));
+            const pipX = isFullFrame ? 0 : Math.max(0, Math.min(outW - pipW, Math.round(outW * rect.x)));
+            const pipY = isFullFrame ? 0 : Math.max(0, Math.min(outH - pipH, Math.round(outH * rect.y)));
             const startT = mapTimelineSecToExportSec(ov.timelineStart);
             const endT = Number((startT + ovTimelineDur).toFixed(3));
             const alpha = Math.min(1, Math.max(0.05, ov.opacity / 100)).toFixed(2);
@@ -2146,10 +2218,15 @@ async function runLocalFfmpegToolInternal(
               !ov.isFreezeFrame && Math.abs(ov.speed - 1) > 0.01
                 ? `${(1 / ov.speed).toFixed(3)}*(PTS-STARTPTS)`
                 : 'PTS-STARTPTS';
-            const pipPreOps: string[] = [
-              `scale=${pipW}:${pipH}:force_original_aspect_ratio=increase`,
-              `crop=${pipW}:${pipH}`,
-            ];
+            const pipPreOps: string[] = isFullFrame
+              ? [
+                  `scale=${outW}:${outH}:force_original_aspect_ratio=decrease`,
+                  `pad=${outW}:${outH}:(ow-iw)/2:(oh-ih)/2:black`,
+                ]
+              : [
+                  `scale=${pipW}:${pipH}:force_original_aspect_ratio=increase`,
+                  `crop=${pipW}:${pipH}`,
+                ];
             if (ov.isFreezeFrame) {
               pipPreOps.push(
                 `trim=duration=0.1`,
@@ -2171,13 +2248,78 @@ async function runLocalFfmpegToolInternal(
               `[${curVidPad}][pip${ovIdx}]overlay=x=${pipX}:y=${pipY}:enable='between(t,${startT},${endT})':eof_action=pass[${nextPad}]`
             );
             curVidPad = nextPad;
+
+            // Experimental PiP / Upper-Layer Audio Mixing via adelay + amix
+            if (
+              expExportPipAudio &&
+              !mute &&
+              !isBoomerang &&
+              !ov.isFreezeFrame &&
+              !ov.muted &&
+              ov.volume > 0 &&
+              ovHasAudio
+            ) {
+              const masterFactor = Math.max(0, volumePct / 100);
+              const effGain = Math.min(2.5, Math.max(0.02, (ov.volume / 100) * masterFactor));
+              const delayMs = Math.max(0, Math.round(startT * 1000));
+              const aChain: string[] = [
+                'asetpts=PTS-STARTPTS',
+                'aformat=sample_rates=48000:channel_layouts=stereo',
+              ];
+              if (Math.abs(effGain - 1) > 0.01) {
+                aChain.push(`volume=${effGain.toFixed(3)}`);
+              }
+              aChain.push(...buildAtempoChain(ov.speed));
+              if (ov.reversed) {
+                aChain.push('areverse');
+              }
+              if (ov.fadeInSec > 0.05) {
+                const dIn = Math.min(ov.fadeInSec, Math.max(0.15, ovTimelineDur * 0.45));
+                aChain.push(`afade=t=in:st=0:d=${dIn.toFixed(2)}`);
+              }
+              if (ov.fadeOutSec > 0.05 && ovTimelineDur > ov.fadeOutSec * 1.4) {
+                const dOut = Math.min(ov.fadeOutSec, Math.max(0.15, ovTimelineDur * 0.45));
+                aChain.push(`afade=t=out:st=${Math.max(0, ovTimelineDur - dOut).toFixed(2)}:d=${dOut.toFixed(2)}`);
+              }
+              if (delayMs > 0) {
+                aChain.push(`adelay=${delayMs}|${delayMs}`);
+              }
+              const aPad = `apip${ovIdx}`;
+              pipChains.push(`[${inpIdx}:a]${aChain.join(',')}[${aPad}]`);
+              pipAudioPads.push(`[${aPad}]`);
+            }
           });
+
+          const mixPipAudio = pipAudioPads.length > 0;
+          if (mixPipAudio) {
+            const allAudioPads: string[] = [];
+            if (renderedHasAudio) {
+              pipChains.push('[0:a:0]aformat=sample_rates=48000:channel_layouts=stereo[apipbase]');
+              allAudioPads.push('[apipbase]');
+            }
+            allAudioPads.push(...pipAudioPads);
+            if (allAudioPads.length === 1) {
+              pipChains.push(`${allAudioPads[0]}alimiter=limit=0.95[apipmix]`);
+            } else {
+              const mixDurMode = renderedHasAudio ? 'first' : 'longest';
+              pipChains.push(
+                `${allAudioPads.join('')}amix=inputs=${allAudioPads.length}:duration=${mixDurMode}:dropout_transition=0:normalize=0,alimiter=limit=0.95[apipmix]`
+              );
+            }
+          }
 
           const pipOut = `nle_pip_${outFile}`;
           tempFilesToClean.push(pipOut);
+          const pipAudioCodecArgs = mixPipAudio
+            ? outFmt === 'webm'
+              ? ['-c:a', 'libvorbis']
+              : ['-c:a', 'aac', '-ar', '48000', '-ac', '2', '-b:a', audioBitrate]
+            : renderedHasAudio
+              ? ['-c:a', 'copy']
+              : ['-an'];
           const pipCodecArgs =
             outFmt === 'webm'
-              ? ['-c:v', 'libvpx', '-b:v', '1.8M', ...(renderedHasAudio ? ['-c:a', 'copy'] : ['-an'])]
+              ? ['-c:v', 'libvpx', '-b:v', '1.8M', ...pipAudioCodecArgs]
               : [
                   '-pix_fmt',
                   'yuv420p',
@@ -2187,7 +2329,7 @@ async function runLocalFfmpegToolInternal(
                   'ultrafast',
                   '-crf',
                   crf,
-                  ...(renderedHasAudio ? ['-c:a', 'copy'] : ['-an']),
+                  ...pipAudioCodecArgs,
                 ];
 
           const rcPip = await ffmpeg.exec([
@@ -2196,7 +2338,7 @@ async function runLocalFfmpegToolInternal(
             pipChains.join(';'),
             '-map',
             `[${curVidPad}]`,
-            ...(renderedHasAudio ? ['-map', '0:a:0?'] : []),
+            ...(mixPipAudio ? ['-map', '[apipmix]'] : renderedHasAudio ? ['-map', '0:a:0?'] : []),
             ...pipCodecArgs,
             '-y',
             pipOut,
@@ -2208,6 +2350,9 @@ async function runLocalFfmpegToolInternal(
               outFile,
               pipBytes instanceof Uint8Array ? new Uint8Array(pipBytes) : new Uint8Array()
             );
+            if (mixPipAudio) {
+              renderedHasAudio = true;
+            }
             await cleanupVfsFiles(ffmpeg, [pipOut]);
           }
         }

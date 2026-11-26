@@ -5236,6 +5236,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       codec: exp.codec,
       audioBitrate: exp.audioBitrate,
       audioDucking: project.audioDucking ? '1' : '0',
+      allowVideoLayerOverlap: project.allowVideoLayerOverlap ? '1' : '0',
       clipsJson: JSON.stringify(effectiveVideoClips),
       audioClipsJson: JSON.stringify(effectiveAudioClips),
     };

@@ -31,6 +31,7 @@ import {
   readId3Tags,
   writeId3Tags,
 } from '../engine/audioProOps';
+import {transcodeAudioBlob} from '../engine/ffmpegOps';
 
 export type AudioStudioTab = 'waveform' | 'eq' | 'silence' | 'id3';
 
@@ -69,7 +70,10 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
   const [exporting, setExporting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Waveform trim & fade
+  // Waveform trim, zoom & fade
+  const [waveZoom, setWaveZoom] = useState<1 | 2 | 4 | 8>(1);
+  const [exportFormat, setExportFormat] = useState<'wav' | 'mp3' | 'm4a' | 'ogg'>('wav');
+  const [exportStep, setExportStep] = useState('');
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
   const [fadeIn, setFadeIn] = useState(0);
@@ -77,6 +81,9 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
   const [muteEnabled, setMuteEnabled] = useState(false);
   const [muteStart, setMuteStart] = useState(0);
   const [muteEnd, setMuteEnd] = useState(0);
+
+  const expAudioLiveDspPreview = prefs?.expAudioLiveDspPreview !== false;
+  const expAudioMultiFormatExport = prefs?.expAudioMultiFormatExport !== false;
 
   // Playback
   const [playing, setPlaying] = useState(false);
@@ -150,7 +157,8 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
         ]);
         if (cancelled) return;
         setBuffer(decoded);
-        setPeaks(extractWaveformPeaks(decoded, 260));
+        setPeaks(extractWaveformPeaks(decoded, 1040));
+        setWaveZoom(1);
         setTrimStart(0);
         setTrimEnd(decoded.duration);
         setMuteStart(decoded.duration * 0.35);
@@ -248,6 +256,60 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
     ctx.fillRect(0, 0, xStart, h);
     ctx.fillRect(xEnd, 0, w - xEnd, h);
 
+    // Visual Fade In & Fade Out Curves over waveform
+    const trimSpanPx = Math.max(0, xEnd - xStart);
+    if (fadeIn > 0.05 && trimSpanPx > 4) {
+      const fiW = Math.min(trimSpanPx * 0.5, (fadeIn / dur) * w);
+      ctx.save();
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.34)';
+      ctx.beginPath();
+      ctx.moveTo(xStart, 0);
+      ctx.lineTo(xStart + fiW, 0);
+      ctx.lineTo(xStart, h);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(xStart, h - 2);
+      ctx.lineTo(xStart + fiW, 4);
+      ctx.stroke();
+
+      if (fiW >= 24) {
+        ctx.fillStyle = ink;
+        ctx.font = 'bold 9px ui-monospace, SFMono-Regular, Menlo, monospace';
+        ctx.fillText(`IN ${fadeIn.toFixed(1)}s`, xStart + 6, 15);
+      }
+      ctx.restore();
+    }
+    if (fadeOut > 0.05 && trimSpanPx > 4) {
+      const foW = Math.min(trimSpanPx * 0.5, (fadeOut / dur) * w);
+      ctx.save();
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.34)';
+      ctx.beginPath();
+      ctx.moveTo(xEnd, 0);
+      ctx.lineTo(xEnd - foW, 0);
+      ctx.lineTo(xEnd, h);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(xEnd - foW, 4);
+      ctx.lineTo(xEnd, h - 2);
+      ctx.stroke();
+
+      if (foW >= 28) {
+        ctx.fillStyle = ink;
+        ctx.font = 'bold 9px ui-monospace, SFMono-Regular, Menlo, monospace';
+        ctx.textAlign = 'right';
+        ctx.fillText(`OUT ${fadeOut.toFixed(1)}s`, xEnd - 6, 15);
+      }
+      ctx.restore();
+    }
+
     // Prominent finger-friendly Left & Right Trim Handles
     const drawTrimHandle = (xPos: number, isLeft: boolean) => {
       const clampedX = Math.max(8, Math.min(w - 8, xPos));
@@ -281,7 +343,7 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
     const xPlay = (playhead / dur) * w;
     ctx.fillStyle = ink;
     ctx.fillRect(xPlay - 1, 0, 2, h);
-  }, [peaks, buffer, trimStart, trimEnd, playhead, silenceSegments, tab, removeSilence, muteEnabled, muteStart, muteEnd]);
+  }, [peaks, buffer, trimStart, trimEnd, fadeIn, fadeOut, waveZoom, playhead, silenceSegments, tab, removeSilence, muteEnabled, muteStart, muteEnd]);
 
   const drawVuIdle = () => {
     const vu = vuCanvasRef.current;
@@ -354,8 +416,86 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
       head.connect(bq);
       head = bq;
     }
+
+    // Experimental Live Web Audio DSP Preview: Denoise filters + Dynamics Compressor
+    if (expAudioLiveDspPreview) {
+      if (denoiseStrength > 0) {
+        const hp = ctx.createBiquadFilter();
+        hp.type = 'highpass';
+        hp.frequency.value = 75 + denoiseStrength * 0.65;
+        hp.Q.value = 0.8;
+        head.connect(hp);
+        head = hp;
+
+        const lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = Math.max(5500, 14500 - denoiseStrength * 75);
+        lp.Q.value = 0.7;
+        head.connect(lp);
+        head = lp;
+      }
+      if (compressorEnabled || normalizeEnabled) {
+        const comp = ctx.createDynamicsCompressor();
+        comp.threshold.value = compressorEnabled ? -22 : -10;
+        comp.knee.value = 18;
+        comp.ratio.value = compressorEnabled ? 4.5 : 2.2;
+        comp.attack.value = 0.01;
+        comp.release.value = 0.18;
+        head.connect(comp);
+        head = comp;
+      }
+    }
+
+    const startOffset = playhead >= trimStart && playhead < trimEnd - 0.1 ? playhead : trimStart;
+    const dur = Math.max(0.1, trimEnd - startOffset);
+    const startedAt = ctx.currentTime;
+
     const gNode = ctx.createGain();
-    gNode.gain.value = gain;
+    if (expAudioLiveDspPreview) {
+      const clipLen = Math.max(0.05, trimEnd - trimStart);
+      const effFi = Math.min(fadeIn, clipLen * 0.5);
+      const effFo = Math.min(fadeOut, clipLen * 0.5);
+      const hasMuteWin = muteEnabled && muteEnd > muteStart + 0.02;
+      const gainAt = (tSec: number): number => {
+        let g = gain;
+        if (effFi > 0.02 && tSec < trimStart + effFi) {
+          g *= Math.max(0, Math.min(1, (tSec - trimStart) / effFi));
+        }
+        if (effFo > 0.02 && tSec > trimEnd - effFo) {
+          g *= Math.max(0, Math.min(1, (trimEnd - tSec) / effFo));
+        }
+        if (hasMuteWin && tSec >= muteStart && tSec <= muteEnd) {
+          g = 0.0001;
+        }
+        return Math.max(0.0001, g);
+      };
+
+      const rawPts = [
+        startOffset,
+        trimStart + effFi,
+        trimEnd - effFo,
+        trimEnd,
+      ];
+      if (hasMuteWin) {
+        rawPts.push(muteStart - 0.015, muteStart, muteEnd, muteEnd + 0.015);
+      }
+      const pts = Array.from(
+        new Set(
+          rawPts
+            .filter((p) => p >= startOffset && p <= trimEnd)
+            .map((p) => Number(p.toFixed(4)))
+        )
+      ).sort((a, b) => a - b);
+
+      gNode.gain.setValueAtTime(gainAt(startOffset), startedAt);
+      for (let i = 1; i < pts.length; i++) {
+        const pt = pts[i];
+        gNode.gain.linearRampToValueAtTime(gainAt(pt), startedAt + (pt - startOffset));
+      }
+    } else {
+      gNode.gain.value = gain;
+    }
+
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 128;
     analyser.smoothingTimeConstant = 0.76;
@@ -368,9 +508,6 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
     const freqData = new Uint8Array(analyser.frequencyBinCount);
     const timeData = new Uint8Array(analyser.fftSize);
 
-    const startOffset = playhead >= trimStart && playhead < trimEnd - 0.1 ? playhead : trimStart;
-    const dur = Math.max(0.1, trimEnd - startOffset);
-    const startedAt = ctx.currentTime;
     src.start(0, startOffset, dur);
     playSrcRef.current = src;
     setPlaying(true);
@@ -479,6 +616,7 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
   const handleExportAudio = async () => {
     if (!buffer || !file) return;
     setExporting(true);
+    setExportStep('');
     try {
       stopPlayback();
       const stem = file.name.replace(/\.[^.]+$/, '');
@@ -488,7 +626,8 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
         onClose();
         return;
       }
-      const outBlob = await processAudioStudio(buffer, {
+      setExportStep(isTr ? 'DSP işleniyor...' : 'Rendering DSP...');
+      const wavBlob = await processAudioStudio(buffer, {
         trimStartSec: trimStart,
         trimEndSec: trimEnd,
         fadeInSec: fadeIn,
@@ -504,12 +643,27 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
         silenceMinDurationSec: silenceMinSec,
         gain,
       });
-      onExportBlob(outBlob, `${stem}_studio.wav`, isTr ? 'Ses Stüdyosu' : 'Audio Studio');
+      const targetFmt = expAudioMultiFormatExport ? exportFormat : 'wav';
+      let finalBlob = wavBlob;
+      if (targetFmt !== 'wav') {
+        setExportStep(
+          isTr
+            ? `${targetFmt.toUpperCase()} kodlanıyor...`
+            : `Encoding ${targetFmt.toUpperCase()}...`
+        );
+        finalBlob = await transcodeAudioBlob(wavBlob, targetFmt, (msg) => setExportStep(msg));
+      }
+      onExportBlob(
+        finalBlob,
+        `${stem}_studio.${targetFmt}`,
+        isTr ? 'Ses Stüdyosu' : 'Audio Studio'
+      );
       onClose();
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : 'Export error');
     } finally {
       setExporting(false);
+      setExportStep('');
     }
   };
 
@@ -652,23 +806,56 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
 
           {buffer && !loading && (
             <>
-              {/* Interactive Waveform Canvas + Live VU/Spectrum Level Bar */}
+              {/* Interactive Waveform Canvas + Zoom Bar + Live VU/Spectrum Level Bar */}
               {tab !== 'id3' && (
                 <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3 space-y-2">
-                  <canvas
-                    ref={canvasRef}
-                    onPointerDown={(e) => handleCanvasPointer(e, true)}
-                    onPointerMove={(e) => {
-                      if (dragHandleRef.current) handleCanvasPointer(e, false);
-                    }}
-                    onPointerUp={() => {
-                      dragHandleRef.current = null;
-                    }}
-                    onPointerCancel={() => {
-                      dragHandleRef.current = null;
-                    }}
-                    className="h-36 w-full cursor-ew-resize touch-none rounded-xl"
-                  />
+                  {/* Waveform Zoom Controls (1x / 2x / 4x / 8x) */}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-[var(--muted)]">
+                      {isTr ? 'Dalga Yakınlaştırma' : 'Waveform Zoom'}
+                      {waveZoom > 1 && (
+                        <span className="ml-1.5 font-normal opacity-80">
+                          ({isTr ? 'Yatay kaydır' : 'Scroll horizontally'})
+                        </span>
+                      )}
+                    </span>
+                    <div className="flex items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-0.5">
+                      {([1, 2, 4, 8] as const).map((z) => (
+                        <button
+                          key={z}
+                          type="button"
+                          onClick={() => setWaveZoom(z)}
+                          className={`font-mono-num min-h-[32px] min-w-[38px] rounded-lg px-2 text-[11px] font-extrabold transition-colors ${
+                            waveZoom === z
+                              ? 'morph-accent-solid shadow-sm'
+                              : 'text-[var(--muted)] hover:text-[var(--ink)]'
+                          }`}
+                        >
+                          {z}×
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Horizontally Scrollable Zoomed Waveform */}
+                  <div className="w-full overflow-x-auto rounded-xl">
+                    <div style={{width: `${waveZoom * 100}%`, minWidth: '100%'}}>
+                      <canvas
+                        ref={canvasRef}
+                        onPointerDown={(e) => handleCanvasPointer(e, true)}
+                        onPointerMove={(e) => {
+                          if (dragHandleRef.current) handleCanvasPointer(e, false);
+                        }}
+                        onPointerUp={() => {
+                          dragHandleRef.current = null;
+                        }}
+                        onPointerCancel={() => {
+                          dragHandleRef.current = null;
+                        }}
+                        className="block h-36 w-full cursor-ew-resize touch-none rounded-xl"
+                      />
+                    </div>
+                  </div>
                   <canvas
                     ref={vuCanvasRef}
                     className="h-8 w-full rounded-lg border border-[var(--line)] bg-[var(--surface)]"
@@ -1035,40 +1222,69 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between gap-2 border-t border-[var(--line)] px-4 py-3">
-          <button
-            type="button"
-            onClick={() => {
-              setEqBands([...EQ_PRESETS.flat.bands]);
-              setDenoiseStrength(0);
-              setFadeIn(0);
-              setFadeOut(0);
-              setGain(1);
-              setRemoveSilence(false);
-              if (buffer) {
-                setTrimStart(0);
-                setTrimEnd(buffer.duration);
-              }
-            }}
-            className="flex h-10 items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-bold text-[var(--muted)] hover:text-[var(--ink)]"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            <span>{isTr ? 'Sıfırla' : 'Reset'}</span>
-          </button>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setEqBands([...EQ_PRESETS.flat.bands]);
+                setDenoiseStrength(0);
+                setFadeIn(0);
+                setFadeOut(0);
+                setGain(1);
+                setRemoveSilence(false);
+                setWaveZoom(1);
+                if (buffer) {
+                  setTrimStart(0);
+                  setTrimEnd(buffer.duration);
+                }
+              }}
+              className="flex h-10 items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-bold text-[var(--muted)] hover:text-[var(--ink)]"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span>{isTr ? 'Sıfırla' : 'Reset'}</span>
+            </button>
+
+            {tab !== 'id3' && expAudioMultiFormatExport && (
+              <div
+                role="radiogroup"
+                aria-label={isTr ? 'Çıktı formatı' : 'Output format'}
+                className="flex items-center gap-0.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] p-0.5"
+              >
+                {(['wav', 'mp3', 'm4a', 'ogg'] as const).map((fmt) => (
+                  <button
+                    key={fmt}
+                    type="button"
+                    disabled={exporting}
+                    onClick={() => setExportFormat(fmt)}
+                    className={`font-mono-num min-h-[34px] rounded-lg px-2 text-[11px] font-extrabold uppercase transition-colors ${
+                      exportFormat === fmt
+                        ? 'morph-accent-solid shadow-sm'
+                        : 'text-[var(--muted)] hover:text-[var(--ink)]'
+                    }`}
+                  >
+                    {fmt}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <button
             type="button"
             disabled={!buffer || exporting}
             onClick={handleExportAudio}
-            className="morph-accent-btn flex min-h-[44px] items-center gap-2 rounded-2xl px-6 text-xs font-extrabold shadow-md disabled:opacity-40"
+            className="morph-accent-btn flex min-h-[44px] items-center gap-2 rounded-2xl px-5 text-xs font-extrabold shadow-md disabled:opacity-40"
           >
             {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             <span>
               {exporting
-                ? isTr ? 'İşleniyor...' : 'Processing...'
+                ? exportStep || (isTr ? 'İşleniyor...' : 'Processing...')
                 : tab === 'id3'
                   ? isTr ? 'ID3 Etiketlerini Kaydet (MP3)' : 'Save ID3 Tags (MP3)'
-                  : isTr ? 'İşle ve Kaydet (WAV)' : 'Render & Save (WAV)'}
+                  : isTr
+                    ? `İşle ve Kaydet (${(expAudioMultiFormatExport ? exportFormat : 'wav').toUpperCase()})`
+                    : `Render & Save (${(expAudioMultiFormatExport ? exportFormat : 'wav').toUpperCase()})`}
             </span>
           </button>
         </div>

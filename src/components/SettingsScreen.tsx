@@ -104,13 +104,13 @@ import {
 import {deleteNleProjectIdb, listNleProjectsIdb} from '../engine/projectStorage';
 import {PWAInstallButton} from './PWAInstallButton';
 import {
-  DEFAULT_PRO_SUITES_ORDER,
+  SettingsAccordionCard,
   SettingsDownloadsExtra,
   SettingsProTab,
   SettingsStudioLayoutCard,
 } from './SettingsProTab';
 
-export type SettingsCategory = 'appearance' | 'pro' | 'downloads' | 'permissions' | 'experimental' | 'about';
+export type SettingsCategory = 'appearance' | 'studio' | 'downloads' | 'experimental' | 'system';
 
 interface SettingsScreenProps {
   prefs: Prefs;
@@ -174,7 +174,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [storageEstimate, setStorageEstimate] = useState<{usage: number; quota: number} | null>(null);
 
   useEffect(() => {
-    if (category !== 'about') return;
+    if (category !== 'system') return;
     let alive = true;
     listNleProjectsIdb()
       .then((list) => {
@@ -239,6 +239,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [copiedDiag, setCopiedDiag] = useState(false);
   const [diagExpanded, setDiagExpanded] = useState(false);
   const [serverExpanded, setServerExpanded] = useState(false);
+  const [wheelExpanded, setWheelExpanded] = useState(false);
 
   // Experimental tab visibility (hidden by default; revealed via 7 taps on Permissions shield icon) + password gate (session-scoped)
   const EXP_UNLOCK_KEY = 'morph_exp_unlocked_v1';
@@ -267,7 +268,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   useEffect(() => {
     if (initialCategory === 'experimental' && !expTabVisibleRef.current) {
       setCategory('appearance');
-    } else if (initialCategory === 'pro' && prefs.simpleMode) {
+    } else if (initialCategory === 'studio' && prefs.simpleMode) {
       setCategory('appearance');
     } else {
       setCategory(initialCategory);
@@ -275,7 +276,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   }, [initialCategory, prefs.simpleMode]);
 
   useEffect(() => {
-    if (prefs.simpleMode && category === 'pro') {
+    if (prefs.simpleMode && category === 'studio') {
       setCategory('appearance');
     }
   }, [prefs.simpleMode, category]);
@@ -390,7 +391,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     setExpGateOpen(false);
     setExpPassInput('');
     setExpPassError(false);
-    setCategory('permissions');
+    setCategory('system');
     try {
       window.sessionStorage.removeItem(EXP_UNLOCK_KEY);
       window.sessionStorage.removeItem(EXP_TAB_VISIBLE_KEY);
@@ -616,14 +617,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   }> = [
     {id: 'appearance', label: t('SetCatAppearance', lang), Icon: Palette},
     ...(!simpleMode
-      ? [{id: 'pro' as const, label: lang === 'tr' ? 'Gelişmiş' : 'Advanced', Icon: Layers}]
+      ? [{id: 'studio' as const, label: lang === 'tr' ? 'Stüdyo' : 'Studio', Icon: Layers}]
       : []),
     {id: 'downloads', label: t('SetCatDownloads', lang), Icon: Download},
-    {id: 'permissions', label: t('SetCatPermissions', lang), Icon: ShieldCheck},
     ...(expUnlocked && expTabVisible
       ? [{id: 'experimental' as const, label: lang === 'tr' ? 'Deneysel' : 'Experimental', Icon: FlaskConical}]
       : []),
-    {id: 'about', label: t('SetCatAbout', lang), Icon: Smartphone},
+    {id: 'system', label: lang === 'tr' ? 'Sistem' : 'System', Icon: Smartphone},
   ];
 
   const channelLabel =
@@ -849,8 +849,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         })}
       </div>
 
-      {/* CATEGORY PRO: PRO MODULES, ORDERING, DEFAULTS & DATA MANAGEMENT */}
-      {category === 'pro' && (
+      {/* CATEGORY STUDIO: VIDEO, AUDIO, IMAGE DEFAULTS & WORKFLOW */}
+      {category === 'studio' && (
         <SettingsProTab
           prefs={prefs}
           lang={lang}
@@ -1286,11 +1286,16 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       : 'minimal_dot';
 
             return (
-              <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4 sm:p-5">
-                {/* Header with Live Combined Preview + Visibility Switch */}
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex h-11 w-12 shrink-0 items-center justify-center">
+              <section className="overflow-hidden rounded-3xl border border-[var(--line)] bg-[var(--surface)]">
+                {/* Collapsible Header with Live Combined Preview + Inline Visibility Switch */}
+                <div className="flex items-center gap-2 px-4 py-3.5 sm:px-5">
+                  <button
+                    type="button"
+                    aria-expanded={wheelExpanded}
+                    onClick={() => setWheelExpanded((v) => !v)}
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left transition-opacity hover:opacity-90"
+                  >
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center">
                       <span
                         style={previewBadgeStyle}
                         className={`morph-accent-btn flex h-10 w-10 items-center justify-center shadow-sm transition-all ${
@@ -1317,8 +1322,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                         </svg>
                       </span>
                     </div>
-                    <div className="min-w-0">
-                      <h2 className="text-sm font-bold leading-tight text-[var(--ink)] sm:text-base">
+                    <div className="min-w-0 flex-1">
+                      <h2 className="truncate text-sm font-bold leading-tight text-[var(--ink)] sm:text-[15px]">
                         {t('WheelFabSectionTitle', lang)}
                       </h2>
                       <p className="mt-0.5 truncate text-[11px] font-medium text-[var(--muted)]">
@@ -1327,7 +1332,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                         {activeInnerMeta ? (lang === 'tr' ? activeInnerMeta.titleTr : activeInnerMeta.titleEn) : ''}
                       </p>
                     </div>
-                  </div>
+                  </button>
 
                   <button
                     type="button"
@@ -1341,7 +1346,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                         nextEnabled ? t('QuickWheelEnabledToast', lang) : t('QuickWheelDisabledToast', lang)
                       );
                     }}
-                    className="flex shrink-0 items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--inset)] py-1.5 pl-3 pr-2 transition-colors hover:border-[var(--accent)]/50"
+                    className="flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--inset)] py-1.5 pl-2.5 pr-1.5 transition-colors hover:border-[var(--accent)]/50"
                   >
                     <span className="text-[11px] font-semibold text-[var(--ink)]">
                       {wheelEnabled ? (lang === 'tr' ? 'Açık' : 'On') : lang === 'tr' ? 'Gizli' : 'Off'}
@@ -1350,7 +1355,24 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       <span className="morph-switch-thumb" />
                     </span>
                   </button>
+
+                  <button
+                    type="button"
+                    aria-expanded={wheelExpanded}
+                    aria-label={t('WheelFabSectionTitle', lang)}
+                    onClick={() => setWheelExpanded((v) => !v)}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[var(--muted)] transition-colors hover:bg-[var(--inset)] hover:text-[var(--ink)]"
+                  >
+                    <ChevronDown
+                      className={`h-4 w-4 transition-transform duration-200 ${
+                        wheelExpanded ? 'rotate-180 text-[var(--accent-text)]' : ''
+                      }`}
+                    />
+                  </button>
                 </div>
+
+                {wheelExpanded && (
+                <div className="border-t border-[var(--line)]/75 px-4 pb-4 pt-3.5 sm:px-5 sm:pb-5">
 
                 {prefs.expAltLauncher && prefs.expAltLauncherForMain === true && (
                   <div className="mt-3.5 flex flex-col gap-2.5 rounded-2xl border border-[var(--accent)]/40 bg-[var(--accent)]/10 p-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1570,21 +1592,38 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     )}
                   </div>
                 )}
+                </div>
+                )}
               </section>
             );
           })()}
 
           {/* 3. Interface Scale, Corner Radius & Grouped Interaction Toggles */}
           {!simpleMode && (
-          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4 sm:p-5">
-            <div className="flex items-center gap-2">
-              <SlidersHorizontal className="h-4.5 w-4.5 text-[var(--accent)]" />
-              <h2 className="text-sm font-bold text-[var(--ink)] sm:text-base">
-                {t('UiInterfaceSection', lang)}
-              </h2>
-            </div>
-
-            <div className="mt-3.5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <SettingsAccordionCard
+            icon={<SlidersHorizontal className="h-4.5 w-4.5" />}
+            title={t('UiInterfaceSection', lang)}
+            subtitle={
+              lang === 'tr'
+                ? 'Ölçek, köşe yumuşaklığı, hareket azaltma, titreşim ve etiketler'
+                : 'UI scale, corner softness, reduced motion, haptics & labels'
+            }
+            badge={`${
+              uiScale === 'compact'
+                ? t('ScaleCompact', lang)
+                : uiScale === 'large'
+                  ? t('ScaleLarge', lang)
+                  : t('ScaleDefault', lang)
+            } · ${
+              cornerStyle === 'sharp'
+                ? t('CornerSharp', lang)
+                : cornerStyle === 'soft'
+                  ? t('CornerSoft', lang)
+                  : t('CornerBalanced', lang)
+            }`}
+            defaultOpen={false}
+          >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {/* Text & UI Scale Control */}
               {(() => {
                 const scaleSteps: readonly UiScalePref[] = ['compact', 'default', 'large'];
@@ -1798,7 +1837,16 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 </span>
               </button>
             </div>
-          </section>
+          </SettingsAccordionCard>
+          )}
+
+          {/* 4. Studio & Library Layout, Visibility Strips & Project Folders */}
+          {!simpleMode && (
+            <SettingsStudioLayoutCard
+              prefs={prefs}
+              lang={lang}
+              onChangePrefs={onChangePrefs}
+            />
           )}
         </div>
       )}
@@ -2021,28 +2069,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </section>
 
           {/* 2. Smart Download Preferences (Quality, Speed & Data Controls) */}
-          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
-                  <Wifi className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold leading-tight text-[var(--ink)]">
-                    {t('DownloadPrefsSection', lang)}
-                  </h2>
-                  <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
-                    {t('DownloadPrefsDesc', lang)}
-                  </p>
-                </div>
-              </div>
-
-              <span className="text-xs font-semibold text-[var(--muted)] whitespace-nowrap">
-                {liveNetLabel}
-              </span>
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <SettingsAccordionCard
+            icon={<Wifi className="h-4.5 w-4.5" />}
+            title={t('DownloadPrefsSection', lang)}
+            subtitle={t('DownloadPrefsDesc', lang)}
+            badge={`${preferredQuality === 'best' ? t('QualityBest', lang) : preferredQuality} · ${liveNetLabel}`}
+            defaultOpen={true}
+          >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <button
                 type="button"
                 onClick={() => onChangePrefs((p) => ({...p, downloadWifiOnly: !p.downloadWifiOnly}))}
@@ -2224,7 +2258,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 );
               })()}
             </div>
-          </section>
+          </SettingsAccordionCard>
 
           {/* 3 & 4. Parallel HTTP Range Accelerator, Auto-Categorization & Link Downloader Defaults */}
           <SettingsDownloadsExtra
@@ -2418,109 +2452,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </div>
       )}
 
-      {/* CATEGORY 3: PERMISSIONS */}
-      {category === 'permissions' && (
-        <div className="mt-5">
-          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  onClick={handlePermShieldTap}
-                  aria-label={t('PermissionsSection', lang)}
-                  className="flex h-9 w-9 shrink-0 cursor-default items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)] focus:outline-none"
-                >
-                  <ShieldCheck className="h-5 w-5" />
-                </button>
-                <div>
-                  <h2 className="text-base font-bold leading-tight text-[var(--ink)]">
-                    {t('PermissionsSection', lang)}
-                  </h2>
-                  <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
-                    {t('PermissionsDesc', lang)}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                disabled={requestingPerms}
-                onClick={handleGrantAllPermissions}
-                className="morph-tonal-btn flex min-h-[44px] shrink-0 items-center justify-center gap-2 rounded-full px-4 text-xs font-semibold whitespace-nowrap transition-transform active:scale-[0.98] disabled:opacity-70"
-              >
-                <ShieldCheck className="h-4 w-4 shrink-0 text-[var(--accent)]" />
-                <span>{t('RequestPermissionsBtn', lang)}</span>
-              </button>
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              {(
-                [
-                  {
-                    key: 'storage' as const,
-                    title: t('PermStorage', lang),
-                    desc: t('PermStorageDesc', lang),
-                    Icon: FolderCheck,
-                  },
-                  {
-                    key: 'media' as const,
-                    title: t('PermMedia', lang),
-                    desc: t('PermMediaDesc', lang),
-                    Icon: ImageIcon,
-                  },
-                  {
-                    key: 'notifications' as const,
-                    title: t('PermNotifications', lang),
-                    desc: t('PermNotificationsDesc', lang),
-                    Icon: Bell,
-                  },
-                  {
-                    key: 'clipboard' as const,
-                    title: t('PermClipboard', lang),
-                    desc: t('PermClipboardDesc', lang),
-                    Icon: ClipboardPaste,
-                  },
-                ] as const
-              ).map(({key, title, desc, Icon}) => {
-                const state = perms[key];
-                const isActionable = state === 'prompt';
-                const isGranted = state === 'granted' || state === 'ready';
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    disabled={requestingPerms}
-                    onClick={() => handleSinglePermission(key)}
-                    className="flex min-h-[68px] items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
-                  >
-                    <div className="flex min-w-0 items-start gap-3">
-                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--accent)]">
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-[var(--ink)]">{title}</p>
-                        <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">{desc}</p>
-                      </div>
-                    </div>
-                    <span
-                      className={`shrink-0 text-xs font-semibold whitespace-nowrap ${
-                        isGranted
-                          ? 'text-[var(--accent-end)]'
-                          : isActionable
-                            ? 'text-[var(--accent)]'
-                            : 'text-[var(--muted)]'
-                      }`}
-                    >
-                      {permBadgeLabel(state)}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        </div>
-      )}
+      {/* Permissions card merged into the System (Sistem) tab below */}
 
       {/* CATEGORY 4: EXPERIMENTAL & CLASSIC REVERSIBLE FEATURES (HIDDEN UNTIL 7-TAP + PASSWORD-LOCKED) */}
       {category === 'experimental' && expTabVisible && !expUnlocked && (
@@ -2598,141 +2530,239 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       )}
 
       {category === 'experimental' && expTabVisible && expUnlocked && (
-        <div className="mt-5 space-y-4">
-          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between gap-2.5">
-                <div className="flex min-w-0 flex-1 items-center gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
-                    <FlaskConical className="h-5 w-5" />
-                  </div>
-                  <h2 className="text-base font-bold leading-tight text-[var(--ink)]">
-                    {lang === 'tr' ? 'Deneysel & Klasik Özellikler' : 'Experimental & Classic Features'}
-                  </h2>
+        <div className="mt-4 space-y-3.5">
+          {/* Compact Header + Reset + Lock */}
+          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] px-4 py-3.5 sm:px-5">
+            <div className="flex items-center justify-between gap-2.5">
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
+                  <FlaskConical className="h-4.5 w-4.5" />
                 </div>
-
-                <div className="flex shrink-0 items-center gap-1.5">
-                  {(prefs.expAltLauncher ||
-                    prefs.expAltLauncherForMain === true ||
-                    prefs.expAltLauncherForMenus === false ||
-                    prefs.expAltLauncherForVideo === false ||
-                    prefs.expAltLauncherLabelsEnabled === false ||
-                    (prefs.expAltLauncherLabelMode && prefs.expAltLauncherLabelMode !== 'wrap') ||
-                    prefs.expAltLauncherShowDesc === false ||
-                    (prefs.expAltLauncherTextSize && prefs.expAltLauncherTextSize !== 'md') ||
-                    prefs.expSpinningGear ||
-                    prefs.expWheelBurnEffect ||
-                    (prefs.expWheelBurnStyle && prefs.expWheelBurnStyle !== 'classic_fire') ||
-                    prefs.expWheelSpinEnabled ||
-                    (prefs.expWheelSpinMode && prefs.expWheelSpinMode !== 'outer_ccw_inner_cw') ||
-                    (prefs.expWheelSpinTrigger && prefs.expWheelSpinTrigger !== 'always') ||
-                    prefs.expArmadilloReel === false ||
-                    prefs.expArmadilloHideOnFullPreview === false ||
-                    prefs.expArmadilloHideOnPlay === false ||
-                    prefs.expVideoMobileGridInHeader === false ||
-                    prefs.expVideoMobileMuteInTransport === false ||
-                    prefs.expVideoExtraTimecodes ||
-                    prefs.expWheelCenterHoldCustomize ||
-                    prefs.expTouchTooltips ||
-                    prefs.expLegacySliders ||
-                    prefs.expAmbientAurora ||
-                    prefs.expTerminal ||
-                    prefs.expUiSounds ||
-                    prefs.expWheelShockwave ||
-                    prefs.proShowStudioSuitesBar ||
-                    prefs.proShowPinnedRecentStrip ||
-                    prefs.proShowResultChainBar ||
-                    prefs.proShowClipboardBanner ||
-                    (prefs.proHiddenSuites?.length ?? 0) > 0) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onChangePrefs((p) => ({
-                          ...p,
-                          expAltLauncher: false,
-                          expAltLauncherStyle: 'cascade_sheet',
-                          expAltLauncherForMain: false,
-                          expAltLauncherForMenus: true,
-                          expAltLauncherForVideo: true,
-                          expAltLauncherLabelsEnabled: true,
-                          expAltLauncherLabelMode: 'wrap',
-                          expAltLauncherShowDesc: true,
-                          expAltLauncherTextSize: 'md',
-                          expSpinningGear: false,
-                          expWheelBurnEffect: false,
-                          expWheelBurnStyle: 'classic_fire',
-                          expWheelSpinEnabled: false,
-                          expWheelSpinMode: 'outer_ccw_inner_cw',
-                          expWheelSpinTrigger: 'always',
-                          expArmadilloReel: true,
-                          expArmadilloHideOnFullPreview: true,
-                          expArmadilloHideOnPlay: true,
-                          expVideoMobileGridInHeader: true,
-                          expVideoMobileMuteInTransport: true,
-                          expVideoExtraTimecodes: false,
-                          expWheelCenterHoldCustomize: false,
-                          expTouchTooltips: false,
-                          expLegacySliders: false,
-                          expAmbientAurora: false,
-                          expTerminal: false,
-                          expUiSounds: false,
-                          expWheelShockwave: false,
-                          proShowStudioSuitesBar: false,
-                          proShowPinnedRecentStrip: false,
-                          proShowResultChainBar: false,
-                          proShowClipboardBanner: false,
-                          proSuitesOrder: DEFAULT_PRO_SUITES_ORDER,
-                          proHiddenSuites: [],
-                        }));
-                        onShowToast?.(
-                          lang === 'tr'
-                            ? 'Deneysel ayarlar varsayılana döndürüldü.'
-                            : 'Experimental settings restored to defaults.'
-                        );
-                      }}
-                      title={lang === 'tr' ? 'Varsayılana Dön' : 'Reset Defaults'}
-                      aria-label={lang === 'tr' ? 'Varsayılana Dön' : 'Reset Defaults'}
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent-text)] transition-colors hover:border-[var(--accent)] active:scale-95"
-                    >
-                      <RotateCcw className="h-4 w-4" />
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={handleExpLock}
-                    title={lang === 'tr' ? 'Kilitle' : 'Lock'}
-                    aria-label={lang === 'tr' ? 'Kilitle' : 'Lock'}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)] transition-colors hover:border-[var(--accent)] active:scale-95"
-                  >
-                    <Lock className="h-4 w-4" />
-                  </button>
+                <div className="min-w-0">
+                  <h2 className="truncate text-sm font-extrabold leading-tight text-[var(--ink)] sm:text-base">
+                    {lang === 'tr' ? 'Deneysel & Beta Özellikler' : 'Experimental & Beta Features'}
+                  </h2>
+                  <p className="mt-0.5 truncate text-[11px] text-[var(--muted)]">
+                    {lang === 'tr'
+                      ? 'Yeni motor özellikleri, kademeli başlatıcı ve görsel deneyler.'
+                      : 'Beta engine switches, cascading launcher & visual experiments.'}
+                  </p>
                 </div>
               </div>
 
-              <p className="text-xs leading-relaxed text-[var(--muted)]">
-                {lang === 'tr'
-                  ? 'Sadeleştirilmiş görsel efektleri ve eski arayüz ayarlarını buradan istediğin zaman açabilirsin.'
-                  : 'Re-enable retired visual effects and classic UI behaviors anytime from here.'}
-              </p>
+              <div className="flex shrink-0 items-center gap-1.5">
+                {(prefs.expAltLauncher ||
+                  prefs.expAltLauncherForMain === true ||
+                  prefs.expAltLauncherForMenus === false ||
+                  prefs.expAltLauncherForVideo === false ||
+                  prefs.expAltLauncherLabelsEnabled === false ||
+                  (prefs.expAltLauncherLabelMode && prefs.expAltLauncherLabelMode !== 'wrap') ||
+                  prefs.expAltLauncherShowDesc === false ||
+                  (prefs.expAltLauncherTextSize && prefs.expAltLauncherTextSize !== 'md') ||
+                  prefs.expSpinningGear ||
+                  prefs.expWheelBurnEffect ||
+                  (prefs.expWheelBurnStyle && prefs.expWheelBurnStyle !== 'classic_fire') ||
+                  prefs.expWheelSpinEnabled ||
+                  (prefs.expWheelSpinMode && prefs.expWheelSpinMode !== 'outer_ccw_inner_cw') ||
+                  (prefs.expWheelSpinTrigger && prefs.expWheelSpinTrigger !== 'always') ||
+                  prefs.expVideoExtraTimecodes ||
+                  prefs.expWheelCenterHoldCustomize ||
+                  prefs.expTouchTooltips ||
+                  prefs.expLegacySliders ||
+                  prefs.expAmbientAurora ||
+                  prefs.expTerminal ||
+                  prefs.expUiSounds ||
+                  prefs.expWheelShockwave ||
+                  prefs.expExportPipAudio === false ||
+                  prefs.expExportOverlapNormalVideo === false ||
+                  prefs.expAudioLiveDspPreview === false ||
+                  prefs.expAudioMultiFormatExport === false) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onChangePrefs((p) => ({
+                        ...p,
+                        expAltLauncher: false,
+                        expAltLauncherStyle: 'cascade_sheet',
+                        expAltLauncherForMain: false,
+                        expAltLauncherForMenus: true,
+                        expAltLauncherForVideo: true,
+                        expAltLauncherLabelsEnabled: true,
+                        expAltLauncherLabelMode: 'wrap',
+                        expAltLauncherShowDesc: true,
+                        expAltLauncherTextSize: 'md',
+                        expSpinningGear: false,
+                        expWheelBurnEffect: false,
+                        expWheelBurnStyle: 'classic_fire',
+                        expWheelSpinEnabled: false,
+                        expWheelSpinMode: 'outer_ccw_inner_cw',
+                        expWheelSpinTrigger: 'always',
+                        expVideoExtraTimecodes: false,
+                        expWheelCenterHoldCustomize: false,
+                        expTouchTooltips: false,
+                        expLegacySliders: false,
+                        expAmbientAurora: false,
+                        expTerminal: false,
+                        expUiSounds: false,
+                        expWheelShockwave: false,
+                        expExportPipAudio: true,
+                        expExportOverlapNormalVideo: true,
+                        expAudioLiveDspPreview: true,
+                        expAudioMultiFormatExport: true,
+                      }));
+                      onShowToast?.(
+                        lang === 'tr'
+                          ? 'Deneysel ayarlar varsayılana döndürüldü.'
+                          : 'Experimental settings restored to defaults.'
+                      );
+                    }}
+                    title={lang === 'tr' ? 'Varsayılana Dön' : 'Reset Defaults'}
+                    aria-label={lang === 'tr' ? 'Varsayılana Dön' : 'Reset Defaults'}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent-text)] transition-colors hover:border-[var(--accent)] active:scale-95"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleExpLock}
+                  title={lang === 'tr' ? 'Kilitle' : 'Lock'}
+                  aria-label={lang === 'tr' ? 'Kilitle' : 'Lock'}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)] transition-colors hover:border-[var(--accent)] active:scale-95"
+                >
+                  <Lock className="h-4 w-4" />
+                </button>
+              </div>
             </div>
+          </section>
 
-            <div className="mt-4 space-y-2.5">
-              {/* Single Master Experimental Feature: Cascading Tool Launcher with ON/OFF, 5 Styles, Target Scope & Label Settings */}
-              {(() => {
-                const altEnabled = Boolean(prefs.expAltLauncher);
-                const altStyle: ExpLauncherStyle = prefs.expAltLauncherStyle ?? 'cascade_sheet';
-                const forMenus = prefs.expAltLauncherForMenus !== false;
-                const forMain = prefs.expAltLauncherForMain === true;
-                const forVideo = prefs.expAltLauncherForVideo !== false;
-                const {labelsEnabled, labelMode, showDesc, textSize} =
-                  resolveLauncherLabelPrefs(prefs);
-                const previewTitleSize =
-                  textSize === 'sm' ? 'text-[10.5px]' : textSize === 'lg' ? 'text-[12.5px]' : 'text-[11.5px]';
-                const previewDescSize =
-                  textSize === 'sm' ? 'text-[9.5px]' : textSize === 'lg' ? 'text-[10.5px]' : 'text-[10px]';
+          {/* 1. NEW BETA ENGINE FEATURES (Expanded by default for fast testing) */}
+          {(() => {
+            const engineBetaItems = [
+              {
+                key: 'expExportPipAudio' as const,
+                defaultOn: true,
+                titleTr: 'Video Dışa Aktarımda PiP (V2–V5) Ses Miksajı',
+                titleEn: 'Mix PiP (V2–V5) Audio on Video Export',
+                descTr:
+                  'Susturulmamış V2–V5 PiP kliplerinin seslerini zaman çizelgesi konumuna göre (adelay + amix) ana sese miksler.',
+                descEn:
+                  'Mixes audio from unmuted V2–V5 PiP clips into the final export at their exact timeline offsets (adelay + amix).',
+              },
+              {
+                key: 'expExportOverlapNormalVideo' as const,
+                defaultOn: true,
+                titleTr: 'Üst Üste Binen Normal Katmanları (V2–V5) Birleştir',
+                titleEn: 'Composite Overlapping Normal Layers (V2–V5)',
+                descTr:
+                  'Katman çakışması açıkken V1 ile çakışan normal V2–V5 kliplerini çakıştığı aralıkta tam ekran üst katman olarak bindirir.',
+                descEn:
+                  'When video layer overlap is allowed, composites overlapping normal V2–V5 clips full-frame over V1 during their exact window.',
+              },
+              {
+                key: 'expAudioLiveDspPreview' as const,
+                defaultOn: true,
+                titleTr: 'Ses Stüdyosu Canlı DSP Önizlemesi (Fade / Mute / Denoise)',
+                titleEn: 'Audio Studio Live DSP Preview (Fade / Mute / Denoise)',
+                descTr:
+                  'Ses Stüdyosu oynatırken Fade In/Out, Sessiz Bölge, Gürültü Azaltma ve Kompresörü canlı olarak duyurur.',
+                descEn:
+                  'Audibly previews Fade In/Out ramps, Mute Region, Noise Reduction filters, and Compressor live in Web Audio playback.',
+              },
+              {
+                key: 'expAudioMultiFormatExport' as const,
+                defaultOn: true,
+                titleTr: 'Ses Stüdyosu Çoklu Format Dışa Aktarım (MP3 / M4A / OGG)',
+                titleEn: 'Audio Studio Multi-Format Export (MP3 / M4A / OGG)',
+                descTr:
+                  'Ses Stüdyosu çıktısını WAV yanında FFmpeg ile MP3, M4A veya OGG olarak kaydetme seçeneği sunar.',
+                descEn:
+                  'Adds WAV, MP3, M4A, and OGG export format selection in Audio Studio using local FFmpeg transcoding.',
+              },
+            ] as const;
+            const activeBetaCount = engineBetaItems.filter((it) => prefs[it.key] !== false).length;
+            return (
+              <SettingsAccordionCard
+                icon={<Cpu className="h-4.5 w-4.5" />}
+                title={lang === 'tr' ? 'Yeni Motor Özellikleri (Beta)' : 'Beta Engine Features'}
+                subtitle={
+                  lang === 'tr'
+                    ? 'FFmpeg dışa aktarım ve Web Audio DSP yeniliklerini tek tıkla test et'
+                    : 'Toggle new FFmpeg export and Web Audio DSP engine capabilities'
+                }
+                badge={`${activeBetaCount}/${engineBetaItems.length} ${lang === 'tr' ? 'aktif' : 'on'}`}
+                defaultOpen={true}
+                accentBorder={true}
+              >
+                <div className="space-y-2.5">
+                  {engineBetaItems.map((item) => {
+                    const checked = prefs[item.key] !== false;
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        role="switch"
+                        aria-checked={checked}
+                        onClick={() =>
+                          onChangePrefs((p) => ({
+                            ...p,
+                            [item.key]: p[item.key] === false,
+                          }))
+                        }
+                        className="flex min-h-[64px] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-[var(--ink)]">
+                            {lang === 'tr' ? item.titleTr : item.titleEn}
+                          </p>
+                          <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
+                            {lang === 'tr' ? item.descTr : item.descEn}
+                          </p>
+                        </div>
+                        <span className="morph-switch shrink-0" data-checked={checked ? 'true' : 'false'}>
+                          <span className="morph-switch-thumb" />
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </SettingsAccordionCard>
+            );
+          })()}
 
-                return (
+          {/* 2. CASCADING TOOL LAUNCHER (Collapsible) */}
+          {(() => {
+            const altEnabled = Boolean(prefs.expAltLauncher);
+            const altStyle: ExpLauncherStyle = prefs.expAltLauncherStyle ?? 'cascade_sheet';
+            const forMenus = prefs.expAltLauncherForMenus !== false;
+            const forMain = prefs.expAltLauncherForMain === true;
+            const forVideo = prefs.expAltLauncherForVideo !== false;
+            const {labelsEnabled, labelMode, showDesc, textSize} =
+              resolveLauncherLabelPrefs(prefs);
+            const previewTitleSize =
+              textSize === 'sm' ? 'text-[10.5px]' : textSize === 'lg' ? 'text-[12.5px]' : 'text-[11.5px]';
+            const previewDescSize =
+              textSize === 'sm' ? 'text-[9.5px]' : textSize === 'lg' ? 'text-[10.5px]' : 'text-[10px]';
+
+            return (
+              <SettingsAccordionCard
+                icon={<Layers className="h-4.5 w-4.5" />}
+                title={
+                  lang === 'tr'
+                    ? 'Kademeli Araç Başlatıcı (5 Stil)'
+                    : 'Cascading Tool Launcher (5 Styles)'
+                }
+                subtitle={
+                  lang === 'tr'
+                    ? 'Seçili menülerde klasik çark yerine 5 kademeli başlatıcı kullan'
+                    : 'Replace classic radial wheel with a 5-style cascading launcher'
+                }
+                badge={altEnabled ? (lang === 'tr' ? 'Açık' : 'On') : lang === 'tr' ? 'Kapalı' : 'Off'}
+                accentBorder={altEnabled}
+                defaultOpen={false}
+              >
+                <div className="space-y-3">
                   <div
                     className={`rounded-2xl border p-3.5 transition-colors ${
                       altEnabled
@@ -3207,10 +3237,33 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       </div>
                     </div>
                   </div>
-                );
-              })()}
+                </div>
+              </SettingsAccordionCard>
+            );
+          })()}
 
-              {/* Quick Wheel 30s Burn Effect (12 Designs) — Wheel shapes moved to Görünüm (Appearance) */}
+          {/* 3. QUICK WHEEL EFFECTS (30s Burn + Dual-Layer Spin) */}
+          <SettingsAccordionCard
+            icon={<Sparkles className="h-4.5 w-4.5" />}
+            title={lang === 'tr' ? 'Hızlı Çark Görsel Efektleri' : 'Quick Wheel Visual Effects'}
+            subtitle={
+              lang === 'tr'
+                ? '30 sn yanma efektleri (12 tasarım) ve çift katmanlı dönüş (8 koreografi)'
+                : '30s burn effects (12 styles) & dual-layer rotation (8 modes)'
+            }
+            badge={
+              [
+                prefs.expWheelBurnEffect ? (lang === 'tr' ? 'Yanma' : 'Burn') : null,
+                prefs.expWheelSpinEnabled ? (lang === 'tr' ? 'Dönüş' : 'Spin') : null,
+              ]
+                .filter(Boolean)
+                .join(' · ') || (lang === 'tr' ? 'Kapalı' : 'Off')
+            }
+            accentBorder={Boolean(prefs.expWheelBurnEffect || prefs.expWheelSpinEnabled)}
+            defaultOpen={false}
+          >
+            <div className="space-y-3">
+              {/* Quick Wheel 30s Burn Effect (12 Designs) */}
               {(() => {
                 const burnEnabled = Boolean(prefs.expWheelBurnEffect);
                 const activeBurnStyle: WheelBurnStylePref = prefs.expWheelBurnStyle ?? 'classic_fire';
@@ -3560,194 +3613,143 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   </div>
                 );
               })()}
-
-              {(
-                [
-                  {
-                    key: 'expAmbientAurora' as const,
-                    defaultOn: false,
-                    titleTr: 'Canlı Ortam Işığı (Aurora)',
-                    titleEn: 'Living Ambient Aurora Glow',
-                    descTr:
-                      'Arka planda seçili Morph temanın renkleriyle yavaşça nefes alıp süzülen yumuşak ortam ışığı katmanı ekler.',
-                    descEn:
-                      'Adds a gentle, slow-drifting ambient glow in the background tinted dynamically to your active Morph theme.',
-                  },
-                  {
-                    key: 'expTerminal' as const,
-                    defaultOn: false,
-                    titleTr: 'Termux Tarzı Morph Terminali',
-                    titleEn: 'Termux-Style Morph Terminal',
-                    descTr:
-                      'Üst çubuğa Termux benzeri etkileşimli komut satırı (ve Ctrl+` kısayolu) ekler. Komutlarla (help, neofetch, ls, tools, open, dl/yt-dlp, theme, engine) uygulamayı doğrudan kontrol edebilirsin.',
-                    descEn:
-                      'Adds a Termux-style interactive command shell to the top bar (and Ctrl+` shortcut) to control tools, themes, download engines, and URL downloads via CLI commands.',
-                  },
-                  {
-                    key: 'expUiSounds' as const,
-                    defaultOn: false,
-                    titleTr: 'Mekanik Arayüz Sesleri',
-                    titleEn: 'Tactile UI Micro-Sounds',
-                    descTr:
-                      'Düğmelere, sekmelere ve anahtarlara dokunduğunda hafif, mekanik ve tamamen çevrimdışı dokunsal ses geri bildirimi verir.',
-                    descEn:
-                      'Synthesizes subtle, crisp mechanical clicks and switch tones on taps with zero external audio files.',
-                  },
-                  {
-                    key: 'expWheelShockwave' as const,
-                    defaultOn: false,
-                    titleTr: 'Hızlı Çark Şok Dalgası',
-                    titleEn: 'Quick Wheel Shockwave Pulse',
-                    descTr:
-                      'Hızlı Çark düğmesine bastığında veya köşeye bıraktığında etrafında tema renkli genişleyen şok dalgası oluşturur.',
-                    descEn:
-                      'Emits an expanding theme-accented shockwave pulse ring around the Quick Wheel on press and corner snap.',
-                  },
-                  {
-                    key: 'expArmadilloReel' as const,
-                    defaultOn: true,
-                    titleTr: 'Video Düzenleyici Katlanan Armadillo Çarkı',
-                    titleEn: 'Video Editor Armadillo Fold Reel',
-                    descTr:
-                      'Varsayılan olarak açıktır. Kapatırsan Video Düzenleyici dikey görünümünde standart sabit alt araç çubuğu kullanılır.',
-                    descEn:
-                      'Enabled by default. Turn off to use the flat bottom dock in portrait Video Editor instead of the 3D folding reel.',
-                  },
-                  {
-                    key: 'expArmadilloHideOnFullPreview' as const,
-                    defaultOn: true,
-                    titleTr: 'Tam Önizlemede Sinema Çarkını Gizle',
-                    titleEn: 'Hide Cinema Wheel in Full Preview',
-                    descTr:
-                      'Varsayılan olarak açıktır. Video önizlemeyi en alta kadar çekip tam görünüm açtığında köşedeki Sinema Çarkı otomatik kaybolur; yukarı çektiğinde geri gelir.',
-                    descEn:
-                      'Enabled by default. Automatically hides the corner Cinema Wheel when dragging preview all the way down, and brings it back when pulled up.',
-                  },
-                  {
-                    key: 'expArmadilloHideOnPlay' as const,
-                    defaultOn: true,
-                    titleTr: 'Video Oynatırken Sinema Çarkını Gizle',
-                    titleEn: 'Hide Cinema Wheel While Playing',
-                    descTr:
-                      'Varsayılan olarak açıktır. Video oynatılırken köşedeki Sinema Çarkı otomatik gizlenir, duraklattığında anında geri görünür.',
-                    descEn:
-                      'Enabled by default. Automatically hides the corner Cinema Wheel during video playback and restores it as soon as playback pauses.',
-                  },
-                  {
-                    key: 'expVideoMobileGridInHeader' as const,
-                    defaultOn: true,
-                    titleTr: 'Mobilde Üst Çubukta Izgara (3×3) & Kıyaslama',
-                    titleEn: 'Mobile Header 3×3 Grid & Split Compare',
-                    descTr:
-                      'Varsayılan olarak açıktır. Mobil Video Düzenleyici üst çubuğunda 3×3 kadraj ızgarası ve bölünmüş önce/sonra kısayollarını gösterir. Kapatsan bile ızgara Kadraj sekmesinden, kıyaslama Renk sekmesinden açılabilir.',
-                    descEn:
-                      'Enabled by default. Shows 3×3 composition grid and split before/after shortcuts directly in the mobile Video Editor header (still accessible in Crop & Color tabs when off).',
-                  },
-                  {
-                    key: 'expVideoMobileMuteInTransport' as const,
-                    defaultOn: true,
-                    titleTr: 'Mobilde Oynatma Çubuğunda Sessize Al',
-                    titleEn: 'Mobile Transport Bar Mute Button',
-                    descTr:
-                      'Varsayılan olarak açıktır. Mobil oynatma çubuğunda tek dokunuşla ana sesi kapatıp açma (Mute) simgesini kompakt şekilde gösterir. Kapatıldığında oynatma çubuğu daha geniş kalır ve ses ayarı Ses sekmesinden yapılır.',
-                    descEn:
-                      'Enabled by default. Shows a compact Master Mute toggle directly in the mobile transport bar (when off, master mute stays available in the Audio tab).',
-                  },
-                  {
-                    key: 'expVideoExtraTimecodes' as const,
-                    defaultOn: false,
-                    titleTr: 'Video Düzenleyici Ek Süre Göstergeleri',
-                    titleEn: 'Video Editor Extra Timecode Badges',
-                    descTr:
-                      'Çarkın ortasındaki süre her zaman görünür. Bu ayar açıldığında çarkın üst şeridi, deneysel alt çubuk ve deneysel araç penceresi başlığında da anlık zaman kodu gösterilir.',
-                    descEn:
-                      'The center wheel timecode always stays visible. Turn on to also show extra timecodes in the wheel top badge, experimental bottom bar, and experimental tool launcher header.',
-                  },
-                  {
-                    key: 'expTouchTooltips' as const,
-                    defaultOn: false,
-                    titleTr: 'Dokunmatikte Düzenleyici İpucu Baloncukları',
-                    titleEn: 'Touch-Device Editor Tooltips',
-                    descTr:
-                      'Açıkken Video Düzenleyici butonlarının açıklama baloncukları telefon ve dokunmatik ekranlarda da görünür.',
-                    descEn:
-                      'Shows floating tooltip bubbles on Video Editor buttons on touch screens in addition to desktop mouse hover.',
-                  },
-                  {
-                    key: 'expSpinningGear' as const,
-                    defaultOn: false,
-                    titleTr: 'Sürekli Dönen Ayarlar Dişlisi',
-                    titleEn: 'Continuously Spinning Settings Gear',
-                    descTr: 'Üst çubuktaki Ayarlar ikonunu sürekli döndürür.',
-                    descEn: 'Keeps the top-bar Settings gear continuously rotating.',
-                  },
-                  {
-                    key: 'expWheelCenterHoldCustomize' as const,
-                    defaultOn: false,
-                    titleTr: 'Çark Ortasına 3 sn Basarak Özelleştir',
-                    titleEn: '3s Center-Hold Wheel Customize',
-                    descTr:
-                      'Açıkken "Özelleştir" butonunu gizler; çarkta ortadaki m logosuna, 5 kademeli başlatıcıda ise sol üstteki m amblemine 3 saniye basılı tutarak özelleştirirsin.',
-                    descEn:
-                      'Hides the Customize button; hold the center Morph hub on radial wheels or the top-left Morph mark on cascading launchers for 3 seconds to customize.',
-                  },
-                  {
-                    key: 'expLegacySliders' as const,
-                    defaultOn: false,
-                    titleTr: '3 Seçenekli Ayarlarda Ek Kaydırıcılar',
-                    titleEn: 'Extra Sliders on 3-Option Controls',
-                    descTr:
-                      'Arayüz boyutu, köşe stili ve çark konumu seçeneklerinin üstünde ek kaydırma çubuklarını gösterir.',
-                    descEn:
-                      'Restores duplicate range sliders above the segmented buttons for UI Scale, Corner Radius, and Wheel Position.',
-                  },
-                ] as const
-              ).map((item) => {
-                const checked = item.defaultOn
-                  ? prefs[item.key] !== false
-                  : Boolean(prefs[item.key]);
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    role="switch"
-                    aria-checked={checked}
-                    onClick={() =>
-                      onChangePrefs((p) => ({
-                        ...p,
-                        [item.key]: item.defaultOn ? p[item.key] === false : !p[item.key],
-                      }))
-                    }
-                    className="flex min-h-[68px] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-[var(--ink)]">
-                        {lang === 'tr' ? item.titleTr : item.titleEn}
-                      </p>
-                      <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
-                        {lang === 'tr' ? item.descTr : item.descEn}
-                      </p>
-                    </div>
-                    <span className="morph-switch shrink-0" data-checked={checked ? 'true' : 'false'}>
-                      <span className="morph-switch-thumb" />
-                    </span>
-                  </button>
-                );
-              })}
             </div>
-          </section>
+          </SettingsAccordionCard>
 
-          <SettingsStudioLayoutCard
-            prefs={prefs}
-            lang={lang}
-            onChangePrefs={onChangePrefs}
-          />
+          {/* 4. VISUAL & CLASSIC UI EXPERIMENTS */}
+          {(() => {
+            const uiExpItems = [
+              {
+                key: 'expAmbientAurora' as const,
+                titleTr: 'Canlı Ortam Işığı (Aurora)',
+                titleEn: 'Living Ambient Aurora Glow',
+                descTr:
+                  'Arka planda seçili Morph temanın renkleriyle yavaşça nefes alıp süzülen yumuşak ortam ışığı katmanı ekler.',
+                descEn:
+                  'Adds a gentle, slow-drifting ambient glow in the background tinted dynamically to your active Morph theme.',
+              },
+              {
+                key: 'expTerminal' as const,
+                titleTr: 'Termux Tarzı Morph Terminali',
+                titleEn: 'Termux-Style Morph Terminal',
+                descTr:
+                  'Üst çubuğa Termux benzeri etkileşimli komut satırı (ve Ctrl+` kısayolu) ekler. Komutlarla uygulamayı doğrudan kontrol edebilirsin.',
+                descEn:
+                  'Adds a Termux-style interactive command shell to the top bar (and Ctrl+` shortcut) to control tools, themes, and downloads via CLI.',
+              },
+              {
+                key: 'expUiSounds' as const,
+                titleTr: 'Mekanik Arayüz Sesleri',
+                titleEn: 'Tactile UI Micro-Sounds',
+                descTr:
+                  'Düğmelere, sekmelere ve anahtarlara dokunduğunda hafif, mekanik ve tamamen çevrimdışı dokunsal ses geri bildirimi verir.',
+                descEn:
+                  'Synthesizes subtle, crisp mechanical clicks and switch tones on taps with zero external audio files.',
+              },
+              {
+                key: 'expVideoExtraTimecodes' as const,
+                titleTr: 'Video Düzenleyici Ek Süre Göstergeleri',
+                titleEn: 'Video Editor Extra Timecode Badges',
+                descTr:
+                  'Çarkın üst şeridi, deneysel alt çubuk ve deneysel araç penceresi başlığında da anlık zaman kodu gösterir.',
+                descEn:
+                  'Shows extra timecodes in the wheel top badge, experimental bottom bar, and experimental tool launcher header.',
+              },
+              {
+                key: 'expTouchTooltips' as const,
+                titleTr: 'Dokunmatikte Düzenleyici İpucu Baloncukları',
+                titleEn: 'Touch-Device Editor Tooltips',
+                descTr:
+                  'Video Düzenleyici butonlarının açıklama baloncuklarını telefon ve dokunmatik ekranlarda da gösterir.',
+                descEn:
+                  'Shows floating tooltip bubbles on Video Editor buttons on touch screens in addition to desktop hover.',
+              },
+              {
+                key: 'expSpinningGear' as const,
+                titleTr: 'Sürekli Dönen Ayarlar Dişlisi',
+                titleEn: 'Continuously Spinning Settings Gear',
+                descTr: 'Üst çubuktaki Ayarlar ikonunu sürekli döndürür.',
+                descEn: 'Keeps the top-bar Settings gear continuously rotating.',
+              },
+              {
+                key: 'expWheelCenterHoldCustomize' as const,
+                titleTr: 'Çark Ortasına 3 sn Basarak Özelleştir',
+                titleEn: '3s Center-Hold Wheel Customize',
+                descTr:
+                  'Özelleştir butonunu gizler; çarkın ortasına veya başlatıcıda sol üst m amblemine 3 saniye basılı tutarak özelleştirirsin.',
+                descEn:
+                  'Hides the Customize button; hold the center Morph hub for 3 seconds to customize.',
+              },
+              {
+                key: 'expLegacySliders' as const,
+                titleTr: '3 Seçenekli Ayarlarda Ek Kaydırıcılar',
+                titleEn: 'Extra Sliders on 3-Option Controls',
+                descTr:
+                  'Arayüz boyutu ve köşe stili seçeneklerinin üstünde ek kaydırma çubuklarını gösterir.',
+                descEn:
+                  'Restores duplicate range sliders above the segmented buttons for UI Scale and Corner Radius.',
+              },
+            ] as const;
+            const activeUiCount = uiExpItems.filter((it) => Boolean(prefs[it.key])).length;
+            return (
+              <SettingsAccordionCard
+                icon={<SlidersHorizontal className="h-4.5 w-4.5" />}
+                title={lang === 'tr' ? 'Görsel & Klasik Deneyler' : 'Visual & Classic Experiments'}
+                subtitle={
+                  lang === 'tr'
+                    ? 'Aurora ortam ışığı, Morph terminali, arayüz sesleri ve klasik davranışlar'
+                    : 'Aurora glow, Morph terminal, UI micro-sounds & classic behaviors'
+                }
+                badge={
+                  activeUiCount > 0
+                    ? `${activeUiCount} ${lang === 'tr' ? 'aktif' : 'on'}`
+                    : lang === 'tr'
+                      ? 'Tümü kapalı'
+                      : 'All off'
+                }
+                defaultOpen={false}
+              >
+                <div className="space-y-2.5">
+                  {uiExpItems.map((item) => {
+                    const checked = Boolean(prefs[item.key]);
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        role="switch"
+                        aria-checked={checked}
+                        onClick={() =>
+                          onChangePrefs((p) => ({
+                            ...p,
+                            [item.key]: !p[item.key],
+                          }))
+                        }
+                        className="flex min-h-[64px] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-[var(--ink)]">
+                            {lang === 'tr' ? item.titleTr : item.titleEn}
+                          </p>
+                          <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
+                            {lang === 'tr' ? item.descTr : item.descEn}
+                          </p>
+                        </div>
+                        <span className="morph-switch shrink-0" data-checked={checked ? 'true' : 'false'}>
+                          <span className="morph-switch-thumb" />
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </SettingsAccordionCard>
+            );
+          })()}
         </div>
       )}
 
-      {/* CATEGORY 5: UPDATES (Equal-Height h-12 Boxes, Single Clean Version Row, Developer Telegram) */}
-      {category === 'about' && (
-        <div className="mt-5 space-y-4">
+      {/* CATEGORY 5: SYSTEM (Updates, Storage & Cache, Permissions with 7-tap Experimental unlock, Developer) */}
+      {category === 'system' && (
+        <div className="mt-4 space-y-4">
           <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
@@ -4048,6 +4050,106 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 </span>
               </div>
             )}
+          </section>
+
+          {/* App Permissions Card (Merged into System tab; preserves 7-tap Shield Experimental unlock) */}
+          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={handlePermShieldTap}
+                  aria-label={t('PermissionsSection', lang)}
+                  className="flex h-9 w-9 shrink-0 cursor-default items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)] focus:outline-none"
+                >
+                  <ShieldCheck className="h-5 w-5" />
+                </button>
+                <div className="min-w-0">
+                  <h2 className="text-sm font-extrabold leading-tight text-[var(--ink)] sm:text-base">
+                    {t('PermissionsSection', lang)}
+                  </h2>
+                  <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
+                    {t('PermissionsDesc', lang)}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={requestingPerms}
+                onClick={handleGrantAllPermissions}
+                className="morph-tonal-btn flex min-h-[42px] shrink-0 items-center justify-center gap-2 rounded-full px-4 text-xs font-semibold whitespace-nowrap transition-transform active:scale-[0.98] disabled:opacity-70"
+              >
+                <ShieldCheck className="h-4 w-4 shrink-0 text-[var(--accent)]" />
+                <span>{t('RequestPermissionsBtn', lang)}</span>
+              </button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              {(
+                [
+                  {
+                    key: 'storage' as const,
+                    title: t('PermStorage', lang),
+                    desc: t('PermStorageDesc', lang),
+                    Icon: FolderCheck,
+                  },
+                  {
+                    key: 'media' as const,
+                    title: t('PermMedia', lang),
+                    desc: t('PermMediaDesc', lang),
+                    Icon: ImageIcon,
+                  },
+                  {
+                    key: 'notifications' as const,
+                    title: t('PermNotifications', lang),
+                    desc: t('PermNotificationsDesc', lang),
+                    Icon: Bell,
+                  },
+                  {
+                    key: 'clipboard' as const,
+                    title: t('PermClipboard', lang),
+                    desc: t('PermClipboardDesc', lang),
+                    Icon: ClipboardPaste,
+                  },
+                ] as const
+              ).map(({key, title, desc, Icon}) => {
+                const state = perms[key];
+                const isActionable = state === 'prompt';
+                const isGranted = state === 'granted' || state === 'ready';
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    disabled={requestingPerms}
+                    onClick={() => handleSinglePermission(key)}
+                    className="flex min-h-[68px] items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
+                  >
+                    <div className="flex min-w-0 items-start gap-3">
+                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--accent)]">
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-[var(--ink)]">{title}</p>
+                        <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">{desc}</p>
+                      </div>
+                    </div>
+                    <span
+                      className={`shrink-0 text-xs font-semibold whitespace-nowrap ${
+                        isGranted
+                          ? 'text-[var(--accent-end)]'
+                          : isActionable
+                            ? 'text-[var(--accent)]'
+                            : 'text-[var(--muted)]'
+                      }`}
+                    >
+                      {permBadgeLabel(state)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </section>
 
           {/* Equal-Width Developer Card with permanent 8s Cloud Easter Egg */}
