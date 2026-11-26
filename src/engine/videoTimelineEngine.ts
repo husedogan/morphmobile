@@ -1957,7 +1957,7 @@ export function trimAudioClipHandle(
     const maxSourceEnd =
       typeof a.sourceDurationSec === 'number' && a.sourceDurationSec > minDur
         ? a.sourceDurationSec
-        : Math.max(minDur, a.sourceEnd);
+        : Math.max(a.sourceEnd, a.sourceStart + minDur);
     const maxDurBySource = Math.max(minDur, maxSourceEnd - a.sourceStart);
     const maxDurByNeighbor = Math.max(minDur, maxNeighborEnd - a.timelineStart);
     const nextDur = Math.min(

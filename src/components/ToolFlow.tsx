@@ -3152,13 +3152,14 @@ const LocalToolConfig: React.FC<{
         onToggleToolLabels={onToggleToolLabels}
         pdfFile={files[0] ?? null}
         onBack={onBack}
-        onExport={() =>
+        onExport={() => {
+          const trimmedRanges = splitMode === 'ranges' ? ranges.trim() : '';
           onExport({
             kind: 'pdfSplit',
-            everyN: splitMode === 'ranges' && !ranges.trim() ? 1 : everyN,
-            ranges: splitMode === 'ranges' ? ranges : '',
-          })
-        }
+            everyN: splitMode === 'ranges' && !trimmedRanges ? 1 : everyN,
+            ranges: trimmedRanges,
+          });
+        }}
       >
         <PdfSplitVisualPicker
           file={files[0]?.file}
@@ -3289,13 +3290,14 @@ const LocalToolConfig: React.FC<{
         onToggleToolLabels={onToggleToolLabels}
         pdfFile={files[0] ?? null}
         onBack={onBack}
-        onExport={() =>
+        onExport={() => {
+          const parsedDeg = Number(pdfDeg);
           onExport({
             kind: 'pdfRotate',
-            degrees: Number.isFinite(Number(pdfDeg)) ? Number(pdfDeg) : 90,
+            degrees: Number.isFinite(parsedDeg) ? parsedDeg : 90,
             pageRotations: pdfPageRotations.length > 0 ? pdfPageRotations : undefined,
-          })
-        }
+          });
+        }}
       >
         <PdfRotateVisualPicker
           file={files[0]?.file}

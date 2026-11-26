@@ -20,49 +20,80 @@ export function normalizeImageFormat(format: string): string {
   return 'jpg';
 }
 
-export async function decodeImage(file: Blob, maxDim?: number): Promise<DecodedImage> {
-  let bitmap: ImageBitmap;
+const SAFE_MAX_IMAGE_DIM = 4096;
+const SAFE_MAX_IMAGE_PIXELS = 50_000_000;
+
+async function decodeViaHtmlImage(file: Blob, maxDim?: number): Promise<ImageBitmap> {
+  const url = URL.createObjectURL(file);
   try {
-    if (file.type === 'image/svg+xml') {
-      throw new Error('SVG_FALLBACK');
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('Image decode failed'));
+      el.src = url;
+    });
+    const rawW = Math.max(1, img.naturalWidth || img.width || 1024);
+    const rawH = Math.max(1, img.naturalHeight || img.height || 1024);
+    const effectiveMax = maxDim && maxDim > 0 ? Math.min(maxDim, SAFE_MAX_IMAGE_DIM) : SAFE_MAX_IMAGE_DIM;
+    let scale = 1;
+    const longest = Math.max(rawW, rawH);
+    if (longest > effectiveMax) {
+      scale = Math.min(scale, effectiveMax / longest);
     }
-    bitmap = await createImageBitmap(file, {imageOrientation: 'from-image'});
-  } catch {
+    if (rawW * rawH * scale * scale > SAFE_MAX_IMAGE_PIXELS) {
+      scale = Math.min(scale, Math.sqrt(SAFE_MAX_IMAGE_PIXELS / (rawW * rawH)));
+    }
+    const w = Math.max(1, Math.round(rawW * scale));
+    const h = Math.max(1, Math.round(rawH * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas unavailable');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, w, h);
+    return await createImageBitmap(canvas);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+export async function decodeImage(file: Blob, maxDim?: number): Promise<DecodedImage> {
+  const isSvg =
+    file.type === 'image/svg+xml' ||
+    ('name' in file && typeof (file as File).name === 'string' && /\.svg$/i.test((file as File).name));
+
+  let bitmap: ImageBitmap;
+  if (isSvg) {
+    bitmap = await decodeViaHtmlImage(file, maxDim);
+  } else {
     try {
-      if (file.type === 'image/svg+xml') {
-        throw new Error('SVG_FALLBACK');
-      }
-      bitmap = await createImageBitmap(file);
+      bitmap = await createImageBitmap(file, {imageOrientation: 'from-image'});
     } catch {
-      const url = URL.createObjectURL(file);
       try {
-        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-          const el = new Image();
-          el.onload = () => resolve(el);
-          el.onerror = () => reject(new Error('Image decode failed'));
-          el.src = url;
-        });
-        const w = Math.max(1, img.naturalWidth || 512);
-        const h = Math.max(1, img.naturalHeight || 512);
-        const c = document.createElement('canvas');
-        c.width = w;
-        c.height = h;
-        const ctx = c.getContext('2d');
-        if (!ctx) throw new Error('Canvas unavailable');
-        ctx.drawImage(img, 0, 0, w, h);
-        bitmap = await createImageBitmap(c);
-      } finally {
-        URL.revokeObjectURL(url);
+        bitmap = await createImageBitmap(file);
+      } catch {
+        bitmap = await decodeViaHtmlImage(file, maxDim);
       }
     }
   }
 
   let target = bitmap;
-  const longest = Math.max(bitmap.width, bitmap.height);
-  if (maxDim && maxDim > 0 && longest > maxDim) {
-    const ratio = maxDim / longest;
-    const w = Math.max(1, Math.round(bitmap.width * ratio));
-    const h = Math.max(1, Math.round(bitmap.height * ratio));
+  const rawW = Math.max(1, bitmap.width);
+  const rawH = Math.max(1, bitmap.height);
+  const longest = Math.max(rawW, rawH);
+  const effectiveMax = maxDim && maxDim > 0 ? Math.min(maxDim, SAFE_MAX_IMAGE_DIM) : SAFE_MAX_IMAGE_DIM;
+  let scale = 1;
+  if (longest > effectiveMax) {
+    scale = Math.min(scale, effectiveMax / longest);
+  }
+  if (rawW * rawH * scale * scale > SAFE_MAX_IMAGE_PIXELS) {
+    scale = Math.min(scale, Math.sqrt(SAFE_MAX_IMAGE_PIXELS / (rawW * rawH)));
+  }
+  if (scale < 1) {
+    const w = Math.max(1, Math.round(rawW * scale));
+    const h = Math.max(1, Math.round(rawH * scale));
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
@@ -77,9 +108,9 @@ export async function decodeImage(file: Blob, maxDim?: number): Promise<DecodedI
   }
 
   const hasAlpha =
+    isSvg ||
     file.type === 'image/png' ||
     file.type === 'image/webp' ||
-    file.type === 'image/svg+xml' ||
     file.type === 'image/x-icon' ||
     file.type === 'image/gif';
   return {
@@ -275,7 +306,7 @@ export async function editImageBlob(
 ): Promise<{blob: Blob; format: string}> {
   const rawFmt = ENCODABLE_IMAGE_FORMATS.includes(ext.toLowerCase()) ? normalizeImageFormat(ext) : 'jpg';
   const format = ['ico', 'svg'].includes(rawFmt) ? 'png' : rawFmt;
-  const decoded = await decodeImage(file, 4096);
+  const decoded = await decodeImage(file);
   try {
     const edited = renderEditedToCanvas(decoded.bitmap, opts);
     if (needsWhiteBackdrop(format)) {
@@ -297,7 +328,7 @@ export async function cropImageBlob(
 ): Promise<{blob: Blob; format: string}> {
   const rawFmt = ENCODABLE_IMAGE_FORMATS.includes(ext.toLowerCase()) ? normalizeImageFormat(ext) : 'jpg';
   const format = ['ico', 'svg'].includes(rawFmt) ? 'png' : rawFmt;
-  const decoded = await decodeImage(file, 4096);
+  const decoded = await decodeImage(file);
   try {
     const sx = Math.max(0, Math.min(decoded.width - 1, Math.round(rect.left * decoded.width)));
     const sy = Math.max(0, Math.min(decoded.height - 1, Math.round(rect.top * decoded.height)));
@@ -1279,11 +1310,13 @@ async function encodeMultiSizeIcoFromCanvas(
   sizes: number[] = [16, 32, 48, 256]
 ): Promise<Blob> {
   const pngBuffers: Array<{size: number; bytes: Uint8Array}> = [];
+  const srcW = Math.max(1, sourceCanvas.width);
+  const srcH = Math.max(1, sourceCanvas.height);
   for (const sz of sizes) {
     const {canvas, ctx} = createCanvas(sz, sz, false);
-    const scale = Math.min(sz / sourceCanvas.width, sz / sourceCanvas.height);
-    const dw = sourceCanvas.width * scale;
-    const dh = sourceCanvas.height * scale;
+    const scale = Math.min(sz / srcW, sz / srcH);
+    const dw = Math.max(1, Math.round(srcW * scale));
+    const dh = Math.max(1, Math.round(srcH * scale));
     ctx.drawImage(sourceCanvas, (sz - dw) / 2, (sz - dh) / 2, dw, dh);
     const pngBlob = await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('PNG encode failed'))), 'image/png');

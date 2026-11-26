@@ -213,11 +213,13 @@ interface PageCanvasProps {
   pdf: pdfjsLib.PDFDocumentProxy;
   pageNum: number;
   zoom: number;
+  lang: Lang;
   readingTheme: PdfReadingTheme;
   isActive: boolean;
   matchCount: number;
   isCurrentMatchPage: boolean;
   baseViewportWidth: number;
+  scrollRootEl: HTMLDivElement | null;
   annotateMode: boolean;
   annotTool: PdfAnnotTool;
   annotColor: string;
@@ -235,11 +237,13 @@ const LazyPdfPage: React.FC<PageCanvasProps> = ({
   pdf,
   pageNum,
   zoom,
+  lang,
   readingTheme,
   isActive,
   matchCount,
   isCurrentMatchPage,
   baseViewportWidth,
+  scrollRootEl,
   annotateMode,
   annotTool,
   annotColor,
@@ -259,7 +263,7 @@ const LazyPdfPage: React.FC<PageCanvasProps> = ({
   const [renderedKey, setRenderedKey] = useState('');
   const [aspectRatio, setAspectRatio] = useState(210 / 297);
   const [rendering, setRendering] = useState(false);
-  const [renderError, setRenderError] = useState<string | null>(null);
+  const [renderError, setRenderError] = useState(false);
   const [retryTick, setRetryTick] = useState(0);
 
   const [draftStroke, setDraftStroke] = useState<PdfAnnotStroke | null>(null);
@@ -279,17 +283,23 @@ const LazyPdfPage: React.FC<PageCanvasProps> = ({
         for (const entry of entries) {
           if (entry.isIntersecting) {
             setInView(true);
-            if (entry.intersectionRatio >= 0.2 || entry.intersectionRect.height >= 160) {
+            const rootH = entry.rootBounds?.height || window.innerHeight || 600;
+            const fillsRoot = entry.intersectionRect.height >= rootH * 0.35;
+            if (entry.intersectionRatio >= 0.35 || fillsRoot) {
               onBecomeVisible(pageNum);
             }
           }
         }
       },
-      {rootMargin: '360px 0px', threshold: [0.05, 0.2, 0.5]}
+      {
+        root: scrollRootEl ?? null,
+        rootMargin: '420px 0px',
+        threshold: [0.05, 0.2, 0.35, 0.65],
+      }
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [pageNum, onBecomeVisible]);
+  }, [pageNum, onBecomeVisible, scrollRootEl]);
 
   useEffect(() => {
     if (!inView) return;
@@ -300,7 +310,7 @@ const LazyPdfPage: React.FC<PageCanvasProps> = ({
     let cancelled = false;
     let renderTask: pdfjsLib.RenderTask | null = null;
     setRendering(true);
-    setRenderError(null);
+    setRenderError(false);
 
     (async () => {
       try {
@@ -324,27 +334,37 @@ const LazyPdfPage: React.FC<PageCanvasProps> = ({
         offscreen.width = Math.max(1, Math.round(vp.width));
         offscreen.height = Math.max(1, Math.round(vp.height));
         const offCtx = offscreen.getContext('2d');
-        if (offCtx) {
-          offCtx.fillStyle = '#FFFFFF';
-          offCtx.fillRect(0, 0, offscreen.width, offscreen.height);
-          renderTask = page.render({canvasContext: offCtx, viewport: vp, canvas: offscreen});
-          await renderTask.promise;
+        if (!offCtx) {
+          page.cleanup();
+          throw new Error('2D context unavailable');
+        }
+        offCtx.fillStyle = '#FFFFFF';
+        offCtx.fillRect(0, 0, offscreen.width, offscreen.height);
+        renderTask = page.render({canvasContext: offCtx, viewport: vp, canvas: offscreen});
+        await renderTask.promise;
+
+        if (!cancelled) {
           const canvas = canvasRef.current;
-          if (!cancelled && canvas) {
+          if (canvas) {
             canvas.width = offscreen.width;
             canvas.height = offscreen.height;
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-              ctx.drawImage(offscreen, 0, 0);
+            const visibleCtx = canvas.getContext('2d');
+            if (visibleCtx) {
+              visibleCtx.drawImage(offscreen, 0, 0);
             }
-            setRenderedKey(key);
           }
+          setRenderedKey(key);
+          setRenderError(false);
         }
         page.cleanup();
       } catch (err) {
-        const name = (err as {name?: string} | null)?.name ?? '';
-        if (!cancelled && name !== 'RenderingCancelledException') {
-          setRenderError(err instanceof Error ? err.message : 'Render failed');
+        const isCancel =
+          cancelled ||
+          (err instanceof Error &&
+            (err.name === 'RenderingCancelledException' ||
+              err.message.toLowerCase().includes('cancel')));
+        if (!isCancel && !cancelled) {
+          setRenderError(true);
         }
       } finally {
         if (!cancelled) setRendering(false);
@@ -532,25 +552,30 @@ const LazyPdfPage: React.FC<PageCanvasProps> = ({
           }`}
         />
 
-        {rendering && (
+        {rendering && !renderedKey && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/5">
             <Loader2 className="h-5 w-5 animate-spin text-[var(--accent)]" />
           </div>
         )}
 
         {renderError && !rendering && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/75 p-4 text-center text-white">
-            <p className="text-xs font-semibold text-rose-300">{renderError}</p>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-[var(--surface)]/95 p-4 text-center"
+          >
+            <p className="text-xs font-bold text-[var(--ink)]">
+              {lang === 'tr' ? `Sayfa ${pageNum} çizilemedi` : `Page ${pageNum} failed to render`}
+            </p>
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
+              onClick={() => {
                 setRenderedKey('');
+                setRenderError(false);
                 setRetryTick((t) => t + 1);
               }}
-              className="rounded-xl bg-[var(--accent)] px-3 py-1.5 text-xs font-bold text-white"
+              className="morph-accent-btn min-h-[38px] rounded-xl px-4 text-xs font-bold shadow-sm active:scale-95"
             >
-              Tekrar Dene
+              {lang === 'tr' ? 'Tekrar Dene' : 'Retry'}
             </button>
           </div>
         )}
@@ -626,10 +651,16 @@ export const PdfCanvasViewer: React.FC<PdfCanvasViewerProps> = ({
 
   const pageElsRef = useRef<Map<number, HTMLDivElement>>(new Map());
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [scrollRootEl, setScrollRootEl] = useState<HTMLDivElement | null>(null);
   const pinchRef = useRef<{dist: number; baseZoom: number} | null>(null);
   const swipeStartRef = useRef<{x: number; y: number; t: number} | null>(null);
   const initialJumpedRef = useRef(false);
   const sourceBytesRef = useRef<Uint8Array | null>(null);
+
+  const setScrollContainerNode = useCallback((el: HTMLDivElement | null) => {
+    scrollContainerRef.current = el;
+    setScrollRootEl(el);
+  }, []);
 
   // Measure scroll container width for crisp edge-to-edge mobile Fit-Width
   useEffect(() => {
@@ -1273,17 +1304,21 @@ export const PdfCanvasViewer: React.FC<PdfCanvasViewerProps> = ({
 
       {/* MAIN EDGE-TO-EDGE READING STAGE */}
       <div
-        ref={scrollContainerRef}
+        ref={setScrollContainerNode}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onWheel={handleWheel}
         className={`h-full w-full flex-1 overflow-auto transition-colors duration-200 ${backdropStyle} ${
-          flowMode === 'single' && zoom <= 1 ? 'flex items-start justify-center' : ''
+          flowMode === 'single'
+            ? zoom > 1
+              ? 'flex items-start justify-start'
+              : 'flex items-start justify-center'
+            : ''
         }`}
       >
         <div
-          className={`mx-auto ${zoom > 1 ? 'w-max min-w-full' : 'w-full'} ${
+          className={`${zoom > 1 ? 'w-max min-w-full' : 'mx-auto w-full'} ${
             flowMode === 'single'
               ? 'my-auto pt-24 pb-28 px-1 sm:px-4'
               : 'space-y-2.5 pt-24 pb-28 px-1 sm:px-3.5'
@@ -1295,11 +1330,13 @@ export const PdfCanvasViewer: React.FC<PdfCanvasViewerProps> = ({
               pdf={pdfDoc}
               pageNum={pageNum}
               zoom={zoom}
+              lang={lang}
               readingTheme={readingTheme}
               isActive={currentPage === pageNum}
               matchCount={matchMap.get(pageNum) ?? 0}
               isCurrentMatchPage={activeMatch?.pageNum === pageNum}
               baseViewportWidth={viewportWidth}
+              scrollRootEl={scrollRootEl}
               annotateMode={annotateMode}
               annotTool={annotTool}
               annotColor={annotColor}

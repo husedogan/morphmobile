@@ -38,8 +38,31 @@ async function canvasToBlob(canvas: HTMLCanvasElement, mime: string, quality?: n
   });
 }
 
+const MAX_PRO_IMAGE_DIM = 4096;
+const MAX_PRO_IMAGE_PIXELS = 50_000_000;
+
+function clampImageDimensions(rawW: number, rawH: number, maxWidth = 0): {w: number; h: number} {
+  const safeW = Math.max(1, rawW || 1024);
+  const safeH = Math.max(1, rawH || 1024);
+  let scale = 1;
+  if (maxWidth > 0 && safeW > maxWidth) {
+    scale = Math.min(scale, maxWidth / safeW);
+  }
+  const longest = Math.max(safeW, safeH);
+  if (longest * scale > MAX_PRO_IMAGE_DIM) {
+    scale = Math.min(scale, MAX_PRO_IMAGE_DIM / longest);
+  }
+  if (safeW * safeH * scale * scale > MAX_PRO_IMAGE_PIXELS) {
+    scale = Math.min(scale, Math.sqrt(MAX_PRO_IMAGE_PIXELS / (safeW * safeH)));
+  }
+  return {
+    w: Math.max(1, Math.round(safeW * scale)),
+    h: Math.max(1, Math.round(safeH * scale)),
+  };
+}
+
 /**
- * Live compressed preview for Squoosh-style Before/After Split-Slider.
+ * Live compressed preview for Before/After Split-Slider.
  */
 export async function renderLiveImagePreview(
   blob: Blob,
@@ -49,13 +72,7 @@ export async function renderLiveImagePreview(
 ): Promise<{blob: Blob; width: number; height: number; mime: string}> {
   const {img, revoke} = await loadImageBitmapOrElement(blob);
   try {
-    let w = img.naturalWidth || 1024;
-    let h = img.naturalHeight || 1024;
-    if (maxWidth > 0 && w > maxWidth) {
-      const ratio = maxWidth / w;
-      w = Math.round(w * ratio);
-      h = Math.round(h * ratio);
-    }
+    const {w, h} = clampImageDimensions(img.naturalWidth || img.width, img.naturalHeight || img.height, maxWidth);
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
@@ -101,8 +118,7 @@ export async function compressImageToTargetKb(
   const {img, revoke} = await loadImageBitmapOrElement(blob);
 
   try {
-    const origW = img.naturalWidth || 1024;
-    const origH = img.naturalHeight || 1024;
+    const {w: origW, h: origH} = clampImageDimensions(img.naturalWidth || img.width, img.naturalHeight || img.height);
     const scales = [1, 0.85, 0.72, 0.58, 0.45, 0.34, 0.25];
     let bestCandidate: TargetCompressResult | null = null;
 
@@ -387,20 +403,18 @@ export async function encodeIcoFromImage(blob: Blob, sizes = [16, 32, 48, 64, 12
   const {img, revoke} = await loadImageBitmapOrElement(blob);
   try {
     const pngBuffers: Array<{size: number; bytes: Uint8Array}> = [];
+    const srcW = Math.max(1, img.naturalWidth || img.width || 256);
+    const srcH = Math.max(1, img.naturalHeight || img.height || 256);
     for (const s of sizes) {
       const canvas = document.createElement('canvas');
       canvas.width = s;
       canvas.height = s;
       const ctx = canvas.getContext('2d')!;
       ctx.clearRect(0, 0, s, s);
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      // Center-contain square fit
-      const natW = Math.max(1, img.naturalWidth || 512);
-      const natH = Math.max(1, img.naturalHeight || 512);
-      const scale = Math.min(s / natW, s / natH);
-      const dw = natW * scale;
-      const dh = natH * scale;
+      // Center-contain square fit with 0-dimension NaN guard
+      const scale = Math.min(s / srcW, s / srcH);
+      const dw = Math.max(1, Math.round(srcW * scale));
+      const dh = Math.max(1, Math.round(srcH * scale));
       ctx.drawImage(img, (s - dw) / 2, (s - dh) / 2, dw, dh);
       const pngBlob = await canvasToBlob(canvas, 'image/png');
       pngBuffers.push({size: s, bytes: new Uint8Array(await pngBlob.arrayBuffer())});

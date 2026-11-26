@@ -73,7 +73,7 @@ export function parsePageRanges(ranges: string): number[][] {
 export async function imagesToPdfBlob(
   files: Blob[],
   onProgress?: (ratio: number) => void,
-  pageSize: 'fit' | 'a4' | '10x15' = 'fit'
+  pageSizePts?: [number, number]
 ): Promise<Blob> {
   if (files.length === 0) throw new Error('No images provided.');
   const doc = await PDFDocument.create();
@@ -101,21 +101,13 @@ export async function imagesToPdfBlob(
         embedded = await doc.embedJpg(await jpgBlob.arrayBuffer());
       }
 
-      const targetSize: [number, number] =
-        pageSize === 'a4'
-          ? [595.28, 841.89]
-          : pageSize === '10x15'
-            ? [283.46, 425.2]
-            : [decoded.width, decoded.height];
-      const page = doc.addPage(targetSize);
-      const scale = Math.min(targetSize[0] / decoded.width, targetSize[1] / decoded.height);
-      const drawW = decoded.width * scale;
-      const drawH = decoded.height * scale;
+      const [pageW, pageH] = pageSizePts ?? [decoded.width, decoded.height];
+      const page = doc.addPage([pageW, pageH]);
       page.drawImage(embedded, {
-        x: (targetSize[0] - drawW) / 2,
-        y: (targetSize[1] - drawH) / 2,
-        width: drawW,
-        height: drawH,
+        x: 0,
+        y: 0,
+        width: pageW,
+        height: pageH,
       });
     } finally {
       decoded.bitmap.close();

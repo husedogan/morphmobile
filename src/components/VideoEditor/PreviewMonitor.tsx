@@ -1023,44 +1023,50 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
         />
       </div>
 
-      {/* Minimalist Transport Bar — Safe 390px Touch Targets & Optional Mobile Mute */}
-      <div className="relative z-30 flex min-h-12 shrink-0 items-center justify-between gap-0.5 border-y border-white/[0.07] bg-[#0D0D10] px-1.5 py-1 sm:gap-1.5 sm:px-3.5">
+      {/* Minimalist Transport Bar — Safe 360px-412px Fit & Optional Mobile Mute */}
+      <div
+        className={`relative z-30 flex shrink-0 items-center justify-between gap-0.5 bg-[#0D0D10] px-1.5 sm:gap-1.5 sm:px-3.5 ${
+          isPortraitMode && !isFullscreenPreview
+            ? 'min-h-10 border-t border-white/[0.07] pt-1 pb-0.5'
+            : 'min-h-11 border-y border-white/[0.07] py-1 sm:min-h-12'
+        }`}
+      >
         <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
           <StudioTooltipBtn
             tooltip={isPlaying ? tr('Duraklat', 'Pause') : tr('Oynat', 'Play')}
             align="left"
             onClick={onTogglePlay}
-            className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/[0.09] text-white transition-transform hover:bg-white/[0.15] active:scale-95 min-[420px]:h-9 min-[420px]:w-9 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)]"
+            className="flex h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 items-center justify-center rounded-lg bg-white/[0.09] text-white transition-transform hover:bg-white/[0.15] active:scale-95 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl"
           >
             {isPlaying ? (
-              <Pause className="h-4 w-4 fill-current" />
+              <Pause className="h-3.5 w-3.5 fill-current min-[420px]:h-4 min-[420px]:w-4" />
             ) : (
-              <Play className="h-4 w-4 translate-x-[1px] fill-current" />
+              <Play className="h-3.5 w-3.5 translate-x-[1px] fill-current min-[420px]:h-4 min-[420px]:w-4" />
             )}
           </StudioTooltipBtn>
 
           <StudioTooltipBtn
             tooltip={tr('1 Kare Geri', 'Step Back 1 Frame')}
             onClick={() => onStepFrame(-1)}
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white min-[420px]:h-9 min-[420px]:w-9 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)]"
+            className="flex h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 items-center justify-center rounded-lg text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl"
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4" />
           </StudioTooltipBtn>
 
           <StudioTooltipBtn
             tooltip={tr('1 Kare İleri', 'Step Forward 1 Frame')}
             onClick={() => onStepFrame(1)}
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white min-[420px]:h-9 min-[420px]:w-9 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)]"
+            className="flex h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 items-center justify-center rounded-lg text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl"
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4" />
           </StudioTooltipBtn>
         </div>
 
         {/* Center: Crisp Tabular Timecode */}
-        <div className="font-mono-num flex min-w-0 shrink-0 items-baseline gap-0.5 whitespace-nowrap text-[10.5px] font-bold tracking-tight min-[420px]:text-[11px] sm:gap-1 sm:text-xs">
+        <div className="font-mono-num flex min-w-0 shrink-0 items-baseline gap-0.5 whitespace-nowrap text-[9.5px] font-bold tracking-tight min-[420px]:text-[11px] sm:gap-1 sm:text-xs">
           <span className="text-white">{formatSmpteTimecode(playhead, project.fps)}</span>
           <span className="text-white/25">/</span>
-          <span className="text-[9.5px] font-medium text-white/45 min-[420px]:text-[10px] sm:text-[11px]">
+          <span className="text-[9px] font-medium text-white/45 min-[420px]:text-[10px] sm:text-[11px]">
             {formatSmpteTimecode(safeTotalDur, project.fps)}
           </span>
         </div>
@@ -1071,18 +1077,18 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
             tooltip={tr('Geri Al', 'Undo')}
             onClick={onUndo}
             disabled={!canUndo}
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-25 min-[420px]:h-9 min-[420px]:w-9 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)]"
+            className="flex h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 items-center justify-center rounded-lg text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-25 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl"
           >
-            <Undo2 className="h-4 w-4" />
+            <Undo2 className="h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4" />
           </StudioTooltipBtn>
 
           <StudioTooltipBtn
             tooltip={tr('İleri Al', 'Redo')}
             onClick={onRedo}
             disabled={!canRedo}
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-25 min-[420px]:h-9 min-[420px]:w-9 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)]"
+            className="flex h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 items-center justify-center rounded-lg text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-25 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl"
           >
-            <Redo2 className="h-4 w-4" />
+            <Redo2 className="h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4" />
           </StudioTooltipBtn>
 
           <StudioTooltipBtn
@@ -1092,28 +1098,28 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
                 : tr('Bu Kareye Keyframe Ekle (◆)', 'Add Keyframe at Playhead (◆)')
             }
             onClick={onQuickToggleKeyframe}
-            className={`flex h-8 w-8 items-center justify-center rounded-xl transition-colors min-[420px]:h-9 min-[420px]:w-9 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] ${
+            className={`flex h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 items-center justify-center rounded-lg transition-colors sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl ${
               hasKeyframeAtPlayhead
                 ? 'bg-[#F43F5E]/20 text-[#FB7185]'
                 : 'text-white/65 hover:bg-white/[0.06] hover:text-[#FB7185]'
             }`}
           >
-            <Diamond className={`h-4 w-4 ${hasKeyframeAtPlayhead ? 'fill-current' : ''}`} />
+            <Diamond className={`h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4 ${hasKeyframeAtPlayhead ? 'fill-current' : ''}`} />
           </StudioTooltipBtn>
 
           <StudioTooltipBtn
             tooltip={project.masterMuted ? tr('Sesi Aç', 'Unmute') : tr('Sesi Kapat', 'Mute')}
             onClick={onToggleMute}
-            className={`${showMobileMuteBtn ? 'flex' : 'hidden sm:flex'} h-8 w-8 items-center justify-center rounded-xl transition-colors min-[420px]:h-9 min-[420px]:w-9 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] ${
+            className={`${showMobileMuteBtn ? 'flex' : 'hidden sm:flex'} h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 items-center justify-center rounded-lg transition-colors sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl ${
               project.masterMuted
                 ? 'text-rose-400'
                 : 'text-white/65 hover:bg-white/[0.06] hover:text-white'
             }`}
           >
             {project.masterMuted ? (
-              <VolumeX className="h-4 w-4" />
+              <VolumeX className="h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4" />
             ) : (
-              <Volume2 className="h-4 w-4" />
+              <Volume2 className="h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4" />
             )}
           </StudioTooltipBtn>
 
@@ -1121,116 +1127,127 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
             tooltip={tr('Kare Yakala (Fotoğraf)', 'Capture Frame Snapshot')}
             align="right"
             onClick={onCaptureSnapshot}
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white min-[420px]:h-9 min-[420px]:w-9 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)]"
+            className="flex h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 items-center justify-center rounded-lg text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl"
           >
-            <Camera className="h-4 w-4" />
+            <Camera className="h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4" />
           </StudioTooltipBtn>
         </div>
       </div>
 
-      {/* Tactile Draggable Monitor Height Handle in Portrait Mode */}
-      {isPortraitMode && !isFullscreenPreview && (
-        <div
-          onPointerDown={onStartPreviewResize}
-          onDoubleClick={onCyclePreviewHeight}
-          title={
-            expArmadilloReel
-              ? tr(
-                  'Aşağı sürükleyerek alt çubuğu çarka katlayın, yukarı çekerek geri açın',
-                  'Drag down to roll bottom dock into Cinema Wheel, drag up to unfold'
-                )
-              : tr('Önizleme yüksekliğini ayarlamak için sürükleyin', 'Drag to resize preview height')
-          }
-          className={`group relative flex h-9 shrink-0 cursor-ns-resize touch-none items-center justify-center gap-2 border-b border-white/[0.05] px-2 transition-colors ${
-            floorLockUnlocked
-              ? 'bg-[#10B981]/14 hover:bg-[#10B981]/20'
-              : expArmadilloReel && (armadilloFoldProgress > 0.015 || isExpandedWheelMode)
-                ? 'bg-[#F43F5E]/12 hover:bg-[#F43F5E]/18'
-                : 'bg-[#0B0B0E] hover:bg-white/[0.05]'
-          }`}
-        >
-          <span
-            className={`h-[3px] w-10 rounded-full transition-colors ${
-              floorLockUnlocked
-                ? 'bg-[#34D399]'
-                : (expArmadilloReel && (armadilloFoldProgress > 0.015 || isExpandedWheelMode)) ||
-                    isResizingPreview
-                  ? 'bg-[#F43F5E]'
-                  : 'bg-white/25 group-hover:bg-[#FB7185]'
-            }`}
-          />
-          {expArmadilloReel && (armadilloFoldProgress > 0.015 || isExpandedWheelMode) && (
-            <button
-              type="button"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                onCyclePreviewHeight();
-              }}
-              className="rounded-md px-2 py-1 text-[10px] font-bold tracking-wide text-[#FB7185] transition-colors hover:bg-[#F43F5E]/20"
-            >
-              {isExpandedWheelMode
-                ? tr('Sinema Çarkı · Geri aç', 'Cinema Wheel · Unroll')
-                : tr('Çarka yuvarlanıyor…', 'Rolling into wheel…')}
-            </button>
-          )}
-          {(showFloorLock || floorLockUnlocked) && onUnlockPreviewFloor && (
-            <button
-              key={`floor-lock-${floorLockUnlocked ? 'open' : `${floorLockBumpTick}-${holdCancelBumpTick}`}`}
-              type="button"
-              onContextMenu={(e) => e.preventDefault()}
-              onPointerDown={handleFloorLockPointerDown}
-              onClick={(e) => e.stopPropagation()}
+      {/* Sleek Integrated Monitor Height Handle in Portrait Mode */}
+      {isPortraitMode &&
+        !isFullscreenPreview &&
+        (() => {
+          const showArmadilloPill =
+            expArmadilloReel && (armadilloFoldProgress > 0.015 || isExpandedWheelMode);
+          const showFloorLockBtn =
+            (showFloorLock || floorLockUnlocked) && Boolean(onUnlockPreviewFloor);
+          const hasInlineControls = showArmadilloPill || showFloorLockBtn;
+
+          return (
+            <div
+              onPointerDown={onStartPreviewResize}
+              onDoubleClick={onCyclePreviewHeight}
               title={
-                floorLockUnlocked
+                expArmadilloReel
                   ? tr(
-                      'Aşağı kaydırma açık · Tekrar kilitlemek için dokun',
-                      'Downward drag unlocked · Tap to re-lock'
+                      'Aşağı sürükleyerek alt çubuğu çarka katlayın, yukarı çekerek geri açın',
+                      'Drag down to roll bottom dock into Cinema Wheel, drag up to unfold'
                     )
-                  : tr(
-                      'Tam aşağı kaydırmayı açmak için 0.5 sn basılı tut',
-                      'Press and hold 0.5s to unlock full downward drag'
-                    )
+                  : tr('Önizleme yüksekliğini ayarlamak için sürükleyin', 'Drag to resize preview height')
               }
-              aria-label={
+              className={`group relative z-20 flex shrink-0 cursor-ns-resize touch-none items-center justify-center gap-2 border-b border-white/[0.08] px-2 transition-[height,background-color] duration-150 after:absolute after:-top-1.5 after:bottom-0 after:inset-x-12 after:content-[''] ${
+                hasInlineControls ? 'h-8' : 'h-3.5'
+              } ${
                 floorLockUnlocked
-                  ? tr('Aşağı kaydırma açık', 'Downward drag unlocked')
-                  : tr('Kilidi açmak için 0.5 saniye basılı tut', 'Hold 0.5s to unlock downward drag')
-              }
-              className={`relative ml-0.5 flex h-7 touch-none items-center gap-1 overflow-hidden rounded-lg border px-2 text-[10px] font-extrabold transition-colors ${
-                floorLockUnlocked
-                  ? 'border-[#34D399]/65 bg-[#10B981]/24 text-[#6EE7B7] shadow-[0_0_10px_rgba(16,185,129,0.35)]'
-                  : isHoldingFloorLock
-                    ? 'scale-[1.04] border-[#34D399]/75 bg-[#10B981]/14 text-white shadow-[0_0_10px_rgba(16,185,129,0.28)]'
-                    : `border-white/22 bg-white/[0.08] text-white/85 hover:border-[#FB7185]/60 hover:bg-[#F43F5E]/20 hover:text-white ${
-                        floorLockBumpTick > 0 || holdCancelBumpTick > 0 ? 'morph-floor-lock-bump' : ''
-                      }`
+                  ? 'bg-[#10B981]/12 hover:bg-[#10B981]/18'
+                  : showArmadilloPill
+                    ? 'bg-[#F43F5E]/10 hover:bg-[#F43F5E]/16'
+                    : 'bg-[#0D0D10] hover:bg-white/[0.04]'
               }`}
             >
-              {isHoldingFloorLock && !floorLockUnlocked && (
-                <>
-                  <span
-                    aria-hidden="true"
-                    className="morph-floor-hold-bar pointer-events-none absolute inset-0 bg-[#10B981]/32"
-                  />
-                  <span
-                    aria-hidden="true"
-                    className="morph-floor-hold-bar pointer-events-none absolute inset-x-0 bottom-0 h-[2px] bg-[#34D399]"
-                  />
-                </>
+              <span
+                className={`h-[2.5px] rounded-full transition-all duration-150 ${
+                  floorLockUnlocked
+                    ? 'w-9 bg-[#34D399]'
+                    : showArmadilloPill || isResizingPreview
+                      ? 'w-11 bg-[#F43F5E]'
+                      : 'w-7 bg-white/20 group-hover:w-10 group-hover:bg-[#FB7185]/85'
+                }`}
+              />
+              {showArmadilloPill && (
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCyclePreviewHeight();
+                  }}
+                  className="relative z-10 rounded-md px-2 py-0.5 text-[10px] font-bold tracking-wide text-[#FB7185] transition-colors hover:bg-[#F43F5E]/20"
+                >
+                  {isExpandedWheelMode
+                    ? tr('Sinema Çarkı · Geri aç', 'Cinema Wheel · Unroll')
+                    : tr('Çarka yuvarlanıyor…', 'Rolling into wheel…')}
+                </button>
               )}
-              {floorLockUnlocked ? (
-                <>
-                  <Unlock className="relative z-10 h-3 w-3 shrink-0" />
-                  <span className="relative z-10">{tr('Açık', 'Open')}</span>
-                </>
-              ) : (
-                <Lock className="relative z-10 h-3 w-3 shrink-0" />
+              {showFloorLockBtn && onUnlockPreviewFloor && (
+                <button
+                  key={`floor-lock-${floorLockUnlocked ? 'open' : `${floorLockBumpTick}-${holdCancelBumpTick}`}`}
+                  type="button"
+                  onContextMenu={(e) => e.preventDefault()}
+                  onPointerDown={handleFloorLockPointerDown}
+                  onClick={(e) => e.stopPropagation()}
+                  title={
+                    floorLockUnlocked
+                      ? tr(
+                          'Aşağı kaydırma açık · Tekrar kilitlemek için dokun',
+                          'Downward drag unlocked · Tap to re-lock'
+                        )
+                      : tr(
+                          'Tam aşağı kaydırmayı açmak için 0.5 sn basılı tut',
+                          'Press and hold 0.5s to unlock full downward drag'
+                        )
+                  }
+                  aria-label={
+                    floorLockUnlocked
+                      ? tr('Aşağı kaydırma açık', 'Downward drag unlocked')
+                      : tr('Kilidi açmak için 0.5 saniye basılı tut', 'Hold 0.5s to unlock downward drag')
+                  }
+                  className={`relative z-10 ml-0.5 flex h-6 touch-none items-center gap-1 overflow-hidden rounded-md border px-2 text-[10px] font-extrabold transition-colors ${
+                    floorLockUnlocked
+                      ? 'border-[#34D399]/65 bg-[#10B981]/24 text-[#6EE7B7] shadow-[0_0_10px_rgba(16,185,129,0.35)]'
+                      : isHoldingFloorLock
+                        ? 'scale-[1.04] border-[#34D399]/75 bg-[#10B981]/14 text-white shadow-[0_0_10px_rgba(16,185,129,0.28)]'
+                        : `border-white/22 bg-white/[0.08] text-white/85 hover:border-[#FB7185]/60 hover:bg-[#F43F5E]/20 hover:text-white ${
+                            floorLockBumpTick > 0 || holdCancelBumpTick > 0 ? 'morph-floor-lock-bump' : ''
+                          }`
+                  }`}
+                >
+                  {isHoldingFloorLock && !floorLockUnlocked && (
+                    <>
+                      <span
+                        aria-hidden="true"
+                        className="morph-floor-hold-bar pointer-events-none absolute inset-0 bg-[#10B981]/32"
+                      />
+                      <span
+                        aria-hidden="true"
+                        className="morph-floor-hold-bar pointer-events-none absolute inset-x-0 bottom-0 h-[2px] bg-[#34D399]"
+                      />
+                    </>
+                  )}
+                  {floorLockUnlocked ? (
+                    <>
+                      <Unlock className="relative z-10 h-3 w-3 shrink-0" />
+                      <span className="relative z-10">{tr('Açık', 'Open')}</span>
+                    </>
+                  ) : (
+                    <Lock className="relative z-10 h-3 w-3 shrink-0" />
+                  )}
+                </button>
               )}
-            </button>
-          )}
-        </div>
-      )}
+            </div>
+          );
+        })()}
     </div>
   );
 };

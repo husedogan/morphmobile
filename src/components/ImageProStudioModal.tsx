@@ -28,7 +28,7 @@ import {
 export type ImageProTab = 'compare' | 'target_kb' | 'bg_palette' | 'modern';
 
 /**
- * Reusable Squoosh-style Before/After interactive split comparison slider.
+ * Reusable Before/After interactive split comparison slider.
  */
 export const ImageCompareSlider: React.FC<{
   beforeUrl: string;
@@ -126,11 +126,11 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
   const [origUrl, setOrigUrl] = useState('');
   const [busy, setBusy] = useState(false);
 
-  // Tab 1: Squoosh Live Compare
+  // Tab 1: Live Compare
   const [cmpFormat, setCmpFormat] = useState<'webp' | 'jpeg' | 'avif' | 'png'>('webp');
   const [cmpQuality, setCmpQuality] = useState(78);
   const [cmpMaxW, setCmpMaxW] = useState(0);
-  const [cmpPreview, setCmpPreview] = useState<{url: string; blob: Blob; size: number} | null>(null);
+  const [cmpPreview, setCmpPreview] = useState<{url: string; blob: Blob; size: number; mime: string} | null>(null);
 
   // Tab 2: Target KB
   const [targetKb, setTargetKb] = useState(500);
@@ -212,7 +212,7 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
-  // Debounced Squoosh live preview
+  // Debounced live compression preview
   useEffect(() => {
     if (!open || !file || tab !== 'compare') return;
     let cancelled = false;
@@ -223,7 +223,7 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
         const url = URL.createObjectURL(res.blob);
         if (cmpPreviewUrlRef.current) URL.revokeObjectURL(cmpPreviewUrlRef.current);
         cmpPreviewUrlRef.current = url;
-        setCmpPreview({url, blob: res.blob, size: res.blob.size});
+        setCmpPreview({url, blob: res.blob, size: res.blob.size, mime: res.mime});
       } catch {
         // ignore
       }
@@ -263,15 +263,23 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
   const handleExportCurrent = async () => {
     if (!file) return;
     const stem = file.name.replace(/\.[^.]+$/, '');
+    const extFromMime = (mime: string, fallback: string) => {
+      const m = (mime || '').toLowerCase();
+      if (m.includes('avif')) return 'avif';
+      if (m.includes('webp')) return 'webp';
+      if (m.includes('png')) return 'png';
+      if (m.includes('jpeg') || m.includes('jpg')) return 'jpg';
+      return fallback === 'jpeg' ? 'jpg' : fallback;
+    };
     setBusy(true);
     try {
       if (tab === 'compare' && cmpPreview) {
-        const ext = cmpFormat === 'jpeg' ? 'jpg' : cmpFormat;
+        const ext = extFromMime(cmpPreview.blob.type || cmpPreview.mime, cmpFormat);
         onExportBlob(cmpPreview.blob, `${stem}_q${cmpQuality}.${ext}`, isTr ? 'Canlı Sıkıştırma' : 'Live Compare Compress');
         onClose();
       } else if (tab === 'target_kb') {
         const res = targetResult ?? (await compressImageToTargetKb(file, targetKb, targetFmt));
-        const ext = 'ext' in res ? res.ext : targetFmt === 'jpeg' ? 'jpg' : 'webp';
+        const ext = res.ext || extFromMime(res.blob.type, targetFmt);
         onExportBlob(res.blob, `${stem}_${targetKb}kb.${ext}`, isTr ? 'Hedef Boyut Sıkıştırma' : 'Target KB Compress');
         onClose();
       } else if (tab === 'bg_palette') {
@@ -284,8 +292,8 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
           onExportBlob(ico, `${stem}.ico`, isTr ? 'ICO Dönüştürücü' : 'ICO Generator');
         } else {
           const res = await renderLiveImagePreview(file, modernFmt, 0.88, 0);
-          const actualExt = res.mime === 'image/webp' ? 'webp' : res.mime === 'image/png' ? 'png' : modernFmt;
-          onExportBlob(res.blob, `${stem}.${actualExt}`, isTr ? 'Modern Format Dönüştürücü' : 'Modern Image Export');
+          const ext = extFromMime(res.blob.type || res.mime, modernFmt);
+          onExportBlob(res.blob, `${stem}.${ext}`, isTr ? 'Modern Format Dönüştürücü' : 'Modern Image Export');
         }
         onClose();
       }
@@ -401,7 +409,7 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
             </button>
           ) : (
             <>
-              {/* TAB 1: SQUOOSH LIVE COMPARE */}
+              {/* TAB 1: LIVE COMPARE */}
               {tab === 'compare' && (
                 <div className="space-y-3.5">
                   {origUrl && cmpPreview && (

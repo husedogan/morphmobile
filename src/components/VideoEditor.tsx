@@ -4120,30 +4120,42 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       if (targetId.startsWith('orig:')) {
         const vc = project.videoClips.find((c) => c.id === targetId!.slice(5));
         if (!vc) return;
+        const nextVideoClips = project.videoClips.map((c) =>
+          c.id === vc.id ? {...c, audioDetached: true, muted: true} : c
+        );
+        const audioSpan = Math.max(0.25, vc.sourceEnd - vc.sourceStart);
         initStartSec = vc.timelineStart;
-        initSpanSec = clipTimelineDuration(vc);
+        initSpanSec = audioSpan;
         initSourceStart = vc.sourceStart;
         initSourceEnd = vc.sourceEnd;
-        initRow = 0;
+        initRow = findAvailableAudioRow(
+          project.audioClips,
+          nextVideoClips,
+          vc.timelineStart,
+          vc.timelineStart + audioSpan,
+          0
+        );
       } else {
         const ac = project.audioClips.find((a) => a.id === targetId);
         if (!ac) {
-          // Detached synchronously above — compute from matching V1 clip fallback
+          // Detached synchronously above — compute exact row & audio duration from matching V1 clip fallback
           const v1Fallback = project.videoClips.find(
             (c) => rawTargetId?.startsWith('orig:') && c.id === rawTargetId.slice(5)
           );
           if (!v1Fallback) return;
+          const nextVideoClips = project.videoClips.map((c) =>
+            c.id === v1Fallback.id ? {...c, audioDetached: true, muted: true} : c
+          );
+          const audioSpan = Math.max(0.25, v1Fallback.sourceEnd - v1Fallback.sourceStart);
           initStartSec = v1Fallback.timelineStart;
+          initSpanSec = audioSpan;
           initSourceStart = v1Fallback.sourceStart;
           initSourceEnd = v1Fallback.sourceEnd;
-          initSpanSec = Math.max(0.25, initSourceEnd - initSourceStart);
           initRow = findAvailableAudioRow(
             project.audioClips,
-            project.videoClips.map((c) =>
-              c.id === v1Fallback.id ? {...c, audioDetached: true, muted: true} : c
-            ),
-            initStartSec,
-            initStartSec + initSpanSec,
+            nextVideoClips,
+            v1Fallback.timelineStart,
+            v1Fallback.timelineStart + audioSpan,
             0
           );
         } else {

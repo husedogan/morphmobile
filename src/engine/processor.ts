@@ -475,11 +475,10 @@ export async function runLocalTool(
           format: 'jpg',
           quality: 95,
         });
-        const pdfBlob = await imagesToPdfBlob(
-          [sheetJpg],
-          undefined,
-          opts.paper === 'a4' ? 'a4' : '10x15'
-        );
+        // Real physical PDF dimensions in points (72 pt/in): A4 portrait 210x297mm, 10x15cm landscape 150x100mm
+        const pageSizePts: [number, number] =
+          opts.paper === 'a4' ? [595.28, 841.89] : [425.2, 283.46];
+        const pdfBlob = await imagesToPdfBlob([sheetJpg], undefined, pageSizePts);
         outputs.push({name: `${files[0].baseName}-id-print-${opts.paper}.pdf`, blob: pdfBlob});
       } else {
         const fmt = normalizeImageFormat(opts.format);
@@ -526,7 +525,7 @@ export async function runLocalTool(
 
     case 'PDF_REMOVE_PAGES': {
       const opts =
-        options.kind === 'pdfRemovePages' ? options : {kind: 'pdfRemovePages' as const, ranges: '1'};
+        options.kind === 'pdfRemovePages' ? options : {kind: 'pdfRemovePages' as const, ranges: ''};
       const blob = await removePdfPagesBlob(files[0].file, opts.ranges, (r) => onProgress(r, files[0].name));
       outputs.push({name: `${files[0].baseName}-trimmed.pdf`, blob});
       break;
