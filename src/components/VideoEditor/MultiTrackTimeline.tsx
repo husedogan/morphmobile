@@ -4,6 +4,7 @@ import {
   ArrowUpDown,
   AudioLines,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
@@ -189,6 +190,9 @@ interface MultiTrackTimelineProps {
   waveformBars: number[];
   waveformStatus?: 'loading' | 'ready' | 'silent';
   isPortraitMode?: boolean;
+  isCompactLandscape?: boolean;
+  landscapeTimelineState?: 'compact' | 'expanded' | 'collapsed';
+  onSetLandscapeTimelineState?: (state: 'compact' | 'expanded' | 'collapsed') => void;
   isInspectorOpen?: boolean;
   isExpandedWheelMode?: boolean;
   freeTimelineMode?: boolean;
@@ -258,6 +262,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
   waveformBars,
   waveformStatus = 'ready',
   isPortraitMode = false,
+  isCompactLandscape = false,
+  landscapeTimelineState = 'compact',
+  onSetLandscapeTimelineState,
   isInspectorOpen = false,
   isExpandedWheelMode = false,
   freeTimelineMode = false,
@@ -645,7 +652,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
     return (
       <div
         key={`text-row-${rowIdx}`}
-        className={`relative h-8 rounded-lg transition-all ${
+        className={`relative rounded-lg transition-all ${
+          isCompactLandscape ? 'h-6.5' : 'h-8'
+        } ${
           isDropTarget
             ? 'bg-[#38BDF8]/18 ring-1 ring-[#38BDF8]'
             : rowIdx % 2 === 1
@@ -1182,7 +1191,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
       return (
         <div
           key="split_cut"
-          className="flex h-8 shrink-0 items-center gap-[2px] rounded-lg border border-white/[0.09] bg-white/[0.03] p-[2px] sm:h-9"
+          className={`flex shrink-0 items-center gap-[2px] rounded-lg border border-white/[0.09] bg-white/[0.03] p-[2px] ${
+            isCompactLandscape ? 'h-7' : 'h-8 sm:h-9'
+          }`}
         >
           <StudioTooltipBtn
             tooltip={tr(
@@ -1191,7 +1202,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             )}
             align="left"
             onClick={onSplit}
-            className={`flex h-[26px] w-7 shrink-0 items-center justify-center rounded-[6px] transition-colors sm:h-7 sm:w-8 ${
+            className={`flex shrink-0 items-center justify-center rounded-[6px] transition-colors ${
+              isCompactLandscape ? 'h-[22px] w-7' : 'h-[26px] w-7 sm:h-7 sm:w-8'
+            } ${
               canSplitActiveLayer
                 ? 'bg-[#F43F5E]/20 text-[#FB7185] hover:bg-[#F43F5E]/30'
                 : 'text-white/55 hover:bg-white/[0.08] hover:text-[#FB7185]'
@@ -1209,7 +1222,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             )}
             align="left"
             onClick={openCutMenuFromButton}
-            className={`flex h-[26px] w-7 shrink-0 items-center justify-center rounded-[6px] transition-colors sm:h-7 sm:w-8 ${
+            className={`flex shrink-0 items-center justify-center rounded-[6px] transition-colors ${
+              isCompactLandscape ? 'h-[22px] w-7' : 'h-[26px] w-7 sm:h-7 sm:w-8'
+            } ${
               cutMenuAnchor
                 ? 'bg-[#FB923C]/24 text-[#FDBA74]'
                 : canSplitActiveLayer
@@ -1241,7 +1256,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
         tooltip={tr(meta.labelTr, meta.labelEn)}
         onClick={meta.onRun}
         disabled={meta.disabled}
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors disabled:opacity-30 sm:h-9 sm:w-9 ${toolVisualClass}`}
+        className={`flex shrink-0 items-center justify-center rounded-lg border transition-colors disabled:opacity-30 ${
+          isCompactLandscape ? 'h-7 w-7' : 'h-8 w-8 sm:h-9 sm:w-9'
+        } ${toolVisualClass}`}
       >
         <Icon className="h-3.5 w-3.5" />
       </StudioTooltipBtn>
@@ -1262,7 +1279,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               width: '256px',
               zIndex: 9998,
             }}
-            className="rounded-2xl border border-white/[0.12] bg-[#16161B]/96 p-2.5 text-white shadow-[0_14px_42px_rgba(0,0,0,0.78)] backdrop-blur-xl"
+            className="morph-nle-scroll max-h-[calc(100dvh-20px)] overflow-y-auto rounded-2xl border border-white/[0.12] bg-[#16161B]/96 p-2.5 text-white shadow-[0_14px_42px_rgba(0,0,0,0.78)] backdrop-blur-xl"
           >
             {/* Tray Header */}
             <div className="mb-2 flex items-center justify-between gap-2 border-b border-white/[0.08] pb-2">
@@ -1497,7 +1514,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               width: '264px',
               zIndex: 9998,
             }}
-            className="rounded-2xl border border-white/[0.14] bg-[#14141A]/96 p-2.5 text-white shadow-[0_16px_46px_rgba(0,0,0,0.84)] backdrop-blur-xl"
+            className="morph-nle-scroll max-h-[calc(100dvh-20px)] overflow-y-auto rounded-2xl border border-white/[0.14] bg-[#14141A]/96 p-2.5 text-white shadow-[0_16px_46px_rgba(0,0,0,0.84)] backdrop-blur-xl"
           >
             {/* Section 1: Quick Add Media & Overlays (from bottom strip icons) */}
             <div className="mb-1.5 flex items-center justify-between px-0.5">
@@ -1639,13 +1656,21 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
       {cutMenuPortal}
       {hiddenTrayPortal}
       {floatingAddPortal}
-      {/* Context-Aware Action Bar (Compact 360px+ Fit + Show Hidden Tools ^ Trigger + Zoom) */}
-      <div className="relative z-20 flex h-10 shrink-0 items-center justify-between gap-1 border-b border-white/[0.06] bg-[#111115] px-1.5 sm:h-11 sm:gap-1.5 sm:px-2">
+      {/* Context-Aware Action Bar (Compact 360px+ Fit + Show Hidden Tools ^ Trigger + Zoom + Landscape Height) */}
+      <div
+        className={`relative z-20 flex shrink-0 items-center justify-between border-b border-white/[0.06] bg-[#111115] ${
+          isCompactLandscape
+            ? 'h-8 gap-1 px-1.5'
+            : 'h-10 gap-1 px-1.5 sm:h-11 sm:gap-1.5 sm:px-2'
+        }`}
+      >
         <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pr-0.5 sm:gap-1.5 sm:pr-1">
           {/* Active Layer Indicator Pill */}
           <span
             style={{color: activeLayerMeta.color, borderColor: `${activeLayerMeta.color}40`}}
-            className="flex h-8 shrink-0 items-center gap-1 rounded-lg border bg-white/[0.03] px-1.5 text-[10px] font-extrabold sm:h-9 sm:gap-1.5 sm:px-2"
+            className={`flex shrink-0 items-center gap-1 rounded-lg border bg-white/[0.03] px-1.5 text-[10px] font-extrabold ${
+              isCompactLandscape ? 'h-7' : 'h-8 sm:h-9 sm:gap-1.5 sm:px-2'
+            }`}
           >
             <ActiveLayerIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
             <span className="inline">{activeLayerMeta.label}</span>
@@ -1655,7 +1680,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
           {pinnedTools.map((toolId) => renderPinnedToolbarTool(toolId))}
         </div>
 
-        {/* Right: Quick-Add (+), Show Hidden Tools (^) Trigger + Dedicated Timeline Zoom */}
+        {/* Right: Quick-Add (+), Show Hidden Tools (^) Trigger + Dedicated Timeline Zoom + Landscape Height */}
         <div className="flex shrink-0 items-center gap-1 border-l border-white/[0.08] pl-1 sm:gap-1.5 sm:pl-1.5">
           <button
             ref={fabTriggerRef}
@@ -1667,7 +1692,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                 : tr('Medya, Katman & Satır Ekle', 'Add Media, Layer & Track Row')
             }
             aria-label={tr('Medya ve Satır Ekle', 'Add Media and Track Row')}
-            className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-all active:scale-95 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#F43F5E]/60 sm:h-9 sm:w-9 ${
+            className={`flex items-center justify-center rounded-lg border transition-all active:scale-95 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#F43F5E]/60 ${
+              isCompactLandscape ? 'h-7 w-7' : 'h-8 w-8 sm:h-9 sm:w-9'
+            } ${
               fabAnchor
                 ? 'border-[#F43F5E] bg-[#F43F5E] text-white shadow-[0_0_12px_rgba(244,63,94,0.45)]'
                 : 'border-[#F43F5E]/40 bg-[#F43F5E]/15 text-[#FB7185] hover:border-[#F43F5E]/65 hover:bg-[#F43F5E]/24 hover:text-white'
@@ -1689,7 +1716,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                 ? tr('Gizli Öğeleri Kapat', 'Close Hidden Tools')
                 : tr('Gizli Öğeleri Göster & Düzenle', 'Show Hidden Tools & Customize')
             }
-            className={`relative flex h-8 w-8 items-center justify-center rounded-lg border transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-white/35 sm:h-9 sm:w-9 ${
+            className={`relative flex items-center justify-center rounded-lg border transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-white/35 ${
+              isCompactLandscape ? 'h-7 w-7' : 'h-8 w-8 sm:h-9 sm:w-9'
+            } ${
               trayAnchor
                 ? 'border-[#38BDF8]/50 bg-[#38BDF8]/18 text-[#38BDF8]'
                 : 'border-white/[0.09] bg-white/[0.03] text-white/65 hover:border-white/[0.16] hover:bg-white/[0.08] hover:text-white'
@@ -1705,8 +1734,12 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             )}
           </button>
 
-          {/* Dedicated Timeline Magnifier Zoom Controls (Clearly Zoom, never confused with playback speed!) */}
-          <div className="flex h-8 items-center rounded-lg border border-white/[0.09] bg-white/[0.03] p-[2px] sm:h-9">
+          {/* Dedicated Timeline Magnifier Zoom Controls */}
+          <div
+            className={`flex items-center rounded-lg border border-white/[0.09] bg-white/[0.03] p-[2px] ${
+              isCompactLandscape ? 'h-7' : 'h-8 sm:h-9'
+            }`}
+          >
             <StudioTooltipBtn
               tooltip={tr(
                 `Zaman Çizelgesini Uzaklaştır (%${zoomPercent})`,
@@ -1715,7 +1748,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               align="right"
               disabled={timelineZoom <= 1}
               onClick={onZoomOut}
-              className="flex h-[26px] w-6 items-center justify-center rounded-[6px] text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-25 sm:h-7 sm:w-7"
+              className={`flex items-center justify-center rounded-[6px] text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-25 ${
+                isCompactLandscape ? 'h-[22px] w-6' : 'h-[26px] w-6 sm:h-7 sm:w-7'
+              }`}
             >
               <ZoomOut className="h-3.5 w-3.5" />
             </StudioTooltipBtn>
@@ -1727,7 +1762,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               )}
               align="right"
               onClick={onResetZoom}
-              className="flex h-[26px] items-center justify-center gap-[2px] rounded-[6px] px-1 transition-colors hover:bg-white/[0.08] sm:h-7 sm:px-1.5"
+              className={`flex items-center justify-center gap-[2px] rounded-[6px] px-1 transition-colors hover:bg-white/[0.08] ${
+                isCompactLandscape ? 'h-[22px]' : 'h-[26px] sm:h-7 sm:px-1.5'
+              }`}
             >
               {[0, 1, 2, 3].map((idx) => (
                 <span
@@ -1747,11 +1784,47 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               align="right"
               disabled={timelineZoom >= 8}
               onClick={onZoomIn}
-              className="flex h-[26px] w-6 items-center justify-center rounded-[6px] text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-25 sm:h-7 sm:w-7"
+              className={`flex items-center justify-center rounded-[6px] text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-25 ${
+                isCompactLandscape ? 'h-[22px] w-6' : 'h-[26px] w-6 sm:h-7 sm:w-7'
+              }`}
             >
               <ZoomIn className="h-3.5 w-3.5" />
             </StudioTooltipBtn>
           </div>
+
+          {/* Mobile Landscape Timeline Height Presets (Collapsed / Compact / Expanded) */}
+          {isCompactLandscape && onSetLandscapeTimelineState && (
+            <div className="flex h-7 items-center rounded-lg border border-white/[0.09] bg-white/[0.03] p-[2px]">
+              <button
+                type="button"
+                disabled={landscapeTimelineState === 'collapsed'}
+                onClick={() =>
+                  onSetLandscapeTimelineState(
+                    landscapeTimelineState === 'expanded' ? 'compact' : 'collapsed'
+                  )
+                }
+                title={tr('Zaman çizelgesini küçült', 'Shrink timeline')}
+                aria-label={tr('Zaman çizelgesini küçült', 'Shrink timeline')}
+                className="flex h-[22px] w-6 items-center justify-center rounded-[6px] text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-25"
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                disabled={landscapeTimelineState === 'expanded'}
+                onClick={() =>
+                  onSetLandscapeTimelineState(
+                    landscapeTimelineState === 'collapsed' ? 'compact' : 'expanded'
+                  )
+                }
+                title={tr('Zaman çizelgesini genişlet', 'Expand timeline')}
+                aria-label={tr('Zaman çizelgesini genişlet', 'Expand timeline')}
+                className="flex h-[22px] w-6 items-center justify-center rounded-[6px] text-white/70 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-25"
+              >
+                <ChevronUp className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1761,20 +1834,32 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
-        className="no-scrollbar relative min-h-0 flex-1 overflow-auto bg-[#09090B] px-3 py-1.5"
+        className={`no-scrollbar relative min-h-0 flex-1 overflow-auto bg-[#09090B] ${
+          isCompactLandscape && landscapeTimelineState === 'collapsed'
+            ? 'hidden'
+            : isCompactLandscape
+              ? 'px-2 py-1'
+              : 'px-3 py-1.5'
+        }`}
       >
         <div
           ref={timelineTrackRef}
           style={{width: `${timelineZoom * 100}%`, minWidth: '100%'}}
-          className={`relative flex flex-col gap-1.5 pr-1 ${isExpandedWheelMode ? 'pb-16' : 'pb-10'}`}
+          className={`relative flex flex-col pr-1 ${
+            isCompactLandscape
+              ? 'gap-1 pb-1.5'
+              : `gap-1.5 ${isExpandedWheelMode ? 'pb-16' : 'pb-5'}`
+          }`}
         >
           {/* Tight tracks wrapper so the vertical playhead & snap guide end just ~8px below the lowest track bar */}
-          <div className="relative flex flex-col gap-1.5 pb-2">
+          <div className={`relative flex flex-col ${isCompactLandscape ? 'gap-1 pb-1.5' : 'gap-1.5 pb-2'}`}>
           {/* SCRUBBABLE TIME RULER */}
           <div
             onPointerDown={(e) => onStartTimelineDrag(e, 'playhead')}
             title={tr('Zamanı kaydırmak için cetveli sürükleyin', 'Drag ruler to scrub playhead')}
-            className="font-mono-num sticky top-0 z-30 flex h-6 cursor-ew-resize touch-none items-end justify-between border-b border-white/[0.08] bg-[#0B0B0E]/95 px-1 pb-1 text-[9px] font-medium text-white/50 backdrop-blur-xs hover:bg-white/[0.04]"
+            className={`font-mono-num sticky top-0 z-30 flex cursor-ew-resize touch-none items-end justify-between border-b border-white/[0.08] bg-[#0B0B0E]/95 px-1 pb-1 text-[9px] font-medium text-white/50 backdrop-blur-xs hover:bg-white/[0.04] ${
+              isCompactLandscape ? 'h-5' : 'h-6'
+            }`}
           >
             {rulerTicks.map((tk, idx) => (
               <span
@@ -1789,7 +1874,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
 
           {/* LANE V1: PRIMARY VIDEO FILMSTRIP (Full Width, Inner-Left Film Icon, 2D Drag & Expandable Trimming) */}
           <div
-            className={`relative h-13 rounded-lg transition-all ${
+            className={`relative rounded-lg transition-all ${
+              isCompactLandscape ? 'h-9' : 'h-13'
+            } ${
               activeDragLaneHint?.kind === 'video' && activeDragLaneHint.row === 0
                 ? 'bg-[#F43F5E]/15 ring-1 ring-[#F43F5E]'
                 : 'bg-white/[0.03]'
@@ -1988,7 +2075,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             return (
               <div
                 key={`pip-row-${pipTrackIdx}`}
-                className={`relative h-10 rounded-lg transition-all ${
+                className={`relative rounded-lg transition-all ${
+                  isCompactLandscape ? 'h-7' : 'h-10'
+                } ${
                   isDropTarget
                     ? 'bg-[#A855F7]/22 ring-1 ring-[#C084FC]'
                     : pipTrackIdx % 2 === 0
@@ -2204,7 +2293,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
           {/* LANE W1: WATERMARK TIMED BAR (Shown when watermark active) */}
           {hasWatermark && (
             <div
-              className={`relative h-7.5 rounded-lg bg-white/[0.025] transition-opacity ${
+              className={`relative rounded-lg bg-white/[0.025] transition-opacity ${
+                isCompactLandscape ? 'h-6.5' : 'h-7.5'
+              } ${
                 trackVisibility.w1 ? 'opacity-100' : 'opacity-30'
               }`}
             >
@@ -2262,7 +2353,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
 
           {/* LANE A1: PRIMARY AUDIO (Attached Original Video Audio Cards + Row-0 Independent Audio — Zero Overlap!) */}
           <div
-            className={`relative h-9 rounded-lg transition-all ${
+            className={`relative rounded-lg transition-all ${
+              isCompactLandscape ? 'h-7' : 'h-9'
+            } ${
               activeDragLaneHint?.kind === 'audio' && activeDragLaneHint.row === 0
                 ? 'bg-[#34D399]/16 ring-1 ring-[#34D399]'
                 : 'bg-[#0C1614]/85'
@@ -2396,7 +2489,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             return (
               <div
                 key={`audio-row-${rowIdx}`}
-                className={`relative h-9 rounded-lg transition-all ${
+                className={`relative rounded-lg transition-all ${
+                  isCompactLandscape ? 'h-7' : 'h-9'
+                } ${
                   isDropTarget
                     ? 'bg-[#818CF8]/22 ring-1 ring-[#818CF8]'
                     : rowIdx % 2 === 1
@@ -2488,9 +2583,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             {/* Draggable Playhead Cap on Ruler */}
             <div
               onPointerDown={(e) => onStartTimelineDrag(e, 'playhead')}
-              className="pointer-events-auto absolute -top-0.5 left-1/2 flex h-4.5 w-4.5 -translate-x-1/2 cursor-ew-resize touch-none items-center justify-center rounded-sm bg-[#F43F5E] shadow-md"
+              className="pointer-events-auto absolute top-0.5 left-1/2 flex h-3.5 w-3.5 -translate-x-1/2 cursor-ew-resize touch-none items-center justify-center rounded-[3px] bg-[#F43F5E] shadow-md"
             >
-              <span className="h-2.5 w-[2px] rounded-full bg-white/85" />
+              <span className="h-2 w-[1.5px] rounded-full bg-white/85" />
             </div>
 
             {/* Live Split Trigger cleanly positioned at the bottom tip of active tracks */}

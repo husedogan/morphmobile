@@ -121,7 +121,7 @@ export const ClipQuickActionPopup: React.FC<ClipQuickActionPopupProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm overflow-hidden rounded-t-3xl border border-white/[0.12] bg-[#121216] pb-[calc(var(--morph-safe-bottom)+0.5rem)] shadow-2xl sm:rounded-2xl sm:pb-0"
+        className="morph-nle-scroll max-h-[90dvh] w-full max-w-sm overflow-y-auto rounded-t-3xl border border-white/[0.12] bg-[#121216] pb-[calc(var(--morph-safe-bottom)+0.5rem)] shadow-2xl sm:rounded-2xl sm:pb-0"
       >
         <div className="flex flex-col border-b border-white/[0.08] bg-[#18181E] px-3.5 pt-2 pb-2.5 sm:py-2.5">
           <div
@@ -335,7 +335,7 @@ export const MediaLayerQuickPopup: React.FC<MediaLayerQuickPopupProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm overflow-hidden rounded-t-3xl border border-white/[0.12] bg-[#121216] pb-[calc(var(--morph-safe-bottom)+0.5rem)] shadow-2xl sm:rounded-2xl sm:pb-0"
+        className="morph-nle-scroll max-h-[90dvh] w-full max-w-sm overflow-y-auto rounded-t-3xl border border-white/[0.12] bg-[#121216] pb-[calc(var(--morph-safe-bottom)+0.5rem)] shadow-2xl sm:rounded-2xl sm:pb-0"
       >
         <div className="flex flex-col border-b border-white/[0.08] bg-[#18181E] px-3.5 pt-2 pb-2.5 sm:py-2.5">
           <div
@@ -573,7 +573,7 @@ export const TransitionPickerPopup: React.FC<TransitionPickerPopupProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm overflow-hidden rounded-t-3xl border border-white/[0.12] bg-[#121216] pb-[calc(var(--morph-safe-bottom)+0.5rem)] shadow-2xl sm:rounded-2xl sm:pb-0"
+        className="morph-nle-scroll max-h-[90dvh] w-full max-w-sm overflow-y-auto rounded-t-3xl border border-white/[0.12] bg-[#121216] pb-[calc(var(--morph-safe-bottom)+0.5rem)] shadow-2xl sm:rounded-2xl sm:pb-0"
       >
         <div className="flex flex-col border-b border-white/[0.08] bg-[#18181E] px-3.5 pt-2 pb-2.5 sm:py-2.5">
           <div
@@ -733,7 +733,7 @@ export const ExportConfirmPopup: React.FC<ExportConfirmPopupProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md overflow-hidden rounded-t-3xl border border-white/[0.12] bg-[#121216] pb-[calc(var(--morph-safe-bottom)+0.5rem)] shadow-2xl sm:rounded-2xl sm:pb-0"
+        className="morph-nle-scroll max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-white/[0.12] bg-[#121216] pb-[calc(var(--morph-safe-bottom)+0.5rem)] shadow-2xl sm:rounded-2xl sm:pb-0"
       >
         <div className="flex flex-col border-b border-white/[0.08] bg-[#18181E] px-4 pt-2 pb-3 sm:py-3">
           <div

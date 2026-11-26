@@ -50,6 +50,7 @@ interface PreviewMonitorProps {
   isPlaying: boolean;
   isInGap: boolean;
   isPortraitMode: boolean;
+  isCompactLandscape?: boolean;
   isInspectorOpen?: boolean;
   isExpandedWheelMode?: boolean;
   expArmadilloReel?: boolean;
@@ -131,6 +132,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
   isPlaying,
   isInGap,
   isPortraitMode,
+  isCompactLandscape = false,
   isInspectorOpen = false,
   isExpandedWheelMode = false,
   expArmadilloReel = false,
@@ -379,7 +381,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
       style={
         !isFullscreenPreview && isPortraitMode
           ? isInspectorOpen && !isExpandedWheelMode
-            ? {height: 'clamp(146px, 24dvh, 215px)', minHeight: '146px', maxHeight: '215px'}
+            ? {height: 'clamp(192px, 34dvh, 285px)', minHeight: '192px', maxHeight: '285px'}
             : {height: `${previewHeightVh}dvh`, minHeight: '170px', maxHeight: '85dvh'}
           : undefined
       }
@@ -394,7 +396,11 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
       }`}
     >
       {/* Clean Unobstructed Video Viewport */}
-      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#050507] px-1.5 py-1 sm:px-3 sm:py-1.5">
+      <div
+        className={`relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#050507] ${
+          isCompactLandscape ? 'px-1 py-0.5' : 'px-1.5 py-1 sm:px-3 sm:py-1.5'
+        }`}
+      >
         {project.aspectRatio !== 'orig' && project.fitMode === 'blur' && blurBgVideoSrc && !isInGap && (
           <video
             src={blurBgVideoSrc}
@@ -888,7 +894,11 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
 
         {/* Floating Bottom-Left Free Positioning Corner Toggle (symmetric with Fullscreen) */}
         {onToggleFreePositionMode && (
-          <div className="absolute bottom-2 left-2.5 z-20">
+          <div
+            className={`absolute left-2 z-20 ${
+              isCompactLandscape ? 'bottom-1' : 'bottom-1.5 sm:bottom-2 sm:left-2.5'
+            }`}
+          >
             <StudioTooltipBtn
               tooltip={
                 freePositionMode
@@ -897,20 +907,30 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
               }
               align="left"
               onClick={onToggleFreePositionMode}
-              className={`flex h-9 items-center justify-center rounded-xl backdrop-blur-sm transition-colors ${
+              className={`flex items-center justify-center rounded-lg backdrop-blur-sm transition-colors ${
+                isCompactLandscape ? 'h-7' : 'h-8 sm:h-9 sm:rounded-xl'
+              } ${
                 freePositionMode
-                  ? 'gap-1.5 border border-[#38BDF8]/55 bg-[#0F172A]/85 px-2.5 text-[11px] font-bold text-[#38BDF8] shadow-[0_2px_10px_rgba(56,189,248,0.28)]'
-                  : 'w-9 bg-black/55 text-white/80 hover:bg-black/80 hover:text-white'
+                  ? 'gap-1.5 border border-[#38BDF8]/55 bg-[#0F172A]/85 px-2 text-[10.5px] font-bold text-[#38BDF8] shadow-[0_2px_10px_rgba(56,189,248,0.28)] sm:px-2.5 sm:text-[11px]'
+                  : `${isCompactLandscape ? 'w-7' : 'w-8 sm:w-9'} bg-black/55 text-white/80 hover:bg-black/80 hover:text-white`
               }`}
             >
-              <Move className="h-4 w-4 shrink-0" />
+              <Move className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
               {freePositionMode && <span>{tr('Serbest', 'Free')}</span>}
             </StudioTooltipBtn>
           </div>
         )}
 
         {/* Minimal Floating Fullscreen Corner Trigger (moves to top-right in fullscreen so it never collides with Cinema Wheel) */}
-        <div className={`absolute right-2.5 z-20 ${isFullscreenPreview ? 'top-2.5' : 'bottom-2'}`}>
+        <div
+          className={`absolute right-2 z-20 ${
+            isFullscreenPreview
+              ? 'top-2.5 sm:right-2.5'
+              : isCompactLandscape
+                ? 'bottom-1'
+                : 'bottom-1.5 sm:right-2.5 sm:bottom-2'
+          }`}
+        >
           <StudioTooltipBtn
             tooltip={
               isFullscreenPreview
@@ -919,12 +939,14 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
             }
             align="right"
             onClick={onToggleFullscreen}
-            className="flex h-9 w-9 items-center justify-center rounded-xl bg-black/55 text-white/80 backdrop-blur-sm transition-colors hover:bg-black/80 hover:text-white"
+            className={`flex items-center justify-center rounded-lg bg-black/55 text-white/80 backdrop-blur-sm transition-colors hover:bg-black/80 hover:text-white ${
+              isCompactLandscape ? 'h-7 w-7' : 'h-8 w-8 sm:h-9 sm:w-9 sm:rounded-xl'
+            }`}
           >
             {isFullscreenPreview ? (
-              <Minimize2 className="h-4 w-4" />
+              <Minimize2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             ) : (
-              <Maximize2 className="h-4 w-4" />
+              <Maximize2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             )}
           </StudioTooltipBtn>
         </div>
@@ -938,7 +960,9 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
           onSeekTimelineTo(ratio * safeTotalDur);
         }}
         title={tr('Proje genel görünüm çubuğu — atlamak için dokunun', 'Project overview bar — tap to jump')}
-        className="relative flex h-4 shrink-0 cursor-ew-resize touch-none flex-col justify-center gap-[2px] border-t border-white/[0.06] bg-[#0B0B0E] px-2"
+        className={`relative flex shrink-0 cursor-ew-resize touch-none flex-col justify-center border-t border-white/[0.06] bg-[#0B0B0E] px-2 ${
+          isCompactLandscape ? 'h-3 gap-[1px]' : 'h-4 gap-[2px]'
+        }`}
       >
         {/* Text + Watermark mini-band */}
         <div className="relative h-[2px] w-full overflow-hidden rounded-full bg-white/[0.06]">
@@ -1023,12 +1047,14 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
         />
       </div>
 
-      {/* Minimalist Transport Bar — Safe 360px-412px Fit & Optional Mobile Mute */}
+      {/* Minimalist Transport Bar — Safe 360px-412px Fit & Compact Landscape Mode */}
       <div
-        className={`relative z-30 flex shrink-0 items-center justify-between gap-0.5 bg-[#0D0D10] px-1.5 sm:gap-1.5 sm:px-3.5 ${
-          isPortraitMode && !isFullscreenPreview
-            ? 'min-h-10 border-t border-white/[0.07] pt-1 pb-0.5'
-            : 'min-h-11 border-y border-white/[0.07] py-1 sm:min-h-12'
+        className={`relative z-30 flex shrink-0 items-center justify-between gap-0.5 bg-[#0D0D10] ${
+          isCompactLandscape
+            ? 'min-h-8 border-y border-white/[0.07] px-1.5 py-0.5'
+            : isPortraitMode && !isFullscreenPreview && !(isInspectorOpen && !isExpandedWheelMode)
+              ? 'min-h-10 border-t border-white/[0.07] px-1.5 pt-1 pb-0.5 sm:gap-1.5 sm:px-3.5'
+              : 'min-h-11 border-y border-white/[0.07] px-1.5 py-1 sm:min-h-12 sm:gap-1.5 sm:px-3.5'
         }`}
       >
         <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
@@ -1036,37 +1062,57 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
             tooltip={isPlaying ? tr('Duraklat', 'Pause') : tr('Oynat', 'Play')}
             align="left"
             onClick={onTogglePlay}
-            className="flex h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 items-center justify-center rounded-lg bg-white/[0.09] text-white transition-transform hover:bg-white/[0.15] active:scale-95 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl"
+            className={`flex items-center justify-center rounded-lg bg-white/[0.09] text-white transition-transform hover:bg-white/[0.15] active:scale-95 ${
+              isCompactLandscape
+                ? 'h-7 w-7'
+                : 'h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl'
+            }`}
           >
             {isPlaying ? (
-              <Pause className="h-3.5 w-3.5 fill-current min-[420px]:h-4 min-[420px]:w-4" />
+              <Pause className={isCompactLandscape ? 'h-3.5 w-3.5 fill-current' : 'h-3.5 w-3.5 fill-current min-[420px]:h-4 min-[420px]:w-4'} />
             ) : (
-              <Play className="h-3.5 w-3.5 translate-x-[1px] fill-current min-[420px]:h-4 min-[420px]:w-4" />
+              <Play className={isCompactLandscape ? 'h-3.5 w-3.5 translate-x-[1px] fill-current' : 'h-3.5 w-3.5 translate-x-[1px] fill-current min-[420px]:h-4 min-[420px]:w-4'} />
             )}
           </StudioTooltipBtn>
 
           <StudioTooltipBtn
             tooltip={tr('1 Kare Geri', 'Step Back 1 Frame')}
             onClick={() => onStepFrame(-1)}
-            className="flex h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 items-center justify-center rounded-lg text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl"
+            className={`flex items-center justify-center rounded-lg text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white ${
+              isCompactLandscape
+                ? 'h-7 w-7'
+                : 'h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl'
+            }`}
           >
-            <ChevronLeft className="h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4" />
+            <ChevronLeft className={isCompactLandscape ? 'h-3.5 w-3.5' : 'h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4'} />
           </StudioTooltipBtn>
 
           <StudioTooltipBtn
             tooltip={tr('1 Kare İleri', 'Step Forward 1 Frame')}
             onClick={() => onStepFrame(1)}
-            className="flex h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 items-center justify-center rounded-lg text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl"
+            className={`flex items-center justify-center rounded-lg text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white ${
+              isCompactLandscape
+                ? 'h-7 w-7'
+                : 'h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl'
+            }`}
           >
-            <ChevronRight className="h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4" />
+            <ChevronRight className={isCompactLandscape ? 'h-3.5 w-3.5' : 'h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4'} />
           </StudioTooltipBtn>
         </div>
 
         {/* Center: Crisp Tabular Timecode */}
-        <div className="font-mono-num flex min-w-0 shrink-0 items-baseline gap-0.5 whitespace-nowrap text-[9.5px] font-bold tracking-tight min-[420px]:text-[11px] sm:gap-1 sm:text-xs">
+        <div
+          className={`font-mono-num flex min-w-0 shrink-0 items-baseline gap-0.5 whitespace-nowrap font-bold tracking-tight ${
+            isCompactLandscape ? 'text-[10px]' : 'text-[9.5px] min-[420px]:text-[11px] sm:gap-1 sm:text-xs'
+          }`}
+        >
           <span className="text-white">{formatSmpteTimecode(playhead, project.fps)}</span>
           <span className="text-white/25">/</span>
-          <span className="text-[9px] font-medium text-white/45 min-[420px]:text-[10px] sm:text-[11px]">
+          <span
+            className={`font-medium text-white/45 ${
+              isCompactLandscape ? 'text-[9px]' : 'text-[9px] min-[420px]:text-[10px] sm:text-[11px]'
+            }`}
+          >
             {formatSmpteTimecode(safeTotalDur, project.fps)}
           </span>
         </div>
@@ -1077,18 +1123,26 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
             tooltip={tr('Geri Al', 'Undo')}
             onClick={onUndo}
             disabled={!canUndo}
-            className="flex h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 items-center justify-center rounded-lg text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-25 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl"
+            className={`flex items-center justify-center rounded-lg text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-25 ${
+              isCompactLandscape
+                ? 'h-7 w-7'
+                : 'h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl'
+            }`}
           >
-            <Undo2 className="h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4" />
+            <Undo2 className={isCompactLandscape ? 'h-3.5 w-3.5' : 'h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4'} />
           </StudioTooltipBtn>
 
           <StudioTooltipBtn
             tooltip={tr('İleri Al', 'Redo')}
             onClick={onRedo}
             disabled={!canRedo}
-            className="flex h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 items-center justify-center rounded-lg text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-25 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl"
+            className={`flex items-center justify-center rounded-lg text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white disabled:opacity-25 ${
+              isCompactLandscape
+                ? 'h-7 w-7'
+                : 'h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl'
+            }`}
           >
-            <Redo2 className="h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4" />
+            <Redo2 className={isCompactLandscape ? 'h-3.5 w-3.5' : 'h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4'} />
           </StudioTooltipBtn>
 
           <StudioTooltipBtn
@@ -1098,28 +1152,40 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
                 : tr('Bu Kareye Keyframe Ekle (◆)', 'Add Keyframe at Playhead (◆)')
             }
             onClick={onQuickToggleKeyframe}
-            className={`flex h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 items-center justify-center rounded-lg transition-colors sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl ${
+            className={`flex items-center justify-center rounded-lg transition-colors ${
+              isCompactLandscape
+                ? 'h-7 w-7'
+                : 'h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl'
+            } ${
               hasKeyframeAtPlayhead
                 ? 'bg-[#F43F5E]/20 text-[#FB7185]'
                 : 'text-white/65 hover:bg-white/[0.06] hover:text-[#FB7185]'
             }`}
           >
-            <Diamond className={`h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4 ${hasKeyframeAtPlayhead ? 'fill-current' : ''}`} />
+            <Diamond
+              className={`${
+                isCompactLandscape ? 'h-3.5 w-3.5' : 'h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4'
+              } ${hasKeyframeAtPlayhead ? 'fill-current' : ''}`}
+            />
           </StudioTooltipBtn>
 
           <StudioTooltipBtn
             tooltip={project.masterMuted ? tr('Sesi Aç', 'Unmute') : tr('Sesi Kapat', 'Mute')}
             onClick={onToggleMute}
-            className={`${showMobileMuteBtn ? 'flex' : 'hidden sm:flex'} h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 items-center justify-center rounded-lg transition-colors sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl ${
+            className={`${showMobileMuteBtn ? 'flex' : 'hidden sm:flex'} items-center justify-center rounded-lg transition-colors ${
+              isCompactLandscape
+                ? 'h-7 w-7'
+                : 'h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl'
+            } ${
               project.masterMuted
                 ? 'text-rose-400'
                 : 'text-white/65 hover:bg-white/[0.06] hover:text-white'
             }`}
           >
             {project.masterMuted ? (
-              <VolumeX className="h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4" />
+              <VolumeX className={isCompactLandscape ? 'h-3.5 w-3.5' : 'h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4'} />
             ) : (
-              <Volume2 className="h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4" />
+              <Volume2 className={isCompactLandscape ? 'h-3.5 w-3.5' : 'h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4'} />
             )}
           </StudioTooltipBtn>
 
@@ -1127,16 +1193,21 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
             tooltip={tr('Kare Yakala (Fotoğraf)', 'Capture Frame Snapshot')}
             align="right"
             onClick={onCaptureSnapshot}
-            className="flex h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 items-center justify-center rounded-lg text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl"
+            className={`flex items-center justify-center rounded-lg text-white/65 transition-colors hover:bg-white/[0.06] hover:text-white ${
+              isCompactLandscape
+                ? 'h-7 w-7'
+                : 'h-7 w-7 min-[420px]:h-8 min-[420px]:w-8 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)] sm:rounded-xl'
+            }`}
           >
-            <Camera className="h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4" />
+            <Camera className={isCompactLandscape ? 'h-3.5 w-3.5' : 'h-3.5 w-3.5 min-[420px]:h-4 min-[420px]:w-4'} />
           </StudioTooltipBtn>
         </div>
       </div>
 
-      {/* Sleek Integrated Monitor Height Handle in Portrait Mode */}
+      {/* Sleek Integrated Monitor Height Handle in Portrait Mode (Timeline view) */}
       {isPortraitMode &&
         !isFullscreenPreview &&
+        !(isInspectorOpen && !isExpandedWheelMode) &&
         (() => {
           const showArmadilloPill =
             expArmadilloReel && (armadilloFoldProgress > 0.015 || isExpandedWheelMode);

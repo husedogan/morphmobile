@@ -16,6 +16,7 @@ interface StudioDockProps {
   activeTab: VideoEditorTab;
   isInspectorOpen: boolean;
   isPortraitMode: boolean;
+  isCompactLandscape?: boolean;
   hasActiveWatermark?: boolean;
   onSelectTab: (tab: VideoEditorTab) => void;
 }
@@ -30,6 +31,7 @@ export const StudioDock: React.FC<StudioDockProps> = ({
   activeTab,
   isInspectorOpen,
   isPortraitMode,
+  isCompactLandscape = false,
   hasActiveWatermark = false,
   onSelectTab,
 }) => {
@@ -54,7 +56,11 @@ export const StudioDock: React.FC<StudioDockProps> = ({
   ];
 
   return (
-    <nav className="pb-safe no-scrollbar flex shrink-0 items-center justify-between gap-0.5 overflow-x-auto border-t border-white/[0.08] bg-[#0B0B0E] px-1.5 pt-1">
+    <nav
+      className={`no-scrollbar flex shrink-0 items-center justify-between gap-0.5 overflow-x-auto border-t border-white/[0.08] bg-[#0B0B0E] px-1.5 ${
+        isPortraitMode ? 'pb-safe pt-1' : 'py-0.5'
+      }`}
+    >
       {items.map((tab) => {
         const Icon = tab.icon;
         const isHighlighted = activeTab === tab.id && (!isPortraitMode || isInspectorOpen);
@@ -82,12 +88,18 @@ export const StudioDock: React.FC<StudioDockProps> = ({
                   : 'transparent',
               color: isTinted ? tab.accent : undefined,
             }}
-            className={`group relative flex min-h-[var(--ve-dock-h,44px)] min-w-[40px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl border px-1 py-1 text-[length:var(--ve-dock-font,10px)] font-semibold transition-colors ${
-              isTinted ? '' : 'text-white/60'
-            }`}
+            className={`group relative flex min-w-0 flex-1 flex-col items-center justify-center rounded-xl border px-0.5 font-semibold transition-colors sm:px-1 ${
+              isCompactLandscape
+                ? 'min-h-[34px] gap-[1px] py-0.5 text-[8.5px]'
+                : 'min-h-[var(--ve-dock-h,44px)] gap-0.5 py-1 text-[9.5px] min-[400px]:text-[length:var(--ve-dock-font,10px)]'
+            } ${isTinted ? '' : 'text-white/60'}`}
           >
             <Icon
-              className="h-[var(--ve-dock-icon,16px)] w-[var(--ve-dock-icon,16px)] shrink-0 transition-transform group-active:scale-90"
+              className={`shrink-0 transition-transform group-active:scale-90 ${
+                isCompactLandscape
+                  ? 'h-3.5 w-3.5'
+                  : 'h-[15px] w-[15px] min-[400px]:h-[var(--ve-dock-icon,16px)] min-[400px]:w-[var(--ve-dock-icon,16px)]'
+              }`}
               style={isTinted ? {color: tab.accent} : undefined}
             />
             <span

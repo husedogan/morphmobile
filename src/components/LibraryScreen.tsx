@@ -314,7 +314,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
 
   return (
     <div className={`mx-auto w-full px-4 pb-28 pt-5 sm:px-6 lg:pb-12 lg:pt-8 ${simpleMode ? 'max-w-2xl' : 'max-w-5xl'}`}>
-      <div className="flex items-center justify-between gap-2.5">
+      <div className="flex items-center justify-between gap-2.5 [@media(orientation:landscape)_and_(max-height:639px)]:pr-20 [@media(orientation:landscape)_and_(max-width:1023px)]:pr-20">
         <div className="min-w-0">
           <h1 className="truncate text-2xl font-extrabold tracking-tight text-[var(--ink)] sm:text-3xl">
             {t('Library', lang)}

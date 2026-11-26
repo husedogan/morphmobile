@@ -11,6 +11,11 @@ import {
   WheelSpinTriggerPref,
 } from '../data/models';
 
+export function isLandscapeFixedWheelViewport(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.innerWidth > window.innerHeight && (window.innerWidth < 1024 || window.innerHeight < 640);
+}
+
 export interface WheelActionItem {
   id: string;
   label: string;
@@ -96,7 +101,7 @@ function getWheelGeometry(count: number): WheelGeometry {
       outerRingIn: 120,
       outerRingOut: 186,
       outerLabelR: 153,
-      containerWidthClass: 'w-[min(384px,94vw)]',
+      containerWidthClass: 'w-[min(384px,92vw,74dvh)]',
     };
   }
 
@@ -115,7 +120,7 @@ function getWheelGeometry(count: number): WheelGeometry {
     outerRingIn: 57,
     outerRingOut: 166,
     outerLabelR: 112,
-    containerWidthClass: 'w-[min(344px,92vw)]',
+    containerWidthClass: 'w-[min(344px,88vw,74dvh)]',
   };
 }
 
@@ -521,7 +526,7 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
 
   return (
     <div
-      className="no-touch-callout fixed inset-0 z-50 flex flex-col items-center justify-end gap-3 overflow-hidden pb-8 sm:justify-center sm:pb-0"
+      className="no-touch-callout fixed inset-0 z-50 flex flex-col items-center justify-end gap-3 overflow-hidden pb-8 sm:justify-center sm:pb-0 [@media(max-height:540px)]:justify-center [@media(max-height:540px)]:gap-1.5 [@media(max-height:540px)]:pb-2"
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) {
           e.stopPropagation();
@@ -1303,8 +1308,26 @@ export const WheelFab: React.FC<{
   const [isDragging, setIsDragging] = useState(false);
   const [isSnapping, setIsSnapping] = useState(false);
   const [previewSide, setPreviewSide] = useState<WheelSidePref>(side);
+  const [isLandscapeFixed, setIsLandscapeFixed] = useState<boolean>(() => isLandscapeFixedWheelViewport());
+  const isLandscapeFixedRef = useRef(isLandscapeFixed);
+  isLandscapeFixedRef.current = isLandscapeFixed;
   const [shockwaves, setShockwaves] = useState<number[]>([]);
   const shockIdRef = useRef(1);
+
+  useEffect(() => {
+    const syncLandscape = () => {
+      setIsLandscapeFixed(isLandscapeFixedWheelViewport());
+    };
+    syncLandscape();
+    window.addEventListener('resize', syncLandscape);
+    window.addEventListener('orientationchange', syncLandscape);
+    window.visualViewport?.addEventListener('resize', syncLandscape);
+    return () => {
+      window.removeEventListener('resize', syncLandscape);
+      window.removeEventListener('orientationchange', syncLandscape);
+      window.visualViewport?.removeEventListener('resize', syncLandscape);
+    };
+  }, []);
 
   const emitShockwave = () => {
     if (!expWheelShockwave) return;
@@ -1623,7 +1646,7 @@ export const WheelFab: React.FC<{
             const cx = rect ? rect.left + rect.width / 2 : window.innerWidth - 48;
             const cy = rect ? rect.top + rect.height / 2 : window.innerHeight - 48;
             vibrateIfAllowed([22, 35, 16]);
-            if (rect) {
+            if (rect && !isLandscapeFixedRef.current) {
               const ratio = cx / Math.max(1, window.innerWidth);
               const dropSide: WheelSidePref = ratio < 0.34 ? 'left' : ratio > 0.66 ? 'right' : 'center';
               onChangeSide?.(dropSide);
@@ -1771,8 +1794,10 @@ export const WheelFab: React.FC<{
       latestX = Math.max(12, Math.min(window.innerWidth - btnW - 12, originX + dx));
       latestY = Math.max(12, Math.min(window.innerHeight - btnH - 12, originY + dy));
       setDragPos({x: latestX, y: latestY});
-      const ratio = (latestX + btnW / 2) / Math.max(1, window.innerWidth);
-      setPreviewSide(ratio < 0.34 ? 'left' : ratio > 0.66 ? 'right' : 'center');
+      if (!isLandscapeFixedRef.current) {
+        const ratio = (latestX + btnW / 2) / Math.max(1, window.innerWidth);
+        setPreviewSide(ratio < 0.34 ? 'left' : ratio > 0.66 ? 'right' : 'center');
+      }
     };
 
     const cleanup = (ev: PointerEvent, cancelled: boolean) => {
@@ -1794,6 +1819,22 @@ export const WheelFab: React.FC<{
           setIsDragging(false);
           setIsSnapping(false);
           setDragPos(null);
+          return;
+        }
+
+        if (isLandscapeFixedRef.current) {
+          const homeX = Math.max(12, Math.min(window.innerWidth - btnW - 12, originX));
+          const homeY = Math.max(12, Math.min(window.innerHeight - btnH - 12, originY));
+          setIsDragging(false);
+          setIsSnapping(true);
+          setDragPos({x: homeX, y: homeY});
+
+          snapTimerRef.current = window.setTimeout(() => {
+            setIsSnapping(false);
+            setDragPos(null);
+            snapTimerRef.current = null;
+            emitShockwave();
+          }, 260);
           return;
         }
 
@@ -1851,8 +1892,9 @@ export const WheelFab: React.FC<{
     window.addEventListener('pointercancel', onCancel);
   };
 
-  const cornerClass =
-    side === 'left'
+  const cornerClass = isLandscapeFixed
+    ? 'morph-fab-landscape-top'
+    : side === 'left'
       ? 'morph-fab-bottom left-5 lg:left-8'
       : side === 'center'
         ? 'morph-fab-bottom left-1/2 -translate-x-1/2'
@@ -2485,29 +2527,42 @@ export const WheelFab: React.FC<{
     <>
       {isDragging && (
         <div className="pointer-events-none fixed inset-0 z-20">
-          {(['left', 'center', 'right'] as WheelSidePref[]).map((s) => (
+          {isLandscapeFixed ? (
             <div
-              key={s}
               style={
                 iconStyle === 'diamond'
-                  ? {transform: s === 'center' ? 'translateX(-50%) rotate(45deg)' : 'rotate(45deg)'}
+                  ? {transform: 'rotate(45deg)'}
                   : shapeClipPath
                     ? {clipPath: shapeClipPath}
                     : undefined
               }
-              className={`morph-fab-bottom fixed flex items-center justify-center border-2 border-dashed transition-all duration-150 ${shapeShellClass} ${
-                s === 'left'
-                  ? 'left-5 lg:left-8'
-                  : s === 'center'
-                    ? 'left-1/2 -translate-x-1/2'
-                    : 'right-5 lg:right-8'
-              } ${
-                previewSide === s
-                  ? 'scale-105 border-[var(--accent)] bg-[var(--accent)]/15'
-                  : 'border-[var(--line)] bg-[var(--surface)]/30 opacity-60'
-              }`}
+              className={`morph-fab-landscape-top fixed flex scale-105 items-center justify-center border-2 border-dashed border-[var(--accent)] bg-[var(--accent)]/15 transition-all duration-150 ${shapeShellClass}`}
             />
-          ))}
+          ) : (
+            (['left', 'center', 'right'] as WheelSidePref[]).map((s) => (
+              <div
+                key={s}
+                style={
+                  iconStyle === 'diamond'
+                    ? {transform: s === 'center' ? 'translateX(-50%) rotate(45deg)' : 'rotate(45deg)'}
+                    : shapeClipPath
+                      ? {clipPath: shapeClipPath}
+                      : undefined
+                }
+                className={`morph-fab-bottom fixed flex items-center justify-center border-2 border-dashed transition-all duration-150 ${shapeShellClass} ${
+                  s === 'left'
+                    ? 'left-5 lg:left-8'
+                    : s === 'center'
+                      ? 'left-1/2 -translate-x-1/2'
+                      : 'right-5 lg:right-8'
+                } ${
+                  previewSide === s
+                    ? 'scale-105 border-[var(--accent)] bg-[var(--accent)]/15'
+                    : 'border-[var(--line)] bg-[var(--surface)]/30 opacity-60'
+                }`}
+              />
+            ))
+          )}
         </div>
       )}
 

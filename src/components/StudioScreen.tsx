@@ -355,7 +355,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
       />
 
       {/* Editorial Hero */}
-      <div className="mb-5">
+      <div className="mb-5 [@media(orientation:landscape)_and_(max-height:639px)]:pr-20 [@media(orientation:landscape)_and_(max-width:1023px)]:pr-20">
         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--accent-text)]">
           {t('Workspace', lang)}
         </p>

@@ -640,7 +640,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [activeTab, setActiveTab] = useState<VideoEditorTab>(initialTab);
   const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(initialTab !== 'trim');
-  const [previewHeightVh, setPreviewHeightVh] = useState<number>(44);
+  const [previewHeightVh, setPreviewHeightVh] = useState<number>(50);
   const [isResizingPreview, setIsResizingPreview] = useState<boolean>(false);
   const [filterPreviewMode, setFilterPreviewMode] = useState<'sample' | 'video'>('sample');
   const [showGrid, setShowGrid] = useState(false);
@@ -712,6 +712,13 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const [isPortraitMode, setIsPortraitMode] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerHeight >= window.innerWidth : false
   );
+  const [viewportHeight, setViewportHeight] = useState<number>(() =>
+    typeof window !== 'undefined' ? (window.visualViewport?.height ?? window.innerHeight) : 800
+  );
+  const [landscapeTimelineState, setLandscapeTimelineState] = useState<
+    'compact' | 'expanded' | 'collapsed'
+  >('compact');
+  const isCompactLandscape = !isPortraitMode && viewportHeight < 560;
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
   const [snapGuideTime, setSnapGuideTime] = useState<number | null>(null);
   const [showProjectsModal, setShowProjectsModal] = useState(false);
@@ -1030,13 +1037,21 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     setHasUnsavedChanges(true);
   }, []);
 
-  // Sync device orientation
+  // Sync device orientation and viewport height for responsive mobile landscape budgeting
   useEffect(() => {
     const onResize = () => {
       setIsPortraitMode(window.innerHeight >= window.innerWidth);
+      setViewportHeight(window.visualViewport?.height ?? window.innerHeight);
     };
+    onResize();
     window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    window.visualViewport?.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+      window.visualViewport?.removeEventListener('resize', onResize);
+    };
   }, []);
 
   const toggleOrientationLock = async () => {
@@ -5391,30 +5406,50 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         }`}
       >
         {/* Clean Contextual Drawer Header */}
-        <div className="flex h-9 shrink-0 items-center justify-between border-b border-white/[0.07] bg-[#121216] px-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold tracking-tight text-white">
+        <div
+          className={`flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.07] bg-[#121216] ${
+            isCompactLandscape ? 'h-7 px-2' : 'h-9 px-2.5 sm:px-3'
+          }`}
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-xs font-bold tracking-tight text-white">
               {activeTabTitle[activeTab]}
             </span>
             {selectedClip && (activeTab === 'trim' || activeTab === 'fx') && (
-              <span className="font-mono-num text-[10px] font-medium text-white/45">
+              <span className="font-mono-num hidden shrink-0 text-[10px] font-medium text-white/45 min-[380px]:inline">
                 {selectedClip.label} · {selectedClip.speed}×
               </span>
             )}
           </div>
           {isPortraitMode && (
-            <button
-              type="button"
-              onClick={() => setIsInspectorOpen(false)}
-              className="flex items-center gap-1 rounded-md bg-white/[0.08] px-2.5 py-1 text-[11px] font-bold text-[#FB7185] transition-colors hover:bg-white/[0.14]"
-            >
-              <Check className="h-3 w-3" />
-              <span>{tr('Tamam', 'Done')}</span>
-            </button>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {!isExpandedWheelMode && (
+                <button
+                  type="button"
+                  onClick={() => setIsInspectorOpen(false)}
+                  className="flex items-center gap-1 rounded-md border border-white/[0.09] bg-white/[0.04] px-2 py-1 text-[10.5px] font-semibold text-white/75 transition-colors hover:bg-white/[0.1] hover:text-white"
+                >
+                  <SlidersHorizontal className="h-3 w-3 text-[#38BDF8]" />
+                  <span>{tr('Katmanlar', 'Tracks')}</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setIsInspectorOpen(false)}
+                className="flex items-center gap-1 rounded-md bg-white/[0.08] px-2.5 py-1 text-[11px] font-bold text-[#FB7185] transition-colors hover:bg-white/[0.14]"
+              >
+                <Check className="h-3 w-3" />
+                <span>{tr('Tamam', 'Done')}</span>
+              </button>
+            </div>
           )}
         </div>
 
-        <div className="morph-nle-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
+        <div
+          className={`morph-nle-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain ${
+            isCompactLandscape ? 'p-2' : 'p-3'
+          }`}
+        >
         {/* TAB 1: MULTI-SOURCE MEDIA BIN, V2 PIP, CLIP TRANSITIONS, OPACITY & SILENCE CUT */}
         {activeTab === 'trim' && (
           <div className="space-y-3">
@@ -6717,7 +6752,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
 
             <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 space-y-3">
               {/* Pro Color Wheels / Tonal Balance: Lift / Gamma / Gain */}
-              <div className="grid grid-cols-3 gap-3 border-b border-[var(--line)] pb-3">
+              <div className="grid grid-cols-1 gap-2.5 border-b border-[var(--line)] pb-3 sm:grid-cols-3 sm:gap-3">
                 {(
                   [
                     {key: 'lift', label: tr('Lift (Siyahlar)', 'Lift (Shadows)')},
@@ -8287,6 +8322,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       showGrid={showGrid}
       showMobileGridBtn={expVideoMobileGridInHeader}
       isPortraitMode={isPortraitMode}
+      isCompactLandscape={isCompactLandscape}
       onBack={handleRequestExit}
       onSaveProject={() => void handleSaveProject()}
       onOpenProjects={() => {
@@ -8319,6 +8355,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       isPlaying={isPlaying}
       isInGap={isInGap}
       isPortraitMode={isPortraitMode}
+      isCompactLandscape={isCompactLandscape}
       isInspectorOpen={isInspectorOpen}
       isExpandedWheelMode={isExpandedWheelMode}
       expArmadilloReel={effectiveArmadilloReel}
@@ -8408,6 +8445,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       waveformBars={waveformBars}
       waveformStatus={waveformStatus}
       isPortraitMode={isPortraitMode}
+      isCompactLandscape={isCompactLandscape}
+      landscapeTimelineState={landscapeTimelineState}
+      onSetLandscapeTimelineState={setLandscapeTimelineState}
       isInspectorOpen={isInspectorOpen}
       isExpandedWheelMode={isExpandedWheelMode}
       freeTimelineMode={freeTimelineMode}
@@ -8545,6 +8585,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       activeTab={activeTab}
       isInspectorOpen={isInspectorOpen}
       isPortraitMode={isPortraitMode}
+      isCompactLandscape={isCompactLandscape}
       hasActiveWatermark={hasActiveWatermark}
       onSelectTab={handleSelectDockTab}
     />
@@ -8664,9 +8705,10 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       {isPortraitMode ? (
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
           {previewMonitorNode}
-          {multiTrackTimelineNode}
+          {/* In Portrait Mode, collapse the multi-track timeline while an Inspector drawer is open (unless in Cinema Wheel sheet mode) so both Video Preview & Tool Controls stay generous and readable */}
+          {(!isInspectorOpen || isExpandedWheelMode) && multiTrackTimelineNode}
 
-          {/* Normal Mode: docked inspector */}
+          {/* Normal Mode: spacious docked inspector */}
           {!isExpandedWheelMode && isInspectorOpen && renderInspectorPanel()}
 
           {/* Expanded Near-Fullscreen Mode (Experimental Armadillo Reel): Inspector pops up as a floating bottom sheet */}
@@ -8749,7 +8791,11 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             <div className="col-span-6 flex min-h-0 flex-col overflow-hidden lg:col-span-5">
               {renderInspectorPanel()}
               {expAltLauncher ? (
-                <div className="flex shrink-0 items-center justify-between gap-2 border-t border-white/[0.1] bg-[#0D0E13] px-3.5 py-2">
+                <div
+                  className={`flex shrink-0 items-center justify-between gap-2 border-t border-white/[0.1] bg-[#0D0E13] ${
+                    isCompactLandscape ? 'px-2.5 py-1' : 'px-3.5 py-2'
+                  }`}
+                >
                   <span className="truncate text-xs font-bold text-white/80">
                     {activeTabTitle[activeTab]}
                     {expVideoExtraTimecodes ? ` · ${formatSmpteTimecode(playhead, project.fps)}` : ''}
@@ -8757,7 +8803,11 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                   <button
                     type="button"
                     onClick={() => setExpEditorLauncherOpen(true)}
-                    className="flex min-h-[38px] items-center gap-1.5 rounded-xl bg-[var(--accent)] px-3.5 text-xs font-bold text-white transition-transform active:scale-95"
+                    className={`flex items-center gap-1.5 rounded-xl bg-[var(--accent)] font-bold text-white transition-transform active:scale-95 ${
+                      isCompactLandscape
+                        ? 'min-h-[32px] px-2.5 text-[11px]'
+                        : 'min-h-[38px] px-3.5 text-xs'
+                    }`}
                   >
                     <Sparkles className="h-3.5 w-3.5" />
                     <span>{tr('Kademeli Araçlar', 'Cascading Tools')}</span>
@@ -8769,7 +8819,17 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             </div>
           </div>
 
-          <div className="flex h-[212px] shrink-0 flex-col">
+          <div
+            className={`flex shrink-0 flex-col transition-[height] duration-150 ${
+              isCompactLandscape
+                ? landscapeTimelineState === 'collapsed'
+                  ? 'h-[34px]'
+                  : landscapeTimelineState === 'expanded'
+                    ? 'h-[clamp(176px,50dvh,224px)]'
+                    : 'h-[clamp(118px,34dvh,144px)]'
+                : 'h-[212px]'
+            }`}
+          >
             {multiTrackTimelineNode}
           </div>
         </div>

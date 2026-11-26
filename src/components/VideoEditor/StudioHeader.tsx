@@ -31,6 +31,7 @@ interface StudioHeaderProps {
   showGrid: boolean;
   showMobileGridBtn?: boolean;
   isPortraitMode: boolean;
+  isCompactLandscape?: boolean;
   onBack: () => void;
   onSaveProject: () => void;
   onOpenProjects: () => void;
@@ -65,6 +66,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
   showGrid,
   showMobileGridBtn = true,
   isPortraitMode,
+  isCompactLandscape = false,
   onBack,
   onSaveProject,
   onOpenProjects,
@@ -108,7 +110,13 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
     !isPortraitMode;
 
   return (
-    <header className="pt-safe relative z-40 flex min-h-11 shrink-0 items-center justify-between gap-2 border-b border-white/[0.07] bg-[#0B0B0E] px-1.5 py-1 sm:min-h-12 sm:px-3.5">
+    <header
+      className={`pt-safe relative z-40 flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.07] bg-[#0B0B0E] ${
+        isCompactLandscape
+          ? 'min-h-10 px-2 py-0.5'
+          : 'min-h-11 px-1.5 py-1 sm:min-h-12 sm:px-3.5'
+      }`}
+    >
       {/* Left: Back + Stacked Project Title & Clean Unboxed Technical Metadata */}
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden sm:gap-2">
         <StudioTooltipBtn
@@ -116,9 +124,13 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           placement="bottom"
           align="left"
           onClick={onBack}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/75 transition-colors hover:bg-white/[0.07] hover:text-white sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)]"
+          className={`flex shrink-0 items-center justify-center rounded-lg text-white/75 transition-colors hover:bg-white/[0.07] hover:text-white ${
+            isCompactLandscape
+              ? 'h-7 w-7'
+              : 'h-8 w-8 sm:h-[var(--ve-btn-size,38px)] sm:w-[var(--ve-btn-size,38px)]'
+          }`}
         >
-          <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+          <ChevronLeft className={isCompactLandscape ? 'h-4 w-4' : 'h-4 w-4 sm:h-5 sm:w-5'} />
         </StudioTooltipBtn>
 
         <div className="min-w-0 flex-1 overflow-hidden">
@@ -470,7 +482,9 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
           placement="bottom"
           align="right"
           onClick={onExport}
-          className="morph-accent-btn flex h-8 min-w-[34px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-extrabold shadow-sm transition-transform active:scale-95 sm:ml-1 sm:h-[var(--ve-btn-size,38px)] sm:rounded-xl sm:px-3"
+          className={`morph-accent-btn flex min-w-[34px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-xs font-extrabold shadow-sm transition-transform active:scale-95 sm:ml-1 sm:rounded-xl sm:px-3 ${
+            isCompactLandscape ? 'h-7.5' : 'h-8 sm:h-[var(--ve-btn-size,38px)]'
+          }`}
         >
           <Share className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">{tr('Dışa Aktar', 'Export')}</span>

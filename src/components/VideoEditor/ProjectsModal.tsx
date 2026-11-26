@@ -97,7 +97,7 @@ export const ProjectsModal: React.FC<ProjectsModalProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[88vh] w-full max-w-md flex-col rounded-t-3xl border border-[var(--line)] bg-[var(--surface)] px-4 pt-2 pb-[calc(var(--morph-safe-bottom)+1rem)] shadow-2xl sm:rounded-2xl sm:p-4"
+        className="flex max-h-[90dvh] w-full max-w-md flex-col rounded-t-3xl border border-[var(--line)] bg-[var(--surface)] px-4 pt-2 pb-[calc(var(--morph-safe-bottom)+1rem)] shadow-2xl sm:rounded-2xl sm:p-4"
       >
         <div
           aria-hidden="true"

@@ -632,6 +632,17 @@ video.morph-nle-video::-webkit-media-controls-overlay-play-button {
   }
 }
 
+.morph-fab-landscape-top {
+  top: calc(4.5rem + var(--morph-safe-top));
+  right: calc(1.25rem + var(--morph-safe-right));
+}
+
+@media (min-width: 1024px) {
+  .morph-fab-landscape-top {
+    right: calc(2rem + var(--morph-safe-right));
+  }
+}
+
 .no-touch-callout {
   -webkit-touch-callout: none;
   -webkit-user-select: none;

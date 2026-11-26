@@ -79,7 +79,7 @@ import {
 } from './components/ExperimentalToolLauncher';
 import {MainWheelCustomizeModal} from './components/MainWheelCustomizeModal';
 import {CustomizeWheelTab, WheelCustomizeModal} from './components/WheelCustomizeModal';
-import {WheelActionItem, WheelFab, WheelMenu} from './components/WheelMenu';
+import {WheelActionItem, WheelFab, WheelMenu, isLandscapeFixedWheelViewport} from './components/WheelMenu';
 import {t} from './data/i18n';
 import {
   ALL_CONVERT_FORMATS_CATALOG,
@@ -245,6 +245,24 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [showWheelCloud, setShowWheelCloud] = useState<boolean>(false);
   const [showGearCloud, setShowGearCloud] = useState<boolean>(false);
+  const [isLandscapeFixedWheel, setIsLandscapeFixedWheel] = useState<boolean>(() =>
+    isLandscapeFixedWheelViewport()
+  );
+
+  useEffect(() => {
+    const syncWheelAnchor = () => {
+      setIsLandscapeFixedWheel(isLandscapeFixedWheelViewport());
+    };
+    syncWheelAnchor();
+    window.addEventListener('resize', syncWheelAnchor);
+    window.addEventListener('orientationchange', syncWheelAnchor);
+    window.visualViewport?.addEventListener('resize', syncWheelAnchor);
+    return () => {
+      window.removeEventListener('resize', syncWheelAnchor);
+      window.removeEventListener('orientationchange', syncWheelAnchor);
+      window.visualViewport?.removeEventListener('resize', syncWheelAnchor);
+    };
+  }, []);
   const [updateInfo, setUpdateInfo] = useState<GithubUpdateInfo | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateDownload, setUpdateDownload] = useState<UpdateDownloadProgress | null>(null);
@@ -2918,21 +2936,29 @@ export default function App() {
                     !wheelKind && showWheelCloud ? (
                       <div
                         role="tooltip"
-                        className={`pointer-events-none absolute bottom-[68px] w-max max-w-[230px] rounded-2xl border border-[var(--accent)]/45 bg-[var(--surface)]/95 px-3.5 py-2 text-xs font-medium leading-snug text-[var(--ink)] shadow-2xl backdrop-blur-md ${
-                          (prefs.wheelSide ?? 'right') === 'left'
-                            ? 'left-0'
-                            : (prefs.wheelSide ?? 'right') === 'center'
-                              ? 'left-1/2 -translate-x-1/2'
-                              : 'right-0'
+                        className={`pointer-events-none absolute w-max max-w-[230px] rounded-2xl border border-[var(--accent)]/45 bg-[var(--surface)]/95 px-3.5 py-2 text-xs font-medium leading-snug text-[var(--ink)] shadow-2xl backdrop-blur-md ${
+                          isLandscapeFixedWheel
+                            ? 'top-[68px] right-0'
+                            : `bottom-[68px] ${
+                                (prefs.wheelSide ?? 'right') === 'left'
+                                  ? 'left-0'
+                                  : (prefs.wheelSide ?? 'right') === 'center'
+                                    ? 'left-1/2 -translate-x-1/2'
+                                    : 'right-0'
+                              }`
                         }`}
                       >
                         <span
-                          className={`absolute -bottom-1.5 h-3 w-3 rotate-45 border-b border-r border-[var(--accent)]/45 bg-[var(--surface)] ${
-                            (prefs.wheelSide ?? 'right') === 'left'
-                              ? 'left-5'
-                              : (prefs.wheelSide ?? 'right') === 'center'
-                                ? 'left-1/2 -translate-x-1/2'
-                                : 'right-5'
+                          className={`absolute h-3 w-3 rotate-45 border-[var(--accent)]/45 bg-[var(--surface)] ${
+                            isLandscapeFixedWheel
+                              ? '-top-1.5 right-5 border-l border-t'
+                              : `-bottom-1.5 border-b border-r ${
+                                  (prefs.wheelSide ?? 'right') === 'left'
+                                    ? 'left-5'
+                                    : (prefs.wheelSide ?? 'right') === 'center'
+                                      ? 'left-1/2 -translate-x-1/2'
+                                      : 'right-5'
+                                }`
                           }`}
                         />
                         {t('WheelCloudTip', lang)}

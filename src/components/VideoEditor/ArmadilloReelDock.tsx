@@ -598,12 +598,12 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
                     ? 'none'
                     : 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 160ms ease, background-color 150ms ease, border-color 150ms ease',
                 }}
-                className={`group absolute z-[2] flex flex-col items-center justify-center gap-1 border px-0.5 py-1 text-[10px] font-semibold ${
+                className={`group absolute z-[2] flex flex-col items-center justify-center gap-1 border px-0.5 py-1 text-[9.5px] font-semibold min-[400px]:text-[10px] ${
                   isFlat ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none'
                 } ${isTinted ? '' : 'text-white/70'}`}
               >
                 <Icon
-                  className="h-[17px] w-[17px] shrink-0 transition-transform group-active:scale-90"
+                  className="h-[15px] w-[15px] shrink-0 transition-transform group-active:scale-90 min-[400px]:h-[17px] min-[400px]:w-[17px]"
                   style={isTinted || u > 0.08 ? {color: tab.accent} : undefined}
                 />
                 <span
@@ -753,7 +753,7 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
               }
               setHoveredIdx(null);
             }}
-            className="morph-wheel-aperture relative aspect-square w-[min(352px,92vw)] touch-none select-none"
+            className="morph-wheel-aperture relative aspect-square w-[min(352px,92vw,72dvh)] touch-none select-none"
           >
             <svg viewBox="0 0 360 360" className="h-full w-full drop-shadow-[0_18px_45px_rgba(0,0,0,0.85)]">
               <defs>
