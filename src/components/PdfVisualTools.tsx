@@ -242,7 +242,7 @@ export const PdfSplitVisualPicker: React.FC<{
   const {pages, totalPages, loading, error} = usePdfPagePreviews(file, {maxPages: 60, targetWidth: 280});
   const effectiveTotal = Math.max(totalPages, pages.length);
 
-  // 3-tab Adobe / iLovePDF studio mode
+  // 3-tab Morph PDF split studio mode
   const [viewTab, setViewTab] = useState<'select' | 'range' | 'reader'>(
     splitMode === 'every' ? 'range' : 'select'
   );

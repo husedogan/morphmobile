@@ -234,7 +234,7 @@ interface MultiTrackTimelineProps {
 }
 
 /**
- * Full-width CapCut/VN-style Multi-Track NLE Timeline:
+ * Full-width Morph Multi-Track NLE Timeline:
  * - Zero left sidebar rail: every track spans 100% edge-to-edge with crisp inner-left card type icons
  * - Zero double scrollbars: single clean horizontal+vertical scroll container with hidden native scrollbar
  * - Decoupled canvasDuration: shrinking a clip NEVER collapses the ruler or traps the clip

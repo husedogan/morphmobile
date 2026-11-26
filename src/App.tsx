@@ -931,7 +931,7 @@ export default function App() {
       }
       const caps = [
         h.ffmpeg ? 'FFmpeg' : null,
-        h.libreoffice ? 'LibreOffice' : null,
+        h.libreoffice ? (lang === 'tr' ? 'Ofis Motoru' : 'Office Engine') : null,
         h.ytdlp ? 'yt-dlp' : null,
       ].filter(Boolean);
       setServerStatus(
@@ -2597,7 +2597,7 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <main className="relative z-10 pb-safe">
+      <main className="relative pb-safe">
         {job.status === 'done' ? (
           <ResultView
             key={`result-${lang}-${job.result.items[0]?.id ?? 'done'}`}
@@ -2832,16 +2832,16 @@ export default function App() {
                 setPrefs((p) => ({...p, proShowStudioSuitesBar: false}));
                 showToast(
                   lang === 'tr'
-                    ? 'Stüdyo araç çubuğu gizlendi. Ayarlar → Deneysel’den tekrar açabilirsin.'
-                    : 'Studio tools bar hidden. Re-enable anytime in Settings → Experimental.'
+                    ? 'Stüdyo araç çubuğu gizlendi. Ayarlar → Görünüm’den tekrar açabilirsin.'
+                    : 'Studio tools bar hidden. Re-enable anytime in Settings → Appearance.'
                 );
               }}
               onHidePinnedStrip={() => {
                 setPrefs((p) => ({...p, proShowPinnedRecentStrip: false}));
                 showToast(
                   lang === 'tr'
-                    ? 'Sabitlenen kısayol şeridi gizlendi. Ayarlar → Deneysel’den tekrar açabilirsin.'
-                    : 'Pinned shortcuts strip hidden. Re-enable anytime in Settings → Experimental.'
+                    ? 'Sabitlenen kısayol şeridi gizlendi. Ayarlar → Görünüm’den tekrar açabilirsin.'
+                    : 'Pinned shortcuts strip hidden. Re-enable anytime in Settings → Appearance.'
                 );
               }}
             />
@@ -2849,106 +2849,122 @@ export default function App() {
         )}
       </main>
 
-      {/* Draggable Corner-Snapping Radial Wheel Menu FAB — hidden cleanly in Simple Mode */}
-      {!isSimpleMode &&
-        prefs.showQuickWheel !== false &&
-        !toolMode &&
-        job.status === 'idle' &&
-        tab !== 'settings' && (
-          <WheelFab
-            hidden={wheelKind !== null}
-            side={prefs.wheelSide ?? 'right'}
-            iconStyle={prefs.wheelIconStyle ?? prefs.expWheelShape ?? 'wheel'}
-            innerStyle={prefs.wheelInnerStyle ?? 'auto'}
-            expWheelBurnEffect={Boolean(prefs.expWheelBurnEffect)}
-            burnStyle={prefs.expWheelBurnStyle ?? 'classic_fire'}
-            expWheelSpinEnabled={Boolean(prefs.expWheelSpinEnabled)}
-            expWheelSpinMode={prefs.expWheelSpinMode ?? 'outer_ccw_inner_cw'}
-            expWheelSpinTrigger={prefs.expWheelSpinTrigger ?? 'always'}
-            expWheelShockwave={Boolean(prefs.expWheelShockwave)}
-            onChangeSide={(wheelSide) => setPrefs((p) => ({...p, wheelSide}))}
-            onHoverChange={(hover) => {
-              if (!hover || window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
-                setShowWheelCloud(hover);
-              }
-            }}
-            onClick={() => {
-              setShowWheelCloud(false);
-              setWheelKind('main');
-            }}
-            onFocus={() => {
-              if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
-                setShowWheelCloud(true);
-              }
-            }}
-            onBlur={() => setShowWheelCloud(false)}
-            label={t('Tools', lang)}
-            cloud={
-              !wheelKind && showWheelCloud ? (
-                <div
-                  role="tooltip"
-                  className={`pointer-events-none absolute bottom-[68px] w-max max-w-[230px] rounded-2xl border border-[var(--accent)]/45 bg-[var(--surface)]/95 px-3.5 py-2 text-xs font-medium leading-snug text-[var(--ink)] shadow-2xl backdrop-blur-md ${
-                    (prefs.wheelSide ?? 'right') === 'left'
-                      ? 'left-0'
-                      : (prefs.wheelSide ?? 'right') === 'center'
-                        ? 'left-1/2 -translate-x-1/2'
-                        : 'right-0'
-                  }`}
-                >
-                  <span
-                    className={`absolute -bottom-1.5 h-3 w-3 rotate-45 border-b border-r border-[var(--accent)]/45 bg-[var(--surface)] ${
-                      (prefs.wheelSide ?? 'right') === 'left'
-                        ? 'left-5'
-                        : (prefs.wheelSide ?? 'right') === 'center'
-                          ? 'left-1/2 -translate-x-1/2'
-                          : 'right-5'
-                    }`}
-                  />
-                  {t('WheelCloudTip', lang)}
-                </div>
-              ) : null
-            }
-          />
-        )}
+      {/* Draggable Corner-Snapping Radial Wheel Menu FAB — hidden cleanly in Simple Mode or when any overlay/sheet is open */}
+      {(() => {
+        const hasBlockingOverlay =
+          libraryOverlayCount > 0 ||
+          showFileActions ||
+          showManageTools ||
+          showMainWheelCustomize ||
+          customizeModal.open ||
+          docViewerModal.open ||
+          pdfArchiveModal.open ||
+          audioStudioModal.open ||
+          imageProModal.open ||
+          showTerminal ||
+          Boolean(previewTarget);
 
-      {/* Mobile Bottom Navigation Bar — shown on mobile when Quick Wheel is disabled OR in Simple Mode */}
-      {(isSimpleMode || prefs.showQuickWheel === false) && !toolMode && job.status === 'idle' && (
-        <nav
-          aria-label={lang === 'tr' ? 'Alt gezinme' : 'Bottom navigation'}
-          className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t border-[var(--line)] bg-[var(--surface)]/95 px-3 pt-1.5 pb-[calc(var(--morph-safe-bottom)+0.5rem)] backdrop-blur-md md:hidden"
-        >
-          {(isSimpleMode
-            ? ([
-                {id: 'studio' as Tab, label: t('Studio', lang), Icon: LayoutGrid},
-                {id: 'library' as Tab, label: t('Library', lang), Icon: Grid},
-              ] as const)
-            : ([
-                {id: 'studio' as Tab, label: t('Studio', lang), Icon: LayoutGrid},
-                {id: 'library' as Tab, label: t('Library', lang), Icon: Grid},
-                {id: 'settings' as Tab, label: t('Settings', lang), Icon: Settings},
-              ] as const)
-          ).map(({id, label, Icon}) => {
-            const active = tab === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setTab(id)}
-                className={`flex min-h-[44px] flex-col items-center justify-center gap-0.5 rounded-2xl px-4 py-1 text-[11px] font-semibold transition-colors ${
-                  isSimpleMode ? 'min-w-[116px]' : 'min-w-[78px]'
-                } ${
-                  active
-                    ? 'bg-[var(--accent)]/15 text-[var(--accent-text)]'
-                    : 'text-[var(--muted)] hover:text-[var(--ink)]'
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                <span>{label}</span>
-              </button>
-            );
-          })}
-        </nav>
-      )}
+        return (
+          <>
+            {!isSimpleMode &&
+              prefs.showQuickWheel !== false &&
+              !toolMode &&
+              job.status === 'idle' &&
+              tab !== 'settings' &&
+              !hasBlockingOverlay && (
+                <WheelFab
+                  hidden={wheelKind !== null}
+                  side={prefs.wheelSide ?? 'right'}
+                  iconStyle={prefs.wheelIconStyle ?? prefs.expWheelShape ?? 'wheel'}
+                  innerStyle={prefs.wheelInnerStyle ?? 'auto'}
+                  expWheelBurnEffect={Boolean(prefs.expWheelBurnEffect)}
+                  burnStyle={prefs.expWheelBurnStyle ?? 'classic_fire'}
+                  expWheelSpinEnabled={Boolean(prefs.expWheelSpinEnabled)}
+                  expWheelSpinMode={prefs.expWheelSpinMode ?? 'outer_ccw_inner_cw'}
+                  expWheelSpinTrigger={prefs.expWheelSpinTrigger ?? 'always'}
+                  expWheelShockwave={Boolean(prefs.expWheelShockwave)}
+                  onChangeSide={(wheelSide) => setPrefs((p) => ({...p, wheelSide}))}
+                  onHoverChange={(hover) => {
+                    if (!hover || window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
+                      setShowWheelCloud(hover);
+                    }
+                  }}
+                  onClick={() => {
+                    setShowWheelCloud(false);
+                    setWheelKind('main');
+                  }}
+                  onFocus={() => {
+                    if (window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
+                      setShowWheelCloud(true);
+                    }
+                  }}
+                  onBlur={() => setShowWheelCloud(false)}
+                  label={t('Tools', lang)}
+                  cloud={
+                    !wheelKind && showWheelCloud ? (
+                      <div
+                        role="tooltip"
+                        className={`pointer-events-none absolute bottom-[68px] w-max max-w-[230px] rounded-2xl border border-[var(--accent)]/45 bg-[var(--surface)]/95 px-3.5 py-2 text-xs font-medium leading-snug text-[var(--ink)] shadow-2xl backdrop-blur-md ${
+                          (prefs.wheelSide ?? 'right') === 'left'
+                            ? 'left-0'
+                            : (prefs.wheelSide ?? 'right') === 'center'
+                              ? 'left-1/2 -translate-x-1/2'
+                              : 'right-0'
+                        }`}
+                      >
+                        <span
+                          className={`absolute -bottom-1.5 h-3 w-3 rotate-45 border-b border-r border-[var(--accent)]/45 bg-[var(--surface)] ${
+                            (prefs.wheelSide ?? 'right') === 'left'
+                              ? 'left-5'
+                              : (prefs.wheelSide ?? 'right') === 'center'
+                                ? 'left-1/2 -translate-x-1/2'
+                                : 'right-5'
+                          }`}
+                        />
+                        {t('WheelCloudTip', lang)}
+                      </div>
+                    ) : null
+                  }
+                />
+              )}
+
+            {/* Mobile Bottom Navigation Bar — shown on mobile when Quick Wheel is disabled OR in Simple Mode, hidden when any modal/sheet is open */}
+            {(isSimpleMode || prefs.showQuickWheel === false) &&
+              !toolMode &&
+              job.status === 'idle' &&
+              !hasBlockingOverlay && (
+                <nav
+                  aria-label={lang === 'tr' ? 'Alt gezinme' : 'Bottom navigation'}
+                  className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t border-[var(--line)] bg-[var(--surface)]/95 px-3 pt-1.5 pb-[calc(var(--morph-safe-bottom)+0.5rem)] backdrop-blur-md md:hidden"
+                >
+                  {(
+                    [
+                      {id: 'studio' as Tab, label: t('Studio', lang), Icon: LayoutGrid},
+                      {id: 'library' as Tab, label: t('Library', lang), Icon: Grid},
+                    ] as const
+                  ).map(({id, label, Icon}) => {
+                    const active = tab === id;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => setTab(id)}
+                        className={`flex min-h-[44px] min-w-[116px] flex-col items-center justify-center gap-0.5 rounded-2xl px-4 py-1 text-[11px] font-semibold transition-colors ${
+                          active
+                            ? 'bg-[var(--accent)]/15 text-[var(--accent-text)]'
+                            : 'text-[var(--muted)] hover:text-[var(--ink)]'
+                        }`}
+                      >
+                        <Icon className="h-4 w-4" />
+                        <span>{label}</span>
+                      </button>
+                    );
+                  })}
+                </nav>
+              )}
+          </>
+        );
+      })()}
 
       {/* Classic Radial WheelMenu (untouched) & Experimental Cascading Launcher — completely disabled in Simple Mode */}
       {!isSimpleMode && (() => {
@@ -3172,7 +3188,42 @@ export default function App() {
       )}
 
       {/* Universal Source File Preview Modal (Image, PDF, Video, Audio, Document) */}
-      {previewTarget && (sourcePreviewUrl || sourcePreviewText !== null) && (
+      {previewTarget && previewTarget.kind === 'pdf' && sourcePreviewUrl && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={previewTarget.name}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm sm:p-4"
+          onClick={closeSourcePreview}
+        >
+          <div
+            className="flex h-[100dvh] w-full max-w-4xl flex-col overflow-hidden bg-[var(--surface)] shadow-2xl sm:h-[92vh] sm:rounded-3xl sm:border sm:border-[var(--line)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <PdfCanvasViewer
+              file={previewTarget.file}
+              url={sourcePreviewUrl}
+              fileName={previewTarget.name}
+              lang={lang}
+              fullScreen={true}
+              onClose={closeSourcePreview}
+              onOpenInStudio={() => {
+                const f = previewTarget.file;
+                closeSourcePreview();
+                setPdfArchiveModal({open: true, tab: 'pdf_organize', initialPdfFile: f});
+              }}
+              onExportAnnotatedPdf={(blob, newName) => {
+                void handleProExportBlobs(
+                  [{blob, name: newName}],
+                  lang === 'tr' ? 'PDF Not & İşaretleme' : 'Annotated PDF'
+                );
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {previewTarget && previewTarget.kind !== 'pdf' && (sourcePreviewUrl || sourcePreviewText !== null) && (
         <div
           role="dialog"
           aria-modal="true"
@@ -3200,20 +3251,6 @@ export default function App() {
                 <pre className="max-h-[72vh] w-full overflow-auto rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-4 text-xs leading-relaxed whitespace-pre-wrap text-[var(--ink)]">
                   {sourcePreviewText}
                 </pre>
-              ) : previewTarget.kind === 'pdf' && sourcePreviewUrl ? (
-                <div className="h-[72vh] w-full">
-                  <PdfCanvasViewer
-                    file={previewTarget.file}
-                    url={sourcePreviewUrl}
-                    fileName={previewTarget.name}
-                    lang={lang}
-                    onOpenInStudio={() => {
-                      const f = previewTarget.file;
-                      closeSourcePreview();
-                      setPdfArchiveModal({open: true, tab: 'pdf_organize', initialPdfFile: f});
-                    }}
-                  />
-                </div>
               ) : previewTarget.kind === 'video' && sourcePreviewUrl ? (
                 <video
                   src={sourcePreviewUrl}

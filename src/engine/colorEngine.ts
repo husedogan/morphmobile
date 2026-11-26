@@ -54,7 +54,7 @@ export function deleteCustomColorPreset(id: string): CustomColorPreset[] {
 }
 
 /**
- * Parses a standard DaVinci / Adobe `.cube` 1D or 3D LUT file and derives
+ * Parses a standard `.cube` 1D or 3D LUT file and derives
  * calibrated Morph ColorGradingSettings (exposure, contrast, saturation, temperature, tint, shadows/highlights)
  * so loaded `.cube` LUTs work seamlessly in both live CSS preview and FFmpeg export.
  */

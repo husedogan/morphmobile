@@ -367,7 +367,7 @@ const DICT: Record<string, {tr: string; en: string}> = {
   ClipboardEmpty: {tr: 'Panoda bağlantı bulunamadı', en: 'No link found in clipboard'},
 
   // Smart Download Preferences & Selectable Engines
-  DownloadPrefsSection: {tr: 'Akıllı İndirme Ayarları', en: 'Smart Download Settings'},
+  DownloadPrefsSection: {tr: 'İndirme Ayarları', en: 'Download Settings'},
   DownloadPrefsDesc: {
     tr: 'Mobil veri koruması, varsayılan çözünürlük ve çoklu parça hızlandırma tercihlerini yönet.',
     en: 'Control mobile data protection, preferred video quality, and multi-fragment acceleration.',
@@ -644,7 +644,7 @@ const DICT: Record<string, {tr: string; en: string}> = {
   CornerSharp: {tr: 'Keskin', en: 'Sharp'},
   CornerBalanced: {tr: 'Dengeli', en: 'Balanced'},
   CornerSoft: {tr: 'Yumuşak', en: 'Soft'},
-  WheelFabSectionTitle: {tr: 'Hızlı Çark Görünümü', en: 'Quick Wheel Appearance'},
+  WheelFabSectionTitle: {tr: 'Çark', en: 'Wheel'},
   WheelFabSectionDesc: {
     tr: 'Konum, dış şekil ve iç simgeyi düzenle.',
     en: 'Customize position, outer shape, and inner icon.',
@@ -659,31 +659,31 @@ const DICT: Record<string, {tr: string; en: string}> = {
   WheelIconGear: {tr: 'Dişli', en: 'Gear'},
   WheelIconCompass: {tr: 'Pusula', en: 'Compass'},
   WheelIconHex: {tr: 'Altıgen', en: 'Hex'},
-  ShowQuickWheelLabel: {tr: 'Ana Ekran Hızlı Çarkını Göster', en: 'Show Home Quick Wheel'},
+  ShowQuickWheelLabel: {tr: 'Çarkı Göster', en: 'Show Wheel'},
   ShowQuickWheelDesc: {
-    tr: 'Ana ekrandaki yüzen hızlı çark düğmesini aç veya kapat. Kapattığında buradan istediğin zaman geri açabilirsin.',
-    en: 'Show or hide the floating quick wheel button on the home screen. You can re-enable it anytime here.',
+    tr: 'Yüzen çark düğmesini aç veya kapat. Kapattığında buradan istediğin zaman geri açabilirsin.',
+    en: 'Show or hide the floating wheel button. You can re-enable it anytime here.',
   },
-  QuickWheelHiddenBannerTitle: {tr: 'Ana Ekran Çarkı Şu An Kapalı', en: 'Home Quick Wheel Is Off'},
+  QuickWheelHiddenBannerTitle: {tr: 'Çark Şu An Kapalı', en: 'Wheel Is Off'},
   QuickWheelHiddenBannerDesc: {
     tr: 'Yüzen çark düğmesi gizlendi. Tek dokunuşla geri açabilir veya dilimlerini özelleştirebilirsin.',
     en: 'The floating wheel button is hidden. Turn it back on with one tap or customize its slices.',
   },
   QuickWheelEnableNow: {tr: 'Çarkı Aç', en: 'Enable Wheel'},
   QuickWheelDisabledToast: {
-    tr: 'Ana ekran çarkı kapatıldı · Ayarlar → Görünüm bölümünden tekrar açabilirsin',
-    en: 'Home wheel hidden · Re-enable it anytime in Settings → Appearance',
+    tr: 'Çark kapatıldı · Ayarlar → Görünüm bölümünden tekrar açabilirsin',
+    en: 'Wheel hidden · Re-enable it anytime in Settings → Appearance',
   },
   QuickWheelEnabledToast: {
-    tr: 'Ana ekran çarkı açıldı',
-    en: 'Home quick wheel enabled',
+    tr: 'Çark açıldı',
+    en: 'Wheel enabled',
   },
-  MainWheelCustomizeTitle: {tr: 'Ana Çarkı Özelleştir', en: 'Customize Home Wheel'},
+  MainWheelCustomizeTitle: {tr: 'Çarkı Özelleştir', en: 'Customize Wheel'},
   MainWheelCustomizeSubtitle: {
-    tr: 'Ana ekrandaki hızlı çarka istediğin kısayolları ekle, çıkar, sırasını değiştir veya çarkı tamamen kapat.',
-    en: 'Add, remove, reorder shortcuts on the home quick wheel, or disable the wheel completely.',
+    tr: 'Çarka istediğin kısayolları ekle, çıkar, sırasını değiştir veya çarkı tamamen kapat.',
+    en: 'Add, remove, reorder shortcuts on the wheel, or disable it completely.',
   },
-  MainWheelCustomizeBtn: {tr: 'Ana Çark İçeriğini Özelleştir', en: 'Customize Home Wheel Items'},
+  MainWheelCustomizeBtn: {tr: 'Çark İçeriğini Özelleştir', en: 'Customize Wheel Items'},
   MainWheelHoldHint: {
     tr: 'İpucu: Ana ekrandaki çarkı açtıktan sonra ortadaki m işaretine 3 saniye basılı tutarak bu özelleştirme penceresine anında ulaşabilirsin.',
     en: 'Tip: Press and hold the center m hub for 3 seconds on the home wheel to open this customization screen anytime.',

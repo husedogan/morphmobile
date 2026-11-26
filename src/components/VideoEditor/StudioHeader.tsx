@@ -43,7 +43,7 @@ interface StudioHeaderProps {
 }
 
 /**
- * Minimalist ClipCraft / Premiere iOS inspired Studio Top Header.
+ * Minimalist Morph Studio Top Header.
  * Clean unboxed project metadata on the left; icon-first pro tools & primary export action on the right.
  */
 export const StudioHeader: React.FC<StudioHeaderProps> = ({

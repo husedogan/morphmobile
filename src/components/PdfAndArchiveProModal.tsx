@@ -734,11 +734,11 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 sm:p-5 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 sm:p-5 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-[var(--line)] bg-[var(--surface)] shadow-2xl"
+        className="flex h-[100dvh] w-full max-w-3xl flex-col overflow-hidden bg-[var(--surface)] shadow-2xl sm:h-auto sm:max-h-[92vh] sm:rounded-3xl sm:border sm:border-[var(--line)]"
         onClick={(e) => e.stopPropagation()}
       >
         <input
@@ -775,26 +775,27 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
         />
 
         {/* Header */}
-        <div className="flex items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-3.5">
+        <div className="flex items-center justify-between gap-2.5 border-b border-[var(--line)] px-4 pt-[calc(var(--morph-safe-top)+0.65rem)] pb-3 sm:py-3.5">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)]/15 text-[var(--accent-text)]">
               <FileText className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <h2 className="truncate text-base font-extrabold text-[var(--ink)]">
-                {isTr ? 'PDF, Arşiv & Otomasyon' : 'PDF, Archive & Pipelines'}
+              <h2 className="text-base font-extrabold leading-tight text-[var(--ink)]">
+                {isTr ? 'PDF & Arşiv Stüdyosu' : 'PDF & Archive Studio'}
               </h2>
-              <p className="truncate text-[11px] text-[var(--muted)]">
+              <p className="text-[11px] leading-snug text-[var(--muted)]">
                 {isTr
-                  ? 'Görsel PDF Sayfaları · İmza & Sansür · ZArchiver Tarzı ZIP · Tarif Zincirleri'
-                  : 'Visual PDF Pages · Sign & Redact · Smart ZIP Explorer · Automation Pipelines'}
+                  ? 'Sayfa düzenleme, imza, sansür, ZIP ve otomasyon'
+                  : 'Page editor, sign, redact, ZIP explorer & recipes'}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]"
+            aria-label={isTr ? 'Kapat' : 'Close'}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]"
           >
             <X className="h-4.5 w-4.5" />
           </button>
@@ -804,10 +805,10 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
         <div className="grid grid-cols-4 gap-1 border-b border-[var(--line)] bg-[var(--inset)] p-1.5">
           {(
             [
-              {id: 'pdf_organize' as const, icon: FileText, tr: 'PDF Sayfalar', en: 'PDF Pages'},
-              {id: 'pdf_sign' as const, icon: PenTool, tr: 'İmza & Sansür', en: 'Sign & Redact'},
-              {id: 'archive' as const, icon: FolderArchive, tr: 'Arşiv Gezgini', en: 'ZIP Explorer'},
-              {id: 'pipeline' as const, icon: Workflow, tr: 'Tarif Zinciri', en: 'Pipelines'},
+              {id: 'pdf_organize' as const, icon: FileText, tr: 'Sayfalar', en: 'Pages'},
+              {id: 'pdf_sign' as const, icon: PenTool, tr: 'İmza', en: 'Sign'},
+              {id: 'archive' as const, icon: FolderArchive, tr: 'Arşiv', en: 'Archive'},
+              {id: 'pipeline' as const, icon: Workflow, tr: 'Tarif', en: 'Recipes'},
             ] as const
           ).map((item) => {
             const Icon = item.icon;
@@ -817,12 +818,12 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                 key={item.id}
                 type="button"
                 onClick={() => setTab(item.id)}
-                className={`flex min-h-[40px] flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[10.5px] leading-tight font-bold sm:flex-row sm:gap-1.5 sm:px-2 sm:text-xs ${
+                className={`flex min-h-[42px] items-center justify-center gap-1 rounded-xl px-1.5 py-1 text-[11px] font-bold whitespace-nowrap transition-colors sm:gap-1.5 sm:px-2 sm:text-xs ${
                   active ? 'morph-accent-btn shadow-sm' : 'text-[var(--muted)] hover:text-[var(--ink)]'
                 }`}
               >
                 <Icon className="h-3.5 w-3.5 shrink-0" />
-                <span className="max-w-full truncate">{isTr ? item.tr : item.en}</span>
+                <span>{isTr ? item.tr : item.en}</span>
               </button>
             );
           })}
@@ -2044,6 +2045,10 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
         lang={lang}
         initialPage={readerPage ?? 1}
         onClose={() => setReaderPage(null)}
+        onExportAnnotatedPdf={(blob, name) => {
+          onExportBlobs([{blob, name}], isTr ? 'PDF Not & İşaretleme' : 'Annotated PDF');
+          setReaderPage(null);
+        }}
       />
     </div>
   );

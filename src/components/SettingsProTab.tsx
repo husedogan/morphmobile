@@ -301,11 +301,11 @@ export const SettingsDownloadsExtra: React.FC<{
       {/* Parallel Range Accelerator & Auto-Categorization */}
       <SettingsAccordionCard
         icon={<Zap className="h-4.5 w-4.5" />}
-        title={isTr ? 'Paralel Hızlandırıcı & Otomatik Klasörleme' : 'Parallel Accelerator & Auto-Categorize'}
+        title={isTr ? 'Hızlandırıcı & Klasörleme' : 'Accelerator & Sorting'}
         subtitle={
           isTr
-            ? 'HTTP Range parçalı indirme, devam önbelleği ve uzantıya göre klasörleme'
-            : 'HTTP Range chunking, resume cache & automatic Library folder sorting'
+            ? 'HTTP Range parçalı indirme ve uzantıya göre klasörleme'
+            : 'HTTP Range chunking & automatic folder sorting'
         }
         badge={accelBadge}
         defaultOpen={false}
@@ -462,11 +462,11 @@ export const SettingsDownloadsExtra: React.FC<{
       {/* Link Downloader Defaults, SponsorBlock, Cookies & History */}
       <SettingsAccordionCard
         icon={<Download className="h-4.5 w-4.5" />}
-        title={isTr ? 'Bağlantı İndirici Varsayılanları & Veri' : 'Link Downloader Defaults & Data'}
+        title={isTr ? 'İndirici Ayarları' : 'Downloader Defaults'}
         subtitle={
           isTr
-            ? 'Canlı önizleme, SponsorBlock, ses/altyazı, çerez profili ve geçmiş temizliği'
-            : 'Live preview, SponsorBlock, audio/subtitles, cookies & history cleanup'
+            ? 'Canlı önizleme, SponsorBlock, çerez ve geçmiş'
+            : 'Live preview, SponsorBlock, cookies & history'
         }
         badge={defaultsBadge}
         defaultOpen={false}
@@ -675,11 +675,11 @@ export const SettingsStudioLayoutCard: React.FC<{
   return (
     <SettingsAccordionCard
       icon={<Sparkles className="h-4.5 w-4.5" />}
-      title={isTr ? 'Stüdyo & Kitaplık Görünümü' : 'Studio & Library Layout'}
+      title={isTr ? 'Stüdyo & Kitaplık' : 'Studio & Library'}
       subtitle={
         isTr
-          ? 'Üst araç şeritleri, sonuç zinciri, depolama çubuğu ve proje klasörleri'
-          : 'Top studio strips, output chaining, storage bar & project folders'
+          ? 'Üst şeritler, sonuç zinciri, depolama çubuğu ve klasörler'
+          : 'Top strips, output chaining, storage bar & folders'
       }
       badge={`${activeStripCount}/6 ${isTr ? 'aktif' : 'active'}`}
       defaultOpen={false}
@@ -999,31 +999,15 @@ export const SettingsProTab: React.FC<SettingsProTabProps> = ({
 
   return (
     <div className="mt-4 space-y-3.5">
-      {/* Compact Studio Header + Reset */}
-      <div className="flex items-center justify-between gap-3 rounded-3xl border border-[var(--line)] bg-[var(--surface)] px-4 py-3.5 sm:px-5">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
-            <Layers className="h-4.5 w-4.5" />
-          </div>
-          <div className="min-w-0">
-            <h2 className="text-sm font-extrabold leading-snug text-[var(--ink)]">
-              {isTr ? 'Stüdyo & İş Akışı Varsayılanları' : 'Studio & Workflow Defaults'}
-            </h2>
-            <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
-              {isTr
-                ? 'Video, Ses, Görsel stüdyoları ve kayıtlı kısayollar.'
-                : 'Video, Audio, Image studios and saved workflow shortcuts.'}
-            </p>
-          </div>
-        </div>
+      {/* Compact Inline Reset Action (no duplicate tab header card) */}
+      <div className="flex items-center justify-end px-0.5">
         <button
           type="button"
           onClick={handleResetAllStudioPrefs}
-          title={isTr ? 'Stüdyo Ayarlarını Sıfırla' : 'Reset Studio Settings'}
-          aria-label={isTr ? 'Stüdyo Ayarlarını Sıfırla' : 'Reset Studio Settings'}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent-text)] hover:border-[var(--accent)]"
+          className="flex min-h-[36px] items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] active:scale-95"
         >
-          <RotateCcw className="h-4 w-4" />
+          <RotateCcw className="h-3.5 w-3.5 text-[var(--accent-text)]" />
+          <span>{isTr ? 'Varsayılanlara Dön' : 'Reset Defaults'}</span>
         </button>
       </div>
 
@@ -1246,11 +1230,11 @@ export const SettingsProTab: React.FC<SettingsProTabProps> = ({
       {/* 2. AUDIO STUDIO DEFAULTS */}
       <SettingsAccordionCard
         icon={<Sliders className="h-4.5 w-4.5" />}
-        title={isTr ? 'Ses Stüdyosu Varsayılanları' : 'Audio Studio Defaults'}
+        title={isTr ? 'Ses Stüdyosu' : 'Audio Studio'}
         subtitle={
           isTr
-            ? '10-bant EQ profili, ses dengeleme, kompresör ve sessizlik eşiği'
-            : '10-band EQ preset, normalize, compressor & silence threshold'
+            ? '10-bant EQ, ses dengeleme, kompresör ve sessizlik eşiği'
+            : '10-band EQ, normalize, compressor & silence threshold'
         }
         badge={audioBadge}
         defaultOpen={false}
@@ -1334,11 +1318,11 @@ export const SettingsProTab: React.FC<SettingsProTabProps> = ({
       {/* 3. IMAGE STUDIO DEFAULTS */}
       <SettingsAccordionCard
         icon={<ImageIcon className="h-4.5 w-4.5" />}
-        title={isTr ? 'Görsel Stüdyosu Varsayılanları' : 'Image Studio Defaults'}
+        title={isTr ? 'Görsel Stüdyosu' : 'Image Studio'}
         subtitle={
           isTr
-            ? 'Çıktı formatı, hedef boyut (KB), kalite ve arka plan silme toleransı'
-            : 'Compare format, target KB, quality & background remover tolerance'
+            ? 'Format, hedef boyut (KB), kalite ve arka plan toleransı'
+            : 'Format, target KB, quality & background tolerance'
         }
         badge={imageBadge}
         defaultOpen={false}
@@ -1453,11 +1437,11 @@ export const SettingsProTab: React.FC<SettingsProTabProps> = ({
       {/* 4. PINNED TOOLS & SAVED PIPELINES MANAGER */}
       <SettingsAccordionCard
         icon={<Pin className="h-4.5 w-4.5" />}
-        title={isTr ? 'Kısayollar & Otomasyon Tarifleri' : 'Pinned Shortcuts & Pipelines'}
+        title={isTr ? 'Kısayollar & Tarifler' : 'Shortcuts & Recipes'}
         subtitle={
           isTr
-            ? 'Sabitlenen stüdyo kısayollarını ve kayıtlı çok adımlı tarifleri yönet'
-            : 'Toggle pinned shortcuts and manage saved multi-step pipelines'
+            ? 'Sabitlenen kısayollar ve kayıtlı otomasyon tarifleri'
+            : 'Pinned shortcuts and saved automation recipes'
         }
         badge={workflowBadge}
         defaultOpen={false}

@@ -915,32 +915,15 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
   if (selectedTool === 'PDF_VIEWER' && files[0]?.kind === 'pdf') {
     const activePdf = files[0];
     return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-[var(--bg)]">
-        <div className="flex shrink-0 items-center justify-between gap-2.5 border-b border-[var(--line)] bg-[var(--surface)] px-3 py-2.5 sm:px-4">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => (directEntry ? onBack() : setSelectedTool(null))}
-              aria-label={t('Back', lang)}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
-            >
-              <ArrowLeft className="h-4.5 w-4.5" />
-            </button>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-extrabold text-[var(--ink)]">{activePdf.name}</p>
-              <p className="truncate text-[11px] text-[var(--muted)]">
-                {t('ToolPdfViewer', lang)} · {formatBytes(activePdf.size)}
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="min-h-0 flex-1 p-2 sm:p-3">
-          <PdfCanvasViewer
-            file={activePdf.file}
-            lang={lang}
-            fileName={activePdf.name}
-          />
-        </div>
+      <div className="fixed inset-0 z-50 flex flex-col bg-[var(--surface)]">
+        <PdfCanvasViewer
+          file={activePdf.file}
+          lang={lang}
+          fileName={activePdf.name}
+          fullScreen={true}
+          onClose={() => (directEntry ? onBack() : setSelectedTool(null))}
+          onOpenInStudio={onOpenPdfPro ? () => onOpenPdfPro('pdf_sign', activePdf) : undefined}
+        />
       </div>
     );
   }

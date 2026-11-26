@@ -5370,7 +5370,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             : ''
         }`}
       >
-        {/* Clean Contextual Drawer Header (Premiere iOS / ProCut pattern) */}
+        {/* Clean Contextual Drawer Header */}
         <div className="flex h-9 shrink-0 items-center justify-between border-b border-white/[0.07] bg-[#121216] px-3">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold tracking-tight text-white">

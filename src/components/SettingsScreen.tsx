@@ -1379,8 +1379,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   <div className="mt-3.5 flex flex-col gap-2.5 rounded-2xl border border-[var(--accent)]/40 bg-[var(--accent)]/10 p-3 sm:flex-row sm:items-center sm:justify-between">
                     <p className="min-w-0 flex-1 text-[11px] font-medium leading-snug text-[var(--ink)]">
                       {lang === 'tr'
-                        ? 'Ana Ekran Çark düğmesi aktif; dokunulduğunda deneysel başlatıcı açılır.'
-                        : 'Quick Wheel button stays active and opens your experimental launcher.'}
+                        ? 'Çark düğmesi aktif; dokunulduğunda deneysel başlatıcı açılır.'
+                        : 'Wheel button stays active and opens your experimental launcher.'}
                     </p>
                     <button
                       type="button"
@@ -2634,111 +2634,89 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
       {category === 'experimental' && expTabVisible && expUnlocked && (
         <div className="mt-4 space-y-3.5">
-          {/* Compact Header + Reset + Lock */}
-          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] px-4 py-3.5 sm:px-5">
-            <div className="flex items-center justify-between gap-2.5">
-              <div className="flex min-w-0 flex-1 items-center gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
-                  <FlaskConical className="h-4.5 w-4.5" />
-                </div>
-                <div className="min-w-0">
-                  <h2 className="text-sm font-extrabold leading-snug text-[var(--ink)] sm:text-base">
-                    {lang === 'tr' ? 'Deneysel & Beta Özellikler' : 'Experimental & Beta Features'}
-                  </h2>
-                  <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
-                    {lang === 'tr'
-                      ? 'Yeni motor özellikleri, kademeli başlatıcı ve görsel deneyler.'
-                      : 'Beta engine switches, cascading launcher & visual experiments.'}
-                  </p>
-                </div>
-              </div>
+          {/* Compact Inline Actions Row (no duplicate tab header card) */}
+          <div className="flex items-center justify-end gap-2 px-0.5">
+            {(prefs.expAltLauncher ||
+              prefs.expAltLauncherForMain === true ||
+              prefs.expAltLauncherForMenus === false ||
+              prefs.expAltLauncherForVideo === false ||
+              prefs.expAltLauncherLabelsEnabled === false ||
+              (prefs.expAltLauncherLabelMode && prefs.expAltLauncherLabelMode !== 'wrap') ||
+              prefs.expAltLauncherShowDesc === false ||
+              (prefs.expAltLauncherTextSize && prefs.expAltLauncherTextSize !== 'md') ||
+              prefs.expSpinningGear ||
+              prefs.expWheelBurnEffect ||
+              (prefs.expWheelBurnStyle && prefs.expWheelBurnStyle !== 'classic_fire') ||
+              prefs.expWheelSpinEnabled ||
+              (prefs.expWheelSpinMode && prefs.expWheelSpinMode !== 'outer_ccw_inner_cw') ||
+              (prefs.expWheelSpinTrigger && prefs.expWheelSpinTrigger !== 'always') ||
+              prefs.expVideoExtraTimecodes ||
+              prefs.expWheelCenterHoldCustomize ||
+              prefs.expTouchTooltips ||
+              prefs.expLegacySliders ||
+              prefs.expAmbientAurora ||
+              prefs.expTerminal ||
+              prefs.expUiSounds ||
+              prefs.expWheelShockwave ||
+              prefs.expExportPipAudio === false ||
+              prefs.expExportOverlapNormalVideo === false ||
+              prefs.expAudioLiveDspPreview === false ||
+              prefs.expAudioMultiFormatExport === false) && (
+              <button
+                type="button"
+                onClick={() => {
+                  onChangePrefs((p) => ({
+                    ...p,
+                    expAltLauncher: false,
+                    expAltLauncherStyle: 'cascade_sheet',
+                    expAltLauncherForMain: false,
+                    expAltLauncherForMenus: true,
+                    expAltLauncherForVideo: true,
+                    expAltLauncherLabelsEnabled: true,
+                    expAltLauncherLabelMode: 'wrap',
+                    expAltLauncherShowDesc: true,
+                    expAltLauncherTextSize: 'md',
+                    expSpinningGear: false,
+                    expWheelBurnEffect: false,
+                    expWheelBurnStyle: 'classic_fire',
+                    expWheelSpinEnabled: false,
+                    expWheelSpinMode: 'outer_ccw_inner_cw',
+                    expWheelSpinTrigger: 'always',
+                    expVideoExtraTimecodes: false,
+                    expWheelCenterHoldCustomize: false,
+                    expTouchTooltips: false,
+                    expLegacySliders: false,
+                    expAmbientAurora: false,
+                    expTerminal: false,
+                    expUiSounds: false,
+                    expWheelShockwave: false,
+                    expExportPipAudio: true,
+                    expExportOverlapNormalVideo: true,
+                    expAudioLiveDspPreview: true,
+                    expAudioMultiFormatExport: true,
+                  }));
+                  onShowToast?.(
+                    lang === 'tr'
+                      ? 'Deneysel ayarlar varsayılana döndürüldü.'
+                      : 'Experimental settings restored to defaults.'
+                  );
+                }}
+                className="flex min-h-[36px] items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] active:scale-95"
+              >
+                <RotateCcw className="h-3.5 w-3.5 text-[var(--accent-text)]" />
+                <span>{lang === 'tr' ? 'Sıfırla' : 'Reset'}</span>
+              </button>
+            )}
 
-              <div className="flex shrink-0 items-center gap-1.5">
-                {(prefs.expAltLauncher ||
-                  prefs.expAltLauncherForMain === true ||
-                  prefs.expAltLauncherForMenus === false ||
-                  prefs.expAltLauncherForVideo === false ||
-                  prefs.expAltLauncherLabelsEnabled === false ||
-                  (prefs.expAltLauncherLabelMode && prefs.expAltLauncherLabelMode !== 'wrap') ||
-                  prefs.expAltLauncherShowDesc === false ||
-                  (prefs.expAltLauncherTextSize && prefs.expAltLauncherTextSize !== 'md') ||
-                  prefs.expSpinningGear ||
-                  prefs.expWheelBurnEffect ||
-                  (prefs.expWheelBurnStyle && prefs.expWheelBurnStyle !== 'classic_fire') ||
-                  prefs.expWheelSpinEnabled ||
-                  (prefs.expWheelSpinMode && prefs.expWheelSpinMode !== 'outer_ccw_inner_cw') ||
-                  (prefs.expWheelSpinTrigger && prefs.expWheelSpinTrigger !== 'always') ||
-                  prefs.expVideoExtraTimecodes ||
-                  prefs.expWheelCenterHoldCustomize ||
-                  prefs.expTouchTooltips ||
-                  prefs.expLegacySliders ||
-                  prefs.expAmbientAurora ||
-                  prefs.expTerminal ||
-                  prefs.expUiSounds ||
-                  prefs.expWheelShockwave ||
-                  prefs.expExportPipAudio === false ||
-                  prefs.expExportOverlapNormalVideo === false ||
-                  prefs.expAudioLiveDspPreview === false ||
-                  prefs.expAudioMultiFormatExport === false) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onChangePrefs((p) => ({
-                        ...p,
-                        expAltLauncher: false,
-                        expAltLauncherStyle: 'cascade_sheet',
-                        expAltLauncherForMain: false,
-                        expAltLauncherForMenus: true,
-                        expAltLauncherForVideo: true,
-                        expAltLauncherLabelsEnabled: true,
-                        expAltLauncherLabelMode: 'wrap',
-                        expAltLauncherShowDesc: true,
-                        expAltLauncherTextSize: 'md',
-                        expSpinningGear: false,
-                        expWheelBurnEffect: false,
-                        expWheelBurnStyle: 'classic_fire',
-                        expWheelSpinEnabled: false,
-                        expWheelSpinMode: 'outer_ccw_inner_cw',
-                        expWheelSpinTrigger: 'always',
-                        expVideoExtraTimecodes: false,
-                        expWheelCenterHoldCustomize: false,
-                        expTouchTooltips: false,
-                        expLegacySliders: false,
-                        expAmbientAurora: false,
-                        expTerminal: false,
-                        expUiSounds: false,
-                        expWheelShockwave: false,
-                        expExportPipAudio: true,
-                        expExportOverlapNormalVideo: true,
-                        expAudioLiveDspPreview: true,
-                        expAudioMultiFormatExport: true,
-                      }));
-                      onShowToast?.(
-                        lang === 'tr'
-                          ? 'Deneysel ayarlar varsayılana döndürüldü.'
-                          : 'Experimental settings restored to defaults.'
-                      );
-                    }}
-                    title={lang === 'tr' ? 'Varsayılana Dön' : 'Reset Defaults'}
-                    aria-label={lang === 'tr' ? 'Varsayılana Dön' : 'Reset Defaults'}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent-text)] transition-colors hover:border-[var(--accent)] active:scale-95"
-                  >
-                    <RotateCcw className="h-4 w-4" />
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={handleExpLock}
-                  title={lang === 'tr' ? 'Kilitle' : 'Lock'}
-                  aria-label={lang === 'tr' ? 'Kilitle' : 'Lock'}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)] transition-colors hover:border-[var(--accent)] active:scale-95"
-                >
-                  <Lock className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          </section>
+            <button
+              type="button"
+              onClick={handleExpLock}
+              className="flex min-h-[36px] items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] active:scale-95"
+            >
+              <Lock className="h-3.5 w-3.5 text-[var(--accent)]" />
+              <span>{lang === 'tr' ? 'Kilitle' : 'Lock'}</span>
+            </button>
+          </div>
 
           {/* 1. NEW BETA ENGINE FEATURES (Expanded by default for fast testing) */}
           {(() => {
@@ -2788,11 +2766,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             return (
               <SettingsAccordionCard
                 icon={<Cpu className="h-4.5 w-4.5" />}
-                title={lang === 'tr' ? 'Yeni Motor Özellikleri (Beta)' : 'Beta Engine Features'}
+                title={lang === 'tr' ? 'Beta Motorlar' : 'Beta Engines'}
                 subtitle={
                   lang === 'tr'
-                    ? 'FFmpeg dışa aktarım ve Web Audio DSP yeniliklerini tek tıkla test et'
-                    : 'Toggle new FFmpeg export and Web Audio DSP engine capabilities'
+                    ? 'FFmpeg dışa aktarım ve Web Audio DSP deneyleri'
+                    : 'Toggle FFmpeg export and Web Audio DSP engine features'
                 }
                 badge={`${activeBetaCount}/${engineBetaItems.length} ${lang === 'tr' ? 'aktif' : 'on'}`}
                 defaultOpen={true}
@@ -2853,13 +2831,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 icon={<Layers className="h-4.5 w-4.5" />}
                 title={
                   lang === 'tr'
-                    ? 'Kademeli Araç Başlatıcı (5 Stil)'
-                    : 'Cascading Tool Launcher (5 Styles)'
+                    ? 'Kademeli Başlatıcı'
+                    : 'Cascading Launcher'
                 }
                 subtitle={
                   lang === 'tr'
-                    ? 'Seçili menülerde klasik çark yerine 5 kademeli başlatıcı kullan'
-                    : 'Replace classic radial wheel with a 5-style cascading launcher'
+                    ? 'Seçili menülerde klasik çark yerine 5 kademeli başlatıcı'
+                    : 'Replace classic wheel with a 5-style cascading launcher'
                 }
                 badge={altEnabled ? (lang === 'tr' ? 'Açık' : 'On') : lang === 'tr' ? 'Kapalı' : 'Off'}
                 accentBorder={altEnabled}
@@ -2899,13 +2877,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-[var(--ink)]">
                           {lang === 'tr'
-                            ? 'Kademeli Araç Başlatıcı (5 Farklı Stil)'
-                            : 'Cascading Tool Launcher (5 Styles)'}
+                            ? 'Kademeli Başlatıcı'
+                            : 'Cascading Launcher'}
                         </p>
                         <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
                           {lang === 'tr'
-                            ? 'Ana ekrandaki çark düğmesi ve 30 sn alev efekti her zaman korunur; seçtiğin menülerde klasik çark yerine kademeli başlatıcı açılır.'
-                            : 'Your floating Quick Wheel button & 30s burn effect always stay intact; selected menus open the cascading launcher.'}
+                            ? 'Çark düğmesi ve 30 sn yanma efekti korunur; seçtiğin menülerde klasik çark yerine kademeli başlatıcı açılır.'
+                            : 'Your floating Wheel button & 30s burn effect stay intact; selected menus open the cascading launcher.'}
                         </p>
                       </div>
                       <span
@@ -2944,8 +2922,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                               key: 'expAltLauncherForMain' as const,
                               checked: forMain,
                               Icon: SlidersHorizontal,
-                              titleTr: 'Ana Ekran Çarkı',
-                              titleEn: 'Home Quick Wheel',
+                              titleTr: 'Çark',
+                              titleEn: 'Wheel',
                             },
                             {
                               key: 'expAltLauncherForVideo' as const,
@@ -3348,11 +3326,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           {/* 3. QUICK WHEEL EFFECTS (30s Burn + Dual-Layer Spin) */}
           <SettingsAccordionCard
             icon={<Sparkles className="h-4.5 w-4.5" />}
-            title={lang === 'tr' ? 'Hızlı Çark Görsel Efektleri' : 'Quick Wheel Visual Effects'}
+            title={lang === 'tr' ? 'Çark Efektleri' : 'Wheel Effects'}
             subtitle={
               lang === 'tr'
-                ? '30 sn yanma efektleri (12 tasarım) ve çift katmanlı dönüş (8 koreografi)'
-                : '30s burn effects (12 styles) & dual-layer rotation (8 modes)'
+                ? '30 sn yanma (12 tasarım) ve çift katmanlı dönüş'
+                : '30s burn effects (12 styles) & dual-layer spin'
             }
             badge={
               [
@@ -3394,8 +3372,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-[var(--ink)]">
                           {lang === 'tr'
-                            ? 'Hızlı Çark 30 sn Yanma Efekti'
-                            : 'Quick Wheel 30s Burn Effects'}
+                            ? '30 sn Yanma Efekti'
+                            : '30s Burn Effect'}
                         </p>
                         <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
                           {lang === 'tr'
@@ -3577,13 +3555,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-[var(--ink)]">
                           {lang === 'tr'
-                            ? 'Hızlı Çark Çift Katmanlı Dönüş'
-                            : 'Quick Wheel Dual-Layer Spin'}
+                            ? 'Çift Katmanlı Dönüş'
+                            : 'Dual-Layer Spin'}
                         </p>
                         <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
                           {lang === 'tr'
                             ? 'Seçili çarkın dış gövdesini ve iç simgesini ayrı yönlerde her zaman ya da sadece basılı tutunca döndürür.'
-                            : 'Rotates the Quick Wheel outer shell and inner icon independently, always or strictly while pressed.'}
+                            : 'Rotates the Wheel outer shell and inner icon independently, always or strictly while pressed.'}
                         </p>
                       </div>
                       <span className="morph-switch shrink-0" data-checked={spinEnabled ? 'true' : 'false'}>
@@ -3797,11 +3775,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             return (
               <SettingsAccordionCard
                 icon={<SlidersHorizontal className="h-4.5 w-4.5" />}
-                title={lang === 'tr' ? 'Görsel & Klasik Deneyler' : 'Visual & Classic Experiments'}
+                title={lang === 'tr' ? 'Arayüz Deneyleri' : 'UI Experiments'}
                 subtitle={
                   lang === 'tr'
-                    ? 'Aurora ortam ışığı, Morph terminali, arayüz sesleri ve klasik davranışlar'
-                    : 'Aurora glow, Morph terminal, UI micro-sounds & classic behaviors'
+                    ? 'Aurora ışığı, terminal, arayüz sesleri ve klasik seçenekler'
+                    : 'Aurora glow, terminal, UI sounds & classic options'
                 }
                 badge={
                   activeUiCount > 0

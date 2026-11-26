@@ -894,7 +894,31 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
       )}
 
       {/* In-App Preview Modal (Image, Video, Audio & PDF) */}
-      {previewItem && (
+      {previewItem && previewKind === 'pdf' && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={previewItem.item.name}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm sm:p-4"
+          onClick={closePreview}
+        >
+          <div
+            className="flex h-[100dvh] w-full max-w-4xl flex-col overflow-hidden bg-[var(--surface)] shadow-2xl sm:h-[92vh] sm:rounded-3xl sm:border sm:border-[var(--line)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <PdfCanvasViewer
+              file={previewItem.item.blob}
+              url={previewItem.url}
+              fileName={previewItem.item.name}
+              lang={lang}
+              fullScreen={true}
+              onClose={closePreview}
+            />
+          </div>
+        </div>
+      )}
+
+      {previewItem && previewKind !== 'pdf' && (
         <div
           role="dialog"
           aria-modal="true"
@@ -931,7 +955,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                 autoPlay
                 className="max-h-full max-w-full rounded-xl bg-black"
               />
-            ) : previewKind === 'audio' ? (
+            ) : (
               <div className="flex w-full max-w-md flex-col items-center gap-5 rounded-3xl border border-white/15 bg-[#141418] p-6 text-white shadow-2xl">
                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--accent)]/20 text-[var(--accent)]">
                   <Music className="h-8 w-8" />
@@ -943,15 +967,6 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                   </p>
                 </div>
                 <audio src={previewItem.url} controls autoPlay className="w-full" />
-              </div>
-            ) : (
-              <div className="h-full w-full max-w-4xl">
-                <PdfCanvasViewer
-                  file={previewItem.item.blob}
-                  url={previewItem.url}
-                  fileName={previewItem.item.name}
-                  lang={lang}
-                />
               </div>
             )}
           </div>

@@ -544,7 +544,7 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
       onContextMenu={(e) => e.preventDefault()}
       role="dialog"
       aria-modal="true"
-      aria-label={title || (lang === 'tr' ? 'Hızlı çark menüsü' : 'Quick wheel menu')}
+      aria-label={title || (lang === 'tr' ? 'Çark menüsü' : 'Wheel menu')}
     >
       {/* Clean uniform dim scrim without backdrop bokeh/blur */}
       <div

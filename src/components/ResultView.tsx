@@ -423,13 +423,20 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 <audio src={previewItem.url} controls autoPlay className="w-full" />
               </div>
             ) : (
-              <div className="h-full w-full max-w-3xl">
-                <PdfCanvasViewer
-                  file={previewItem.item.blob}
-                  url={previewItem.url}
-                  fileName={previewItem.item.name}
-                  lang={lang}
-                />
+              <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/85 sm:p-4" onClick={closePreview}>
+                <div
+                  className="flex h-[100dvh] w-full max-w-4xl flex-col overflow-hidden bg-[var(--surface)] shadow-2xl sm:h-[92vh] sm:rounded-3xl sm:border sm:border-[var(--line)]"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <PdfCanvasViewer
+                    file={previewItem.item.blob}
+                    url={previewItem.url}
+                    fileName={previewItem.item.name}
+                    lang={lang}
+                    fullScreen={true}
+                    onClose={closePreview}
+                  />
+                </div>
               </div>
             )}
           </div>

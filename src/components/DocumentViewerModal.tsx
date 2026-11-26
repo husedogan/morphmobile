@@ -510,6 +510,32 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
               ? FileCode2
               : FileText;
 
+  if (ext === 'pdf') {
+    return (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={fileName}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm sm:p-4"
+        onClick={onClose}
+      >
+        <div
+          className="flex h-[100dvh] w-full max-w-4xl flex-col overflow-hidden bg-[var(--surface)] shadow-2xl sm:h-[92vh] sm:rounded-3xl sm:border sm:border-[var(--line)]"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <PdfCanvasViewer
+            file={file}
+            fileName={fileName}
+            lang={lang}
+            fullScreen={true}
+            onClose={onClose}
+            onExportAnnotatedPdf={onSaveEditedBlob}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       role="dialog"
