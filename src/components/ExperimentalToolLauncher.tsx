@@ -430,6 +430,7 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
   const holdRafRef = useRef<number | null>(null);
   const holdHintTimerRef = useRef<number | null>(null);
   const holdTriggeredRef = useRef(false);
+  const openedAtRef = useRef(0);
 
   const treeWrapRef = useRef<HTMLDivElement | null>(null);
   const treeSvgColRef = useRef<HTMLDivElement | null>(null);
@@ -492,6 +493,7 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
       setHoldHintFlash(false);
       return;
     }
+    openedAtRef.current = performance.now();
     setQuery('');
     setCommandCatId(null);
     setHoveredCaption(null);
@@ -1939,7 +1941,12 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
       <button
         type="button"
         aria-label={tr('Kapat', 'Close')}
-        onClick={onDismiss}
+        onClick={(e) => {
+          if (e.detail > 0 && performance.now() - openedAtRef.current < 260) {
+            return;
+          }
+          onDismiss();
+        }}
         className="fixed inset-0 bg-black/55 backdrop-blur-[3px]"
       />
       {/* Active Experimental Style Surface */}

@@ -634,7 +634,7 @@ video.morph-nle-video::-webkit-media-controls-overlay-play-button {
 
 .morph-fab-landscape-top {
   top: calc(4.5rem + var(--morph-safe-top));
-  right: calc(1.25rem + var(--morph-safe-right));
+  right: calc(1.5rem + var(--morph-safe-right));
 }
 
 @media (min-width: 1024px) {

@@ -261,6 +261,8 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
   const openTimerRef = useRef<number | null>(null);
   const holdingCenterRef = useRef<boolean>(false);
   const completedHoldRef = useRef<boolean>(false);
+  const openedAtRef = useRef<number>(0);
+  const backdropDownRef = useRef<boolean>(false);
 
   const cappedActions = actions.slice(0, MAX_WHEEL_SLICES);
   const pageActions = cappedActions;
@@ -296,9 +298,13 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
   }, []);
 
   useEffect(() => {
-    if (!open) {
+    if (open) {
+      openedAtRef.current = performance.now();
+      backdropDownRef.current = false;
+    } else {
       setActiveIndex(-1);
       activeRef.current = -1;
+      backdropDownRef.current = false;
       stopHoldAnimation(true);
     }
   }, [open, stopHoldAnimation]);
@@ -526,23 +532,37 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
 
   return (
     <div
-      className="no-touch-callout fixed inset-0 z-50 flex flex-col items-center justify-end gap-3 overflow-hidden pb-8 sm:justify-center sm:pb-0 [@media(max-height:540px)]:justify-center [@media(max-height:540px)]:gap-1.5 [@media(max-height:540px)]:pb-2"
+      className="no-touch-callout fixed inset-0 z-50 flex flex-col items-center justify-end gap-3 overflow-hidden pb-8 sm:justify-center sm:pb-0 [@media(max-height:540px)]:justify-center [@media(max-height:540px)]:gap-1.5 [@media(max-height:540px)]:pt-[calc(var(--morph-safe-top)+0.25rem)] [@media(max-height:540px)]:pb-[calc(var(--morph-safe-bottom)+0.25rem)]"
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) {
+          backdropDownRef.current = true;
           e.stopPropagation();
+        } else {
+          backdropDownRef.current = false;
         }
       }}
       onPointerUp={(e) => {
+        const startedOnBackdrop = backdropDownRef.current;
+        backdropDownRef.current = false;
         if (e.target === e.currentTarget) {
           e.stopPropagation();
+          if (!startedOnBackdrop && performance.now() - openedAtRef.current < 260) {
+            return;
+          }
           installGhostClickShield();
           onDismiss();
         }
+      }}
+      onPointerCancel={() => {
+        backdropDownRef.current = false;
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           e.preventDefault();
           e.stopPropagation();
+          if (e.detail > 0 && performance.now() - openedAtRef.current < 260) {
+            return;
+          }
           onDismiss();
         }
       }}
@@ -1254,8 +1274,10 @@ function createAshBurst(cx: number, cy: number, startId: number, theme: BurnThem
 
 // Minimum movement distance to start dragging the FAB to left/right corners at ANY point
 // during a press-and-hold while keeping the spin -> fire gear -> ash sequence running live.
-const DRAG_DISTANCE_PX = 18;
-const TAP_MAX_MS = 320;
+// Landscape top-right thumb reaches roll slightly further on tap, so use a wider threshold there.
+const DRAG_DISTANCE_PX = 22;
+const DRAG_DISTANCE_LANDSCAPE_PX = 42;
+const TAP_HOLD_MAX_MS = 650;
 
 export const WheelFab: React.FC<{
   onClick: () => void;
@@ -1754,11 +1776,12 @@ export const WheelFab: React.FC<{
 
     const downAt = performance.now();
     const pointerId = e.pointerId;
-    try {
-      e.currentTarget.setPointerCapture(pointerId);
-    } catch {
-      // Ignore pointer capture errors
-    }
+    const targetBtn = e.currentTarget;
+    const dragThreshold = isLandscapeFixedRef.current
+      ? DRAG_DISTANCE_LANDSCAPE_PX
+      : DRAG_DISTANCE_PX;
+    const hasLongPressHoldEffect =
+      expWheelBurnEffect || (expWheelSpinEnabled && expWheelSpinTrigger === 'press');
 
     setIsPressing(true);
     emitShockwave();
@@ -1784,10 +1807,15 @@ export const WheelFab: React.FC<{
 
       // Enter corner-drag mode whenever the pointer moves beyond threshold — at ANY point
       // during the spin/heat/burn hold — without interrupting acceleration or flames!
-      if (!dragged && dist > DRAG_DISTANCE_PX) {
+      if (!dragged && dist > dragThreshold) {
         dragged = true;
         setIsDragging(true);
         onHoverChange?.(false);
+        try {
+          targetBtn.setPointerCapture(pointerId);
+        } catch {
+          // Ignore pointer capture errors
+        }
       }
       if (!dragged) return;
 
@@ -1813,7 +1841,7 @@ export const WheelFab: React.FC<{
         suppressClickRef.current = true;
         window.setTimeout(() => {
           suppressClickRef.current = false;
-        }, 160);
+        }, 180);
 
         if (phaseRef.current !== 'idle') {
           setIsDragging(false);
@@ -1865,12 +1893,15 @@ export const WheelFab: React.FC<{
 
       if (cancelled) return;
 
-      // Quick tap opens the radial WheelMenu; long press-and-hold cools down smoothly without opening menu
-      if (heldFor < TAP_MAX_MS && phaseRef.current === 'idle') {
+      // Tap opens the radial WheelMenu; when burn/press-spin hold FX are active, long press-and-hold
+      // lets the user admire or cool down the wheel without popping open the menu on release.
+      const isTapRelease = !hasLongPressHoldEffect || heldFor < TAP_HOLD_MAX_MS;
+      if (isTapRelease && phaseRef.current === 'idle') {
         suppressClickRef.current = true;
         window.setTimeout(() => {
           suppressClickRef.current = false;
-        }, 160);
+        }, 240);
+        installGhostClickShield();
         setIsHovering(false);
         hoverMsRef.current = 0;
         setHeat(0);
@@ -1880,7 +1911,7 @@ export const WheelFab: React.FC<{
         suppressClickRef.current = true;
         window.setTimeout(() => {
           suppressClickRef.current = false;
-        }, 160);
+        }, 240);
       }
     };
 
@@ -2662,7 +2693,7 @@ export const WheelFab: React.FC<{
               }
             : undefined
         }
-        className={`no-touch-callout fixed z-30 select-none transition-opacity duration-150 ${
+        className={`no-touch-callout fixed z-40 select-none transition-opacity duration-150 ${
           dragPos ? '' : cornerClass
         } ${hidden ? 'pointer-events-none invisible opacity-0' : ''}`}
       >
@@ -2690,6 +2721,7 @@ export const WheelFab: React.FC<{
           onPointerDown={handlePointerDown}
           onClick={() => {
             if (suppressClickRef.current || phase !== 'idle') return;
+            installGhostClickShield();
             setIsHovering(false);
             setIsPressing(false);
             hoverMsRef.current = 0;
@@ -2704,24 +2736,31 @@ export const WheelFab: React.FC<{
           }}
           aria-label={label}
           style={{
-            ...fireStyle,
-            clipPath: shapeClipPath,
-            opacity: phase === 'ash' ? ashBtnOpacity : undefined,
-            filter: ashCharFilter || undefined,
-            transform: baseButtonTransform,
             pointerEvents: phase === 'ash' ? 'none' : undefined,
           }}
-          className={
-            className ??
-            `morph-accent-btn no-touch-callout relative flex ${shapeShellClass} touch-none select-none items-center justify-center border border-white/20 shadow-xl ${
-              expWheelSpinEnabled ? '' : 'transition-transform duration-150'
-            } ${isDragging ? 'cursor-grabbing shadow-2xl' : 'cursor-grab'}`
-          }
+          className={`group no-touch-callout relative -m-2.5 flex touch-none select-none items-center justify-center rounded-full bg-transparent p-2.5 focus-visible:outline-none ${
+            isDragging ? 'cursor-grabbing' : 'cursor-grab'
+          }`}
         >
-          <svg
-            className={`pointer-events-none relative z-10 ${
-              iconStyle === 'pill_dock' ? 'h-6 w-12' : 'h-7 w-7'
-            }`}
+          <span
+            style={{
+              ...fireStyle,
+              clipPath: shapeClipPath,
+              opacity: phase === 'ash' ? ashBtnOpacity : undefined,
+              filter: ashCharFilter || undefined,
+              transform: baseButtonTransform,
+            }}
+            className={
+              className ??
+              `morph-accent-btn relative flex ${shapeShellClass} items-center justify-center border border-white/20 shadow-xl group-focus-visible:ring-2 group-focus-visible:ring-[var(--accent)] group-focus-visible:ring-offset-2 ${
+                expWheelSpinEnabled ? '' : 'transition-transform duration-150'
+              } ${isDragging ? 'shadow-2xl' : ''}`
+            }
+          >
+            <svg
+              className={`pointer-events-none relative z-10 ${
+                iconStyle === 'pill_dock' ? 'h-6 w-12' : 'h-7 w-7'
+              }`}
             viewBox={iconStyle === 'pill_dock' ? '0 0 48 24' : '0 0 28 28'}
             fill="none"
             style={{
@@ -3114,6 +3153,7 @@ export const WheelFab: React.FC<{
               }
             })()}
           </svg>
+          </span>
         </button>
       </div>
     </>
