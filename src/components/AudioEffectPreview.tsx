@@ -1,7 +1,5 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
-  ArrowLeftRight,
-  Headphones,
   Music,
   Pause,
   Play,
@@ -819,9 +817,9 @@ export const AudioEffectPreview: React.FC<AudioEffectPreviewProps> = ({
             <button
               type="button"
               onClick={() => setCompareMode('result')}
-              className={`flex h-7 items-center gap-1 rounded-lg px-2.5 text-[11px] font-bold transition-colors whitespace-nowrap ${
+              className={`flex min-h-[36px] items-center gap-1 rounded-lg px-2.5 text-[11px] font-bold transition-colors whitespace-nowrap ${
                 isPreviewActive
-                  ? 'bg-[var(--accent)] text-white shadow-xs'
+                  ? 'bg-[var(--accent)] text-[var(--accent-ink)] shadow-xs'
                   : 'text-[var(--muted)] hover:text-[var(--ink)]'
               }`}
             >
@@ -831,7 +829,7 @@ export const AudioEffectPreview: React.FC<AudioEffectPreviewProps> = ({
             <button
               type="button"
               onClick={() => setCompareMode('original')}
-              className={`flex h-7 items-center rounded-lg px-2.5 text-[11px] font-bold transition-colors whitespace-nowrap ${
+              className={`flex min-h-[36px] items-center rounded-lg px-2.5 text-[11px] font-bold transition-colors whitespace-nowrap ${
                 !isPreviewActive
                   ? 'bg-[var(--surface)] text-[var(--ink)] shadow-xs'
                   : 'text-[var(--muted)] hover:text-[var(--ink)]'
@@ -851,9 +849,9 @@ export const AudioEffectPreview: React.FC<AudioEffectPreviewProps> = ({
               key={f.id}
               type="button"
               onClick={() => setActiveIdx(idx)}
-              className={`shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+              className={`min-h-[36px] shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors ${
                 idx === safeIdx
-                  ? 'bg-[var(--accent)] text-white shadow-xs'
+                  ? 'bg-[var(--accent)] text-[var(--accent-ink)] shadow-xs'
                   : 'text-[var(--muted)] hover:bg-[var(--surface)] hover:text-[var(--ink)]'
               }`}
             >
@@ -1095,8 +1093,8 @@ export const AudioEffectPreview: React.FC<AudioEffectPreviewProps> = ({
             {showToolLabels && <span className="text-[10px] font-semibold">-2s</span>}
           </button>
 
-          {/* Context Quick Action: Jump to Fade-Out (Fade) OR Quick A/B Flip */}
-          {toolId === 'audio_fade' ? (
+          {/* Context Quick Action: Jump to Fade-Out (Fade only — A/B toggle lives in header) */}
+          {toolId === 'audio_fade' && (
             <button
               type="button"
               onClick={() => {
@@ -1113,31 +1111,7 @@ export const AudioEffectPreview: React.FC<AudioEffectPreviewProps> = ({
                 <span className="text-[10px] font-semibold">{tr('Çıkış', 'Out')}</span>
               )}
             </button>
-          ) : hasABCompare ? (
-            <button
-              type="button"
-              onClick={() => setCompareMode((m) => (m === 'result' ? 'original' : 'result'))}
-              disabled={rawDuration <= 0}
-              aria-label={tr('Orijinal ve sonuç arasında geçiş yap', 'Toggle Original / Result')}
-              title={tr('Orijinal / Sonuç', 'Before / After')}
-              className={`flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 rounded-2xl transition-colors active:scale-95 disabled:opacity-35 ${
-                isPreviewActive
-                  ? 'bg-[var(--accent)]/12 text-[var(--accent)]'
-                  : 'text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)]'
-              }`}
-            >
-              {toolId === 'audio_channels' ? (
-                <Headphones className="h-4 w-4" />
-              ) : (
-                <ArrowLeftRight className="h-4 w-4" />
-              )}
-              {showToolLabels && (
-                <span className="text-[10px] font-semibold">
-                  {isPreviewActive ? tr('Sonuç', 'After') : tr('Orijinal', 'Orig')}
-                </span>
-              )}
-            </button>
-          ) : null}
+          )}
 
           {/* Primary Play / Pause Focal Button */}
           <button
@@ -1145,7 +1119,7 @@ export const AudioEffectPreview: React.FC<AudioEffectPreviewProps> = ({
             onClick={togglePlay}
             disabled={rawDuration <= 0}
             aria-label={isPlaying ? tr('Duraklat', 'Pause') : tr('Oynat', 'Play')}
-            className="mx-1.5 flex h-13 w-13 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[var(--accent)] to-[var(--accent-btn-start)] text-white shadow-[0_6px_18px_-4px_rgba(233,79,120,0.55)] transition-transform hover:brightness-105 active:scale-95 disabled:opacity-40"
+            className="morph-accent-btn mx-1.5 flex h-13 w-13 shrink-0 items-center justify-center rounded-full shadow-md transition-transform hover:brightness-105 active:scale-95 disabled:opacity-40"
           >
             {isPlaying ? (
               <Pause className="h-5 w-5 fill-current" />

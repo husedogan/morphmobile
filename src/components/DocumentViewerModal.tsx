@@ -22,13 +22,14 @@ import {
 import lutReferencePhotoUrl from '../assets/images/lut_reference_scene_1795636727554.jpg';
 import {Lang} from '../data/i18n';
 import {PickedFile, formatBytes} from '../data/models';
-import {extractDocumentText, parseCsvRows} from '../engine/officeOps';
+import {extractDocumentText, extractStructuredRows, parseCsvRows} from '../engine/officeOps';
 import {
   MorphPackageSummary,
   SrtCue,
   fileExtLower,
   formatXmlPretty,
   isQuickViewOfficeExt,
+  isSpreadsheetExt,
   isTextEditableExt,
   parseSrtCues,
   readMorphPackageSummary,
@@ -36,6 +37,7 @@ import {
   sanitizeHtmlForSandbox,
 } from '../engine/previewParsers';
 import {ColorGradingSettings} from '../engine/videoTimelineEngine';
+import {PdfCanvasViewer} from './PdfCanvasViewer';
 
 interface DocumentViewerModalProps {
   open: boolean;
@@ -128,7 +130,7 @@ const SafeMarkdownView: React.FC<{text: string}> = ({text}) => {
         out.push(
           <pre
             key={`pre-${key++}`}
-            className="overflow-x-auto rounded-xl border border-[var(--line)] bg-black/30 p-3 font-mono text-[11px] leading-relaxed text-slate-200"
+            className="overflow-x-auto rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 font-mono text-[11px] leading-relaxed text-[var(--ink)]"
           >
             {codeLines.join('\n')}
           </pre>
@@ -221,7 +223,8 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
   const [rawText, setRawText] = useState('');
   const [draftText, setDraftText] = useState('');
   const [viewMode, setViewMode] = useState<'preview' | 'code' | 'edit'>('preview');
-  const [lutApply, setLutApply] = useState(true);
+  const [lutMode, setLutMode] = useState<'split' | 'full' | 'orig'>('split');
+  const [lutSplitPct, setLutSplitPct] = useState(50);
   const [lutMeta, setLutMeta] = useState<{
     title: string;
     sampleCount: number;
@@ -231,6 +234,8 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
   const [lutLoadedImg, setLutLoadedImg] = useState<HTMLImageElement | null>(null);
   const [htmlLightPaper, setHtmlLightPaper] = useState(false);
   const [morphSummary, setMorphSummary] = useState<MorphPackageSummary | null>(null);
+  const [sheetRows, setSheetRows] = useState<string[][]>([]);
+  const [selectedCell, setSelectedCell] = useState<{row: number; colHeader: string; value: string} | null>(null);
   const [srtQuery, setSrtQuery] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [copied, setCopied] = useState(false);
@@ -267,9 +272,12 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
     setLoading(true);
     setErrorMsg('');
     setMorphSummary(null);
+    setSheetRows([]);
+    setSelectedCell(null);
     setLutMeta(null);
     setSrtQuery('');
-    setLutApply(true);
+    setLutMode('split');
+    setLutSplitPct(50);
 
     // Default landing mode per file type
     if (ext === 'txt' || ext === 'json' || ext === 'xml') {
@@ -280,9 +288,34 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
 
     (async () => {
       try {
+        if (ext === 'pdf') {
+          if (!cancelled) setLoading(false);
+          return;
+        }
         if (ext === 'morph') {
           const summary = await readMorphPackageSummary(file, fileName);
           if (!cancelled) setMorphSummary(summary);
+          return;
+        }
+        if (ext === 'xlsx' || ext === 'xls' || ext === 'ods') {
+          const tempPicked: PickedFile = {
+            id: 'sheetview',
+            file: file instanceof File ? file : new File([file], fileName, {type: mime}),
+            name: fileName,
+            baseName: fileName.replace(/\.[^.]+$/, ''),
+            ext,
+            size: fileSize,
+            mime,
+            kind: 'document',
+          };
+          const rows = await extractStructuredRows(tempPicked);
+          if (!cancelled) {
+            const limited = rows.slice(0, 200);
+            setSheetRows(limited);
+            const joined = limited.map((r) => r.join('\t')).join('\n').slice(0, 160000);
+            setRawText(joined);
+            setDraftText(joined);
+          }
           return;
         }
         if (isQuickViewOfficeExt(ext)) {
@@ -337,8 +370,9 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
         lutCanvasRef.current,
         rawText,
         fileName,
-        lutApply,
-        lutLoadedImg
+        lutMode !== 'orig',
+        lutLoadedImg,
+        lutMode === 'split' ? lutSplitPct / 100 : undefined
       );
       setLutMeta(meta);
     } catch (err) {
@@ -350,9 +384,10 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
             : 'Failed to parse .cube LUT.'
       );
     }
-  }, [open, ext, rawText, fileName, lutApply, lutLoadedImg, isTr]);
+  }, [open, ext, rawText, fileName, lutMode, lutSplitPct, lutLoadedImg, isTr]);
 
-  const csvRows = useMemo(() => {
+  const tableRows = useMemo(() => {
+    if (ext === 'xlsx' || ext === 'xls' || ext === 'ods') return sheetRows;
     if (ext !== 'csv' && ext !== 'tsv') return [];
     const delimiter = ext === 'tsv' ? '\t' : ',';
     const text = ext === 'tsv' ? draftText.replace(/\t/g, '\t') : draftText;
@@ -365,7 +400,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
         .map((line) => line.split('\t'));
     }
     return parseCsvRows(text).slice(0, 150);
-  }, [ext, draftText]);
+  }, [ext, draftText, sheetRows]);
 
   const srtCues: SrtCue[] = useMemo(() => {
     if (ext !== 'srt') return [];
@@ -463,7 +498,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
   const isModified = draftText !== rawText;
 
   const HeaderIcon =
-    ext === 'csv' || ext === 'tsv'
+    isSpreadsheetExt(ext)
       ? FileSpreadsheet
       : ext === 'srt'
         ? Subtitles
@@ -502,8 +537,8 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
                 {ext.toUpperCase() || 'DOC'} · {formatBytes(fileSize)}
                 {isQuickViewOfficeExt(ext)
                   ? ` · ${isTr ? 'Hızlı Okuma' : 'Quick View'}`
-                  : ext === 'csv' || ext === 'tsv'
-                    ? ` · ${csvRows.length} ${isTr ? 'satır' : 'rows'}`
+                  : isSpreadsheetExt(ext)
+                    ? ` · ${tableRows.length} ${isTr ? 'satır' : 'rows'}`
                     : ext === 'srt'
                       ? ` · ${srtCues.length} ${isTr ? 'altyazı' : 'cues'}`
                       : ''}
@@ -512,7 +547,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5">
-            {(isTextEditableExt(ext) || isQuickViewOfficeExt(ext)) && (
+            {(isTextEditableExt(ext) || isQuickViewOfficeExt(ext) || isSpreadsheetExt(ext)) && (
               <button
                 type="button"
                 onClick={() => void handleCopyText()}
@@ -520,7 +555,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
                 title={isTr ? 'Kopyala' : 'Copy'}
                 className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)] hover:border-[var(--accent)]"
               >
-                {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                {copied ? <Check className="h-4 w-4 text-[var(--accent-text)]" /> : <Copy className="h-4 w-4" />}
               </button>
             )}
             <button
@@ -536,13 +571,13 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
 
         {/* Mode / Action Toolbar (for text/data/md/html) */}
         {!loading && !errorMsg && isTextEditableExt(ext) && (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--line)] bg-[var(--inset)] px-4 py-2">
-            <div className="flex min-w-0 items-center gap-1">
+          <div className="no-scrollbar flex items-center justify-between gap-2 overflow-x-auto border-b border-[var(--line)] bg-[var(--inset)] px-4 py-2">
+            <div className="flex shrink-0 items-center gap-1">
               {(ext === 'md' || ext === 'markdown' || ext === 'html' || ext === 'htm' || ext === 'csv' || ext === 'tsv' || ext === 'srt') && (
                 <button
                   type="button"
                   onClick={() => setViewMode('preview')}
-                  className={`flex min-h-[36px] items-center gap-1.5 rounded-xl px-3 text-xs font-bold ${
+                  className={`flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-bold whitespace-nowrap ${
                     viewMode === 'preview'
                       ? 'morph-accent-btn shadow-sm'
                       : 'border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]'
@@ -552,25 +587,23 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
                   <span>{isTr ? 'Görünüm' : 'Preview'}</span>
                 </button>
               )}
-              {(ext === 'md' || ext === 'markdown' || ext === 'html' || ext === 'htm' || ext === 'txt' || ext === 'json' || ext === 'xml') && (
-                <button
-                  type="button"
-                  onClick={() => setViewMode('code')}
-                  className={`flex min-h-[36px] items-center gap-1.5 rounded-xl px-3 text-xs font-bold ${
-                    viewMode === 'code'
-                      ? 'morph-accent-btn shadow-sm'
-                      : 'border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]'
-                  }`}
-                >
-                  <Code2 className="h-3.5 w-3.5" />
-                  <span>{isTr ? 'Kod' : 'Code'}</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setViewMode('code')}
+                className={`flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-bold whitespace-nowrap ${
+                  viewMode === 'code'
+                    ? 'morph-accent-btn shadow-sm'
+                    : 'border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]'
+                }`}
+              >
+                <Code2 className="h-3.5 w-3.5" />
+                <span>{isTr ? 'Kod' : 'Code'}</span>
+              </button>
               {canEdit && (
                 <button
                   type="button"
                   onClick={() => setViewMode('edit')}
-                  className={`flex min-h-[36px] items-center gap-1.5 rounded-xl px-3 text-xs font-bold ${
+                  className={`flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-bold whitespace-nowrap ${
                     viewMode === 'edit'
                       ? 'morph-accent-btn shadow-sm'
                       : 'border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]'
@@ -582,12 +615,12 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
               )}
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex shrink-0 items-center gap-1.5">
               {(ext === 'html' || ext === 'htm') && viewMode === 'preview' && (
                 <button
                   type="button"
                   onClick={() => setHtmlLightPaper((v) => !v)}
-                  className="flex min-h-[36px] items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-2.5 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)]"
+                  className="flex min-h-[36px] shrink-0 items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-2.5 text-xs font-bold whitespace-nowrap text-[var(--ink)] hover:border-[var(--accent)]"
                 >
                   <Sun className="h-3.5 w-3.5 text-[var(--accent-text)]" />
                   <span>{htmlLightPaper ? (isTr ? 'Tema' : 'Theme') : isTr ? 'Açık Sayfa' : 'Light Paper'}</span>
@@ -597,7 +630,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
                 <button
                   type="button"
                   onClick={handleFormatContent}
-                  className="flex min-h-[36px] items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-2.5 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)]"
+                  className="flex min-h-[36px] shrink-0 items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-2.5 text-xs font-bold whitespace-nowrap text-[var(--ink)] hover:border-[var(--accent)]"
                 >
                   <Wand2 className="h-3.5 w-3.5 text-[var(--accent-text)]" />
                   <span>{isTr ? 'Biçimlendir' : 'Format'}</span>
@@ -607,7 +640,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
                 <button
                   type="button"
                   onClick={handleSaveChanges}
-                  className="morph-accent-btn flex min-h-[36px] items-center gap-1.5 rounded-xl px-3.5 text-xs font-extrabold shadow-sm"
+                  className="morph-accent-btn flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-xl px-3.5 text-xs font-extrabold whitespace-nowrap shadow-sm"
                 >
                   <Save className="h-3.5 w-3.5" />
                   <span>{isTr ? 'Kaydet' : 'Save'}</span>
@@ -618,14 +651,24 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
         )}
 
         {/* Main Content Body */}
-        <div className="flex-1 overflow-y-auto p-4 pb-[calc(var(--morph-safe-bottom)+1rem)] sm:pb-4">
-          {loading ? (
+        <div
+          className={`flex-1 ${
+            ext === 'pdf'
+              ? 'min-h-0 overflow-hidden p-2.5 pb-[calc(var(--morph-safe-bottom)+0.65rem)] sm:p-3 sm:pb-3'
+              : 'overflow-y-auto p-4 pb-[calc(var(--morph-safe-bottom)+1rem)] sm:pb-4'
+          }`}
+        >
+          {ext === 'pdf' ? (
+            <div className="h-[74dvh] min-h-[380px] w-full">
+              <PdfCanvasViewer file={file} fileName={fileName} lang={lang} />
+            </div>
+          ) : loading ? (
             <div className="flex items-center justify-center gap-2 py-12 text-xs font-semibold text-[var(--muted)]">
               <Loader2 className="h-5 w-5 animate-spin text-[var(--accent-text)]" />
               <span>{isTr ? 'İçerik yükleniyor...' : 'Loading content...'}</span>
             </div>
           ) : errorMsg ? (
-            <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-xs font-semibold text-red-400">
+            <div className="rounded-2xl border border-[var(--danger)]/40 bg-[var(--danger)]/10 p-4 text-xs font-semibold text-[var(--danger)]">
               {errorMsg}
             </div>
           ) : ext === 'morph' && morphSummary ? (
@@ -731,42 +774,78 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
                     {lutMeta ? `${lutMeta.sampleCount} ${isTr ? 'renk noktası' : 'LUT points'}` : '3D LUT'}
                   </p>
                 </div>
-                <div className="flex shrink-0 items-center gap-1.5">
+                <div className="flex flex-wrap shrink-0 items-center gap-1.5">
                   <button
                     type="button"
                     onClick={() => lutPhotoInputRef.current?.click()}
-                    className="flex min-h-[40px] items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)]"
+                    className="flex min-h-[38px] items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)]"
                   >
                     <ImagePlus className="h-3.5 w-3.5 text-[var(--accent-text)]" />
                     <span>{isTr ? 'Foto Seç' : 'Custom Photo'}</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setLutApply((v) => !v)}
-                    className={`flex min-h-[40px] items-center gap-1.5 rounded-xl px-3.5 text-xs font-bold ${
-                      lutApply
-                        ? 'morph-accent-btn shadow-sm'
-                        : 'border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)]'
-                    }`}
-                  >
-                    <Palette className="h-3.5 w-3.5" />
-                    <span>
-                      {lutApply
-                        ? isTr
-                          ? 'LUT Aktif'
-                          : 'LUT On'
-                        : isTr
-                          ? 'Orijinal'
-                          : 'Original'}
-                    </span>
-                  </button>
+                  <div className="flex items-center rounded-xl border border-[var(--line)] bg-[var(--inset)] p-0.5">
+                    {(
+                      [
+                        {id: 'split' as const, tr: 'Kıyasla', en: 'Split'},
+                        {id: 'full' as const, tr: 'Tam LUT', en: 'Full'},
+                        {id: 'orig' as const, tr: 'Orijinal', en: 'Orig'},
+                      ] as const
+                    ).map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setLutMode(m.id)}
+                        className={`min-h-[34px] rounded-lg px-2.5 text-[11px] font-bold transition-colors ${
+                          lutMode === m.id
+                            ? 'bg-[var(--accent)] text-[var(--accent-ink)] shadow-xs'
+                            : 'text-[var(--muted)] hover:text-[var(--ink)]'
+                        }`}
+                      >
+                        {isTr ? m.tr : m.en}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
               <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-2">
-                <canvas
-                  ref={lutCanvasRef}
-                  className="mx-auto aspect-[480/280] w-full max-w-lg rounded-xl object-contain"
-                />
+                <div
+                  onPointerDown={(e) => {
+                    if (lutMode !== 'split') return;
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    const pct = ((e.clientX - rect.left) / Math.max(1, rect.width)) * 100;
+                    setLutSplitPct(Math.max(4, Math.min(96, pct)));
+                  }}
+                  onPointerMove={(e) => {
+                    if (lutMode !== 'split' || e.buttons !== 1) return;
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const pct = ((e.clientX - rect.left) / Math.max(1, rect.width)) * 100;
+                    setLutSplitPct(Math.max(4, Math.min(96, pct)));
+                  }}
+                  className={`relative mx-auto aspect-[480/280] w-full max-w-lg select-none overflow-hidden rounded-xl ${
+                    lutMode === 'split' ? 'cursor-ew-resize touch-none' : ''
+                  }`}
+                >
+                  <canvas ref={lutCanvasRef} className="block h-full w-full object-contain" />
+                  {lutMode === 'split' && (
+                    <>
+                      <div
+                        className="pointer-events-none absolute inset-y-0 w-0.5 bg-white shadow-[0_0_8px_rgba(0,0,0,0.85)]"
+                        style={{left: `${lutSplitPct}%`}}
+                      >
+                        <div className="absolute left-1/2 top-1/2 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-[var(--accent)] text-xs font-black text-[var(--accent-ink)] shadow-lg">
+                          ⇄
+                        </div>
+                      </div>
+                      <span className="pointer-events-none absolute left-2 top-2 rounded-lg bg-black/70 px-2 py-0.5 font-mono text-[10px] font-bold text-white">
+                        {isTr ? 'Orijinal' : 'Original'}
+                      </span>
+                      <span className="pointer-events-none absolute right-2 top-2 rounded-lg bg-[var(--accent)] px-2 py-0.5 font-mono text-[10px] font-bold text-[var(--accent-ink)]">
+                        LUT
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
               {lutMeta && (
                 <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
@@ -828,46 +907,99 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
                 </div>
               )}
             </div>
-          ) : (ext === 'csv' || ext === 'tsv') && viewMode === 'preview' ? (
-            <div className="overflow-x-auto rounded-2xl border border-[var(--line)] bg-[var(--inset)]">
-              {csvRows.length === 0 ? (
-                <p className="p-6 text-center text-xs text-[var(--muted)]">
-                  {isTr ? 'Tablo verisi boş.' : 'Table is empty.'}
-                </p>
-              ) : (
-                <table className="w-max min-w-full border-collapse text-left text-xs">
-                  <thead className="sticky top-0 bg-[var(--surface)]">
-                    <tr className="border-b border-[var(--line)]">
-                      <th className="font-mono-num w-10 px-2.5 py-2 text-[10px] font-bold text-[var(--muted)]">#</th>
-                      {csvRows[0].map((cell, cIdx) => (
-                        <th
-                          key={cIdx}
-                          className="max-w-[200px] truncate border-l border-[var(--line)] px-3 py-2 font-bold text-[var(--ink)]"
-                        >
-                          {cell || `Col ${cIdx + 1}`}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--line)]">
-                    {csvRows.slice(1).map((row, rIdx) => (
-                      <tr key={rIdx} className="hover:bg-[var(--surface)]/50">
-                        <td className="font-mono-num px-2.5 py-1.5 text-[10px] text-[var(--muted)]">
-                          {rIdx + 1}
-                        </td>
-                        {csvRows[0].map((_, cIdx) => (
-                          <td
-                            key={cIdx}
-                            className="font-mono-num max-w-[220px] truncate border-l border-[var(--line)] px-3 py-1.5 text-[var(--ink)]"
-                          >
-                            {row[cIdx] ?? ''}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          ) : isSpreadsheetExt(ext) && viewMode === 'preview' ? (
+            <div className="space-y-2.5">
+              {selectedCell && (
+                <div className="flex items-start justify-between gap-2 rounded-2xl border border-[var(--accent)]/40 bg-[var(--inset)] p-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-mono-num text-[10px] font-bold uppercase tracking-wider text-[var(--accent-text)]">
+                      {isTr ? `Satır ${selectedCell.row}` : `Row ${selectedCell.row}`} · {selectedCell.colHeader}
+                    </p>
+                    <p className="mt-1 break-words whitespace-pre-wrap text-xs leading-relaxed text-[var(--ink)]">
+                      {selectedCell.value || (isTr ? '(Boş hücre)' : '(Empty cell)')}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(selectedCell.value).catch(() => {});
+                        onShowToast?.(isTr ? 'Hücre kopyalandı' : 'Cell copied');
+                      }}
+                      aria-label={isTr ? 'Hücreyi kopyala' : 'Copy cell'}
+                      className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] hover:border-[var(--accent)]"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCell(null)}
+                      aria-label={isTr ? 'Kapat' : 'Close'}
+                      className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)]"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
               )}
+              <div className="overflow-x-auto rounded-2xl border border-[var(--line)] bg-[var(--inset)]">
+                {tableRows.length === 0 ? (
+                  <p className="p-6 text-center text-xs text-[var(--muted)]">
+                    {isTr ? 'Tablo verisi boş.' : 'Table is empty.'}
+                  </p>
+                ) : (() => {
+                  const colCount = Math.max(...tableRows.map((r) => r.length));
+                  const headers = Array.from({length: colCount}, (_, i) => tableRows[0]?.[i] || `Col ${i + 1}`);
+                  return (
+                    <table className="w-max min-w-full border-collapse text-left text-xs">
+                      <thead className="sticky top-0 bg-[var(--surface)]">
+                        <tr className="border-b border-[var(--line)]">
+                          <th className="font-mono-num w-10 px-2.5 py-2.5 text-[10px] font-bold text-[var(--muted)]">#</th>
+                          {headers.map((cell, cIdx) => (
+                            <th
+                              key={cIdx}
+                              onClick={() => setSelectedCell({row: 0, colHeader: `Col ${cIdx + 1}`, value: cell})}
+                              className="max-w-[200px] cursor-pointer truncate border-l border-[var(--line)] px-3 py-2.5 font-bold text-[var(--ink)] active:bg-[var(--accent)]/15"
+                            >
+                              {cell}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[var(--line)]">
+                        {tableRows.slice(1).map((row, rIdx) => (
+                          <tr key={rIdx} className="hover:bg-[var(--surface)]/50">
+                            <td className="font-mono-num px-2.5 py-2 text-[10px] text-[var(--muted)]">
+                              {rIdx + 1}
+                            </td>
+                            {headers.map((colHeader, cIdx) => {
+                              const val = row[cIdx] ?? '';
+                              const isPicked =
+                                selectedCell?.row === rIdx + 1 && selectedCell?.colHeader === colHeader && selectedCell?.value === val;
+                              return (
+                                <td
+                                  key={cIdx}
+                                  onClick={() => setSelectedCell({row: rIdx + 1, colHeader, value: val})}
+                                  className={`font-mono-num max-w-[220px] cursor-pointer truncate border-l border-[var(--line)] px-3 py-2 text-[var(--ink)] active:bg-[var(--accent)]/15 ${
+                                    isPicked ? 'bg-[var(--accent)]/15 font-bold text-[var(--accent-text)]' : ''
+                                  }`}
+                                >
+                                  {val}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  );
+                })()}
+              </div>
+              <p className="text-[10px] text-[var(--muted)]">
+                {isTr
+                  ? 'Tam içeriği görmek için herhangi bir hücreye dokunun.'
+                  : 'Tap any cell to inspect its full content.'}
+              </p>
             </div>
           ) : (ext === 'md' || ext === 'markdown') && viewMode === 'preview' ? (
             <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-4">

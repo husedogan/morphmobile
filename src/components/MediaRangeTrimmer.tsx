@@ -545,9 +545,9 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
             <button
               type="button"
               onClick={() => setBleepCompareMode('result')}
-              className={`flex h-7 items-center gap-1 rounded-lg px-2.5 text-[11px] font-bold transition-colors whitespace-nowrap ${
+              className={`flex min-h-[36px] items-center gap-1 rounded-lg px-2.5 text-[11px] font-bold transition-colors whitespace-nowrap ${
                 bleepCompareMode === 'result'
-                  ? 'bg-amber-500 text-white shadow-xs'
+                  ? 'bg-[var(--accent)] text-[var(--accent-ink)] shadow-xs'
                   : 'text-[var(--muted)] hover:text-[var(--ink)]'
               }`}
             >
@@ -557,7 +557,7 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
             <button
               type="button"
               onClick={() => setBleepCompareMode('original')}
-              className={`flex h-7 items-center rounded-lg px-2.5 text-[11px] font-bold transition-colors whitespace-nowrap ${
+              className={`flex min-h-[36px] items-center rounded-lg px-2.5 text-[11px] font-bold transition-colors whitespace-nowrap ${
                 bleepCompareMode === 'original'
                   ? 'bg-[var(--surface)] text-[var(--ink)] shadow-xs'
                   : 'text-[var(--muted)] hover:text-[var(--ink)]'
@@ -581,9 +581,9 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
               key={f.id}
               type="button"
               onClick={() => setActiveIdx(idx)}
-              className={`shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+              className={`min-h-[36px] shrink-0 rounded-lg px-3 py-1 text-[11px] font-semibold transition-colors ${
                 idx === safeIdx
-                  ? 'bg-[var(--accent)] text-white shadow-xs'
+                  ? 'bg-[var(--accent)] text-[var(--accent-ink)] shadow-xs'
                   : 'text-[var(--muted)] hover:bg-[var(--surface)] hover:text-[var(--ink)]'
               }`}
             >
@@ -650,7 +650,7 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
                 <span aria-hidden="true" className="opacity-45">
                   ·
                 </span>
-                <span className="text-sky-500">
+                <span className="text-[var(--ink)]">
                   {tr('2. Parça', 'Part 2')} {formatTrimTime(Math.max(0, safeDur - parsedStart))}
                 </span>
               </>
@@ -733,8 +733,8 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
                           ? 'bg-[var(--accent)]'
                           : 'bg-[var(--accent)]/75'
                         : isPlayed
-                          ? 'bg-sky-500'
-                          : 'bg-sky-500/65'
+                          ? 'bg-[var(--ink)]/80'
+                          : 'bg-[var(--ink)]/38'
                       : insideRange
                         ? isPlayed
                           ? 'bg-[var(--accent)]'
@@ -794,7 +794,7 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
                   >
                     <span className="absolute inset-y-0 w-[2.5px] rounded-full bg-[var(--accent)] shadow-[0_0_12px_var(--accent)]" />
                     <span
-                      className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full border-2 border-[var(--surface)] bg-[var(--accent)] text-white shadow-md transition-transform ${
+                      className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full border-2 border-[var(--surface)] bg-[var(--accent)] text-[var(--accent-ink)] shadow-md transition-transform ${
                         activeDrag === 'split' ? 'scale-110' : 'hover:scale-105'
                       }`}
                     >
@@ -856,7 +856,7 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
                     >
                       <span
                         className={`h-7 w-[2.5px] rounded-full ${
-                          isBleep ? 'bg-black/60' : 'bg-white/90'
+                          isBleep ? 'bg-black/60' : 'bg-[var(--accent-ink)]/90'
                         }`}
                       />
                     </div>
@@ -871,7 +871,7 @@ export const MediaRangeTrimmer: React.FC<MediaRangeTrimmerProps> = ({
                     >
                       <span
                         className={`h-7 w-[2.5px] rounded-full ${
-                          isBleep ? 'bg-black/60' : 'bg-white/90'
+                          isBleep ? 'bg-black/60' : 'bg-[var(--accent-ink)]/90'
                         }`}
                       />
                     </div>

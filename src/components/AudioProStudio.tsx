@@ -199,7 +199,14 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
     if (!ctx) return;
     ctx.scale(dpr, dpr);
 
-    ctx.fillStyle = '#0c111a';
+    const cs = typeof window !== 'undefined' ? getComputedStyle(document.documentElement) : null;
+    const bgInset = cs?.getPropertyValue('--inset').trim() || '#0c111a';
+    const accent = cs?.getPropertyValue('--accent').trim() || '#f0788a';
+    const accentInk = cs?.getPropertyValue('--accent-ink').trim() || '#0c111a';
+    const ink = cs?.getPropertyValue('--ink').trim() || '#f8fafc';
+    const danger = cs?.getPropertyValue('--danger').trim() || '#f43f5e';
+
+    ctx.fillStyle = bgInset;
     ctx.fillRect(0, 0, w, h);
 
     const dur = Math.max(0.01, buffer.duration);
@@ -208,12 +215,15 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
 
     // Highlight silence segments
     if (tab === 'silence' || removeSilence) {
-      ctx.fillStyle = 'rgba(244, 63, 94, 0.22)';
+      ctx.save();
+      ctx.globalAlpha = 0.24;
+      ctx.fillStyle = danger;
       for (const seg of silenceSegments) {
         const sx = (seg.startSec / dur) * w;
         const ex = (seg.endSec / dur) * w;
         ctx.fillRect(sx, 0, Math.max(2, ex - sx), h);
       }
+      ctx.restore();
     }
 
     // Mute region highlight
@@ -229,12 +239,12 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
       const x = i * barW;
       const inRange = x >= xStart && x <= xEnd;
       const barH = Math.max(3, peaks[i] * (h * 0.86));
-      ctx.fillStyle = inRange ? '#34d399' : 'rgba(148, 163, 184, 0.28)';
+      ctx.fillStyle = inRange ? accent : 'rgba(148, 163, 184, 0.28)';
       ctx.fillRect(x, midY - barH / 2, Math.max(1.5, barW - 0.8), barH);
     }
 
     // Dim outside trim
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.52)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
     ctx.fillRect(0, 0, xStart, h);
     ctx.fillRect(xEnd, 0, w - xEnd, h);
 
@@ -242,7 +252,7 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
     const drawTrimHandle = (xPos: number, isLeft: boolean) => {
       const clampedX = Math.max(8, Math.min(w - 8, xPos));
       ctx.save();
-      ctx.fillStyle = isLeft ? '#38bdf8' : '#22d3ee';
+      ctx.fillStyle = accent;
       ctx.fillRect(clampedX - 1.5, 0, 3, h);
 
       // Large rounded top/bottom grab tabs for touch
@@ -257,7 +267,7 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
       ctx.fill();
 
       // Inner grip lines
-      ctx.fillStyle = '#0c111a';
+      ctx.fillStyle = accentInk;
       ctx.fillRect(tabX + tabW / 2 - 2.5, 10, 1.5, 10);
       ctx.fillRect(tabX + tabW / 2 + 1, 10, 1.5, 10);
       ctx.fillRect(tabX + tabW / 2 - 2.5, h - 20, 1.5, 10);
@@ -269,7 +279,7 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
 
     // Playhead
     const xPlay = (playhead / dur) * w;
-    ctx.fillStyle = '#f8fafc';
+    ctx.fillStyle = ink;
     ctx.fillRect(xPlay - 1, 0, 2, h);
   }, [peaks, buffer, trimStart, trimEnd, playhead, silenceSegments, tab, removeSilence, muteEnabled, muteStart, muteEnd]);
 
@@ -285,13 +295,15 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
     }
     const ctx = vu.getContext('2d');
     if (!ctx) return;
+    const cs = typeof window !== 'undefined' ? getComputedStyle(document.documentElement) : null;
+    const bgSurface = cs?.getPropertyValue('--surface').trim() || '#0b111c';
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = '#070b12';
+    ctx.fillStyle = bgSurface;
     ctx.fillRect(0, 0, w, h);
     const bars = 28;
     const bw = (w - 8) / bars;
     for (let i = 0; i < bars; i++) {
-      ctx.fillStyle = 'rgba(148, 163, 184, 0.16)';
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.2)';
       ctx.fillRect(4 + i * bw + 1, h - 6, Math.max(2, bw - 2), 3);
     }
   };
@@ -394,16 +406,22 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
             const dev = Math.abs(timeData[i] - 128) / 128;
             if (dev > peak) peak = dev;
           }
-          vctx.fillStyle = '#070b12';
+          const cs = typeof window !== 'undefined' ? getComputedStyle(document.documentElement) : null;
+          const bgSurface = cs?.getPropertyValue('--surface').trim() || '#0b111c';
+          const accent = cs?.getPropertyValue('--accent').trim() || '#f0788a';
+          const accentEnd = cs?.getPropertyValue('--accent-end').trim() || '#f43f5e';
+          const danger = cs?.getPropertyValue('--danger').trim() || '#ef4444';
+
+          vctx.fillStyle = bgSurface;
           vctx.fillRect(0, 0, w, h);
 
           // Top slim VU level bar (4px height)
           const vuW = Math.min(1, peak * 1.45) * (w - 8);
           const grad = vctx.createLinearGradient(4, 0, w - 4, 0);
-          grad.addColorStop(0, '#34d399');
-          grad.addColorStop(0.7, '#f59e0b');
-          grad.addColorStop(1, '#f43f5e');
-          vctx.fillStyle = 'rgba(148, 163, 184, 0.15)';
+          grad.addColorStop(0, accent);
+          grad.addColorStop(0.75, accentEnd);
+          grad.addColorStop(1, danger);
+          vctx.fillStyle = 'rgba(148, 163, 184, 0.18)';
           vctx.fillRect(4, 3, w - 8, 4);
           vctx.fillStyle = grad;
           vctx.fillRect(4, 3, vuW, 4);
@@ -415,9 +433,11 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
           for (let i = 0; i < bars; i++) {
             const val = freqData[Math.min(freqData.length - 1, i * step)] / 255;
             const bh = Math.max(2, val * (h - 12));
-            vctx.fillStyle = val > 0.78 ? '#f43f5e' : val > 0.5 ? '#38bdf8' : '#34d399';
+            vctx.fillStyle = val > 0.82 ? danger : accent;
+            vctx.globalAlpha = val > 0.82 ? 0.95 : 0.45 + val * 0.55;
             vctx.fillRect(4 + i * bw + 1, h - 2 - bh, Math.max(2, bw - 2.5), bh);
           }
+          vctx.globalAlpha = 1;
         }
       }
 
@@ -538,7 +558,7 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-3.5">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)]/15 text-[var(--accent-text)]">
               <Music className="h-5 w-5" />
             </div>
             <div className="min-w-0">
@@ -625,7 +645,7 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
           )}
 
           {errorMsg && (
-            <div className="rounded-2xl border border-red-500/40 bg-red-500/10 p-3 text-xs font-semibold text-red-400">
+            <div className="rounded-2xl border border-[var(--danger)]/40 bg-[var(--danger)]/10 p-3 text-xs font-semibold text-[var(--danger)]">
               {errorMsg}
             </div>
           )}
@@ -634,7 +654,7 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
             <>
               {/* Interactive Waveform Canvas + Live VU/Spectrum Level Bar */}
               {tab !== 'id3' && (
-                <div className="rounded-2xl border border-[var(--line)] bg-[#0c111a] p-3 space-y-2">
+                <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3 space-y-2">
                   <canvas
                     ref={canvasRef}
                     onPointerDown={(e) => handleCanvasPointer(e, true)}
@@ -651,7 +671,7 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
                   />
                   <canvas
                     ref={vuCanvasRef}
-                    className="h-8 w-full rounded-lg border border-white/10 bg-[#070b12]"
+                    className="h-8 w-full rounded-lg border border-[var(--line)] bg-[var(--surface)]"
                   />
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                     <div className="flex items-center gap-2">
@@ -663,13 +683,13 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
                         {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
                         <span>{playing ? (isTr ? 'Durdur' : 'Pause') : isTr ? 'Önizle' : 'Play'}</span>
                       </button>
-                      <span className="font-mono-num text-[11px] text-slate-300">
+                      <span className="font-mono-num text-[11px] text-[var(--ink)]">
                         {fmtTime(playhead)} / {fmtTime(buffer.duration)}
                       </span>
                     </div>
-                    <div className="font-mono-num flex items-center gap-2 text-[11px] text-sky-400">
+                    <div className="font-mono-num flex items-center gap-2 text-[11px] text-[var(--muted)]">
                       <span>{isTr ? 'Aralık:' : 'Range:'} {fmtTime(trimStart)} – {fmtTime(trimEnd)}</span>
-                      <span className="text-emerald-400">({fmtTime(trimEnd - trimStart)})</span>
+                      <span className="font-bold text-[var(--accent-text)]">({fmtTime(trimEnd - trimStart)})</span>
                     </div>
                   </div>
                 </div>
@@ -720,7 +740,7 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
                       <button
                         type="button"
                         onClick={() => setMuteEnabled((v) => !v)}
-                        className={`rounded-lg border px-2 py-0.5 text-[10px] font-bold ${
+                        className={`min-h-[36px] rounded-xl border px-2.5 text-[11px] font-bold ${
                           muteEnabled
                             ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
                             : 'border-[var(--line)] text-[var(--muted)]'
@@ -793,7 +813,7 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
                         key={key}
                         type="button"
                         onClick={() => setEqBands([...preset.bands])}
-                        className="rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2.5 py-1.5 text-[11px] font-bold text-[var(--ink)] hover:border-[var(--accent)]"
+                        className="min-h-[38px] rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 py-1.5 text-[11px] font-bold text-[var(--ink)] hover:border-[var(--accent)]"
                       >
                         {isTr ? preset.labelTr : preset.labelEn}
                       </button>
@@ -979,7 +999,7 @@ export const AudioProStudio: React.FC<AudioProStudioProps> = ({
                     <button
                       type="button"
                       onClick={() => coverInputRef.current?.click()}
-                      className="text-[11px] font-bold text-[var(--accent-text)] hover:underline"
+                      className="min-h-[36px] rounded-xl px-2.5 text-[11px] font-bold text-[var(--accent-text)] hover:underline"
                     >
                       {isTr ? 'Albüm Kapağı Değiştir' : 'Change Cover Art'}
                     </button>

@@ -35,8 +35,16 @@ export function isRichDocumentExt(ext: string): boolean {
     'htm',
     'csv',
     'tsv',
+    'xlsx',
+    'xls',
+    'ods',
     'docx',
+    'doc',
     'odt',
+    'pptx',
+    'ppt',
+    'odp',
+    'rtf',
     'srt',
     'cube',
     'morph',
@@ -49,8 +57,12 @@ export function isTextEditableExt(ext: string): boolean {
   );
 }
 
+export function isSpreadsheetExt(ext: string): boolean {
+  return ['csv', 'tsv', 'xlsx', 'xls', 'ods'].includes(ext.toLowerCase());
+}
+
 export function isQuickViewOfficeExt(ext: string): boolean {
-  return ['docx', 'odt'].includes(ext.toLowerCase());
+  return ['docx', 'doc', 'odt', 'pptx', 'ppt', 'odp', 'rtf'].includes(ext.toLowerCase());
 }
 
 export function parseSrtCues(srtText: string): SrtCue[] {
@@ -200,6 +212,7 @@ export async function readMorphPackageSummary(file: File | Blob, fileName: strin
       projectName?: string;
       videoClips?: Array<{startSec?: number; endSec?: number; speed?: number}>;
       audioClips?: unknown[];
+      textClips?: unknown[];
       textOverlays?: unknown[];
     };
     const clips = Array.isArray(parsed.videoClips) ? parsed.videoClips : [];
@@ -211,7 +224,11 @@ export async function readMorphPackageSummary(file: File | Blob, fileName: strin
       projectName: parsed.projectName || fileName.replace(/\.[^.]+$/, ''),
       clipCount: clips.length,
       audioTrackCount: Array.isArray(parsed.audioClips) ? parsed.audioClips.length : 0,
-      textTrackCount: Array.isArray(parsed.textOverlays) ? parsed.textOverlays.length : 0,
+      textTrackCount: Array.isArray(parsed.textClips)
+        ? parsed.textClips.length
+        : Array.isArray(parsed.textOverlays)
+          ? parsed.textOverlays.length
+          : 0,
       totalDurationSec,
       hasSourceVideo: false,
       appVersion: 'JSON',
@@ -234,7 +251,11 @@ export async function readMorphPackageSummary(file: File | Blob, fileName: strin
       fileName.replace(/\.morph$/i, ''),
     clipCount: videoClips.length,
     audioTrackCount: Array.isArray(projectRaw?.audioClips) ? projectRaw.audioClips.length : 0,
-    textTrackCount: Array.isArray(projectRaw?.textOverlays) ? projectRaw.textOverlays.length : 0,
+    textTrackCount: Array.isArray(projectRaw?.textClips)
+      ? projectRaw.textClips.length
+      : Array.isArray(projectRaw?.textOverlays)
+        ? projectRaw.textOverlays.length
+        : 0,
     totalDurationSec: durationFromTimeline,
     hasSourceVideo: Boolean(manifestRaw?.hasSourceVideo),
     appVersion: manifestRaw?.appVersion || '1.1',
@@ -246,7 +267,8 @@ export function renderCubeLutSampleScene(
   cubeText: string,
   fileName: string,
   applyLut: boolean,
-  sourceImage?: HTMLImageElement | HTMLCanvasElement | ImageBitmap | null
+  sourceImage?: HTMLImageElement | HTMLCanvasElement | ImageBitmap | null,
+  splitRatio?: number
 ): {title: string; grading: ColorGradingSettings; sampleCount: number} {
   const parsed = parseCubeLutToGrading(cubeText, fileName);
   const w = 480;
@@ -293,7 +315,12 @@ export function renderCubeLutSampleScene(
 
   if (!applyLut) return parsed;
 
-  // Apply calibrated ColorGradingSettings pixel transforms cleanly
+  const splitX =
+    typeof splitRatio === 'number' && Number.isFinite(splitRatio)
+      ? Math.max(0, Math.min(w, Math.round(splitRatio * w)))
+      : 0;
+
+  // Apply calibrated ColorGradingSettings pixel transforms cleanly (respecting optional Before/After splitX)
   const imgData = ctx.getImageData(0, 0, w, h);
   const d = imgData.data;
   const g = parsed.grading;
@@ -307,38 +334,46 @@ export function renderCubeLutSampleScene(
 
   const clamp255 = (v: number) => (v < 0 ? 0 : v > 255 ? 255 : v);
 
-  for (let i = 0; i < d.length; i += 4) {
-    let r = d[i];
-    let gr = d[i + 1];
-    let b = d[i + 2];
+  for (let y = 0; y < h; y++) {
+    for (let x = splitX; x < w; x++) {
+      const i = (y * w + x) * 4;
+      let r = d[i];
+      let gr = d[i + 1];
+      let b = d[i + 2];
 
-    const lum = (0.299 * r + 0.587 * gr + 0.114 * b) / 255;
-    const shadowWeight = Math.max(0, 1 - lum * 2);
-    const highWeight = Math.max(0, (lum - 0.5) * 2);
-    const toneLift = shadowWeight * shadowLift + highWeight * highLift;
+      const lum = (0.299 * r + 0.587 * gr + 0.114 * b) / 255;
+      const shadowWeight = Math.max(0, 1 - lum * 2);
+      const highWeight = Math.max(0, (lum - 0.5) * 2);
+      const toneLift = shadowWeight * shadowLift + highWeight * highLift;
 
-    r = (r - 128) * contrastFactor + 128 + brightShift + tempShift - tintShift * 0.4 + toneLift;
-    gr = (gr - 128) * contrastFactor + 128 + brightShift + tintShift + toneLift;
-    b = (b - 128) * contrastFactor + 128 + brightShift - tempShift - tintShift * 0.4 + toneLift;
+      r = (r - 128) * contrastFactor + 128 + brightShift + tempShift - tintShift * 0.4 + toneLift;
+      gr = (gr - 128) * contrastFactor + 128 + brightShift + tintShift + toneLift;
+      b = (b - 128) * contrastFactor + 128 + brightShift - tempShift - tintShift * 0.4 + toneLift;
 
-    const avg = 0.299 * r + 0.587 * gr + 0.114 * b;
-    r = avg + (r - avg) * satFactor;
-    gr = avg + (gr - avg) * satFactor;
-    b = avg + (b - avg) * satFactor;
+      const avg = 0.299 * r + 0.587 * gr + 0.114 * b;
+      r = avg + (r - avg) * satFactor;
+      gr = avg + (gr - avg) * satFactor;
+      b = avg + (b - avg) * satFactor;
 
-    d[i] = clamp255(r);
-    d[i + 1] = clamp255(gr);
-    d[i + 2] = clamp255(b);
+      d[i] = clamp255(r);
+      d[i + 1] = clamp255(gr);
+      d[i + 2] = clamp255(b);
+    }
   }
   ctx.putImageData(imgData, 0, 0);
 
-  // Subtle vignette
+  // Subtle vignette clipped to graded area
   if (g.vignette > 0) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(splitX, 0, w - splitX, h);
+    ctx.clip();
     const vig = ctx.createRadialGradient(w / 2, h / 2, w * 0.25, w / 2, h / 2, w * 0.65);
     vig.addColorStop(0, 'rgba(0,0,0,0)');
     vig.addColorStop(1, `rgba(0,0,0,${Math.min(0.45, g.vignette / 100)})`);
     ctx.fillStyle = vig;
     ctx.fillRect(0, 0, w, h);
+    ctx.restore();
   }
 
   return parsed;

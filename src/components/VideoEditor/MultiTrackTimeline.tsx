@@ -1182,7 +1182,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
       return (
         <div
           key="split_cut"
-          className="flex h-7 shrink-0 items-center gap-[2px] rounded-lg border border-white/[0.09] bg-white/[0.03] p-[2px]"
+          className="flex h-9 shrink-0 items-center gap-[2px] rounded-lg border border-white/[0.09] bg-white/[0.03] p-[2px]"
         >
           <StudioTooltipBtn
             tooltip={tr(
@@ -1191,7 +1191,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             )}
             align="left"
             onClick={onSplit}
-            className={`flex h-[22px] w-[26px] shrink-0 items-center justify-center rounded-[5px] transition-colors ${
+            className={`flex h-7 w-8 shrink-0 items-center justify-center rounded-[6px] transition-colors ${
               canSplitActiveLayer
                 ? 'bg-[#F43F5E]/20 text-[#FB7185] hover:bg-[#F43F5E]/30'
                 : 'text-white/55 hover:bg-white/[0.08] hover:text-[#FB7185]'
@@ -1200,7 +1200,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             <SquareSplitHorizontal className="h-3.5 w-3.5" />
           </StudioTooltipBtn>
 
-          <span className="h-3 w-px bg-white/[0.08]" aria-hidden="true" />
+          <span className="h-3.5 w-px bg-white/[0.08]" aria-hidden="true" />
 
           <StudioTooltipBtn
             tooltip={tr(
@@ -1209,7 +1209,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             )}
             align="left"
             onClick={openCutMenuFromButton}
-            className={`flex h-[22px] w-[26px] shrink-0 items-center justify-center rounded-[5px] transition-colors ${
+            className={`flex h-7 w-8 shrink-0 items-center justify-center rounded-[6px] transition-colors ${
               cutMenuAnchor
                 ? 'bg-[#FB923C]/24 text-[#FDBA74]'
                 : canSplitActiveLayer
@@ -1241,7 +1241,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
         tooltip={tr(meta.labelTr, meta.labelEn)}
         onClick={meta.onRun}
         disabled={meta.disabled}
-        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-colors disabled:opacity-30 ${toolVisualClass}`}
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors disabled:opacity-30 ${toolVisualClass}`}
       >
         <Icon className="h-3.5 w-3.5" />
       </StudioTooltipBtn>
@@ -1278,7 +1278,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                       type="button"
                       onClick={() => setPinnedTools(DEFAULT_PINNED_TOOLBAR_TOOLS)}
                       title={tr('Varsayılana Sıfırla', 'Reset Default')}
-                      className="flex h-6 items-center gap-1 rounded-md border border-white/[0.1] bg-white/[0.04] px-1.5 text-[10px] font-bold text-white/65 hover:text-white"
+                      className="flex h-8 items-center gap-1 rounded-md border border-white/[0.1] bg-white/[0.04] px-2 text-[10px] font-bold text-white/65 hover:text-white"
                     >
                       <RotateCcw className="h-2.5 w-2.5" />
                       <span>{tr('Sıfırla', 'Reset')}</span>
@@ -1286,7 +1286,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                     <button
                       type="button"
                       onClick={() => setTrayEditMode(false)}
-                      className="flex h-6 items-center gap-1 rounded-md border border-[#38BDF8]/50 bg-[#38BDF8]/18 px-2 text-[10px] font-extrabold text-[#38BDF8] hover:bg-[#38BDF8]/25"
+                      className="flex h-8 items-center gap-1 rounded-md border border-[#38BDF8]/50 bg-[#38BDF8]/18 px-2.5 text-[10px] font-extrabold text-[#38BDF8] hover:bg-[#38BDF8]/25"
                     >
                       <Check className="h-3 w-3" />
                       <span>{tr('Bitti', 'Done')}</span>
@@ -1296,7 +1296,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   <button
                     type="button"
                     onClick={() => setTrayEditMode(true)}
-                    className="flex h-6 items-center gap-1 rounded-md border border-white/[0.1] bg-white/[0.05] px-2 text-[10px] font-bold text-white/75 transition-colors hover:border-[#38BDF8]/45 hover:text-[#38BDF8]"
+                    className="flex h-8 items-center gap-1 rounded-md border border-white/[0.1] bg-white/[0.05] px-2.5 text-[10px] font-bold text-white/75 transition-colors hover:border-[#38BDF8]/45 hover:text-[#38BDF8]"
                   >
                     <SlidersHorizontal className="h-2.5 w-2.5" />
                     <span>{tr('Düzenle', 'Edit')}</span>
@@ -1377,24 +1377,24 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                             disabled={idx === 0}
                             onClick={() => movePinnedToolOrder(id, -1)}
                             title={tr('Sola al', 'Move left')}
-                            className="flex h-5 w-5 items-center justify-center rounded text-white/60 hover:bg-white/10 hover:text-white disabled:opacity-25"
+                            className="flex h-8 w-8 items-center justify-center rounded text-white/60 hover:bg-white/10 hover:text-white disabled:opacity-25"
                           >
-                            <ChevronLeft className="h-3 w-3" />
+                            <ChevronLeft className="h-3.5 w-3.5" />
                           </button>
                           <button
                             type="button"
                             disabled={idx === pinnedTools.length - 1}
                             onClick={() => movePinnedToolOrder(id, 1)}
                             title={tr('Sağa al', 'Move right')}
-                            className="flex h-5 w-5 items-center justify-center rounded text-white/60 hover:bg-white/10 hover:text-white disabled:opacity-25"
+                            className="flex h-8 w-8 items-center justify-center rounded text-white/60 hover:bg-white/10 hover:text-white disabled:opacity-25"
                           >
-                            <ChevronRight className="h-3 w-3" />
+                            <ChevronRight className="h-3.5 w-3.5" />
                           </button>
                           <button
                             type="button"
                             onClick={() => togglePinTool(id)}
                             title={tr('Gizli tepsiye al', 'Move to hidden tray')}
-                            className="ml-0.5 flex h-5 items-center gap-0.5 rounded bg-white/[0.08] px-1.5 text-[9px] font-bold text-white/80 hover:bg-rose-500/25 hover:text-rose-300"
+                            className="ml-0.5 flex h-8 items-center gap-0.5 rounded bg-white/[0.08] px-2 text-[10px] font-bold text-white/80 hover:bg-rose-500/25 hover:text-rose-300"
                           >
                             <span>{tr('Gizle', 'Hide')}</span>
                           </button>
@@ -1427,9 +1427,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                           <button
                             type="button"
                             onClick={() => togglePinTool(id)}
-                            className="flex h-5 shrink-0 items-center gap-1 rounded border border-[#38BDF8]/35 bg-[#38BDF8]/12 px-1.5 text-[9px] font-bold text-[#38BDF8] hover:bg-[#38BDF8]/22"
+                            className="flex h-8 shrink-0 items-center gap-1 rounded border border-[#38BDF8]/35 bg-[#38BDF8]/12 px-2 text-[10px] font-bold text-[#38BDF8] hover:bg-[#38BDF8]/22"
                           >
-                            <Pin className="h-2.5 w-2.5" />
+                            <Pin className="h-3 w-3" />
                             <span>{tr('Sabitle', 'Pin')}</span>
                           </button>
                         </div>
@@ -1507,9 +1507,9 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               <button
                 type="button"
                 onClick={() => setFabAnchor(null)}
-                className="flex h-5 w-5 items-center justify-center rounded-md text-white/45 hover:bg-white/10 hover:text-white"
+                className="flex h-8 w-8 items-center justify-center rounded-md text-white/55 hover:bg-white/10 hover:text-white"
               >
-                <X className="h-3 w-3" />
+                <X className="h-3.5 w-3.5" />
               </button>
             </div>
 
@@ -1639,16 +1639,16 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
       {cutMenuPortal}
       {hiddenTrayPortal}
       {floatingAddPortal}
-      {/* Context-Aware Action Bar (Uniform h-7 Studio Geometry + Show Hidden Tools ^ Trigger + Zoom) */}
-      <div className="relative z-20 flex h-10 shrink-0 items-center justify-between gap-1.5 border-b border-white/[0.06] bg-[#111115] px-2">
+      {/* Context-Aware Action Bar (Mobile-Friendly h-9 Touch Geometry + Show Hidden Tools ^ Trigger + Zoom) */}
+      <div className="relative z-20 flex h-11 shrink-0 items-center justify-between gap-1.5 border-b border-white/[0.06] bg-[#111115] px-2">
         <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pr-1">
           {/* Active Layer Indicator Pill */}
           <span
             style={{color: activeLayerMeta.color, borderColor: `${activeLayerMeta.color}40`}}
-            className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg border bg-white/[0.03] px-2 text-[10px] font-extrabold"
+            className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border bg-white/[0.03] px-2 text-[10px] font-extrabold"
           >
             <ActiveLayerIcon className="h-3.5 w-3.5" />
-            <span className="hidden min-[440px]:inline">{activeLayerMeta.label}</span>
+            <span className="inline">{activeLayerMeta.label}</span>
           </span>
 
           {/* User-Customizable Pinned Tools */}
@@ -1667,14 +1667,14 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                 : tr('Medya, Katman & Satır Ekle', 'Add Media, Layer & Track Row')
             }
             aria-label={tr('Medya ve Satır Ekle', 'Add Media and Track Row')}
-            className={`flex h-7 w-7 items-center justify-center rounded-lg border transition-all active:scale-95 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#F43F5E]/60 ${
+            className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-all active:scale-95 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#F43F5E]/60 ${
               fabAnchor
                 ? 'border-[#F43F5E] bg-[#F43F5E] text-white shadow-[0_0_12px_rgba(244,63,94,0.45)]'
                 : 'border-[#F43F5E]/40 bg-[#F43F5E]/15 text-[#FB7185] hover:border-[#F43F5E]/65 hover:bg-[#F43F5E]/24 hover:text-white'
             }`}
           >
             <Plus
-              className={`h-3.5 w-3.5 stroke-[2.6] transition-transform duration-200 ${
+              className={`h-4 w-4 stroke-[2.6] transition-transform duration-200 ${
                 fabAnchor ? 'rotate-45' : ''
               }`}
             />
@@ -1689,24 +1689,24 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                 ? tr('Gizli Öğeleri Kapat', 'Close Hidden Tools')
                 : tr('Gizli Öğeleri Göster & Düzenle', 'Show Hidden Tools & Customize')
             }
-            className={`relative flex h-7 w-7 items-center justify-center rounded-lg border transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-white/35 ${
+            className={`relative flex h-9 w-9 items-center justify-center rounded-lg border transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-white/35 ${
               trayAnchor
                 ? 'border-[#38BDF8]/50 bg-[#38BDF8]/18 text-[#38BDF8]'
                 : 'border-white/[0.09] bg-white/[0.03] text-white/65 hover:border-white/[0.16] hover:bg-white/[0.08] hover:text-white'
             }`}
           >
             <ChevronUp
-              className={`h-3.5 w-3.5 transition-transform duration-200 ${
+              className={`h-4 w-4 transition-transform duration-200 ${
                 trayAnchor ? 'rotate-180' : ''
               }`}
             />
             {hasActiveHiddenTool && !trayAnchor && (
-              <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#38BDF8] shadow-[0_0_6px_#38BDF8]" />
+              <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#38BDF8] shadow-[0_0_6px_#38BDF8]" />
             )}
           </button>
 
           {/* Dedicated Timeline Magnifier Zoom Controls (Clearly Zoom, never confused with playback speed!) */}
-          <div className="flex h-7 items-center rounded-lg border border-white/[0.09] bg-white/[0.03] p-[2px]">
+          <div className="flex h-9 items-center rounded-lg border border-white/[0.09] bg-white/[0.03] p-[2px]">
             <StudioTooltipBtn
               tooltip={tr(
                 `Zaman Çizelgesini Uzaklaştır (%${zoomPercent})`,
@@ -1715,7 +1715,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               align="right"
               disabled={timelineZoom <= 1}
               onClick={onZoomOut}
-              className="flex h-[22px] w-[22px] items-center justify-center rounded-[5px] text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-25"
+              className="flex h-7 w-7 items-center justify-center rounded-[6px] text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-25"
             >
               <ZoomOut className="h-3.5 w-3.5" />
             </StudioTooltipBtn>
@@ -1727,12 +1727,12 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               )}
               align="right"
               onClick={onResetZoom}
-              className="flex h-[22px] items-center justify-center gap-[2px] rounded-[5px] px-1 transition-colors hover:bg-white/[0.08]"
+              className="flex h-7 items-center justify-center gap-[2px] rounded-[6px] px-1.5 transition-colors hover:bg-white/[0.08]"
             >
               {[0, 1, 2, 3].map((idx) => (
                 <span
                   key={idx}
-                  className={`h-2 w-[2.5px] rounded-full transition-colors ${
+                  className={`h-2.5 w-[2.5px] rounded-full transition-colors ${
                     idx <= zoomStepIndex ? 'bg-[#FB7185]' : 'bg-white/20'
                   }`}
                 />
@@ -1747,7 +1747,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               align="right"
               disabled={timelineZoom >= 8}
               onClick={onZoomIn}
-              className="flex h-[22px] w-[22px] items-center justify-center rounded-[5px] text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-25"
+              className="flex h-7 w-7 items-center justify-center rounded-[6px] text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-25"
             >
               <ZoomIn className="h-3.5 w-3.5" />
             </StudioTooltipBtn>

@@ -384,7 +384,7 @@ export async function filterImageBlob(
   }
 }
 
-export type WatermarkPosition = 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left' | 'center' | 'tile';
+export type WatermarkPosition = 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left' | 'center' | 'tile' | 'custom';
 
 export interface WatermarkOptions {
   text: string;
@@ -392,6 +392,8 @@ export interface WatermarkOptions {
   opacity: number; // 15..100
   scale: number; // 1..3
   color: string;
+  cx?: number; // 0..1 normalized center X when position === 'custom'
+  cy?: number; // 0..1 normalized center Y when position === 'custom'
 }
 
 export function renderWatermarkToCanvas(
@@ -429,6 +431,12 @@ export function renderWatermarkToCanvas(
         ctx.fillText(label, x, y);
       }
     }
+  } else if (opts.position === 'custom') {
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const nx = typeof opts.cx === 'number' && Number.isFinite(opts.cx) ? Math.min(0.95, Math.max(0.05, opts.cx)) : 0.5;
+    const ny = typeof opts.cy === 'number' && Number.isFinite(opts.cy) ? Math.min(0.95, Math.max(0.05, opts.cy)) : 0.5;
+    ctx.fillText(label, bitmap.width * nx, bitmap.height * ny);
   } else if (opts.position === 'center') {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -511,6 +519,7 @@ export function renderCollageToCanvas(
     targetWidth?: number;
     cellTransforms?: CollageCellTransform[];
     selectedCellIndex?: number | null;
+    accentColor?: string;
   }
 ): HTMLCanvasElement {
   const {cols, width, height, cellW, cellH, gap, radius} = computeCollageLayout(bitmaps, opts);
@@ -548,7 +557,7 @@ export function renderCollageToCanvas(
     if (opts.selectedCellIndex === index) {
       ctx.save();
       roundRectPath(ctx, x + 2, y + 2, cellW - 4, cellH - 4, Math.max(4, radius - 2));
-      ctx.strokeStyle = 'rgba(240, 120, 138, 0.95)';
+      ctx.strokeStyle = opts.accentColor || '#f0788a';
       ctx.lineWidth = Math.max(3, Math.round(width * 0.005));
       ctx.stroke();
       ctx.restore();

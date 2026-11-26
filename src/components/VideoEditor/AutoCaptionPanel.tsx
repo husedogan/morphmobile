@@ -102,7 +102,7 @@ export const AutoCaptionPanel: React.FC<AutoCaptionPanelProps> = ({
             value={language}
             disabled={isGenerating}
             onChange={(e) => onChangeLanguage(e.target.value)}
-            className="h-8 w-full rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2 text-[11px] font-bold text-[var(--ink)] focus:border-[#38BDF8] focus:outline-none disabled:opacity-50"
+            className="h-9 w-full rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2 text-[11px] font-bold text-[var(--ink)] focus:border-[#38BDF8] focus:outline-none disabled:opacity-50"
           >
             {CAPTION_SOURCE_LANGUAGES.map((opt) => (
               <option key={opt.code} value={opt.code}>
@@ -120,7 +120,7 @@ export const AutoCaptionPanel: React.FC<AutoCaptionPanelProps> = ({
             value={stylePreset}
             disabled={isGenerating}
             onChange={(e) => onChangeStylePreset(e.target.value as CaptionStylePresetId)}
-            className="h-8 w-full rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2 text-[11px] font-bold text-[var(--ink)] focus:border-[#38BDF8] focus:outline-none disabled:opacity-50"
+            className="h-9 w-full rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2 text-[11px] font-bold text-[var(--ink)] focus:border-[#38BDF8] focus:outline-none disabled:opacity-50"
           >
             <option value="classic">{tr('Klasik Bant', 'Classic Box')}</option>
             <option value="reels">{tr('Reels / Kalın', 'Reels / Bold')}</option>
@@ -137,7 +137,7 @@ export const AutoCaptionPanel: React.FC<AutoCaptionPanelProps> = ({
             value={density}
             disabled={isGenerating}
             onChange={(e) => onChangeDensity(e.target.value as CaptionDensityMode)}
-            className="h-8 w-full rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2 text-[11px] font-bold text-[var(--ink)] focus:border-[#38BDF8] focus:outline-none disabled:opacity-50"
+            className="h-9 w-full rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2 text-[11px] font-bold text-[var(--ink)] focus:border-[#38BDF8] focus:outline-none disabled:opacity-50"
           >
             <option value="standard">{tr('Standart', 'Standard')}</option>
             <option value="short">{tr('Kısa (Reels)', 'Short (Reels)')}</option>

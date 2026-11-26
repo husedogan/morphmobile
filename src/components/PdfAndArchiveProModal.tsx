@@ -27,9 +27,12 @@ import {
   Upload,
   Workflow,
   X,
+  ZoomIn,
 } from 'lucide-react';
 import {Lang} from '../data/i18n';
 import {PickedFile, formatBytes} from '../data/models';
+import {ensurePdfWorker} from '../engine/pdfOps';
+import {PdfCanvasViewer, PdfReaderModal} from './PdfCanvasViewer';
 import {
   MorphPipeline,
   PipelineStep,
@@ -55,6 +58,7 @@ interface PdfAndArchiveProModalProps {
 
 interface PdfRedactBox {
   id: string;
+  pageNum: number; // 1-based page number
   x: number; // normalized 0..1 top-left origin
   y: number;
   w: number;
@@ -120,6 +124,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
   const [pages, setPages] = useState<PdfPageCard[]>([]);
   const [addPageNumbers, setAddPageNumbers] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [readerPage, setReaderPage] = useState<number | null>(null);
 
   // ---- PDF Visual Sign, Multi-Redact, Watermark & Subject Metadata State ----
   const [signPageNum, setSignPageNum] = useState(1);
@@ -135,8 +140,12 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
     w: 0.34,
     aspect: 540 / 150,
   });
+  const [sigPageNum, setSigPageNum] = useState(1);
+  const [sigScope, setSigScope] = useState<'current' | 'all'>('current');
   const [sigDataUrl, setSigDataUrl] = useState<string | null>(null);
   const [wmEnabled, setWmEnabled] = useState(false);
+  const [wmScope, setWmScope] = useState<'current' | 'all'>('all');
+  const [wmPageNum, setWmPageNum] = useState(1);
   const [wmText, setWmText] = useState('MORPH');
   const [wmOverlay, setWmOverlay] = useState<{cx: number; cy: number; sizePct: number; opacity: number; color: string; diagonal: boolean}>({
     cx: 0.5,
@@ -170,8 +179,10 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
   const [zipSearch, setZipSearch] = useState('');
   const [zipPreview, setZipPreview] = useState<{
     name: string;
-    kind: 'text' | 'image' | 'audio' | 'video';
+    kind: 'text' | 'image' | 'audio' | 'video' | 'pdf' | 'binary';
     content: string;
+    blob?: Blob;
+    size?: number;
     isObjectUrl?: boolean;
   } | null>(null);
   const zipPreviewUrlRef = useRef<string | null>(null);
@@ -233,9 +244,15 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
     if (!open || !pdfFile) return;
     let cancelled = false;
     setPdfLoading(true);
+    setRedactions([]);
+    setSelectedRedactId(null);
+    setSignPageNum(1);
+    setSigPageNum(1);
+    setWmPageNum(1);
 
     (async () => {
       try {
+        ensurePdfWorker();
         const ab = await pdfFile.arrayBuffer();
         const task = pdfjsLib.getDocument({data: new Uint8Array(ab)});
         const doc = await task.promise;
@@ -295,6 +312,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
     setSignPageLoading(true);
     (async () => {
       try {
+        ensurePdfWorker();
         const ab = await pdfFile.arrayBuffer();
         const doc = await pdfjsLib.getDocument({data: new Uint8Array(ab)}).promise;
         const pageNum = Math.max(1, Math.min(doc.numPages, signPageNum));
@@ -409,81 +427,145 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
     setBusy(true);
     try {
       const doc = await PDFDocument.load(await pdfFile.arrayBuffer(), {ignoreEncryption: true});
-      const pIdx = Math.max(0, Math.min(doc.getPageCount() - 1, signPageNum - 1));
-      const pg = doc.getPage(pIdx);
-      const crop = pg.getCropBox();
-      const rotAngle = ((pg.getRotation().angle % 360) + 360) % 360;
+      const sigImg =
+        hasSigStroke && sigCanvasRef.current
+          ? await doc.embedPng(sigCanvasRef.current.toDataURL('image/png'))
+          : null;
+      const wmFont =
+        wmEnabled && wmText.trim() ? await doc.embedFont(StandardFonts.HelveticaBold) : null;
+      const pageCount = doc.getPageCount();
 
-      // Convert normalized [0..1] top-left visual box into pdf-lib bottom-left crop coordinates
-      const toPdfRect = (vx: number, vy: number, vw: number, vh: number) => {
-        if (rotAngle === 180) {
+      for (let p = 0; p < pageCount; p++) {
+        const pageNumber = p + 1;
+        const pg = doc.getPage(p);
+        const crop = pg.getCropBox();
+        const rotAngle = ((pg.getRotation().angle % 360) + 360) % 360;
+        const visW = rotAngle === 90 || rotAngle === 270 ? crop.height : crop.width;
+        const visH = rotAngle === 90 || rotAngle === 270 ? crop.width : crop.height;
+
+        // Convert normalized [0..1] top-left visual box into pdf-lib unrotated user-space crop rect
+        const toPdfRect = (vx: number, vy: number, vw: number, vh: number) => {
+          if (rotAngle === 90) {
+            return {
+              x: crop.x + vy * crop.width,
+              y: crop.y + vx * crop.height,
+              w: vh * crop.width,
+              h: vw * crop.height,
+            };
+          }
+          if (rotAngle === 180) {
+            return {
+              x: crop.x + (1 - vx - vw) * crop.width,
+              y: crop.y + vy * crop.height,
+              w: vw * crop.width,
+              h: vh * crop.height,
+            };
+          }
+          if (rotAngle === 270) {
+            return {
+              x: crop.x + (1 - vy - vh) * crop.width,
+              y: crop.y + (1 - vx - vw) * crop.height,
+              w: vh * crop.width,
+              h: vw * crop.height,
+            };
+          }
           return {
-            x: crop.x + (1 - vx - vw) * crop.width,
-            y: crop.y + vy * crop.height,
+            x: crop.x + vx * crop.width,
+            y: crop.y + crop.height - (vy + vh) * crop.height,
             w: vw * crop.width,
             h: vh * crop.height,
           };
-        }
-        return {
-          x: crop.x + vx * crop.width,
-          y: crop.y + crop.height - (vy + vh) * crop.height,
-          w: vw * crop.width,
-          h: vh * crop.height,
         };
-      };
 
-      // Draw all visual black redaction rectangles
-      for (const box of redactions) {
-        const r = toPdfRect(box.x, box.y, box.w, box.h);
-        pg.drawRectangle({
-          x: r.x,
-          y: r.y,
-          width: r.w,
-          height: r.h,
-          color: rgb(0, 0, 0),
-        });
-      }
+        // 1. Per-page visual black redaction rectangles
+        const boxesForPage = redactions.filter((b) => b.pageNum === pageNumber);
+        for (const box of boxesForPage) {
+          const r = toPdfRect(box.x, box.y, box.w, box.h);
+          pg.drawRectangle({
+            x: r.x,
+            y: r.y,
+            width: r.w,
+            height: r.h,
+            color: rgb(0, 0, 0),
+          });
+        }
 
-      // Embed drawn signature PNG at exact placed box
-      if (hasSigStroke && sigCanvasRef.current) {
-        const dataUrl = sigCanvasRef.current.toDataURL('image/png');
-        const sigImg = await doc.embedPng(dataUrl);
-        const pageAspect = signPageSize.w / Math.max(1, signPageSize.h);
-        const normH = (sigOverlay.w / Math.max(0.2, sigOverlay.aspect)) * pageAspect;
-        const clampedY = Math.min(Math.max(0, sigOverlay.y), Math.max(0, 1 - normH));
-        const r = toPdfRect(sigOverlay.x, clampedY, sigOverlay.w, normH);
-        pg.drawImage(sigImg, {
-          x: r.x,
-          y: r.y,
-          width: r.w,
-          height: r.h,
-        });
-      }
+        // 2. Signature PNG on target page(s) with rotation-aware drawImage
+        if (sigImg && (sigScope === 'all' || sigPageNum === pageNumber)) {
+          const pageAspect = visW / Math.max(1, visH);
+          const normH = (sigOverlay.w / Math.max(0.2, sigOverlay.aspect)) * pageAspect;
+          const clampedY = Math.min(Math.max(0, sigOverlay.y), Math.max(0, 1 - normH));
+          const r = toPdfRect(sigOverlay.x, clampedY, sigOverlay.w, normH);
+          if (rotAngle === 90) {
+            pg.drawImage(sigImg, {
+              x: r.x + r.w,
+              y: r.y,
+              width: r.h,
+              height: r.w,
+              rotate: degrees(90),
+            });
+          } else if (rotAngle === 180) {
+            pg.drawImage(sigImg, {
+              x: r.x + r.w,
+              y: r.y + r.h,
+              width: r.w,
+              height: r.h,
+              rotate: degrees(180),
+            });
+          } else if (rotAngle === 270) {
+            pg.drawImage(sigImg, {
+              x: r.x,
+              y: r.y + r.h,
+              width: r.h,
+              height: r.w,
+              rotate: degrees(270),
+            });
+          } else {
+            pg.drawImage(sigImg, {
+              x: r.x,
+              y: r.y,
+              width: r.w,
+              height: r.h,
+            });
+          }
+        }
 
-      // Draw optional text watermark at exact dragged position & size
-      if (wmEnabled && wmText.trim()) {
-        const font = await doc.embedFont(StandardFonts.HelveticaBold);
-        const visualWidth = rotAngle === 90 || rotAngle === 270 ? crop.height : crop.width;
-        const fontSize = Math.max(8, wmOverlay.sizePct * visualWidth);
-        const text = wmText.trim();
-        const textW = font.widthOfTextAtSize(text, fontSize);
-        const angleRad = wmOverlay.diagonal ? (30 * Math.PI) / 180 : 0;
-        const centerPdfX = crop.x + wmOverlay.cx * crop.width;
-        const centerPdfY = crop.y + (1 - wmOverlay.cy) * crop.height;
-        const halfW = textW / 2;
-        const halfH = fontSize * 0.35;
-        const x = centerPdfX - (halfW * Math.cos(angleRad) - halfH * Math.sin(angleRad));
-        const y = centerPdfY - (halfW * Math.sin(angleRad) + halfH * Math.cos(angleRad));
+        // 3. Optional text watermark on active page or all pages
+        if (wmFont && wmEnabled && wmText.trim() && (wmScope === 'all' || wmPageNum === pageNumber)) {
+          const fontSize = Math.max(8, wmOverlay.sizePct * visW);
+          const text = wmText.trim();
+          const textW = wmFont.widthOfTextAtSize(text, fontSize);
+          const totalDeg = (rotAngle + (wmOverlay.diagonal ? 30 : 0)) % 360;
+          const angleRad = (totalDeg * Math.PI) / 180;
 
-        pg.drawText(text, {
-          x,
-          y,
-          size: fontSize,
-          font,
-          color: hexToPdfRgb(wmOverlay.color),
-          opacity: Math.max(0.08, Math.min(1, wmOverlay.opacity)),
-          rotate: wmOverlay.diagonal ? degrees(30) : degrees(0),
-        });
+          let centerPdfX = crop.x + wmOverlay.cx * crop.width;
+          let centerPdfY = crop.y + (1 - wmOverlay.cy) * crop.height;
+          if (rotAngle === 90) {
+            centerPdfX = crop.x + wmOverlay.cy * crop.width;
+            centerPdfY = crop.y + wmOverlay.cx * crop.height;
+          } else if (rotAngle === 180) {
+            centerPdfX = crop.x + (1 - wmOverlay.cx) * crop.width;
+            centerPdfY = crop.y + wmOverlay.cy * crop.height;
+          } else if (rotAngle === 270) {
+            centerPdfX = crop.x + (1 - wmOverlay.cy) * crop.width;
+            centerPdfY = crop.y + (1 - wmOverlay.cx) * crop.height;
+          }
+
+          const halfW = textW / 2;
+          const halfH = fontSize * 0.35;
+          const x = centerPdfX - (halfW * Math.cos(angleRad) - halfH * Math.sin(angleRad));
+          const y = centerPdfY - (halfW * Math.sin(angleRad) + halfH * Math.cos(angleRad));
+
+          pg.drawText(text, {
+            x,
+            y,
+            size: fontSize,
+            font: wmFont,
+            color: hexToPdfRgb(wmOverlay.color),
+            opacity: Math.max(0.08, Math.min(1, wmOverlay.opacity)),
+            rotate: degrees(totalDeg),
+          });
+        }
       }
 
       // Write standard PDF Subject metadata if provided
@@ -551,6 +633,10 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
       const url = URL.createObjectURL(blob);
       zipPreviewUrlRef.current = url;
       setZipPreview({name: path, kind: 'image', content: url, isObjectUrl: true});
+    } else if (/\.pdf$/i.test(path)) {
+      const raw = await entry.async('arraybuffer');
+      const blob = new Blob([raw], {type: 'application/pdf'});
+      setZipPreview({name: path, kind: 'pdf', content: '', blob, size: blob.size});
     } else if (/\.(mp3|wav|ogg|m4a|aac|flac|opus)$/i.test(path)) {
       const raw = await entry.async('arraybuffer');
       const ext = path.split('.').pop()?.toLowerCase() ?? 'mp3';
@@ -565,9 +651,24 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
       const url = URL.createObjectURL(new Blob([raw], {type: mime}));
       zipPreviewUrlRef.current = url;
       setZipPreview({name: path, kind: 'video', content: url, isObjectUrl: true});
+    } else if (/\.(apk|zip|rar|7z|gz|tar|exe|dll|so|bin|wasm|class|dex|ttf|otf|woff|woff2|docx|xlsx|pptx|odt|ods|odp|morph)$/i.test(path)) {
+      const blob = await entry.async('blob');
+      setZipPreview({name: path, kind: 'binary', content: '', blob, size: blob.size});
     } else {
-      const text = await entry.async('string');
-      setZipPreview({name: path, kind: 'text', content: text.slice(0, 12000)});
+      const bytes = await entry.async('uint8array');
+      // Guard against non-UTF8 / binary blobs masquerading with unknown extension
+      let nullCount = 0;
+      const sampleLen = Math.min(bytes.length, 512);
+      for (let i = 0; i < sampleLen; i++) {
+        if (bytes[i] === 0) nullCount++;
+      }
+      if (nullCount > 2) {
+        const blob = new Blob([new Uint8Array(bytes)]);
+        setZipPreview({name: path, kind: 'binary', content: '', blob, size: blob.size});
+      } else {
+        const text = new TextDecoder('utf-8', {fatal: false}).decode(bytes.slice(0, 24000));
+        setZipPreview({name: path, kind: 'text', content: text.slice(0, 12000)});
+      }
     }
   };
 
@@ -676,7 +777,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-3.5">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)]/15 text-[var(--accent-text)]">
               <FileText className="h-5 w-5" />
             </div>
             <div className="min-w-0">
@@ -741,18 +842,30 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                   <Upload className="h-3.5 w-3.5 shrink-0 text-[var(--accent-text)]" />
                   <span className="truncate">{pdfFile ? pdfFile.name : isTr ? 'PDF Dosyası Seç' : 'Pick PDF File'}</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setAddPageNumbers((v) => !v)}
-                  className={`flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold ${
-                    addPageNumbers
-                      ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
-                      : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
-                  }`}
-                >
-                  <Check className={`h-3.5 w-3.5 ${addPageNumbers ? 'opacity-100' : 'opacity-25'}`} />
-                  <span>{isTr ? 'Sayfa Numarası Ekle' : 'Add Page Numbers'}</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {pdfFile && (
+                    <button
+                      type="button"
+                      onClick={() => setReaderPage(1)}
+                      className="flex h-9 items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-xs font-bold text-[var(--ink)] hover:border-[var(--accent)]"
+                    >
+                      <Eye className="h-3.5 w-3.5 text-[var(--accent-text)]" />
+                      <span>{isTr ? 'Tam Görüntüle' : 'Full View'}</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setAddPageNumbers((v) => !v)}
+                    className={`flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold ${
+                      addPageNumbers
+                        ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
+                        : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
+                    }`}
+                  >
+                    <Check className={`h-3.5 w-3.5 ${addPageNumbers ? 'opacity-100' : 'opacity-25'}`} />
+                    <span>{isTr ? 'Sayfa Numarası' : 'Page Numbers'}</span>
+                  </button>
+                </div>
               </div>
 
               {pdfLoading && (
@@ -768,7 +881,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                   onClick={() => pdfInputRef.current?.click()}
                   className="flex w-full flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-[var(--line)] bg-[var(--inset)] py-12 text-center hover:border-[var(--accent)]"
                 >
-                  <FileText className="h-8 w-8 text-amber-400" />
+                  <FileText className="h-8 w-8 text-[var(--accent-text)]" />
                   <p className="text-sm font-bold text-[var(--ink)]">
                     {isTr ? 'Sayfaları Sıralamak / Döndürmek İçin PDF Seç' : 'Pick a PDF to Reorder / Rotate / Delete Pages'}
                   </p>
@@ -783,7 +896,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                         key={`${p.origIndex}_${idx}`}
                         className={`flex flex-col overflow-hidden rounded-2xl border p-2 transition-all ${
                           p.deleted
-                            ? 'border-red-500/40 bg-red-500/5 opacity-45'
+                            ? 'border-[var(--danger)]/45 bg-[var(--danger)]/10 opacity-45'
                             : 'border-[var(--line)] bg-[var(--inset)]'
                         }`}
                       >
@@ -801,6 +914,15 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                           <span className="absolute left-1.5 top-1.5 rounded-md bg-black/75 px-1.5 py-0.5 font-mono text-[10px] font-bold text-white">
                             {idx + 1}
                           </span>
+                          <button
+                            type="button"
+                            onClick={() => setReaderPage(p.origIndex + 1)}
+                            aria-label={isTr ? `Sayfa ${p.origIndex + 1} büyüt` : `Zoom page ${p.origIndex + 1}`}
+                            title={isTr ? 'Sayfayı Büyüt / Oku' : 'Read / Zoom Page'}
+                            className="absolute right-1.5 top-1.5 flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)]/92 text-[var(--ink)] shadow-md hover:border-[var(--accent)] active:scale-95"
+                          >
+                            <ZoomIn className="h-4 w-4" />
+                          </button>
                         </div>
                         <div className="mt-2 flex items-center justify-between gap-1">
                           <button
@@ -839,8 +961,8 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                             }
                             className={`flex h-9 min-w-0 flex-1 items-center justify-center rounded-xl border ${
                               p.deleted
-                                ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400'
-                                : 'border-red-500/30 bg-red-500/10 text-red-400'
+                                ? 'border-[var(--accent)]/40 bg-[var(--accent)]/15 text-[var(--accent-text)]'
+                                : 'border-[var(--danger)]/35 bg-[var(--danger)]/10 text-[var(--danger)]'
                             }`}
                             title={p.deleted ? (isTr ? 'Geri Al' : 'Restore') : isTr ? 'Sil' : 'Delete'}
                             aria-label={p.deleted ? (isTr ? 'Geri Al' : 'Restore') : isTr ? 'Sil' : 'Delete'}
@@ -917,45 +1039,65 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                   >
                     <ArrowRight className="h-4 w-4" />
                   </button>
+                  {pdfFile && (
+                    <button
+                      type="button"
+                      onClick={() => setReaderPage(signPageNum)}
+                      aria-label={isTr ? 'Tam ekranda oku' : 'Full page reader'}
+                      title={isTr ? 'Tam Görüntüle' : 'Full View'}
+                      className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] hover:border-[var(--accent)]"
+                    >
+                      <ZoomIn className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
 
               {/* Active Tool Mode Switcher for Interactive Canvas */}
-              <div className="grid grid-cols-3 gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-1.5">
-                {(
-                  [
-                    {id: 'redact' as const, icon: ShieldAlert, tr: `Sansür (${redactions.length})`, en: `Redact (${redactions.length})`},
-                    {id: 'signature' as const, icon: PenTool, tr: 'İmza Yerleştir', en: 'Place Sign'},
-                    {id: 'watermark' as const, icon: Type, tr: 'Filigran', en: 'Watermark'},
-                  ] as const
-                ).map((modeBtn) => {
-                  const Icon = modeBtn.icon;
-                  const active = signToolMode === modeBtn.id;
-                  return (
-                    <button
-                      key={modeBtn.id}
-                      type="button"
-                      onClick={() => setSignToolMode(modeBtn.id)}
-                      className={`flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl px-2 text-[11px] font-bold ${
-                        active ? 'morph-accent-btn shadow-sm' : 'text-[var(--muted)] hover:text-[var(--ink)]'
-                      }`}
-                    >
-                      <Icon className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{isTr ? modeBtn.tr : modeBtn.en}</span>
-                    </button>
-                  );
-                })}
-              </div>
+              {(() => {
+                const pageRedactions = redactions.filter((r) => r.pageNum === signPageNum);
+                const redactBadge =
+                  redactions.length > pageRedactions.length
+                    ? `${pageRedactions.length}/${redactions.length}`
+                    : String(pageRedactions.length);
+                return (
+                  <div className="grid grid-cols-3 gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-1.5">
+                    {(
+                      [
+                        {id: 'redact' as const, icon: ShieldAlert, tr: `Sansür (${redactBadge})`, en: `Redact (${redactBadge})`},
+                        {id: 'signature' as const, icon: PenTool, tr: 'İmza Yerleştir', en: 'Place Sign'},
+                        {id: 'watermark' as const, icon: Type, tr: 'Filigran', en: 'Watermark'},
+                      ] as const
+                    ).map((modeBtn) => {
+                      const Icon = modeBtn.icon;
+                      const active = signToolMode === modeBtn.id;
+                      return (
+                        <button
+                          key={modeBtn.id}
+                          type="button"
+                          onClick={() => setSignToolMode(modeBtn.id)}
+                          className={`flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl px-2 text-[11px] font-bold ${
+                            active ? 'morph-accent-btn shadow-sm' : 'text-[var(--muted)] hover:text-[var(--ink)]'
+                          }`}
+                        >
+                          <Icon className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{isTr ? modeBtn.tr : modeBtn.en}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
 
               {/* Interactive Visual PDF Page Stage */}
               {pdfFile ? (
-                <div className="rounded-2xl border border-[var(--line)] bg-black/40 p-2.5 space-y-2">
+                <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-2.5 space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-2 px-1">
                     <p className="text-[11px] text-[var(--muted)]">
                       {signToolMode === 'redact'
                         ? isTr
-                          ? 'Sayfa üzerinde parmakla sürükleyip siyah sansür kutusu çiz, taşı veya boyutlandır.'
-                          : 'Drag on the page to draw, move, or resize black redaction boxes.'
+                          ? `Sayfa ${signPageNum} üzerinde parmakla sürükleyip siyah sansür kutusu çiz, taşı veya boyutlandır.`
+                          : `Drag on page ${signPageNum} to draw, move, or resize black redaction boxes.`
                         : signToolMode === 'signature'
                           ? isTr
                             ? 'İmzayı sürükleyerek taşı; sağ alt tutamaçla ölçeklendir.'
@@ -964,7 +1106,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                             ? 'Filigranı sayfa üzerinde sürükle ve köşeden boyutlandır.'
                             : 'Drag watermark on page and resize from corner.'}
                     </p>
-                    {redactions.length > 0 && (
+                    {redactions.some((r) => r.pageNum === signPageNum) && (
                       <div className="flex items-center gap-1.5">
                         {selectedRedactId && (
                           <button
@@ -973,7 +1115,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                               setRedactions((prev) => prev.filter((r) => r.id !== selectedRedactId));
                               setSelectedRedactId(null);
                             }}
-                            className="flex min-h-[34px] items-center gap-1 rounded-lg border border-rose-500/45 bg-rose-500/15 px-2.5 text-[11px] font-bold text-rose-400"
+                            className="flex min-h-[36px] items-center gap-1 rounded-lg border border-[var(--danger)]/45 bg-[var(--danger)]/15 px-2.5 text-[11px] font-bold text-[var(--danger)]"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                             <span>{isTr ? 'Seçiliyi Sil' : 'Delete Box'}</span>
@@ -982,13 +1124,13 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            setRedactions([]);
+                            setRedactions((prev) => prev.filter((r) => r.pageNum !== signPageNum));
                             setSelectedRedactId(null);
                           }}
-                          className="flex min-h-[34px] items-center gap-1 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2.5 text-[11px] font-bold text-[var(--muted)] hover:text-[var(--ink)]"
+                          className="flex min-h-[36px] items-center gap-1 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2.5 text-[11px] font-bold text-[var(--muted)] hover:text-[var(--ink)]"
                         >
                           <Undo2 className="h-3.5 w-3.5" />
-                          <span>{isTr ? 'Temizle' : 'Clear'}</span>
+                          <span>{isTr ? 'Sayfayı Temizle' : 'Clear Page'}</span>
                         </button>
                       </div>
                     )}
@@ -1083,6 +1225,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                         if (w >= 0.025 && h >= 0.015) {
                           const newBox: PdfRedactBox = {
                             id: `red-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                            pageNum: signPageNum,
                             x,
                             y,
                             w,
@@ -1111,7 +1254,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                     {/* Draft Redaction Preview */}
                     {draftRedact && (
                       <div
-                        className="pointer-events-none absolute border-2 border-dashed border-rose-400 bg-black/85"
+                        className="pointer-events-none absolute border-2 border-dashed border-[var(--accent)] bg-black/85"
                         style={{
                           left: `${Math.min(draftRedact.x0, draftRedact.x1) * 100}%`,
                           top: `${Math.min(draftRedact.y0, draftRedact.y1) * 100}%`,
@@ -1121,8 +1264,10 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                       />
                     )}
 
-                    {/* Existing Multi-Box Redactions */}
-                    {redactions.map((box) => {
+                    {/* Existing Multi-Box Redactions for Active Page */}
+                    {redactions
+                      .filter((box) => box.pageNum === signPageNum)
+                      .map((box) => {
                       const isSel = selectedRedactId === box.id;
                       return (
                         <div
@@ -1167,7 +1312,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                                   setSelectedRedactId(null);
                                 }}
                                 aria-label={isTr ? 'Sil' : 'Delete'}
-                                className="absolute -right-3 -top-3 flex h-9 w-9 items-center justify-center rounded-full bg-rose-500 text-white shadow-md"
+                                className="absolute -right-3 -top-3 flex h-9 w-9 items-center justify-center rounded-full bg-[var(--danger)] text-white shadow-md"
                               >
                                 <X className="h-4 w-4" />
                               </button>
@@ -1189,7 +1334,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                                   };
                                   stage.setPointerCapture(e.pointerId);
                                 }}
-                                className="absolute -bottom-3 -right-3 flex h-9 w-9 cursor-nwse-resize items-center justify-center rounded-full border-2 border-white bg-[var(--accent)] text-white shadow-md"
+                                className="absolute -bottom-3 -right-3 flex h-9 w-9 cursor-nwse-resize items-center justify-center rounded-full border-2 border-white bg-[var(--accent)] text-[var(--accent-ink)] shadow-md"
                               >
                                 <Move className="h-3.5 w-3.5" />
                               </div>
@@ -1200,11 +1345,12 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                     })}
 
                     {/* Live Draggable & Scalable Signature Overlay */}
-                    {hasSigStroke && sigDataUrl && (
+                    {hasSigStroke && sigDataUrl && (sigScope === 'all' || sigPageNum === signPageNum) && (
                       <div
                         onPointerDown={(e) => {
                           e.stopPropagation();
                           setSignToolMode('signature');
+                          setSigPageNum(signPageNum);
                           const stage = signStageRef.current;
                           if (!stage) return;
                           const rect = stage.getBoundingClientRect();
@@ -1226,8 +1372,8 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                         }}
                         className={`absolute cursor-move rounded-lg p-0.5 ${
                           signToolMode === 'signature'
-                            ? 'border-2 border-dashed border-[var(--accent)] bg-sky-500/10'
-                            : 'border border-sky-400/50'
+                            ? 'border-2 border-dashed border-[var(--accent)] bg-[var(--accent)]/10'
+                            : 'border border-[var(--accent)]/45'
                         }`}
                       >
                         <img src={sigDataUrl} alt="Signature" className="pointer-events-none w-full h-auto" />
@@ -1246,7 +1392,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                               };
                               stage.setPointerCapture(e.pointerId);
                             }}
-                            className="absolute -bottom-3 -right-3 flex h-9 w-9 cursor-nwse-resize items-center justify-center rounded-full border-2 border-white bg-[var(--accent)] text-white shadow-md"
+                            className="absolute -bottom-3 -right-3 flex h-9 w-9 cursor-nwse-resize items-center justify-center rounded-full border-2 border-white bg-[var(--accent)] text-[var(--accent-ink)] shadow-md"
                           >
                             <Move className="h-3.5 w-3.5" />
                           </div>
@@ -1255,11 +1401,12 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                     )}
 
                     {/* Live Draggable & Scalable Text Watermark Overlay */}
-                    {wmEnabled && wmText.trim() && (
+                    {wmEnabled && wmText.trim() && (wmScope === 'all' || wmPageNum === signPageNum) && (
                       <div
                         onPointerDown={(e) => {
                           e.stopPropagation();
                           setSignToolMode('watermark');
+                          setWmPageNum(signPageNum);
                           const stage = signStageRef.current;
                           if (!stage) return;
                           const rect = stage.getBoundingClientRect();
@@ -1302,7 +1449,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                               };
                               stage.setPointerCapture(e.pointerId);
                             }}
-                            className="absolute -bottom-3 -right-3 flex h-9 w-9 cursor-nwse-resize items-center justify-center rounded-full border-2 border-white bg-[var(--accent)] text-white shadow-md"
+                            className="absolute -bottom-3 -right-3 flex h-9 w-9 cursor-nwse-resize items-center justify-center rounded-full border-2 border-white bg-[var(--accent)] text-[var(--accent-ink)] shadow-md"
                             style={{opacity: 1}}
                           >
                             <Move className="h-3.5 w-3.5" />
@@ -1318,7 +1465,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                   onClick={() => pdfInputRef.current?.click()}
                   className="flex w-full flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-[var(--line)] bg-[var(--inset)] py-10 text-center hover:border-[var(--accent)]"
                 >
-                  <FileText className="h-8 w-8 text-amber-400" />
+                  <FileText className="h-8 w-8 text-[var(--accent-text)]" />
                   <p className="text-sm font-bold text-[var(--ink)]">
                     {isTr ? 'Sayfada Sansür / İmza İçin PDF Seç' : 'Pick a PDF to Sign / Redact Visually'}
                   </p>
@@ -1327,23 +1474,44 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
 
               {/* Signature Pad */}
               <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 space-y-2.5">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="flex items-center gap-1.5 text-xs font-bold text-[var(--ink)]">
                     <PenTool className="h-3.5 w-3.5 text-[var(--accent-text)]" />
                     {isTr ? 'İmza Çiz (Otomatik Sayfaya Yerleşir)' : 'Draw Signature (Auto-Placed on Page)'}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const c = sigCanvasRef.current;
-                      if (c) c.getContext('2d')?.clearRect(0, 0, c.width, c.height);
-                      setHasSigStroke(false);
-                      setSigDataUrl(null);
-                    }}
-                    className="min-h-[32px] px-2 text-[11px] font-bold text-[var(--danger)] hover:underline"
-                  >
-                    {isTr ? 'Temizle' : 'Clear'}
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSigScope((prev) => {
+                          const next = prev === 'current' ? 'all' : 'current';
+                          if (next === 'current') setSigPageNum(signPageNum);
+                          return next;
+                        });
+                      }}
+                      className="min-h-[36px] rounded-xl border border-[var(--line)] bg-[var(--surface)] px-2.5 text-[11px] font-bold text-[var(--ink)] hover:border-[var(--accent)]"
+                    >
+                      {sigScope === 'all'
+                        ? isTr
+                          ? 'Tüm Sayfalar'
+                          : 'All Pages'
+                        : isTr
+                          ? `Sayfa ${sigPageNum}`
+                          : `Page ${sigPageNum}`}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const c = sigCanvasRef.current;
+                        if (c) c.getContext('2d')?.clearRect(0, 0, c.width, c.height);
+                        setHasSigStroke(false);
+                        setSigDataUrl(null);
+                      }}
+                      className="min-h-[36px] rounded-xl px-2.5 text-[11px] font-bold text-[var(--danger)] hover:underline"
+                    >
+                      {isTr ? 'Temizle' : 'Clear'}
+                    </button>
+                  </div>
                 </div>
                 <canvas
                   ref={sigCanvasRef}
@@ -1352,6 +1520,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                   onPointerDown={(e) => {
                     sigDrawingRef.current = true;
                     setHasSigStroke(true);
+                    setSigPageNum(signPageNum);
                     const ctx = e.currentTarget.getContext('2d');
                     if (!ctx) return;
                     const p = getSigPos(e);
@@ -1374,6 +1543,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                     sigDrawingRef.current = false;
                     if (sigCanvasRef.current) {
                       setSigDataUrl(sigCanvasRef.current.toDataURL('image/png'));
+                      setSigPageNum(signPageNum);
                       setSignToolMode('signature');
                     }
                   }}
@@ -1383,23 +1553,49 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
 
               {/* Optional Text Watermark Controls */}
               <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 space-y-2.5">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="flex items-center gap-1.5 text-xs font-bold text-[var(--ink)]">
                     <Type className="h-3.5 w-3.5 text-[var(--accent-text)]" />
                     {isTr ? 'Metin Filigranı (Sayfada Sürükle)' : 'Text Watermark (Drag on Page)'}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setWmEnabled((v) => !v);
-                      if (!wmEnabled) setSignToolMode('watermark');
-                    }}
-                    className={`min-h-[34px] rounded-xl px-3 text-[11px] font-bold ${
-                      wmEnabled ? 'morph-accent-btn' : 'border border-[var(--line)] text-[var(--muted)]'
-                    }`}
-                  >
-                    {wmEnabled ? (isTr ? 'Aktif' : 'ON') : isTr ? 'Ekle' : 'Enable'}
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    {wmEnabled && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setWmScope((prev) => {
+                            const next = prev === 'all' ? 'current' : 'all';
+                            if (next === 'current') setWmPageNum(signPageNum);
+                            return next;
+                          });
+                        }}
+                        className="min-h-[36px] rounded-xl border border-[var(--line)] bg-[var(--surface)] px-2.5 text-[11px] font-bold text-[var(--ink)] hover:border-[var(--accent)]"
+                      >
+                        {wmScope === 'all'
+                          ? isTr
+                            ? 'Tüm Sayfalar'
+                            : 'All Pages'
+                          : isTr
+                            ? `Sayfa ${wmPageNum}`
+                            : `Page ${wmPageNum}`}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWmEnabled((v) => !v);
+                        if (!wmEnabled) {
+                          setWmPageNum(signPageNum);
+                          setSignToolMode('watermark');
+                        }
+                      }}
+                      className={`min-h-[36px] rounded-xl px-3 text-[11px] font-bold ${
+                        wmEnabled ? 'morph-accent-btn' : 'border border-[var(--line)] text-[var(--muted)]'
+                      }`}
+                    >
+                      {wmEnabled ? (isTr ? 'Aktif' : 'ON') : isTr ? 'Ekle' : 'Enable'}
+                    </button>
+                  </div>
                 </div>
                 {wmEnabled && (
                   <div className="space-y-2.5">
@@ -1430,7 +1626,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                             key={col}
                             type="button"
                             onClick={() => setWmOverlay((p) => ({...p, color: col}))}
-                            className={`h-8 w-8 rounded-full border-2 ${
+                            className={`h-9 w-9 rounded-full border-2 ${
                               wmOverlay.color === col ? 'border-[var(--accent)] scale-110' : 'border-[var(--line)]'
                             }`}
                             style={{backgroundColor: col}}
@@ -1444,7 +1640,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                             key={op}
                             type="button"
                             onClick={() => setWmOverlay((p) => ({...p, opacity: op}))}
-                            className={`min-h-[34px] rounded-lg border px-2 text-[11px] font-bold ${
+                            className={`min-h-[36px] rounded-lg border px-2.5 text-[11px] font-bold ${
                               Math.abs(wmOverlay.opacity - op) < 0.05
                                 ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
                                 : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]'
@@ -1500,7 +1696,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                   onClick={() => zipInputRef.current?.click()}
                   className="flex h-9 min-w-0 max-w-full items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-bold text-[var(--ink)]"
                 >
-                  <Archive className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+                  <Archive className="h-3.5 w-3.5 shrink-0 text-[var(--accent-text)]" />
                   <span className="truncate">{zipFile ? zipFile.name : isTr ? 'ZIP Arşivi Aç' : 'Open ZIP Archive'}</span>
                 </button>
                 <button
@@ -1516,7 +1712,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                     type="button"
                     disabled={busy}
                     onClick={handleSaveModifiedZip}
-                    className="ml-auto flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-emerald-500/45 bg-emerald-500/12 px-3 text-xs font-bold text-emerald-400"
+                    className="morph-accent-btn ml-auto flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-bold shadow-xs"
                   >
                     <Download className="h-3.5 w-3.5" />
                     <span>{isTr ? 'Güncel ZIP’i Kaydet' : 'Save Updated ZIP'}</span>
@@ -1534,14 +1730,14 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                         value={zipSearch}
                         onChange={(e) => setZipSearch(e.target.value)}
                         placeholder={isTr ? 'Arşiv içinde dosya ara...' : 'Search inside archive...'}
-                        className="w-full rounded-xl border border-[var(--line)] bg-[var(--inset)] py-2 pl-8 pr-3 text-xs text-[var(--ink)]"
+                        className="min-h-[40px] w-full rounded-xl border border-[var(--line)] bg-[var(--inset)] py-2 pl-8 pr-3 text-xs text-[var(--ink)]"
                       />
                     </div>
                     <button
                       type="button"
                       disabled={busy || !zipEntries.some((e) => e.selected)}
                       onClick={handleExtractSelectedZip}
-                      className="morph-accent-btn min-h-9 shrink-0 whitespace-nowrap rounded-xl px-3.5 py-1.5 text-xs font-bold disabled:opacity-40"
+                      className="morph-accent-btn min-h-[40px] shrink-0 whitespace-nowrap rounded-xl px-3.5 py-1.5 text-xs font-bold disabled:opacity-40"
                     >
                       {isTr
                         ? `Seçilenleri Çıkar (${zipEntries.filter((e) => e.selected).length})`
@@ -1551,7 +1747,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
 
                   <div className="max-h-64 divide-y divide-[var(--line)] overflow-y-auto rounded-2xl border border-[var(--line)] bg-[var(--inset)]">
                     {filteredZipEntries.map((row) => (
-                      <div key={row.path} className="flex items-center gap-2.5 px-3 py-2">
+                      <div key={row.path} className="flex items-center gap-2 px-2.5 py-2">
                         <button
                           type="button"
                           onClick={() =>
@@ -1559,7 +1755,8 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                               prev.map((r) => (r.path === row.path ? {...r, selected: !r.selected} : r))
                             )
                           }
-                          className="text-[var(--accent-text)]"
+                          aria-label={row.path}
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[var(--accent-text)] hover:bg-[var(--surface)]"
                         >
                           {row.selected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4 text-[var(--muted)]" />}
                         </button>
@@ -1602,13 +1799,21 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                           type="button"
                           onClick={clearZipPreview}
                           aria-label={isTr ? 'Önizlemeyi kapat' : 'Close preview'}
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] hover:text-[var(--ink)]"
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)]"
                         >
                           <X className="h-4 w-4" />
                         </button>
                       </div>
                       {zipPreview.kind === 'image' ? (
-                        <img src={zipPreview.content} alt={zipPreview.name} className="max-h-48 rounded-xl object-contain" />
+                        <img src={zipPreview.content} alt={zipPreview.name} className="max-h-56 w-full rounded-xl object-contain" />
+                      ) : zipPreview.kind === 'pdf' && zipPreview.blob ? (
+                        <div className="h-80 overflow-hidden rounded-xl border border-[var(--line)]">
+                          <PdfCanvasViewer
+                            file={zipPreview.blob}
+                            fileName={zipPreview.name}
+                            lang={lang}
+                          />
+                        </div>
                       ) : zipPreview.kind === 'audio' ? (
                         <audio src={zipPreview.content} controls className="w-full" />
                       ) : zipPreview.kind === 'video' ? (
@@ -1618,8 +1823,36 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                           playsInline
                           className="max-h-56 w-full rounded-xl bg-black"
                         />
+                      ) : zipPreview.kind === 'binary' ? (
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-[var(--ink)]">
+                              {isTr ? 'İkili (Binary) Dosya' : 'Binary File'}
+                            </p>
+                            <p className="font-mono-num mt-0.5 text-[11px] text-[var(--muted)]">
+                              {(zipPreview.name.split('.').pop() || 'BIN').toUpperCase()} · {formatBytes(zipPreview.size ?? 0)}
+                            </p>
+                          </div>
+                          {zipPreview.blob && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!zipPreview.blob) return;
+                                onExportBlobs(
+                                  [{blob: zipPreview.blob, name: zipPreview.name.split('/').pop() || zipPreview.name}],
+                                  isTr ? 'Akıllı Arşiv Gezgini' : 'Archive Explorer'
+                                );
+                                onClose();
+                              }}
+                              className="morph-accent-btn flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-bold"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                              <span>{isTr ? 'Bu Dosyayı Çıkar' : 'Extract File'}</span>
+                            </button>
+                          )}
+                        </div>
                       ) : (
-                        <pre className="max-h-40 overflow-auto rounded-xl bg-black/30 p-2.5 font-mono text-[11px] text-slate-200 whitespace-pre-wrap">
+                        <pre className="max-h-44 overflow-auto rounded-xl border border-[var(--line)] bg-[var(--surface)] p-2.5 font-mono text-[11px] text-[var(--ink)] whitespace-pre-wrap">
                           {zipPreview.content}
                         </pre>
                       )}
@@ -1720,7 +1953,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                           {id: `ns_${Date.now()}`, type: 'watermark_text', param: 'Morph'},
                         ])
                       }
-                      className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5 text-xs font-bold text-[var(--ink)]"
+                      className="min-h-[36px] rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-xs font-bold text-[var(--ink)]"
                     >
                       + {isTr ? 'Adım Ekle' : 'Add Step'}
                     </button>
@@ -1744,7 +1977,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                         setNewPipeName('');
                         setCreatingPipe(false);
                       }}
-                      className="morph-accent-btn ml-auto rounded-xl px-4 py-1.5 text-xs font-bold"
+                      className="morph-accent-btn ml-auto min-h-[36px] rounded-xl px-4 py-1.5 text-xs font-bold"
                     >
                       {isTr ? 'Tarifi Kaydet' : 'Save Recipe'}
                     </button>
@@ -1791,7 +2024,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
                           savePipelines(next);
                         }}
                         aria-label={isTr ? 'Tarifi sil' : 'Delete recipe'}
-                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-red-400"
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--danger)]"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -1803,6 +2036,15 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
           )}
         </div>
       </div>
+
+      <PdfReaderModal
+        open={readerPage !== null}
+        file={pdfFile}
+        fileName={pdfFile?.name ?? 'document.pdf'}
+        lang={lang}
+        initialPage={readerPage ?? 1}
+        onClose={() => setReaderPage(null)}
+      />
     </div>
   );
 };

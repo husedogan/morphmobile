@@ -87,6 +87,8 @@ export type ToolOptions =
       opacity: number;
       scale: number;
       color: string;
+      cx?: number;
+      cy?: number;
       format: string;
       quality: number;
     }

@@ -141,9 +141,9 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
             <button
               type="button"
               onClick={onReset}
-              className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold text-[var(--muted)] hover:bg-white/[0.06] hover:text-rose-400"
+              className="flex min-h-[36px] items-center gap-1 rounded-lg px-2.5 text-[11px] font-bold text-[var(--muted)] hover:bg-white/[0.06] hover:text-rose-400"
             >
-              <RotateCcw className="h-3 w-3" />
+              <RotateCcw className="h-3.5 w-3.5" />
               <span>{tr('Kaldır', 'Clear')}</span>
             </button>
           )}
@@ -194,7 +194,7 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
           <button
             type="button"
             onClick={applyMorphLogo}
-            className="flex items-center gap-1.5 rounded-lg border border-[#FB923C]/35 bg-[#FB923C]/10 px-2.5 py-1 text-[10px] font-bold text-[#FB923C] transition-colors hover:bg-[#FB923C]/20"
+            className="flex min-h-[36px] items-center gap-1.5 rounded-lg border border-[#FB923C]/35 bg-[#FB923C]/10 px-2.5 py-1 text-[11px] font-bold text-[#FB923C] transition-colors hover:bg-[#FB923C]/20"
           >
             <img src="/morph-mark.png" alt="morph" className="h-3.5 w-3.5 object-contain" />
             <span>{tr('Morph Logosu', 'Morph Mark')}</span>
@@ -203,22 +203,22 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
           <button
             type="button"
             onClick={() => logoInputRef.current?.click()}
-            className="flex items-center gap-1 rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2.5 py-1 text-[10px] font-bold text-[var(--ink)] transition-colors hover:border-[#FB923C]"
+            className="flex min-h-[36px] items-center gap-1 rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2.5 py-1 text-[11px] font-bold text-[var(--ink)] transition-colors hover:border-[#FB923C]"
           >
-            <Upload className="h-3 w-3 text-[#38BDF8]" />
+            <Upload className="h-3.5 w-3.5 text-[#38BDF8]" />
             <span>{tr('Logo Yükle (PNG)', 'Upload Logo')}</span>
           </button>
 
           <button
             type="button"
             onClick={applyDiagonalProtectionPreset}
-            className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[10px] font-bold transition-colors ${
+            className={`flex min-h-[36px] items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-colors ${
               watermark.tiled && isEnabled
                 ? 'border-[#34D399] bg-[#34D399]/18 text-[#34D399]'
                 : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
             }`}
           >
-            <Grid3X3 className="h-3 w-3" />
+            <Grid3X3 className="h-3.5 w-3.5" />
             <span>{tr('Çapraz Korumalı', 'Diagonal Tile')}</span>
           </button>
         </div>
@@ -272,7 +272,7 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
                   <button
                     type="button"
                     onClick={() => onChange({bgEnabled: !watermark.bgEnabled})}
-                    className={`rounded-lg border px-2.5 py-1 text-[10px] font-bold transition-colors ${
+                    className={`min-h-[36px] rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-colors ${
                       watermark.bgEnabled
                         ? 'border-[#FB923C] bg-[#FB923C]/18 text-[#FB923C]'
                         : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
@@ -283,7 +283,7 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
                   <button
                     type="button"
                     onClick={() => onChange({shadowEnabled: !watermark.shadowEnabled})}
-                    className={`rounded-lg border px-2.5 py-1 text-[10px] font-bold transition-colors ${
+                    className={`min-h-[36px] rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-colors ${
                       watermark.shadowEnabled
                         ? 'border-[#FB923C] bg-[#FB923C]/18 text-[#FB923C]'
                         : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
@@ -338,13 +338,13 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
                   <button
                     type="button"
                     onClick={onToggleFreePositionMode}
-                    className={`flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-bold transition-colors ${
+                    className={`flex min-h-[36px] items-center gap-1 rounded-lg border px-2.5 text-[11px] font-bold transition-colors ${
                       freePositionMode
                         ? 'border-[#38BDF8] bg-[#38BDF8]/18 text-[#38BDF8]'
                         : 'border-white/10 bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
                     }`}
                   >
-                    <Move className="h-3 w-3" />
+                    <Move className="h-3.5 w-3.5" />
                     <span>
                       {freePositionMode
                         ? tr('Serbest: Açık', 'Free: ON')
@@ -400,7 +400,7 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
                     rotation: !watermark.tiled && watermark.rotation === 0 ? -25 : watermark.rotation,
                   })
                 }
-                className={`flex w-full items-center justify-center gap-1.5 rounded-lg border py-1.5 text-[11px] font-bold transition-colors ${
+                className={`flex min-h-[38px] w-full items-center justify-center gap-1.5 rounded-lg border py-1.5 text-[11px] font-bold transition-colors ${
                   watermark.tiled
                     ? 'border-[#34D399] bg-[#34D399]/18 text-[#34D399]'
                     : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
@@ -478,11 +478,11 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
               <span className="text-[11px] font-bold text-[var(--muted)]">
                 {tr('Filigran Görünüm Süresi', 'Watermark Time Range')}
               </span>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => onChange({fullDuration: true, startSec: 0, endSec: totalTimelineDur})}
-                  className={`rounded-md border px-2 py-0.5 text-[10px] font-bold ${
+                  className={`min-h-[36px] rounded-lg border px-2.5 text-[11px] font-bold ${
                     watermark.fullDuration
                       ? 'border-[#FB923C] bg-[#FB923C]/18 text-[#FB923C]'
                       : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
@@ -502,7 +502,7 @@ export const WatermarkPanel: React.FC<WatermarkPanelProps> = ({
                           : totalTimelineDur,
                     })
                   }
-                  className={`rounded-md border px-2 py-0.5 text-[10px] font-bold ${
+                  className={`min-h-[36px] rounded-lg border px-2.5 text-[11px] font-bold ${
                     !watermark.fullDuration
                       ? 'border-[#FB923C] bg-[#FB923C]/18 text-[#FB923C]'
                       : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'

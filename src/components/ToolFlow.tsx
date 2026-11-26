@@ -115,12 +115,14 @@ import {MediaRangeMode, MediaRangeTrimmer} from './MediaRangeTrimmer';
 import {
   PdfExtractVisualPicker,
   PdfNupVisualPreview,
+  PdfQuickPagePreview,
   PdfRemoveVisualPicker,
   PdfRotateVisualPicker,
   PdfSplitVisualPicker,
   PdfStampVisualPreview,
   PdfWatermarkVisualPreview,
 } from './PdfVisualTools';
+import {PdfReaderModal} from './PdfCanvasViewer';
 import type {VideoEditorState, VideoEditorTab} from './VideoEditor';
 
 const AUDIO_EFFECT_TOOL_IDS = new Set<AudioEffectToolId>([
@@ -345,7 +347,7 @@ const InlineMediaPreview: React.FC<{files: PickedFile[]; lang: Lang}> = ({files,
             type="button"
             onClick={toggleAudio}
             aria-label={audioPlaying ? (lang === 'tr' ? 'Duraklat' : 'Pause') : (lang === 'tr' ? 'Oynat' : 'Play')}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-sm transition-transform active:scale-95"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--accent-ink)] shadow-sm transition-transform active:scale-95"
           >
             {audioPlaying ? (
               <Pause className="h-4 w-4 fill-current" />
@@ -1328,6 +1330,7 @@ const ConfigShell: React.FC<{
   exportLabel?: string;
   showToolLabels?: boolean;
   onToggleToolLabels?: () => void;
+  pdfFile?: PickedFile | null;
   onBack: () => void;
   onExport: () => void;
   children: React.ReactNode;
@@ -1338,66 +1341,97 @@ const ConfigShell: React.FC<{
   exportLabel,
   showToolLabels,
   onToggleToolLabels,
+  pdfFile,
   onBack,
   onExport,
   children,
-}) => (
-  <div className="mx-auto w-full max-w-2xl px-4 pb-28 pt-4 sm:px-6">
-    <TopSubBar
-      title={title}
-      subtitle={subtitle}
-      lang={lang}
-      onBack={onBack}
-      rightAction={
-        onToggleToolLabels ? (
+}) => {
+  const [pdfReaderOpen, setPdfReaderOpen] = useState(false);
+
+  return (
+    <div className="mx-auto w-full max-w-2xl px-4 pb-28 pt-4 sm:px-6">
+      <TopSubBar
+        title={title}
+        subtitle={subtitle}
+        lang={lang}
+        onBack={onBack}
+        rightAction={
+          pdfFile || onToggleToolLabels ? (
+            <div className="flex shrink-0 items-center gap-1.5">
+              {pdfFile && (
+                <button
+                  type="button"
+                  onClick={() => setPdfReaderOpen(true)}
+                  aria-label={lang === 'tr' ? 'PDF tam görüntüle' : 'Full PDF viewer'}
+                  title={lang === 'tr' ? 'Tam Görüntüle' : 'Full View'}
+                  className="flex h-11 items-center justify-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 text-xs font-bold text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
+                >
+                  <Eye className="h-4 w-4 text-[var(--accent-text)]" />
+                  <span className="hidden sm:inline">{lang === 'tr' ? 'Tam Görüntüle' : 'Read'}</span>
+                </button>
+              )}
+              {onToggleToolLabels && (
+                <button
+                  type="button"
+                  onClick={onToggleToolLabels}
+                  aria-pressed={Boolean(showToolLabels)}
+                  aria-label={
+                    lang === 'tr'
+                      ? showToolLabels
+                        ? 'Simge odaklı görünüme geç'
+                        : 'Yazı ve açıklamaları göster'
+                      : showToolLabels
+                        ? 'Switch to icon-first view'
+                        : 'Show labels and descriptions'
+                  }
+                  title={
+                    lang === 'tr'
+                      ? showToolLabels
+                        ? 'Yazılar açık (Sade simgeye geç)'
+                        : 'Simge modu (Yazıları aç)'
+                      : showToolLabels
+                        ? 'Labels on (Switch to icons)'
+                        : 'Icon mode (Show labels)'
+                  }
+                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                    showToolLabels
+                      ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent)]'
+                      : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]'
+                  }`}
+                >
+                  <Type className="h-4.5 w-4.5" />
+                </button>
+              )}
+            </div>
+          ) : undefined
+        }
+      />
+      <div className="mt-5 space-y-5">{children}</div>
+      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-[var(--line)] bg-[var(--paper)]/95 px-4 py-3 pb-safe backdrop-blur-md lg:static lg:mt-6 lg:border-0 lg:bg-transparent lg:p-0">
+        <div className="mx-auto max-w-2xl">
           <button
             type="button"
-            onClick={onToggleToolLabels}
-            aria-pressed={Boolean(showToolLabels)}
-            aria-label={
-              lang === 'tr'
-                ? showToolLabels
-                  ? 'Simge odaklı görünüme geç'
-                  : 'Yazı ve açıklamaları göster'
-                : showToolLabels
-                  ? 'Switch to icon-first view'
-                  : 'Show labels and descriptions'
-            }
-            title={
-              lang === 'tr'
-                ? showToolLabels
-                  ? 'Yazılar açık (Sade simgeye geç)'
-                  : 'Simge modu (Yazıları aç)'
-                : showToolLabels
-                  ? 'Labels on (Switch to icons)'
-                  : 'Icon mode (Show labels)'
-            }
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition-colors ${
-              showToolLabels
-                ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent)]'
-                : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]'
-            }`}
+            onClick={onExport}
+            className="morph-accent-btn flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl text-sm font-semibold shadow-lg transition-transform active:scale-[0.98]"
           >
-            <Type className="h-4.5 w-4.5" />
+            <Check className="h-4 w-4" />
+            <span>{exportLabel ?? t('Export', lang)}</span>
           </button>
-        ) : undefined
-      }
-    />
-    <div className="mt-5 space-y-5">{children}</div>
-    <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-[var(--line)] bg-[var(--paper)]/95 px-4 py-3 pb-safe backdrop-blur-md lg:static lg:mt-6 lg:border-0 lg:bg-transparent lg:p-0">
-      <div className="mx-auto max-w-2xl">
-        <button
-          type="button"
-          onClick={onExport}
-          className="morph-accent-btn flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl text-sm font-semibold shadow-lg transition-transform active:scale-[0.98]"
-        >
-          <Check className="h-4 w-4" />
-          <span>{exportLabel ?? t('Export', lang)}</span>
-        </button>
+        </div>
       </div>
+
+      {pdfFile && (
+        <PdfReaderModal
+          open={pdfReaderOpen}
+          file={pdfFile.file}
+          fileName={pdfFile.name}
+          lang={lang}
+          onClose={() => setPdfReaderOpen(false)}
+        />
+      )}
     </div>
-  </div>
-);
+  );
+};
 
 const OptionPills: React.FC<{
   options: Array<{value: string; label: string; icon?: React.ReactNode}>;
@@ -1481,6 +1515,7 @@ const ConvertConfig: React.FC<{
       title={`${t('Convert', lang)} · ${format.toUpperCase()}`}
       subtitle={`${files.length} ${t('FilesCount', lang)}`}
       lang={lang}
+      pdfFile={firstKind === 'pdf' ? files[0] : null}
       onBack={onBack}
       onExport={() =>
         onExport({
@@ -1493,6 +1528,10 @@ const ConvertConfig: React.FC<{
     >
       {(firstKind === 'video' || firstKind === 'audio') && (
         <InlineMediaPreview files={files} lang={lang} />
+      )}
+
+      {firstKind === 'pdf' && files[0] && (
+        <PdfQuickPagePreview file={files[0].file} lang={lang} />
       )}
 
       {files[0] && (firstKind === 'document' || isRichDocumentExt(fileExtLower(files[0].name))) && (
@@ -1689,9 +1728,31 @@ const LocalToolConfig: React.FC<{
   // Watermark
   const [wmText, setWmText] = useState('Morph');
   const [wmPos, setWmPos] = useState<WatermarkPosition>('bottom-right');
+  const [wmCx, setWmCx] = useState(0.5);
+  const [wmCy, setWmCy] = useState(0.5);
   const [wmOpacity, setWmOpacity] = useState(75);
   const [wmScale, setWmScale] = useState('1');
   const [wmColor, setWmColor] = useState('#FFFFFF');
+  const wmDraggingRef = useRef(false);
+
+  // GIF live animated preview
+  const [gifPlaying, setGifPlaying] = useState(true);
+  const [gifFrameIdx, setGifFrameIdx] = useState(0);
+
+  useEffect(() => {
+    if (toolId !== 'GIF_MAKE') return;
+    setGifFrameIdx((prev) => (files.length > 0 ? prev % files.length : 0));
+  }, [toolId, files.length]);
+
+  useEffect(() => {
+    if (toolId !== 'GIF_MAKE' || !gifPlaying || files.length <= 1) return;
+    const fpsNum = Math.max(1, Number(gifFps) || 4);
+    const intervalMs = Math.max(60, Math.round(1000 / fpsNum));
+    const timer = window.setInterval(() => {
+      setGifFrameIdx((prev) => (prev + 1) % files.length);
+    }, intervalMs);
+    return () => window.clearInterval(timer);
+  }, [toolId, gifPlaying, gifFps, files.length]);
 
   // PDF Stamp
   const [stampText, setStampText] = useState('');
@@ -1705,6 +1766,7 @@ const LocalToolConfig: React.FC<{
   const [renameFind, setRenameFind] = useState('');
   const [renameReplace, setRenameReplace] = useState('');
   const [renameNumbering, setRenameNumbering] = useState(files.length > 1);
+  const [renameStartNum, setRenameStartNum] = useState(1);
   const [renameCase, setRenameCase] = useState<BatchRenameRules['letterCase']>('keep');
 
   // File Hash Report
@@ -1793,6 +1855,8 @@ const LocalToolConfig: React.FC<{
       source = renderWatermarkToCanvas(decodedSingleRef.current.bitmap, {
         text: wmText,
         position: wmPos,
+        cx: wmPos === 'custom' ? wmCx : undefined,
+        cy: wmPos === 'custom' ? wmCy : undefined,
         opacity: wmOpacity,
         scale: Number(wmScale) || 1,
         color: wmColor,
@@ -1810,6 +1874,8 @@ const LocalToolConfig: React.FC<{
     } else if (toolId === 'COLLAGE' && decodedListRef.current.length > 0) {
       const bitmaps = decodedListRef.current.map((d) => d.bitmap);
       const cellTransforms = bitmaps.map((_, idx) => collageTransforms[idx] ?? {zoom: 1, panX: 0, panY: 0});
+      const accentColor =
+        getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#f0788a';
       source = renderCollageToCanvas(bitmaps, {
         columns: Number(columns) || 2,
         gap,
@@ -1817,6 +1883,7 @@ const LocalToolConfig: React.FC<{
         targetWidth: 720,
         cellTransforms,
         selectedCellIndex: selectedCollageCell,
+        accentColor,
       });
     } else if (toolId === 'SCAN_DOC' && decodedSingleRef.current) {
       const bmp = decodedSingleRef.current.bitmap;
@@ -1853,8 +1920,10 @@ const LocalToolConfig: React.FC<{
       });
       const rCtx = source.getContext('2d');
       if (rCtx) {
+        const accentColor =
+          getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#f0788a';
         rCtx.save();
-        rCtx.strokeStyle = 'rgba(240, 120, 138, 0.9)';
+        rCtx.strokeStyle = accentColor;
         rCtx.lineWidth = Math.max(2, Math.round(source.width * 0.004));
         rCtx.setLineDash([8, 6]);
         for (const b of activeBoxes) {
@@ -1917,6 +1986,8 @@ const LocalToolConfig: React.FC<{
     blurPx,
     wmText,
     wmPos,
+    wmCx,
+    wmCy,
     wmOpacity,
     wmScale,
     wmColor,
@@ -2061,7 +2132,7 @@ const LocalToolConfig: React.FC<{
           })
         }
       >
-        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3">
+        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3">
           {showToolLabels && (
             <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
           )}
@@ -2150,15 +2221,15 @@ const LocalToolConfig: React.FC<{
           })
         }
       >
-        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3 space-y-2.5">
+        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3 space-y-2.5">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="grid min-w-0 flex-1 grid-cols-2 gap-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] p-1">
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-1">
               <button
                 type="button"
                 onClick={() => setScanEditCorners(false)}
                 className={`min-h-[36px] min-w-0 truncate rounded-lg px-2 text-xs font-bold transition-colors ${
                   !scanEditCorners
-                    ? 'bg-[var(--accent)] text-white'
+                    ? 'bg-[var(--accent)] text-[var(--accent-ink)]'
                     : 'text-[var(--muted)] hover:text-[var(--ink)]'
                 }`}
               >
@@ -2169,7 +2240,7 @@ const LocalToolConfig: React.FC<{
                 onClick={() => setScanEditCorners(true)}
                 className={`min-h-[36px] min-w-0 truncate rounded-lg px-2 text-xs font-bold transition-colors ${
                   scanEditCorners
-                    ? 'bg-[var(--accent)] text-white'
+                    ? 'bg-[var(--accent)] text-[var(--accent-ink)]'
                     : 'text-[var(--muted)] hover:text-[var(--ink)]'
                 }`}
               >
@@ -2227,8 +2298,9 @@ const LocalToolConfig: React.FC<{
                 >
                   <polygon
                     points={scanCorners.map((c) => `${c.x * 100},${c.y * 100}`).join(' ')}
-                    fill="rgba(240, 120, 138, 0.14)"
-                    stroke="rgba(240, 120, 138, 0.95)"
+                    fill="var(--accent)"
+                    fillOpacity="0.14"
+                    stroke="var(--accent)"
                     strokeWidth="0.9"
                   />
                 </svg>
@@ -2249,7 +2321,7 @@ const LocalToolConfig: React.FC<{
                     }}
                     className="absolute flex h-11 w-11 cursor-grab touch-none items-center justify-center active:cursor-grabbing"
                   >
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-[var(--accent)] text-[8px] font-extrabold text-white shadow-lg" />
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-[var(--accent-ink)] bg-[var(--accent)] text-[8px] font-extrabold text-[var(--accent-ink)] shadow-lg" />
                   </div>
                 ))}
               </>
@@ -2318,7 +2390,7 @@ const LocalToolConfig: React.FC<{
           })
         }
       >
-        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3">
+        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3">
           {showToolLabels && (
             <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
           )}
@@ -2416,7 +2488,7 @@ const LocalToolConfig: React.FC<{
           })
         }
       >
-        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3">
+        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             {showToolLabels ? (
               <p className="text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
@@ -2432,8 +2504,8 @@ const LocalToolConfig: React.FC<{
                 onClick={() => setRedactBoxes((prev) => prev.slice(0, -1))}
                 aria-label={t('UndoLastBox', lang)}
                 title={t('UndoLastBox', lang)}
-                className={`inline-flex h-8 items-center justify-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[11px] font-semibold text-[var(--ink)] disabled:opacity-40 ${
-                  showToolLabels ? 'px-2.5' : 'w-8 px-0'
+                className={`inline-flex h-9 items-center justify-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[11px] font-semibold text-[var(--ink)] disabled:opacity-40 ${
+                  showToolLabels ? 'px-2.5' : 'w-9 px-0'
                 }`}
               >
                 <Undo2 className="h-3.5 w-3.5 text-[var(--accent)]" />
@@ -2448,8 +2520,8 @@ const LocalToolConfig: React.FC<{
                 }}
                 aria-label={t('ClearBoxes', lang)}
                 title={t('ClearBoxes', lang)}
-                className={`inline-flex h-8 items-center justify-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[11px] font-semibold text-[var(--ink)] disabled:opacity-40 ${
-                  showToolLabels ? 'px-2.5' : 'w-8 px-0'
+                className={`inline-flex h-9 items-center justify-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[11px] font-semibold text-[var(--ink)] disabled:opacity-40 ${
+                  showToolLabels ? 'px-2.5' : 'w-9 px-0'
                 }`}
               >
                 <Trash2 className="h-3.5 w-3.5 text-[var(--accent)]" />
@@ -2546,7 +2618,7 @@ const LocalToolConfig: React.FC<{
           })
         }
       >
-        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3">
+        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3">
           {showToolLabels && (
             <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
           )}
@@ -2583,6 +2655,7 @@ const LocalToolConfig: React.FC<{
   }
 
   if (toolId === 'GIF_MAKE') {
+    const activeGifFile = files[gifFrameIdx] ?? files[0];
     return (
       <ConfigShell
         title={t('ToolGifMake', lang)}
@@ -2599,6 +2672,39 @@ const LocalToolConfig: React.FC<{
           })
         }
       >
+        {activeGifFile?.previewUrl && (
+          <div className="space-y-2.5 overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono-num text-xs font-semibold text-[var(--muted)]">
+                {lang === 'tr' ? 'Kare' : 'Frame'} {gifFrameIdx + 1} / {files.length} · {gifFps} FPS
+              </span>
+              <button
+                type="button"
+                onClick={() => setGifPlaying((p) => !p)}
+                className="inline-flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-xs font-bold text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
+              >
+                {gifPlaying ? (
+                  <>
+                    <Pause className="h-3.5 w-3.5 text-[var(--accent)]" />
+                    <span>{lang === 'tr' ? 'Duraklat' : 'Pause'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-3.5 w-3.5 text-[var(--accent)]" />
+                    <span>{lang === 'tr' ? 'Oynat' : 'Play'}</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <div className="flex h-52 items-center justify-center overflow-hidden rounded-xl border border-[var(--line)]/60 bg-[var(--surface)] p-1.5">
+              <img
+                src={activeGifFile.previewUrl}
+                alt={activeGifFile.name}
+                className="max-h-full max-w-full rounded-lg object-contain"
+              />
+            </div>
+          </div>
+        )}
         <div>
           <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('GifFpsLabel', lang)}</p>
           <OptionPills
@@ -2627,11 +2733,21 @@ const LocalToolConfig: React.FC<{
         </div>
         <div className="divide-y divide-[var(--line)] rounded-2xl border border-[var(--line)] bg-[var(--surface)]">
           {files.map((f, i) => (
-            <div key={f.id} className="flex items-center gap-3 px-4 py-2.5">
-              <span className="font-mono-num text-xs font-bold text-[var(--accent)]">{i + 1}.</span>
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => {
+                setGifPlaying(false);
+                setGifFrameIdx(i);
+              }}
+              className={`flex min-h-[48px] w-full items-center gap-3 px-4 py-2 text-left transition-colors ${
+                i === gifFrameIdx ? 'bg-[var(--accent)]/12' : 'hover:bg-[var(--inset)]'
+              }`}
+            >
+              <span className="font-mono-num text-xs font-bold text-[var(--accent-text)]">{i + 1}.</span>
               <FileThumb previewUrl={f.previewUrl} kind={f.kind} alt={f.name} sizeClass="h-9 w-9" />
-              <span className="flex-1 truncate text-sm text-[var(--ink)]">{f.name}</span>
-            </div>
+              <span className="min-w-0 flex-1 truncate text-sm text-[var(--ink)]">{f.name}</span>
+            </button>
           ))}
         </div>
       </ConfigShell>
@@ -2657,7 +2773,7 @@ const LocalToolConfig: React.FC<{
           })
         }
       >
-        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3">
+        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3">
           {showToolLabels && (
             <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
           )}
@@ -2723,7 +2839,7 @@ const LocalToolConfig: React.FC<{
           })
         }
       >
-        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3">
+        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3">
           {showToolLabels && (
             <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
           )}
@@ -2840,7 +2956,7 @@ const LocalToolConfig: React.FC<{
           })
         }
       >
-        <div className="space-y-3 overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3">
+        <div className="space-y-3 overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3">
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-xs font-semibold text-[var(--muted)]">
               {isTr
@@ -2850,7 +2966,7 @@ const LocalToolConfig: React.FC<{
             <button
               type="button"
               onClick={() => updateCellTf(selectedCollageCell, {zoom: 1, panX: 0, panY: 0})}
-              className="flex min-h-[34px] shrink-0 items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-2.5 text-[11px] font-bold text-[var(--muted)] hover:text-[var(--ink)]"
+              className="flex min-h-[36px] shrink-0 items-center gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-2.5 text-[11px] font-bold text-[var(--muted)] hover:text-[var(--ink)]"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               <span>{isTr ? 'Hücreyi Sıfırla' : 'Reset Cell'}</span>
@@ -3013,6 +3129,7 @@ const LocalToolConfig: React.FC<{
         lang={lang}
         showToolLabels={showToolLabels}
         onToggleToolLabels={onToggleToolLabels}
+        pdfFile={files[0] ?? null}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -3036,13 +3153,15 @@ const LocalToolConfig: React.FC<{
           <button
             type="button"
             onClick={() => onOpenPdfPro('pdf_organize', files[0])}
-            className="flex min-h-[42px] w-full items-center justify-between rounded-2xl border border-[var(--accent)]/35 bg-[var(--accent)]/10 px-4 text-xs font-bold text-[var(--accent-text)] transition-colors hover:bg-[var(--accent)]/15"
+            className="flex min-h-[40px] w-full items-center justify-between rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 text-xs font-semibold text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--ink)]"
           >
-            <span className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              <span>{lang === 'tr' ? 'PDF Stüdyosu (Sayfa Sırala & İmza/Sansür)' : 'Open in PDF Studio (Organize & Sign)'}</span>
+            <span className="flex min-w-0 items-center gap-2 truncate">
+              <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--accent-text)]" />
+              <span className="truncate">
+                {lang === 'tr' ? 'PDF Stüdyosu (İmza & Sansür)' : 'PDF Studio (Sign & Redact)'}
+              </span>
             </span>
-            <span>→</span>
+            <span className="shrink-0">→</span>
           </button>
         )}
       </ConfigShell>
@@ -3057,6 +3176,7 @@ const LocalToolConfig: React.FC<{
         lang={lang}
         showToolLabels={showToolLabels}
         onToggleToolLabels={onToggleToolLabels}
+        pdfFile={files[0] ?? null}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -3080,13 +3200,15 @@ const LocalToolConfig: React.FC<{
           <button
             type="button"
             onClick={() => onOpenPdfPro('pdf_organize', files[0])}
-            className="flex min-h-[42px] w-full items-center justify-between rounded-2xl border border-[var(--accent)]/35 bg-[var(--accent)]/10 px-4 text-xs font-bold text-[var(--accent-text)] transition-colors hover:bg-[var(--accent)]/15"
+            className="flex min-h-[40px] w-full items-center justify-between rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 text-xs font-semibold text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--ink)]"
           >
-            <span className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              <span>{lang === 'tr' ? 'PDF Stüdyosu’nda Düzenle (Sırala / Döndür / Sil)' : 'Edit in PDF Studio (Reorder / Rotate / Delete)'}</span>
+            <span className="flex min-w-0 items-center gap-2 truncate">
+              <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--accent-text)]" />
+              <span className="truncate">
+                {lang === 'tr' ? 'PDF Stüdyosu’nda Düzenle' : 'Open in PDF Studio'}
+              </span>
             </span>
-            <span>→</span>
+            <span className="shrink-0">→</span>
           </button>
         )}
       </ConfigShell>
@@ -3101,6 +3223,7 @@ const LocalToolConfig: React.FC<{
         lang={lang}
         showToolLabels={showToolLabels}
         onToggleToolLabels={onToggleToolLabels}
+        pdfFile={files[0] ?? null}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -3122,13 +3245,13 @@ const LocalToolConfig: React.FC<{
           <button
             type="button"
             onClick={() => onOpenPdfPro('pdf_organize', files[0])}
-            className="flex min-h-[42px] w-full items-center justify-between rounded-2xl border border-[var(--accent)]/35 bg-[var(--accent)]/10 px-4 text-xs font-bold text-[var(--accent-text)] transition-colors hover:bg-[var(--accent)]/15"
+            className="flex min-h-[40px] w-full items-center justify-between rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 text-xs font-semibold text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--ink)]"
           >
-            <span className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              <span>{lang === 'tr' ? 'PDF Stüdyosu’nda Aç' : 'Open in PDF Studio'}</span>
+            <span className="flex min-w-0 items-center gap-2 truncate">
+              <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--accent-text)]" />
+              <span className="truncate">{lang === 'tr' ? 'PDF Stüdyosu’nda Aç' : 'Open in PDF Studio'}</span>
             </span>
-            <span>→</span>
+            <span className="shrink-0">→</span>
           </button>
         )}
       </ConfigShell>
@@ -3143,6 +3266,7 @@ const LocalToolConfig: React.FC<{
         lang={lang}
         showToolLabels={showToolLabels}
         onToggleToolLabels={onToggleToolLabels}
+        pdfFile={files[0] ?? null}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -3164,13 +3288,15 @@ const LocalToolConfig: React.FC<{
           <button
             type="button"
             onClick={() => onOpenPdfPro('pdf_organize', files[0])}
-            className="flex min-h-[42px] w-full items-center justify-between rounded-2xl border border-[var(--accent)]/35 bg-[var(--accent)]/10 px-4 text-xs font-bold text-[var(--accent-text)] transition-colors hover:bg-[var(--accent)]/15"
+            className="flex min-h-[40px] w-full items-center justify-between rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 text-xs font-semibold text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--ink)]"
           >
-            <span className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              <span>{lang === 'tr' ? 'PDF Stüdyosu’nda Düzenle (Sayfa Sırala & Döndür)' : 'Edit in PDF Studio (Reorder & Rotate)'}</span>
+            <span className="flex min-w-0 items-center gap-2 truncate">
+              <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--accent-text)]" />
+              <span className="truncate">
+                {lang === 'tr' ? 'PDF Stüdyosu’nda Düzenle' : 'Open in PDF Studio'}
+              </span>
             </span>
-            <span>→</span>
+            <span className="shrink-0">→</span>
           </button>
         )}
       </ConfigShell>
@@ -3186,6 +3312,7 @@ const LocalToolConfig: React.FC<{
         lang={lang}
         showToolLabels={showToolLabels}
         onToggleToolLabels={onToggleToolLabels}
+        pdfFile={files[0] ?? null}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -3265,13 +3392,15 @@ const LocalToolConfig: React.FC<{
           <button
             type="button"
             onClick={() => onOpenPdfPro('pdf_sign', files[0])}
-            className="flex min-h-[42px] w-full items-center justify-between rounded-2xl border border-[var(--accent)]/35 bg-[var(--accent)]/10 px-4 text-xs font-bold text-[var(--accent-text)] transition-colors hover:bg-[var(--accent)]/15"
+            className="flex min-h-[40px] w-full items-center justify-between rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3.5 text-xs font-semibold text-[var(--muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--ink)]"
           >
-            <span className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              <span>{lang === 'tr' ? 'PDF Stüdyosu (İmza & Sansür + Filigran)' : 'Open in PDF Studio (Sign & Redact + Watermark)'}</span>
+            <span className="flex min-w-0 items-center gap-2 truncate">
+              <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--accent-text)]" />
+              <span className="truncate">
+                {lang === 'tr' ? 'PDF Stüdyosu (İmza & Sansür)' : 'PDF Studio (Sign & Redact)'}
+              </span>
             </span>
-            <span>→</span>
+            <span className="shrink-0">→</span>
           </button>
         )}
       </ConfigShell>
@@ -3286,6 +3415,7 @@ const LocalToolConfig: React.FC<{
         lang={lang}
         showToolLabels={showToolLabels}
         onToggleToolLabels={onToggleToolLabels}
+        pdfFile={files[0] ?? null}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -3327,6 +3457,7 @@ const LocalToolConfig: React.FC<{
         lang={lang}
         showToolLabels={showToolLabels}
         onToggleToolLabels={onToggleToolLabels}
+        pdfFile={files[0] ?? null}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -3337,6 +3468,7 @@ const LocalToolConfig: React.FC<{
           })
         }
       >
+        <PdfQuickPagePreview file={files[0]?.file} lang={lang} />
         <div>
           <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('Format', lang)}</p>
           <OptionPills
@@ -3389,7 +3521,7 @@ const LocalToolConfig: React.FC<{
           })
         }
       >
-        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3">
+        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3">
           {showToolLabels && (
             <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
           )}
@@ -3432,6 +3564,15 @@ const LocalToolConfig: React.FC<{
 
   if (toolId === 'WATERMARK') {
     const WM_COLORS = ['#FFFFFF', '#101D31', '#F0788A', '#F0B429'];
+    const handleWmPointer = (e: React.PointerEvent<HTMLCanvasElement>) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const nx = Math.max(0.05, Math.min(0.95, (e.clientX - rect.left) / rect.width));
+      const ny = Math.max(0.05, Math.min(0.95, (e.clientY - rect.top) / rect.height));
+      setWmPos('custom');
+      setWmCx(nx);
+      setWmCy(ny);
+    };
     return (
       <ConfigShell
         title={t('ToolWatermark', lang)}
@@ -3445,6 +3586,8 @@ const LocalToolConfig: React.FC<{
             kind: 'watermark',
             text: wmText,
             position: wmPos,
+            cx: wmPos === 'custom' ? wmCx : undefined,
+            cy: wmPos === 'custom' ? wmCy : undefined,
             opacity: wmOpacity,
             scale: Number(wmScale) || 1,
             color: wmColor,
@@ -3453,11 +3596,36 @@ const LocalToolConfig: React.FC<{
           })
         }
       >
-        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-black/30 p-3">
-          {showToolLabels && (
-            <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('LivePreview', lang)}</p>
-          )}
-          <canvas ref={previewCanvasRef} className="mx-auto max-h-60 max-w-full rounded-lg object-contain" />
+        <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="truncate text-xs font-semibold text-[var(--muted)]">
+              {lang === 'tr' ? 'Filigranı parmakla sürükleyip yerleştir' : 'Drag watermark on preview to position'}
+            </p>
+            {wmPos === 'custom' && (
+              <span className="font-mono-num shrink-0 text-[10px] font-bold text-[var(--accent-text)]">
+                {Math.round(wmCx * 100)}%, {Math.round(wmCy * 100)}%
+              </span>
+            )}
+          </div>
+          <canvas
+            ref={previewCanvasRef}
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId);
+              wmDraggingRef.current = true;
+              handleWmPointer(e);
+            }}
+            onPointerMove={(e) => {
+              if (!wmDraggingRef.current) return;
+              handleWmPointer(e);
+            }}
+            onPointerUp={() => {
+              wmDraggingRef.current = false;
+            }}
+            onPointerCancel={() => {
+              wmDraggingRef.current = false;
+            }}
+            className="mx-auto max-h-60 max-w-full cursor-move touch-none rounded-lg object-contain select-none"
+          />
         </div>
         <div>
           <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('WatermarkText', lang)}</p>
@@ -3481,6 +3649,7 @@ const LocalToolConfig: React.FC<{
               {value: 'top-left', label: t('PosTopLeft', lang)},
               {value: 'center', label: t('PosCenter', lang)},
               {value: 'tile', label: t('PosTile', lang)},
+              {value: 'custom', label: lang === 'tr' ? 'Serbest' : 'Custom'},
             ]}
           />
         </div>
@@ -3499,7 +3668,7 @@ const LocalToolConfig: React.FC<{
         </div>
         <div>
           <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('TextColor', lang)}</p>
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
             {WM_COLORS.map((swatch) => (
               <button
                 key={swatch}
@@ -3512,6 +3681,13 @@ const LocalToolConfig: React.FC<{
                 style={{backgroundColor: swatch}}
               />
             ))}
+            <input
+              type="color"
+              value={wmColor}
+              onChange={(e) => setWmColor(e.target.value)}
+              aria-label={lang === 'tr' ? 'Özel renk' : 'Custom color'}
+              className="h-9 w-11 cursor-pointer rounded-xl border border-[var(--line)] bg-transparent p-0.5"
+            />
           </div>
         </div>
         <div>
@@ -3538,6 +3714,7 @@ const LocalToolConfig: React.FC<{
         lang={lang}
         showToolLabels={showToolLabels}
         onToggleToolLabels={onToggleToolLabels}
+        pdfFile={files[0] ?? null}
         onBack={onBack}
         onExport={() =>
           onExport({
@@ -3588,7 +3765,7 @@ const LocalToolConfig: React.FC<{
       findText: renameFind,
       replaceText: renameReplace,
       numbering: renameNumbering,
-      startNumber: 1,
+      startNumber: Math.max(0, renameStartNum),
       letterCase: renameCase,
     };
     const previewList = computeBatchRenamedNames(files, rules);
@@ -3660,16 +3837,49 @@ const LocalToolConfig: React.FC<{
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setRenameNumbering((v) => !v)}
-          className="flex min-h-[46px] w-full items-center justify-between rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-4"
-        >
-          <span className="text-sm font-medium text-[var(--ink)]">{t('RenameNumberingLabel', lang)}</span>
-          <span className="morph-switch" data-checked={renameNumbering ? 'true' : 'false'}>
-            <span className="morph-switch-thumb" />
-          </span>
-        </button>
+        <div className="space-y-2.5">
+          <button
+            type="button"
+            onClick={() => setRenameNumbering((v) => !v)}
+            className="flex min-h-[46px] w-full items-center justify-between rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-4"
+          >
+            <span className="text-sm font-medium text-[var(--ink)]">{t('RenameNumberingLabel', lang)}</span>
+            <span className="morph-switch" data-checked={renameNumbering ? 'true' : 'false'}>
+              <span className="morph-switch-thumb" />
+            </span>
+          </button>
+          {renameNumbering && (
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-4 py-2.5">
+              <span className="text-xs font-semibold text-[var(--muted)]">
+                {lang === 'tr' ? 'Başlangıç Numarası' : 'Start Number'}
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setRenameStartNum((n) => Math.max(0, n - 1))}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-sm font-bold text-[var(--ink)]"
+                >
+                  −
+                </button>
+                <input
+                  type="number"
+                  min={0}
+                  max={9999}
+                  value={renameStartNum}
+                  onChange={(e) => setRenameStartNum(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                  className="font-mono-num h-9 w-16 rounded-xl border border-[var(--line)] bg-[var(--surface)] text-center text-xs font-bold text-[var(--ink)] outline-none focus:border-[var(--accent)]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setRenameStartNum((n) => Math.min(9999, n + 1))}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-sm font-bold text-[var(--ink)]"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
         <div>
           <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('RenameCaseLabel', lang)}</p>
@@ -3687,13 +3897,17 @@ const LocalToolConfig: React.FC<{
 
         <div>
           <p className="mb-2 text-xs font-semibold text-[var(--muted)]">{t('PreviewNamesLabel', lang)}</p>
-          <div className="max-h-52 divide-y divide-[var(--line)] overflow-y-auto rounded-2xl border border-[var(--line)] bg-[var(--surface)]">
+          <div className="max-h-56 divide-y divide-[var(--line)] overflow-y-auto rounded-2xl border border-[var(--line)] bg-[var(--surface)]">
             {previewList.map((item, idx) => (
-              <div key={item.id} className="flex items-center gap-2 px-3.5 py-2 text-xs">
-                <span className="font-mono-num font-bold text-[var(--accent)]">{idx + 1}.</span>
-                <span className="truncate text-[var(--muted)]">{item.oldName}</span>
-                <span className="text-[var(--accent)]">→</span>
-                <span className="font-mono-num truncate font-semibold text-[var(--ink)]">{item.newName}</span>
+              <div key={item.id} className="space-y-0.5 px-3.5 py-2.5 text-xs">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <span className="font-mono-num shrink-0 font-bold text-[var(--accent-text)]">{idx + 1}.</span>
+                  <span className="truncate text-[11px] text-[var(--muted)]">{item.oldName}</span>
+                </div>
+                <div className="flex min-w-0 items-center gap-1.5 pl-4">
+                  <span className="shrink-0 text-[var(--accent)]">→</span>
+                  <span className="font-mono-num truncate font-semibold text-[var(--ink)]">{item.newName}</span>
+                </div>
               </div>
             ))}
           </div>
@@ -3752,9 +3966,13 @@ const LocalToolConfig: React.FC<{
       lang={lang}
       showToolLabels={showToolLabels}
       onToggleToolLabels={onToggleToolLabels}
+      pdfFile={files[0]?.kind === 'pdf' ? files[0] : null}
       onBack={onBack}
       onExport={() => onExport({kind: 'none'})}
     >
+      {toolId === 'PDF_GRAYSCALE' && files[0] && (
+        <PdfQuickPagePreview file={files[0].file} lang={lang} grayscale />
+      )}
       {def && showToolLabels && (
         <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-4 text-xs text-[var(--muted)]">
           {t(def.descKey, lang)}
@@ -3836,6 +4054,7 @@ const ServerToolConfig: React.FC<{
       lang={lang}
       showToolLabels={showToolLabels}
       onToggleToolLabels={onToggleToolLabels}
+      pdfFile={firstKind === 'pdf' ? files[0] : null}
       onBack={onBack}
       onExport={() => {
         const opts: Record<string, string> = {};

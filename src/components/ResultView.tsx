@@ -4,6 +4,7 @@ import {Lang, t} from '../data/i18n';
 import {ExportItem, ExportResult, detectFileKind, formatBytes} from '../data/models';
 import {isNativeApp} from '../engine/nativeBridge';
 import {FileThumb} from './FileThumb';
+import {PdfCanvasViewer} from './PdfCanvasViewer';
 
 interface ResultViewProps {
   result: ExportResult;
@@ -422,11 +423,14 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 <audio src={previewItem.url} controls autoPlay className="w-full" />
               </div>
             ) : (
-              <iframe
-                src={previewItem.url}
-                title={previewItem.item.name}
-                className="h-full w-full max-w-3xl rounded-2xl bg-white"
-              />
+              <div className="h-full w-full max-w-3xl">
+                <PdfCanvasViewer
+                  file={previewItem.item.blob}
+                  url={previewItem.url}
+                  fileName={previewItem.item.name}
+                  lang={lang}
+                />
+              </div>
             )}
           </div>
         </div>

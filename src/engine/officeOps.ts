@@ -95,6 +95,17 @@ function serializeCsvRows(rows: string[][]): string {
     .join('\r\n');
 }
 
+function colRefToIndex(ref: string | null): number | null {
+  if (!ref) return null;
+  const m = ref.trim().toUpperCase().match(/^([A-Z]+)/);
+  if (!m) return null;
+  let idx = 0;
+  for (let i = 0; i < m[1].length; i++) {
+    idx = idx * 26 + (m[1].charCodeAt(i) - 64);
+  }
+  return Math.max(0, idx - 1);
+}
+
 async function extractXlsxRows(file: Blob): Promise<string[][]> {
   const zip = await JSZip.loadAsync(await file.arrayBuffer());
   const sharedStrings: string[] = [];
@@ -122,27 +133,35 @@ async function extractXlsxRows(file: Blob): Promise<string[][]> {
     for (const row of rows) {
       const cells = Array.from(row.getElementsByTagName('c'));
       const vals: string[] = [];
+      let nextCol = 0;
       for (const cell of cells) {
+        const parsedCol = colRefToIndex(cell.getAttribute('r'));
+        const colIdx = parsedCol !== null ? parsedCol : nextCol;
+        nextCol = colIdx + 1;
+
         const cellType = cell.getAttribute('t');
+        let cellVal = '';
         if (cellType === 'inlineStr') {
-          const inlineTxt = Array.from(cell.getElementsByTagName('t'))
+          cellVal = Array.from(cell.getElementsByTagName('t'))
             .map((t) => t.textContent ?? '')
-            .join('');
-          vals.push(inlineTxt.trim());
+            .join('')
+            .trim();
         } else {
           const vNode = cell.getElementsByTagName('v')[0];
           const rawVal = vNode?.textContent?.trim() ?? '';
-          if (!rawVal) {
-            vals.push('');
-            continue;
-          }
-          if (cellType === 's') {
-            const idx = parseInt(rawVal, 10);
-            vals.push(Number.isFinite(idx) ? (sharedStrings[idx] ?? rawVal).trim() : rawVal);
-          } else {
-            vals.push(rawVal);
+          if (rawVal) {
+            if (cellType === 's') {
+              const idx = parseInt(rawVal, 10);
+              cellVal = Number.isFinite(idx) ? (sharedStrings[idx] ?? rawVal).trim() : rawVal;
+            } else {
+              cellVal = rawVal;
+            }
           }
         }
+        vals[colIdx] = cellVal;
+      }
+      for (let i = 0; i < vals.length; i++) {
+        if (vals[i] === undefined) vals[i] = '';
       }
       if (vals.some((v) => v.length > 0)) {
         allRows.push(vals);
@@ -152,11 +171,63 @@ async function extractXlsxRows(file: Blob): Promise<string[][]> {
   return allRows;
 }
 
+async function extractOdsRows(file: Blob): Promise<string[][]> {
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const xmlEntry = zip.file('content.xml');
+  if (!xmlEntry || typeof DOMParser === 'undefined') return [];
+  const xml = await xmlEntry.async('text');
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  const rowNodes = Array.from(doc.getElementsByTagName('*')).filter(
+    (el) => el.localName === 'table-row'
+  );
+  const allRows: string[][] = [];
+  for (const rowEl of rowNodes) {
+    const cellNodes = Array.from(rowEl.children).filter(
+      (el) => el.localName === 'table-cell' || el.localName === 'covered-table-cell'
+    );
+    const vals: string[] = [];
+    for (const cell of cellNodes) {
+      const repAttr = cell.getAttribute('table:number-columns-repeated');
+      const repeat = Math.min(32, Math.max(1, parseInt(repAttr || '1', 10) || 1));
+      const pNodes = Array.from(cell.getElementsByTagName('*')).filter((el) => el.localName === 'p');
+      const txt = pNodes.length > 0
+        ? pNodes.map((p) => p.textContent ?? '').join(' ').trim()
+        : (cell.textContent ?? '').trim();
+      for (let r = 0; r < repeat; r++) {
+        vals.push(txt);
+      }
+    }
+    while (vals.length > 0 && vals[vals.length - 1] === '') {
+      vals.pop();
+    }
+    if (vals.some((v) => v.length > 0)) {
+      allRows.push(vals);
+    }
+    if (allRows.length >= 500) break;
+  }
+  return allRows;
+}
+
 export async function extractStructuredRows(file: PickedFile): Promise<string[][]> {
   const ext = file.ext.toLowerCase();
   if (ext === 'xlsx') {
     const rows = await extractXlsxRows(file.file);
     if (rows.length > 0) return rows;
+  }
+  if (ext === 'ods') {
+    const rows = await extractOdsRows(file.file);
+    if (rows.length > 0) return rows;
+  }
+  if (ext === 'xls') {
+    const headBytes = new Uint8Array(await file.file.slice(0, 8).arrayBuffer());
+    const isZipContainer = headBytes[0] === 0x50 && headBytes[1] === 0x4b;
+    if (isZipContainer) {
+      const rows = await extractXlsxRows(file.file);
+      if (rows.length > 0) return rows;
+    }
+    throw new Error(
+      'Eski ikili Office biçimi (.xls) cihaz içinde doğrudan ayrıştırılamıyor. Lütfen dosyayı .xlsx veya CSV olarak kaydedip tekrar deneyin.'
+    );
   }
   const raw = await file.file.text();
   if (ext === 'json') {
@@ -201,25 +272,44 @@ export async function extractDocumentText(file: PickedFile): Promise<string> {
       const doc = new DOMParser().parseFromString(xml, 'application/xml');
       const paragraphs = Array.from(doc.getElementsByTagName('w:p'));
       const lines = paragraphs.map((p) => {
-        const texts = Array.from(p.getElementsByTagName('w:t')).map((t) => t.textContent ?? '');
-        return texts.join('');
+        const parts: string[] = [];
+        const nodes = Array.from(p.getElementsByTagName('*'));
+        for (const node of nodes) {
+          if (node.localName === 't') {
+            parts.push(node.textContent ?? '');
+          } else if (node.localName === 'tab') {
+            parts.push('\t');
+          } else if (node.localName === 'br' || node.localName === 'cr') {
+            parts.push('\n');
+          }
+        }
+        return parts.join('');
       });
       return lines.join('\n').trim();
     }
     return xml.replace(/<[^>]+>/g, ' ').trim();
   }
 
-  if (ext === 'odt') {
+  if (ext === 'odt' || ext === 'odp') {
     const zip = await JSZip.loadAsync(await file.file.arrayBuffer());
     const xmlEntry = zip.file('content.xml');
-    if (!xmlEntry) throw new Error('Geçersiz ODT dosyası.');
+    if (!xmlEntry) throw new Error(`Geçersiz ${ext.toUpperCase()} dosyası.`);
     const xml = await xmlEntry.async('text');
     if (typeof DOMParser !== 'undefined') {
       const doc = new DOMParser().parseFromString(xml, 'application/xml');
-      const paragraphs = Array.from(doc.getElementsByTagName('text:p'));
-      return paragraphs.map((p) => p.textContent ?? '').join('\n').trim();
+      const blocks = Array.from(doc.getElementsByTagName('*')).filter(
+        (el) => el.localName === 'h' || el.localName === 'p'
+      );
+      return blocks.map((b) => b.textContent ?? '').join('\n').trim();
     }
     return xml.replace(/<[^>]+>/g, ' ').trim();
+  }
+
+  if (ext === 'ods') {
+    const rows = await extractOdsRows(file.file);
+    if (rows.length > 0) {
+      return rows.map((r) => r.join(' \t ')).join('\n');
+    }
   }
 
   if (ext === 'doc' || ext === 'xls' || ext === 'ppt') {
@@ -243,7 +333,7 @@ export async function extractDocumentText(file: PickedFile): Promise<string> {
     if (ext === 'xlsx') {
       const rows = await extractXlsxRows(file.file);
       if (rows.length > 0) {
-        return rows.map((r) => r.filter(Boolean).join(' \t ')).join('\n');
+        return rows.map((r) => r.join(' \t ')).join('\n');
       }
     }
     if (ext === 'pptx') {

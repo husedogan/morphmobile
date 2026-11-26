@@ -965,7 +965,7 @@ export const SettingsProTab: React.FC<SettingsProTabProps> = ({
                         disabled={cur <= b.min}
                         aria-label={`${labelTr} -`}
                         onClick={() => patchSizing({[key]: Math.max(b.min, cur - b.step)})}
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] disabled:opacity-35"
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] disabled:opacity-35"
                       >
                         <Minus className="h-3.5 w-3.5" />
                       </button>
@@ -984,7 +984,7 @@ export const SettingsProTab: React.FC<SettingsProTabProps> = ({
                         disabled={cur >= b.max}
                         aria-label={`${labelTr} +`}
                         onClick={() => patchSizing({[key]: Math.min(b.max, cur + b.step)})}
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] disabled:opacity-35"
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] disabled:opacity-35"
                       >
                         <Plus className="h-3.5 w-3.5" />
                       </button>

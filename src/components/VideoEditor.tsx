@@ -7022,9 +7022,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                             ),
                           }))
                         }
-                        className="flex items-center gap-1 rounded-md border border-white/10 px-2 py-0.5 text-[10px] font-bold text-[var(--muted)] hover:text-[var(--ink)]"
+                        className="flex min-h-[36px] items-center gap-1 rounded-lg border border-white/10 px-2.5 text-[11px] font-bold text-[var(--muted)] hover:text-[var(--ink)]"
                       >
-                        <RotateCcw className="h-2.5 w-2.5" />
+                        <RotateCcw className="h-3 w-3" />
                         <span>{tr('Ortala', 'Center')}</span>
                       </button>
                     )}
@@ -7069,7 +7069,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                             ),
                           }))
                         }
-                        className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold ${
+                        className={`min-h-[36px] rounded-lg border px-2.5 py-1 text-[11px] font-bold ${
                           selectedTextClip.bgEnabled
                             ? 'border-[var(--accent)] bg-[var(--accent)]/18 text-[var(--accent)]'
                             : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
@@ -7090,7 +7090,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                             ),
                           }))
                         }
-                        className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold ${
+                        className={`min-h-[36px] rounded-lg border px-2.5 py-1 text-[11px] font-bold ${
                           selectedTextClip.strokeWidth > 0
                             ? 'border-[var(--accent)] bg-[var(--accent)]/18 text-[var(--accent)]'
                             : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
@@ -7111,7 +7111,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                             ),
                           }))
                         }
-                        className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold ${
+                        className={`min-h-[36px] rounded-lg border px-2.5 py-1 text-[11px] font-bold ${
                           selectedTextClip.shadowEnabled
                             ? 'border-[var(--accent)] bg-[var(--accent)]/18 text-[var(--accent)]'
                             : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'
@@ -7168,9 +7168,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                         vfx: {...prev.vfx, visualFx: 'none'},
                       }))
                     }
-                    className="flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold text-[var(--muted)] hover:border-rose-400/50 hover:text-rose-300"
+                    className="flex min-h-[36px] items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 text-[11px] font-bold text-[var(--muted)] hover:border-rose-400/50 hover:text-rose-300"
                   >
-                    <RotateCcw className="h-3 w-3" />
+                    <RotateCcw className="h-3.5 w-3.5" />
                     <span>{tr('Efekti Kaldır', 'Clear FX')}</span>
                   </button>
                 )}
@@ -7512,7 +7512,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                     <select
                       value={kfEasing}
                       onChange={(e) => setKfEasing(e.target.value as KeyframeEasingType)}
-                      className="rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2 py-1 text-[10px] font-bold text-[var(--ink)]"
+                      className="min-h-[36px] rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2.5 py-1 text-[11px] font-bold text-[var(--ink)]"
                     >
                       <option value="easeInOut">Ease In/Out</option>
                       <option value="linear">Linear</option>
@@ -7556,9 +7556,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                           )
                         );
                       }}
-                      className="flex items-center gap-1 rounded-lg border border-[#FF8A3D]/55 bg-[#FF8A3D]/18 px-2.5 py-1 text-[11px] font-extrabold text-[#FF8A3D] hover:bg-[#FF8A3D]/25"
+                      className="flex min-h-[36px] items-center gap-1 rounded-lg border border-[#FF8A3D]/55 bg-[#FF8A3D]/18 px-3 py-1 text-[11px] font-extrabold text-[#FF8A3D] hover:bg-[#FF8A3D]/25"
                     >
-                      <Plus className="h-3 w-3" />
+                      <Plus className="h-3.5 w-3.5" />
                       <span>Keyframe ({selectedClip?.keyframes.length ?? 0})</span>
                     </button>
                   </div>
@@ -7660,7 +7660,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                           }));
                           notifyStatus(tr(`${mp.tr} animasyonu uygulandı.`, `Applied ${mp.en} keyframes.`));
                         }}
-                        className="rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2 py-1 text-[10px] font-bold text-[var(--ink)] hover:border-[#FF8A3D]"
+                        className="min-h-[36px] rounded-lg border border-[var(--line)] bg-[var(--inset)] px-2.5 py-1 text-[11px] font-bold text-[var(--ink)] hover:border-[#FF8A3D]"
                       >
                         {isTr ? mp.tr : mp.en}
                       </button>
@@ -7675,12 +7675,12 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                       .map((kf) => (
                         <div
                           key={kf.id}
-                          className="font-mono-num flex items-center overflow-hidden rounded-lg border border-[#FF8A3D]/40 bg-[#FF8A3D]/10 text-[10px] font-bold text-[#FF8A3D]"
+                          className="font-mono-num flex items-center overflow-hidden rounded-lg border border-[#FF8A3D]/40 bg-[#FF8A3D]/10 text-[11px] font-bold text-[#FF8A3D]"
                         >
                           <button
                             type="button"
                             onClick={() => seekTimelineTo(selectedClip.timelineStart + kf.timeOffsetSec)}
-                            className="px-2 py-1 hover:bg-[#FF8A3D]/20"
+                            className="min-h-[36px] px-2.5 py-1 hover:bg-[#FF8A3D]/20"
                           >
                             ◆ {kf.timeOffsetSec.toFixed(1)}s · {kf.zoom.toFixed(1)}×
                           </button>
@@ -7696,7 +7696,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                                 ),
                               }))
                             }
-                            className="border-l border-[#FF8A3D]/30 px-1.5 py-1 hover:text-rose-400"
+                            className="flex min-h-[36px] min-w-[32px] items-center justify-center border-l border-[#FF8A3D]/30 px-2 py-1 hover:text-rose-400"
                           >
                             ×
                           </button>
@@ -7714,7 +7714,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                         vfx: {...prev.vfx, stabilization: !prev.vfx.stabilization},
                       }))
                     }
-                    className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors ${
+                    className={`min-h-[36px] rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors ${
                       project.vfx.stabilization
                         ? 'border-[var(--accent)] bg-[var(--accent)]/18 text-[var(--accent)]'
                         : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)]'

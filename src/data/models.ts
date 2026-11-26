@@ -557,10 +557,10 @@ export interface VideoEditorSizingPrefs {
 }
 
 export const VE_SIZING_BOUNDS = {
-  dockTabHeight: {min: 36, max: 56, step: 2, def: 44},
-  controlBtnSize: {min: 28, max: 44, step: 2, def: 36},
-  colorSwatchSize: {min: 24, max: 40, step: 2, def: 32},
-  watermarkGridHeight: {min: 28, max: 48, step: 2, def: 40},
+  dockTabHeight: {min: 38, max: 56, step: 2, def: 44},
+  controlBtnSize: {min: 36, max: 44, step: 2, def: 38},
+  colorSwatchSize: {min: 32, max: 44, step: 2, def: 34},
+  watermarkGridHeight: {min: 36, max: 48, step: 2, def: 40},
 } as const;
 
 export const DEFAULT_VE_SIZING: VideoEditorSizingPrefs = {

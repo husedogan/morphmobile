@@ -54,6 +54,7 @@ import {LibraryScreen} from './components/LibraryScreen';
 import {MorphTerminalModal} from './components/MorphTerminalModal';
 import {OfflineBanner} from './components/PWAInstallButton';
 import {PdfAndArchiveProModal, PdfArchiveTab} from './components/PdfAndArchiveProModal';
+import {PdfCanvasViewer} from './components/PdfCanvasViewer';
 import {ErrorView, ResultView} from './components/ResultView';
 import {SettingsCategory, SettingsScreen} from './components/SettingsScreen';
 import {StudioScreen} from './components/StudioScreen';
@@ -3178,11 +3179,19 @@ export default function App() {
                   {sourcePreviewText}
                 </pre>
               ) : previewTarget.kind === 'pdf' && sourcePreviewUrl ? (
-                <iframe
-                  src={sourcePreviewUrl}
-                  title={previewTarget.name}
-                  className="h-[72vh] w-full rounded-xl bg-white"
-                />
+                <div className="h-[72vh] w-full">
+                  <PdfCanvasViewer
+                    file={previewTarget.file}
+                    url={sourcePreviewUrl}
+                    fileName={previewTarget.name}
+                    lang={lang}
+                    onOpenInStudio={() => {
+                      const f = previewTarget.file;
+                      closeSourcePreview();
+                      setPdfArchiveModal({open: true, tab: 'pdf_organize', initialPdfFile: f});
+                    }}
+                  />
+                </div>
               ) : previewTarget.kind === 'video' && sourcePreviewUrl ? (
                 <video
                   src={sourcePreviewUrl}

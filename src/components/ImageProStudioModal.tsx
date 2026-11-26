@@ -56,7 +56,7 @@ export const ImageCompareSlider: React.FC<{
       onPointerMove={(e) => {
         if (e.buttons === 1) updateFromClientX(e.clientX);
       }}
-      className="relative h-64 w-full select-none overflow-hidden rounded-2xl border border-[var(--line)] bg-[#0b1018] cursor-ew-resize touch-none sm:h-72"
+      className="relative h-64 w-full select-none overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--inset)] cursor-ew-resize touch-none sm:h-72"
     >
       {/* After (Full Right) */}
       <img
@@ -83,7 +83,7 @@ export const ImageCompareSlider: React.FC<{
         className="pointer-events-none absolute inset-y-0 w-0.5 bg-white shadow-[0_0_8px_rgba(0,0,0,0.8)]"
         style={{left: `${splitPct}%`}}
       >
-        <div className="absolute left-1/2 top-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-black/75 text-[10px] font-black text-white shadow-lg">
+        <div className="absolute left-1/2 top-1/2 flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-black/75 text-xs font-black text-white shadow-lg">
           ⇄
         </div>
       </div>
@@ -92,7 +92,7 @@ export const ImageCompareSlider: React.FC<{
       <span className="pointer-events-none absolute left-2.5 top-2.5 rounded-lg bg-black/70 px-2 py-1 font-mono text-[10px] font-bold text-white">
         {beforeLabel}
       </span>
-      <span className="pointer-events-none absolute right-2.5 top-2.5 rounded-lg bg-emerald-600/85 px-2 py-1 font-mono text-[10px] font-bold text-white">
+      <span className="pointer-events-none absolute right-2.5 top-2.5 rounded-lg bg-[var(--accent)] px-2 py-1 font-mono text-[10px] font-bold text-[var(--accent-ink)]">
         {afterLabel}
       </span>
     </div>
@@ -150,6 +150,21 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
   const [modernFmt, setModernFmt] = useState<'ico' | 'avif' | 'webp' | 'png'>('ico');
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const bgPreviewUrlRef = useRef<string>('');
+  const cmpPreviewUrlRef = useRef<string>('');
+
+  useEffect(() => {
+    return () => {
+      if (bgPreviewUrlRef.current) {
+        URL.revokeObjectURL(bgPreviewUrlRef.current);
+        bgPreviewUrlRef.current = '';
+      }
+      if (cmpPreviewUrlRef.current) {
+        URL.revokeObjectURL(cmpPreviewUrlRef.current);
+        cmpPreviewUrlRef.current = '';
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (open) {
@@ -173,8 +188,19 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
   ]);
 
   useEffect(() => {
+    if (bgPreviewUrlRef.current) {
+      URL.revokeObjectURL(bgPreviewUrlRef.current);
+      bgPreviewUrlRef.current = '';
+    }
+    if (cmpPreviewUrlRef.current) {
+      URL.revokeObjectURL(cmpPreviewUrlRef.current);
+      cmpPreviewUrlRef.current = '';
+    }
+    setCmpPreview(null);
     if (!file) {
       setOrigUrl('');
+      setBgBlob(null);
+      setBgPreviewUrl('');
       return;
     }
     const url = URL.createObjectURL(file);
@@ -195,10 +221,9 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
         const res = await renderLiveImagePreview(file, cmpFormat, cmpQuality / 100, cmpMaxW);
         if (cancelled) return;
         const url = URL.createObjectURL(res.blob);
-        setCmpPreview((prev) => {
-          if (prev?.url) URL.revokeObjectURL(prev.url);
-          return {url, blob: res.blob, size: res.blob.size};
-        });
+        if (cmpPreviewUrlRef.current) URL.revokeObjectURL(cmpPreviewUrlRef.current);
+        cmpPreviewUrlRef.current = url;
+        setCmpPreview({url, blob: res.blob, size: res.blob.size});
       } catch {
         // ignore
       }
@@ -225,9 +250,11 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
     setBusy(true);
     try {
       const blob = await removeImageBackground(file, bgTol, bgFeather, bgMode);
-      if (bgPreviewUrl) URL.revokeObjectURL(bgPreviewUrl);
+      if (bgPreviewUrlRef.current) URL.revokeObjectURL(bgPreviewUrlRef.current);
+      const nextUrl = URL.createObjectURL(blob);
+      bgPreviewUrlRef.current = nextUrl;
       setBgBlob(blob);
-      setBgPreviewUrl(URL.createObjectURL(blob));
+      setBgPreviewUrl(nextUrl);
     } finally {
       setBusy(false);
     }
@@ -299,7 +326,7 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-3.5">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-500/15 text-sky-400">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)]/15 text-[var(--accent-text)]">
               <ImageIcon className="h-5 w-5" />
             </div>
             <div className="min-w-0">
@@ -397,7 +424,7 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
                             key={fmt}
                             type="button"
                             onClick={() => setCmpFormat(fmt)}
-                            className={`rounded-xl border py-1.5 text-xs font-bold uppercase ${
+                            className={`min-h-[38px] rounded-xl border py-1.5 text-xs font-bold uppercase ${
                               cmpFormat === fmt
                                 ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
                                 : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]'
@@ -422,15 +449,17 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
                         style={{'--slider-pct': `${((cmpQuality - 15) / 85) * 100}%`} as React.CSSProperties}
                         className="morph-slider mt-2"
                       />
-                      <div className="mt-1.5 flex items-center gap-1.5">
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         <span className="text-[10px] text-[var(--muted)]">{isTr ? 'Maks Genişlik:' : 'Max W:'}</span>
                         {[0, 1920, 1280, 800].map((mw) => (
                           <button
                             key={mw}
                             type="button"
                             onClick={() => setCmpMaxW(mw)}
-                            className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
-                              cmpMaxW === mw ? 'bg-[var(--accent)] text-white' : 'bg-[var(--surface)] text-[var(--muted)]'
+                            className={`min-h-[36px] rounded-lg px-2.5 text-[11px] font-bold ${
+                              cmpMaxW === mw
+                                ? 'bg-[var(--accent)] text-[var(--accent-ink)]'
+                                : 'bg-[var(--surface)] text-[var(--muted)]'
                             }`}
                           >
                             {mw === 0 ? (isTr ? 'Orijinal' : 'Orig') : `${mw}px`}
@@ -462,7 +491,7 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
                           key={kb}
                           type="button"
                           onClick={() => setTargetKb(kb)}
-                          className={`rounded-xl border px-3 py-1.5 font-mono text-xs font-bold ${
+                          className={`min-h-[38px] rounded-xl border px-3 py-1.5 font-mono text-xs font-bold ${
                             targetKb === kb
                               ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
                               : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]'
@@ -479,7 +508,7 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
                         max={20000}
                         value={targetKb}
                         onChange={(e) => setTargetKb(Math.max(20, Number(e.target.value) || 500))}
-                        className="font-mono-num w-32 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm font-bold text-[var(--ink)]"
+                        className="font-mono-num min-h-[40px] w-32 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm font-bold text-[var(--ink)]"
                       />
                       <span className="text-xs font-bold text-[var(--muted)]">KB</span>
                       <div className="ml-auto flex gap-1">
@@ -488,7 +517,7 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
                             key={f}
                             type="button"
                             onClick={() => setTargetFmt(f)}
-                            className={`rounded-lg border px-2.5 py-1.5 text-xs font-bold uppercase ${
+                            className={`min-h-[38px] rounded-xl border px-3 py-1.5 text-xs font-bold uppercase ${
                               targetFmt === f
                                 ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
                                 : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]'
@@ -509,8 +538,8 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
                       <span>{isTr ? 'En İyi Kaliteyi Hesapla' : 'Calculate Optimal Quality'}</span>
                     </button>
                     {targetResult && (
-                      <div className="flex items-center justify-between rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3.5 py-2.5 text-xs">
-                        <span className="font-bold text-emerald-400">
+                      <div className="flex items-center justify-between rounded-xl border border-[var(--accent)]/40 bg-[var(--accent)]/12 px-3.5 py-2.5 text-xs">
+                        <span className="font-bold text-[var(--accent-text)]">
                           ✓ {formatBytes(file.size)} → {formatBytes(targetResult.blob.size)}
                         </span>
                         <span className="font-mono-num text-[var(--muted)]">
@@ -538,7 +567,7 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
                           const png = await renderPaletteCardPng(palette, file.name);
                           onExportBlob(png, `${file.name.replace(/\.[^.]+$/, '')}_palette.png`, isTr ? 'Renk Paleti' : 'Color Palette');
                         }}
-                        className="text-[11px] font-bold text-[var(--accent-text)] hover:underline"
+                        className="min-h-[36px] rounded-xl px-2 text-[11px] font-bold text-[var(--accent-text)] hover:underline"
                       >
                         {isTr ? 'Palet Kartı İndir (PNG)' : 'Export Swatch PNG'}
                       </button>
@@ -560,7 +589,7 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
                           <div className="flex items-center justify-between px-2 py-1.5">
                             <span className="font-mono text-[10px] font-bold text-[var(--ink)]">{sw.hex}</span>
                             {copiedHex === sw.hex ? (
-                              <Check className="h-3 w-3 text-emerald-400" />
+                              <Check className="h-3 w-3 text-[var(--accent-text)]" />
                             ) : (
                               <Copy className="h-3 w-3 text-[var(--muted)] opacity-60 group-hover:opacity-100" />
                             )}
@@ -572,7 +601,7 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
 
                   {/* Background Remover */}
                   <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 space-y-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="flex items-center gap-1.5 text-xs font-bold text-[var(--ink)]">
                         <Eraser className="h-4 w-4 text-[var(--accent-text)]" />
                         {isTr ? 'Tek Dokunuşla Arka Plan Sil (Şeffaf PNG)' : 'One-Tap Background Remover (Transparent PNG)'}
@@ -583,8 +612,10 @@ export const ImageProStudioModal: React.FC<ImageProStudioModalProps> = ({
                             key={m}
                             type="button"
                             onClick={() => setBgMode(m)}
-                            className={`rounded-lg px-2 py-1 text-[10px] font-bold ${
-                              bgMode === m ? 'bg-[var(--accent)] text-white' : 'bg-[var(--surface)] text-[var(--muted)]'
+                            className={`min-h-[36px] rounded-xl px-2.5 text-[11px] font-bold ${
+                              bgMode === m
+                                ? 'bg-[var(--accent)] text-[var(--accent-ink)]'
+                                : 'bg-[var(--surface)] text-[var(--muted)]'
                             }`}
                           >
                             {m === 'edges' ? (isTr ? 'Kenardan' : 'Edge Fill') : isTr ? 'Tüm Renk' : 'Global'}

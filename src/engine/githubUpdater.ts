@@ -13,7 +13,7 @@ export const PWA_WEB_URL = 'https://morphmobile.vercel.app';
 export const APP_VERSION: string =
   typeof __MORPH_VERSION__ === 'string' && __MORPH_VERSION__.trim().length > 0
     ? __MORPH_VERSION__
-    : '1.1.52';
+    : '1.1.53';
 
 export type VersionChannel = 'stable' | 'preview';
 

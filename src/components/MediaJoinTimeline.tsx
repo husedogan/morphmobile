@@ -831,7 +831,7 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
                     disabled={idx === 0}
                     onClick={() => moveClip(idx, -1)}
                     aria-label={tr('Yukarı taşı', 'Move up')}
-                    className="flex h-8 w-8 items-center justify-center rounded-xl text-[var(--muted)] transition-colors hover:bg-[var(--inset)] hover:text-[var(--ink)] disabled:opacity-25"
+                    className="flex h-9 w-9 items-center justify-center rounded-xl text-[var(--muted)] transition-colors hover:bg-[var(--inset)] hover:text-[var(--ink)] disabled:opacity-25"
                   >
                     <ArrowUp className="h-3.5 w-3.5" />
                   </button>
@@ -840,7 +840,7 @@ export const MediaJoinTimeline: React.FC<MediaJoinTimelineProps> = ({
                     disabled={idx === segments.length - 1}
                     onClick={() => moveClip(idx, 1)}
                     aria-label={tr('Aşağı taşı', 'Move down')}
-                    className="flex h-8 w-8 items-center justify-center rounded-xl text-[var(--muted)] transition-colors hover:bg-[var(--inset)] hover:text-[var(--ink)] disabled:opacity-25"
+                    className="flex h-9 w-9 items-center justify-center rounded-xl text-[var(--muted)] transition-colors hover:bg-[var(--inset)] hover:text-[var(--ink)] disabled:opacity-25"
                   >
                     <ArrowDown className="h-3.5 w-3.5" />
                   </button>

@@ -37,6 +37,7 @@ import {
   setLibraryItemFolder,
 } from '../engine/workspaceProStore';
 import {FileThumb} from './FileThumb';
+import {PdfCanvasViewer} from './PdfCanvasViewer';
 
 interface LibraryScreenProps {
   items: ExportItem[];
@@ -236,7 +237,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   const commitNewFolder = () => {
     const trimmed = newFolderName.trim();
     if (!trimmed) return;
-    const palette = ['#06B6D4', '#8B5CF6', '#F97316', '#EC4899', '#22C55E'];
+    const palette = ['#F0788A', '#0EA5E9', '#10B981', '#D97706', '#6366F1'];
     const created: LibraryFolder = {
       id: `fld_${Date.now()}`,
       name: trimmed,
@@ -467,7 +468,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
             <button
               type="button"
               onClick={() => setActiveFolder('all')}
-              className={`shrink-0 rounded-xl border px-3 py-1.5 text-[11px] font-bold ${
+              className={`min-h-[36px] shrink-0 rounded-xl border px-3 py-1.5 text-[11px] font-bold ${
                 activeFolder === 'all'
                   ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--accent-text)]'
                   : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]'
@@ -480,7 +481,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                 key={f.id}
                 type="button"
                 onClick={() => setActiveFolder(activeFolder === f.id ? 'all' : f.id)}
-                className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-bold ${
+                className={`flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-[11px] font-bold ${
                   activeFolder === f.id
                     ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--ink)]'
                     : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]'
@@ -530,7 +531,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
               <button
                 type="button"
                 onClick={() => setAddingFolder(true)}
-                className="flex shrink-0 items-center gap-1 rounded-xl border border-dashed border-[var(--line)] px-2.5 py-1.5 text-[11px] font-bold text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]"
+                className="flex min-h-[36px] shrink-0 items-center gap-1 rounded-xl border border-dashed border-[var(--line)] px-2.5 py-1.5 text-[11px] font-bold text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]"
               >
                 <FolderPlus className="h-3.5 w-3.5" />
                 <span>{lang === 'tr' ? 'Klasör' : 'Folder'}</span>
@@ -613,7 +614,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                       setSelectedIds(selectableFiltered.map((i) => i.id));
                     }
                   }}
-                  className="rounded-full border border-[var(--line)] bg-[var(--inset)] px-3 py-1.5 text-xs font-semibold text-[var(--ink)] hover:border-[var(--accent)]"
+                  className="min-h-[36px] rounded-full border border-[var(--line)] bg-[var(--inset)] px-3 py-1.5 text-xs font-semibold text-[var(--ink)] hover:border-[var(--accent)]"
                 >
                   {selectedIds.length === selectableFiltered.length && selectableFiltered.length > 0
                     ? lang === 'tr'
@@ -721,13 +722,17 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                         toggleSelectItem(item.id);
                       }}
                       aria-label={item.name}
-                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border transition-colors disabled:opacity-30 ${
-                        isSelected
-                          ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
-                          : 'border-[var(--line)] bg-[var(--inset)] text-transparent'
-                      }`}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors hover:bg-[var(--inset)] disabled:opacity-30"
                     >
-                      <Check className="h-3.5 w-3.5" />
+                      <span
+                        className={`flex h-5 w-5 items-center justify-center rounded-md border transition-colors ${
+                          isSelected
+                            ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-ink)]'
+                            : 'border-[var(--line)] bg-[var(--inset)] text-transparent'
+                        }`}
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                      </span>
                     </button>
                   )}
                   <FileThumb previewUrl={item.previewUrl} kind={kind} alt={item.name} sizeClass="h-11 w-11 sm:h-12 sm:w-12" />
@@ -739,9 +744,16 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                         if (!fld) return null;
                         return (
                           <span
-                            className="shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-bold text-white"
-                            style={{backgroundColor: fld.color}}
+                            className="inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[9px] font-bold text-[var(--ink)]"
+                            style={{
+                              backgroundColor: `${fld.color}20`,
+                              borderColor: `${fld.color}55`,
+                            }}
                           >
+                            <span
+                              className="h-1.5 w-1.5 rounded-full"
+                              style={{backgroundColor: fld.color}}
+                            />
                             {fld.name}
                           </span>
                         );
@@ -924,11 +936,14 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                 <audio src={previewItem.url} controls autoPlay className="w-full" />
               </div>
             ) : (
-              <iframe
-                src={previewItem.url}
-                title={previewItem.item.name}
-                className="h-full w-full max-w-3xl rounded-xl bg-white"
-              />
+              <div className="h-full w-full max-w-4xl">
+                <PdfCanvasViewer
+                  file={previewItem.item.blob}
+                  url={previewItem.url}
+                  fileName={previewItem.item.name}
+                  lang={lang}
+                />
+              </div>
             )}
           </div>
         </div>
