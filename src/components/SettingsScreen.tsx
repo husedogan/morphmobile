@@ -1,6 +1,7 @@
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   Activity,
+  Archive,
   ArrowUp,
   Bell,
   Check,
@@ -13,8 +14,11 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  FileText,
+  Film,
   FlaskConical,
   FolderCheck,
+  FolderOpen,
   GitBranch,
   HardDrive,
   Image as ImageIcon,
@@ -22,6 +26,7 @@ import {
   Layers,
   Lock,
   Moon,
+  Music,
   Palette,
   Play,
   RefreshCw,
@@ -44,6 +49,7 @@ import {
   ExpLauncherLabelMode,
   ExpLauncherStyle,
   ExpLauncherTextSize,
+  ExportItem,
   Prefs,
   UiScalePref,
   VideoQualityPref,
@@ -57,6 +63,7 @@ import {
   WheelSidePref,
   WheelSpinModePref,
   WheelSpinTriggerPref,
+  detectFileKind,
   formatBytes,
 } from '../data/models';
 import {
@@ -110,7 +117,14 @@ import {
   SettingsStudioLayoutCard,
 } from './SettingsProTab';
 
-export type SettingsCategory = 'appearance' | 'studio' | 'downloads' | 'permissions' | 'experimental' | 'system';
+export type SettingsCategory =
+  | 'appearance'
+  | 'studio'
+  | 'downloads'
+  | 'permissions'
+  | 'storage'
+  | 'experimental'
+  | 'system';
 
 interface SettingsScreenProps {
   prefs: Prefs;
@@ -127,7 +141,9 @@ interface SettingsScreenProps {
   onApplyUpdate: () => void;
   libraryCount?: number;
   libraryBytes?: number;
+  libraryItems?: ExportItem[];
   onClearLibrary?: () => void;
+  onDeleteLibraryItems?: (ids: string[]) => void | Promise<void>;
   onOpenWheelCustomize?: () => void;
   onOpenMainWheelCustomize?: () => void;
   onPinnedChanged?: () => void;
@@ -149,7 +165,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onApplyUpdate,
   libraryCount = 0,
   libraryBytes = 0,
+  libraryItems = [],
   onClearLibrary,
+  onDeleteLibraryItems,
   onOpenWheelCustomize,
   onOpenMainWheelCustomize,
   onPinnedChanged,
@@ -278,11 +296,15 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   useEffect(() => {
     if (prefs.simpleMode && category === 'studio') {
       setCategory('appearance');
+    } else if (!prefs.expDedicatedStorageTab && category === 'storage') {
+      setCategory('system');
     }
-  }, [prefs.simpleMode, category]);
+  }, [prefs.simpleMode, prefs.expDedicatedStorageTab, category]);
 
   const permShieldTapCountRef = useRef(0);
   const permShieldLastTapRef = useRef(0);
+  const shieldToastTimerRef = useRef<number | null>(null);
+  const [shieldCountdownToast, setShieldCountdownToast] = useState<string | null>(null);
   const expGateInputRef = useRef<HTMLInputElement | null>(null);
   const [expGateOpen, setExpGateOpen] = useState(false);
   const [expPassInput, setExpPassInput] = useState('');
@@ -292,6 +314,35 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const [expLauncherFocusedScope, setExpLauncherFocusedScope] = useState<
     'expAltLauncherForMenus' | 'expAltLauncherForMain' | 'expAltLauncherForVideo'
   >('expAltLauncherForMenus');
+
+  const showShieldToast = useCallback((msg: string) => {
+    if (shieldToastTimerRef.current !== null) {
+      window.clearTimeout(shieldToastTimerRef.current);
+    }
+    setShieldCountdownToast(msg);
+    shieldToastTimerRef.current = window.setTimeout(() => {
+      setShieldCountdownToast(null);
+      shieldToastTimerRef.current = null;
+    }, 2200);
+  }, []);
+
+  useEffect(() => {
+    if (category !== 'permissions' && shieldCountdownToast) {
+      if (shieldToastTimerRef.current !== null) {
+        window.clearTimeout(shieldToastTimerRef.current);
+        shieldToastTimerRef.current = null;
+      }
+      setShieldCountdownToast(null);
+    }
+  }, [category, shieldCountdownToast]);
+
+  useEffect(() => {
+    return () => {
+      if (shieldToastTimerRef.current !== null) {
+        window.clearTimeout(shieldToastTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!expGateOpen) return;
@@ -318,10 +369,37 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       permShieldTapCountRef.current = 0;
     }
     permShieldLastTapRef.current = now;
-    permShieldTapCountRef.current += 1;
 
-    if (permShieldTapCountRef.current >= 7) {
+    if (expUnlocked && expTabVisible) {
+      showShieldToast(
+        lang === 'tr'
+          ? 'Gerek yok, deneysel mod zaten açık.'
+          : 'No need, Experimental mode is already enabled.'
+      );
+      return;
+    }
+
+    permShieldTapCountRef.current += 1;
+    const remaining = 7 - permShieldTapCountRef.current;
+
+    if (remaining > 0 && remaining <= 3) {
+      showShieldToast(
+        lang === 'tr'
+          ? `Deneysel mod için ${remaining} adım kaldı.`
+          : remaining === 1
+            ? '1 step away from Experimental mode.'
+            : `${remaining} steps away from Experimental mode.`
+      );
+      return;
+    }
+
+    if (remaining <= 0) {
       permShieldTapCountRef.current = 0;
+      if (shieldToastTimerRef.current !== null) {
+        window.clearTimeout(shieldToastTimerRef.current);
+        shieldToastTimerRef.current = null;
+      }
+      setShieldCountdownToast(null);
       if (expUnlocked) {
         if (!expTabVisible) {
           setExpTabVisible(true);
@@ -609,6 +687,120 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   ];
 
   const simpleMode = Boolean(prefs.simpleMode);
+  const dedicatedStorageTab = Boolean(prefs.expDedicatedStorageTab);
+
+  const storageBreakdown = useMemo(() => {
+    type BucketId = 'image' | 'video' | 'audio' | 'document' | 'archive' | 'other';
+    const buckets: Record<
+      BucketId,
+      {
+        id: BucketId;
+        labelTr: string;
+        labelEn: string;
+        color: string;
+        Icon: React.FC<{className?: string}>;
+        count: number;
+        bytes: number;
+        ids: string[];
+      }
+    > = {
+      image: {
+        id: 'image',
+        labelTr: 'Galeri & Görseller',
+        labelEn: 'Gallery & Images',
+        color: '#EC4899',
+        Icon: ImageIcon,
+        count: 0,
+        bytes: 0,
+        ids: [],
+      },
+      video: {
+        id: 'video',
+        labelTr: 'Videolar',
+        labelEn: 'Videos',
+        color: '#8B5CF6',
+        Icon: Film,
+        count: 0,
+        bytes: 0,
+        ids: [],
+      },
+      audio: {
+        id: 'audio',
+        labelTr: 'Sesler',
+        labelEn: 'Audio',
+        color: '#10B981',
+        Icon: Music,
+        count: 0,
+        bytes: 0,
+        ids: [],
+      },
+      document: {
+        id: 'document',
+        labelTr: 'Belgeler & PDF',
+        labelEn: 'Documents & PDF',
+        color: '#F59E0B',
+        Icon: FileText,
+        count: 0,
+        bytes: 0,
+        ids: [],
+      },
+      archive: {
+        id: 'archive',
+        labelTr: 'Arşivler',
+        labelEn: 'Archives',
+        color: '#0EA5E9',
+        Icon: Archive,
+        count: 0,
+        bytes: 0,
+        ids: [],
+      },
+      other: {
+        id: 'other',
+        labelTr: 'Diğer Dosyalar',
+        labelEn: 'Other Files',
+        color: '#64748B',
+        Icon: FolderOpen,
+        count: 0,
+        bytes: 0,
+        ids: [],
+      },
+    };
+
+    let totalBytes = 0;
+    for (const item of libraryItems) {
+      const kind = detectFileKind(item.name, item.mime);
+      const bucketKey: BucketId =
+        kind === 'image'
+          ? 'image'
+          : kind === 'video'
+            ? 'video'
+            : kind === 'audio'
+              ? 'audio'
+              : kind === 'pdf' || kind === 'document'
+                ? 'document'
+                : kind === 'archive'
+                  ? 'archive'
+                  : 'other';
+      const size = Math.max(0, Number(item.size) || 0);
+      buckets[bucketKey].count += 1;
+      buckets[bucketKey].bytes += size;
+      buckets[bucketKey].ids.push(item.id);
+      totalBytes += size;
+    }
+
+    return {
+      totalBytes,
+      totalCount: libraryItems.length,
+      buckets: [
+        buckets.image,
+        buckets.video,
+        buckets.audio,
+        buckets.document,
+        buckets.archive,
+        buckets.other,
+      ],
+    };
+  }, [libraryItems]);
 
   const categories: Array<{
     id: SettingsCategory;
@@ -621,6 +813,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       : []),
     {id: 'downloads', label: t('SetCatDownloads', lang), Icon: Download},
     {id: 'permissions', label: t('SetCatPermissions', lang), Icon: ShieldCheck},
+    ...(dedicatedStorageTab
+      ? [{id: 'storage' as const, label: lang === 'tr' ? 'Depolama' : 'Storage', Icon: HardDrive}]
+      : []),
     ...(expUnlocked && expTabVisible
       ? [{id: 'experimental' as const, label: lang === 'tr' ? 'Deneysel' : 'Experimental', Icon: FlaskConical}]
       : []),
@@ -840,7 +1035,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               className={`flex min-h-[44px] items-center justify-center rounded-xl text-xs font-semibold whitespace-nowrap transition-colors duration-200 ${
                 active
                   ? 'morph-accent-solid shrink-0 gap-1.5 px-3.5 shadow-sm sm:gap-2 sm:px-4'
-                  : 'min-w-[34px] flex-1 px-0 text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)] sm:w-11 sm:flex-none'
+                  : 'min-w-[32px] flex-1 px-0 text-[var(--muted)] hover:bg-[var(--inset)] hover:text-[var(--ink)] sm:w-11 sm:flex-none'
               }`}
             >
               <Icon className="h-4 w-4 shrink-0" />
@@ -2632,134 +2827,368 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </div>
       )}
 
+      {/* CATEGORY 3.5: DEDICATED STORAGE TAB (Experimental opt-in; default OFF) */}
+      {category === 'storage' && dedicatedStorageTab && (
+        <div className="mt-4 space-y-3.5">
+          {/* Storage Overview & Segmented Category Bar */}
+          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5 space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
+                  <HardDrive className="h-4.5 w-4.5" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-sm font-extrabold leading-snug text-[var(--ink)]">
+                    {lang === 'tr' ? 'Depolama Özeti' : 'Storage Overview'}
+                  </h2>
+                  <p className="font-mono-num mt-0.5 text-[11px] text-[var(--muted)]">
+                    {storageBreakdown.totalCount} {t('FilesCount', lang)} ·{' '}
+                    {formatBytes(storageBreakdown.totalBytes)}
+                  </p>
+                </div>
+              </div>
+
+              {onClearLibrary && storageBreakdown.totalCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClearLibrary();
+                    onShowToast?.(
+                      lang === 'tr' ? 'Kitaplık tamamen temizlendi.' : 'Library completely cleared.'
+                    );
+                  }}
+                  className="flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--inset)] px-3 text-[11px] font-semibold text-[var(--danger)] transition-colors hover:border-[var(--danger)] active:scale-95"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>{lang === 'tr' ? 'Tümünü Sil' : 'Clear All'}</span>
+                </button>
+              )}
+            </div>
+
+            {/* Segmented visual usage bar */}
+            <div className="space-y-2">
+              <div className="flex h-3 w-full overflow-hidden rounded-full bg-[var(--inset)] border border-[var(--line)]/70">
+                {storageBreakdown.totalBytes > 0 ? (
+                  storageBreakdown.buckets
+                    .filter((b) => b.bytes > 0)
+                    .map((b) => (
+                      <div
+                        key={b.id}
+                        style={{
+                          width: `${Math.max(3, (b.bytes / storageBreakdown.totalBytes) * 100)}%`,
+                          backgroundColor: b.color,
+                        }}
+                        className="h-full transition-all duration-300 first:rounded-l-full last:rounded-r-full"
+                        title={`${lang === 'tr' ? b.labelTr : b.labelEn}: ${formatBytes(b.bytes)}`}
+                      />
+                    ))
+                ) : (
+                  <div className="h-full w-full bg-[var(--inset)]" />
+                )}
+              </div>
+
+              {storageBreakdown.totalBytes > 0 ? (
+                <div className="flex flex-wrap gap-x-3 gap-y-1.5 pt-0.5">
+                  {storageBreakdown.buckets
+                    .filter((b) => b.count > 0)
+                    .map((b) => (
+                      <span
+                        key={b.id}
+                        className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--muted)]"
+                      >
+                        <span
+                          className="h-2 w-2 rounded-full shrink-0"
+                          style={{backgroundColor: b.color}}
+                        />
+                        <span>{lang === 'tr' ? b.labelTr : b.labelEn}</span>
+                        <span className="font-mono-num text-[var(--ink)] font-semibold">
+                          {formatBytes(b.bytes)}
+                        </span>
+                      </span>
+                    ))}
+                </div>
+              ) : (
+                <p className="text-xs text-[var(--muted)]">
+                  {lang === 'tr'
+                    ? 'Kitaplıkta henüz dosya yok. Çıktı aldığında türlere göre burada görünür.'
+                    : 'No files in your library yet. Exports will appear broken down by type here.'}
+                </p>
+              )}
+            </div>
+          </section>
+
+          {/* Category-by-Category Library Breakdown */}
+          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5 space-y-3">
+            <div>
+              <h2 className="text-sm font-extrabold leading-snug text-[var(--ink)]">
+                {lang === 'tr' ? 'Kitaplık İçeriği' : 'Library Breakdown'}
+              </h2>
+              <p className="mt-0.5 text-xs text-[var(--muted)]">
+                {lang === 'tr'
+                  ? 'Her dosya türünü ayrı ayrı görüntüle ve temizle.'
+                  : 'Inspect and clean each media category separately.'}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              {storageBreakdown.buckets.map((bucket) => {
+                const Icon = bucket.Icon;
+                const pct =
+                  storageBreakdown.totalBytes > 0
+                    ? Math.round((bucket.bytes / storageBreakdown.totalBytes) * 100)
+                    : 0;
+                return (
+                  <div
+                    key={bucket.id}
+                    className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                          style={{
+                            backgroundColor: `${bucket.color}1F`,
+                            color: bucket.color,
+                          }}
+                        >
+                          <Icon className="h-4.5 w-4.5" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold leading-snug text-[var(--ink)]">
+                            {lang === 'tr' ? bucket.labelTr : bucket.labelEn}
+                          </p>
+                          <p className="font-mono-num mt-0.5 text-[11px] text-[var(--muted)]">
+                            {bucket.count} {t('FilesCount', lang)} · {formatBytes(bucket.bytes)}
+                            {bucket.bytes > 0 ? ` · %${pct}` : ''}
+                          </p>
+                        </div>
+                      </div>
+
+                      {bucket.count > 0 && onDeleteLibraryItems && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await onDeleteLibraryItems(bucket.ids);
+                            onShowToast?.(
+                              lang === 'tr'
+                                ? `${bucket.labelTr} temizlendi (${bucket.count} dosya).`
+                                : `${bucket.labelEn} cleared (${bucket.count} files).`
+                            );
+                          }}
+                          className="flex min-h-[34px] shrink-0 items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 text-[11px] font-semibold text-[var(--danger)] transition-colors hover:border-[var(--danger)] active:scale-95"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          <span>{t('Clear', lang)}</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {bucket.bytes > 0 && (
+                      <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface)]">
+                        <div
+                          className="h-full rounded-full transition-all duration-300"
+                          style={{
+                            width: `${Math.max(4, pct)}%`,
+                            backgroundColor: bucket.color,
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* Projects & App Quota */}
+          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5 space-y-3">
+            <h2 className="text-sm font-extrabold leading-snug text-[var(--ink)]">
+              {lang === 'tr' ? 'Projeler & Alan' : 'Projects & Quota'}
+            </h2>
+
+            <div className="flex items-center justify-between gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3.5 py-2.5">
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-[var(--ink)]">
+                  {lang === 'tr' ? 'Video Projeleri' : 'Video Projects'}
+                </p>
+                <p className="font-mono-num mt-0.5 text-[11px] text-[var(--muted)]">
+                  {savedProjectCount} {lang === 'tr' ? 'kayıtlı proje' : 'saved projects'}
+                </p>
+              </div>
+              {savedProjectCount > 0 && (
+                <button
+                  type="button"
+                  disabled={clearingProjects}
+                  onClick={() => void handleClearSavedProjects()}
+                  className="flex min-h-[34px] shrink-0 items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 text-[11px] font-semibold text-[var(--danger)] hover:border-[var(--danger)] disabled:opacity-50"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  <span>{t('Clear', lang)}</span>
+                </button>
+              )}
+            </div>
+
+            {storageEstimate && storageEstimate.quota > 0 && (
+              <div className="space-y-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3.5 py-3">
+                <div className="flex items-center justify-between gap-2 text-[11px] text-[var(--muted)]">
+                  <span>{lang === 'tr' ? 'Uygulama Alan Kullanımı' : 'App Storage Usage'}</span>
+                  <span className="font-mono-num font-semibold text-[var(--ink)]">
+                    {formatBytes(storageEstimate.usage)} / {formatBytes(storageEstimate.quota)}
+                  </span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface)]">
+                  <div
+                    className="morph-accent-solid h-full rounded-full transition-all duration-300"
+                    style={{
+                      width: `${Math.max(
+                        2,
+                        Math.min(100, (storageEstimate.usage / storageEstimate.quota) * 100)
+                      )}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
       {category === 'experimental' && expTabVisible && expUnlocked && (
         <div className="mt-4 space-y-3.5">
           {/* Compact Inline Actions Row (no duplicate tab header card) */}
-          <div className="flex items-center justify-end gap-2 px-0.5">
-            {(prefs.expAltLauncher ||
-              prefs.expAltLauncherForMain === true ||
-              prefs.expAltLauncherForMenus === false ||
-              prefs.expAltLauncherForVideo === false ||
-              prefs.expAltLauncherLabelsEnabled === false ||
-              (prefs.expAltLauncherLabelMode && prefs.expAltLauncherLabelMode !== 'wrap') ||
-              prefs.expAltLauncherShowDesc === false ||
-              (prefs.expAltLauncherTextSize && prefs.expAltLauncherTextSize !== 'md') ||
-              prefs.expSpinningGear ||
-              prefs.expWheelBurnEffect ||
-              (prefs.expWheelBurnStyle && prefs.expWheelBurnStyle !== 'classic_fire') ||
-              prefs.expWheelSpinEnabled ||
-              (prefs.expWheelSpinMode && prefs.expWheelSpinMode !== 'outer_ccw_inner_cw') ||
-              (prefs.expWheelSpinTrigger && prefs.expWheelSpinTrigger !== 'always') ||
-              prefs.expVideoExtraTimecodes ||
-              prefs.expWheelCenterHoldCustomize ||
-              prefs.expTouchTooltips ||
-              prefs.expLegacySliders ||
-              prefs.expAmbientAurora ||
-              prefs.expTerminal ||
-              prefs.expUiSounds ||
-              prefs.expWheelShockwave ||
-              prefs.expExportPipAudio === false ||
-              prefs.expExportOverlapNormalVideo === false ||
-              prefs.expAudioLiveDspPreview === false ||
-              prefs.expAudioMultiFormatExport === false) && (
+          <div className="flex items-center justify-between gap-2 px-0.5">
+            <span className="text-[11px] font-semibold text-[var(--muted)]">
+              {lang === 'tr' ? 'Geliştirici & Beta Deneyleri' : 'Developer & Beta Labs'}
+            </span>
+
+            <div className="flex items-center gap-2">
+              {(prefs.expAltLauncher ||
+                prefs.expAltLauncherForMain === true ||
+                prefs.expAltLauncherForMenus === false ||
+                prefs.expAltLauncherForVideo === false ||
+                prefs.expAltLauncherLabelsEnabled === false ||
+                (prefs.expAltLauncherLabelMode && prefs.expAltLauncherLabelMode !== 'wrap') ||
+                prefs.expAltLauncherShowDesc === false ||
+                (prefs.expAltLauncherTextSize && prefs.expAltLauncherTextSize !== 'md') ||
+                prefs.expSpinningGear ||
+                prefs.expWheelBurnEffect ||
+                (prefs.expWheelBurnStyle && prefs.expWheelBurnStyle !== 'classic_fire') ||
+                prefs.expWheelSpinEnabled ||
+                (prefs.expWheelSpinMode && prefs.expWheelSpinMode !== 'outer_ccw_inner_cw') ||
+                (prefs.expWheelSpinTrigger && prefs.expWheelSpinTrigger !== 'always') ||
+                prefs.expVideoExtraTimecodes ||
+                prefs.expWheelCenterHoldCustomize ||
+                prefs.expTouchTooltips ||
+                prefs.expLegacySliders ||
+                prefs.expAmbientAurora ||
+                prefs.expTerminal ||
+                prefs.expUiSounds ||
+                prefs.expWheelShockwave ||
+                prefs.expDedicatedStorageTab ||
+                prefs.expExportPipAudio === false ||
+                prefs.expExportOverlapNormalVideo === false ||
+                prefs.expAudioLiveDspPreview === false ||
+                prefs.expAudioMultiFormatExport === false) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChangePrefs((p) => ({
+                      ...p,
+                      expAltLauncher: false,
+                      expAltLauncherStyle: 'cascade_sheet',
+                      expAltLauncherForMain: false,
+                      expAltLauncherForMenus: true,
+                      expAltLauncherForVideo: true,
+                      expAltLauncherLabelsEnabled: true,
+                      expAltLauncherLabelMode: 'wrap',
+                      expAltLauncherShowDesc: true,
+                      expAltLauncherTextSize: 'md',
+                      expSpinningGear: false,
+                      expWheelBurnEffect: false,
+                      expWheelBurnStyle: 'classic_fire',
+                      expWheelSpinEnabled: false,
+                      expWheelSpinMode: 'outer_ccw_inner_cw',
+                      expWheelSpinTrigger: 'always',
+                      expVideoExtraTimecodes: false,
+                      expWheelCenterHoldCustomize: false,
+                      expTouchTooltips: false,
+                      expLegacySliders: false,
+                      expAmbientAurora: false,
+                      expTerminal: false,
+                      expUiSounds: false,
+                      expWheelShockwave: false,
+                      expDedicatedStorageTab: false,
+                      expExportPipAudio: true,
+                      expExportOverlapNormalVideo: true,
+                      expAudioLiveDspPreview: true,
+                      expAudioMultiFormatExport: true,
+                    }));
+                    onShowToast?.(
+                      lang === 'tr'
+                        ? 'Deneysel ayarlar varsayılana döndürüldü.'
+                        : 'Experimental settings restored to defaults.'
+                    );
+                  }}
+                  className="flex min-h-[36px] items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] active:scale-95"
+                >
+                  <RotateCcw className="h-3.5 w-3.5 text-[var(--accent-text)]" />
+                  <span>{lang === 'tr' ? 'Sıfırla' : 'Reset'}</span>
+                </button>
+              )}
+
               <button
                 type="button"
-                onClick={() => {
-                  onChangePrefs((p) => ({
-                    ...p,
-                    expAltLauncher: false,
-                    expAltLauncherStyle: 'cascade_sheet',
-                    expAltLauncherForMain: false,
-                    expAltLauncherForMenus: true,
-                    expAltLauncherForVideo: true,
-                    expAltLauncherLabelsEnabled: true,
-                    expAltLauncherLabelMode: 'wrap',
-                    expAltLauncherShowDesc: true,
-                    expAltLauncherTextSize: 'md',
-                    expSpinningGear: false,
-                    expWheelBurnEffect: false,
-                    expWheelBurnStyle: 'classic_fire',
-                    expWheelSpinEnabled: false,
-                    expWheelSpinMode: 'outer_ccw_inner_cw',
-                    expWheelSpinTrigger: 'always',
-                    expVideoExtraTimecodes: false,
-                    expWheelCenterHoldCustomize: false,
-                    expTouchTooltips: false,
-                    expLegacySliders: false,
-                    expAmbientAurora: false,
-                    expTerminal: false,
-                    expUiSounds: false,
-                    expWheelShockwave: false,
-                    expExportPipAudio: true,
-                    expExportOverlapNormalVideo: true,
-                    expAudioLiveDspPreview: true,
-                    expAudioMultiFormatExport: true,
-                  }));
-                  onShowToast?.(
-                    lang === 'tr'
-                      ? 'Deneysel ayarlar varsayılana döndürüldü.'
-                      : 'Experimental settings restored to defaults.'
-                  );
-                }}
+                onClick={handleExpLock}
                 className="flex min-h-[36px] items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] active:scale-95"
               >
-                <RotateCcw className="h-3.5 w-3.5 text-[var(--accent-text)]" />
-                <span>{lang === 'tr' ? 'Sıfırla' : 'Reset'}</span>
+                <Lock className="h-3.5 w-3.5 text-[var(--accent)]" />
+                <span>{lang === 'tr' ? 'Kilitle' : 'Lock'}</span>
               </button>
-            )}
-
-            <button
-              type="button"
-              onClick={handleExpLock}
-              className="flex min-h-[36px] items-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] active:scale-95"
-            >
-              <Lock className="h-3.5 w-3.5 text-[var(--accent)]" />
-              <span>{lang === 'tr' ? 'Kilitle' : 'Lock'}</span>
-            </button>
+            </div>
           </div>
 
-          {/* 1. NEW BETA ENGINE FEATURES (Expanded by default for fast testing) */}
+          {/* 1. NEW BETA ENGINE FEATURES */}
           {(() => {
             const engineBetaItems = [
               {
                 key: 'expExportPipAudio' as const,
                 defaultOn: true,
-                titleTr: 'Video Dışa Aktarımda PiP (V2–V5) Ses Miksajı',
-                titleEn: 'Mix PiP (V2–V5) Audio on Video Export',
+                titleTr: 'PiP Ses Miksajı (V2–V5)',
+                titleEn: 'PiP Audio Mix (V2–V5)',
                 descTr:
-                  'Susturulmamış V2–V5 PiP kliplerinin seslerini zaman çizelgesi konumuna göre (adelay + amix) ana sese miksler.',
+                  'Susturulmamış V2–V5 PiP kliplerinin seslerini zaman çizelgesi konumuna göre ana sese miksler.',
                 descEn:
-                  'Mixes audio from unmuted V2–V5 PiP clips into the final export at their exact timeline offsets (adelay + amix).',
+                  'Mixes audio from unmuted V2–V5 PiP clips into the final export at their exact timeline offsets.',
               },
               {
                 key: 'expExportOverlapNormalVideo' as const,
                 defaultOn: true,
-                titleTr: 'Üst Üste Binen Normal Katmanları (V2–V5) Birleştir',
-                titleEn: 'Composite Overlapping Normal Layers (V2–V5)',
+                titleTr: 'Çakışan Katman Birleştirme',
+                titleEn: 'Overlapping Layer Composite',
                 descTr:
-                  'Katman çakışması açıkken V1 ile çakışan normal V2–V5 kliplerini çakıştığı aralıkta tam ekran üst katman olarak bindirir.',
+                  'Katman çakışması açıkken V1 ile çakışan normal V2–V5 kliplerini çakıştığı aralıkta tam ekran bindirir.',
                 descEn:
-                  'When video layer overlap is allowed, composites overlapping normal V2–V5 clips full-frame over V1 during their exact window.',
+                  'Composites overlapping normal V2–V5 clips full-frame over V1 during their overlap window.',
               },
               {
                 key: 'expAudioLiveDspPreview' as const,
                 defaultOn: true,
-                titleTr: 'Ses Stüdyosu Canlı DSP Önizlemesi (Fade / Mute / Denoise)',
-                titleEn: 'Audio Studio Live DSP Preview (Fade / Mute / Denoise)',
+                titleTr: 'Canlı DSP Önizleme',
+                titleEn: 'Live DSP Preview',
                 descTr:
-                  'Ses Stüdyosu oynatırken Fade In/Out, Sessiz Bölge, Gürültü Azaltma ve Kompresörü canlı olarak duyurur.',
+                  'Ses Stüdyosu oynatırken Fade, Sessiz Bölge, Gürültü Azaltma ve Kompresörü canlı duyurur.',
                 descEn:
-                  'Audibly previews Fade In/Out ramps, Mute Region, Noise Reduction filters, and Compressor live in Web Audio playback.',
+                  'Audibly previews Fade, Mute Region, Denoise, and Compressor live during playback.',
               },
               {
                 key: 'expAudioMultiFormatExport' as const,
                 defaultOn: true,
-                titleTr: 'Ses Stüdyosu Çoklu Format Dışa Aktarım (MP3 / M4A / OGG)',
-                titleEn: 'Audio Studio Multi-Format Export (MP3 / M4A / OGG)',
+                titleTr: 'Çoklu Ses Dışa Aktarımı',
+                titleEn: 'Multi-Format Audio Export',
                 descTr:
-                  'Ses Stüdyosu çıktısını WAV yanında FFmpeg ile MP3, M4A veya OGG olarak kaydetme seçeneği sunar.',
+                  'Ses Stüdyosu çıktısını WAV yanında MP3, M4A veya OGG olarak kaydetme seçeneği sunar.',
                 descEn:
-                  'Adds WAV, MP3, M4A, and OGG export format selection in Audio Studio using local FFmpeg transcoding.',
+                  'Adds WAV, MP3, M4A, and OGG export format selection in Audio Studio.',
               },
             ] as const;
             const activeBetaCount = engineBetaItems.filter((it) => prefs[it.key] !== false).length;
@@ -2769,11 +3198,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 title={lang === 'tr' ? 'Beta Motorlar' : 'Beta Engines'}
                 subtitle={
                   lang === 'tr'
-                    ? 'FFmpeg dışa aktarım ve Web Audio DSP deneyleri'
-                    : 'Toggle FFmpeg export and Web Audio DSP engine features'
+                    ? 'FFmpeg dışa aktarım ve ses işleme deneyleri'
+                    : 'FFmpeg export and audio engine features'
                 }
                 badge={`${activeBetaCount}/${engineBetaItems.length} ${lang === 'tr' ? 'aktif' : 'on'}`}
-                defaultOpen={true}
+                defaultOpen={false}
                 accentBorder={true}
               >
                 <div className="space-y-2.5">
@@ -3697,13 +4126,22 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </div>
           </SettingsAccordionCard>
 
-          {/* 4. VISUAL & CLASSIC UI EXPERIMENTS */}
+          {/* 4. VISUAL & TAB UI EXPERIMENTS */}
           {(() => {
             const uiExpItems = [
               {
+                key: 'expDedicatedStorageTab' as const,
+                titleTr: 'Depolama Yönetimi',
+                titleEn: 'Storage Management',
+                descTr:
+                  'Ayarlar’da ayrı Depolama sekmesi açar; Kitaplık dosyalarını galeri, video, ses ve belge olarak yönetmeni sağlar.',
+                descEn:
+                  'Adds a dedicated Storage tab in Settings to inspect and clean gallery, video, audio, and document files separately.',
+              },
+              {
                 key: 'expAmbientAurora' as const,
-                titleTr: 'Canlı Ortam Işığı (Aurora)',
-                titleEn: 'Living Ambient Aurora Glow',
+                titleTr: 'Ortam Işığı (Aurora)',
+                titleEn: 'Ambient Aurora Glow',
                 descTr:
                   'Arka planda seçili Morph temanın renkleriyle yavaşça nefes alıp süzülen yumuşak ortam ışığı katmanı ekler.',
                 descEn:
@@ -3711,35 +4149,35 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               },
               {
                 key: 'expTerminal' as const,
-                titleTr: 'Termux Tarzı Morph Terminali',
-                titleEn: 'Termux-Style Morph Terminal',
+                titleTr: 'Morph Terminali',
+                titleEn: 'Morph Terminal',
                 descTr:
-                  'Üst çubuğa Termux benzeri etkileşimli komut satırı (ve Ctrl+` kısayolu) ekler. Komutlarla uygulamayı doğrudan kontrol edebilirsin.',
+                  'Üst çubuğa etkileşimli komut satırı (ve Ctrl+` kısayolu) ekler. Komutlarla uygulamayı doğrudan kontrol edebilirsin.',
                 descEn:
-                  'Adds a Termux-style interactive command shell to the top bar (and Ctrl+` shortcut) to control tools, themes, and downloads via CLI.',
+                  'Adds an interactive command shell to the top bar (and Ctrl+` shortcut) to control tools, themes, and downloads via CLI.',
               },
               {
                 key: 'expUiSounds' as const,
                 titleTr: 'Mekanik Arayüz Sesleri',
-                titleEn: 'Tactile UI Micro-Sounds',
+                titleEn: 'Tactile UI Sounds',
                 descTr:
-                  'Düğmelere, sekmelere ve anahtarlara dokunduğunda hafif, mekanik ve tamamen çevrimdışı dokunsal ses geri bildirimi verir.',
+                  'Düğmelere, sekmelere ve anahtarlara dokunduğunda hafif, mekanik ve çevrimdışı dokunsal ses verir.',
                 descEn:
                   'Synthesizes subtle, crisp mechanical clicks and switch tones on taps with zero external audio files.',
               },
               {
                 key: 'expVideoExtraTimecodes' as const,
-                titleTr: 'Video Düzenleyici Ek Süre Göstergeleri',
-                titleEn: 'Video Editor Extra Timecode Badges',
+                titleTr: 'Ek Zaman Kodları',
+                titleEn: 'Extra Timecode Badges',
                 descTr:
-                  'Çarkın üst şeridi, deneysel alt çubuk ve deneysel araç penceresi başlığında da anlık zaman kodu gösterir.',
+                  'Çarkın üst şeridi, deneysel alt çubuk ve deneysel araç penceresi başlığında anlık zaman kodu gösterir.',
                 descEn:
                   'Shows extra timecodes in the wheel top badge, experimental bottom bar, and experimental tool launcher header.',
               },
               {
                 key: 'expTouchTooltips' as const,
-                titleTr: 'Dokunmatikte Düzenleyici İpucu Baloncukları',
-                titleEn: 'Touch-Device Editor Tooltips',
+                titleTr: 'Dokunmatik İpuçları',
+                titleEn: 'Touch Editor Tooltips',
                 descTr:
                   'Video Düzenleyici butonlarının açıklama baloncuklarını telefon ve dokunmatik ekranlarda da gösterir.',
                 descEn:
@@ -3747,24 +4185,24 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               },
               {
                 key: 'expSpinningGear' as const,
-                titleTr: 'Sürekli Dönen Ayarlar Dişlisi',
-                titleEn: 'Continuously Spinning Settings Gear',
+                titleTr: 'Dönen Ayarlar Dişlisi',
+                titleEn: 'Spinning Settings Gear',
                 descTr: 'Üst çubuktaki Ayarlar ikonunu sürekli döndürür.',
                 descEn: 'Keeps the top-bar Settings gear continuously rotating.',
               },
               {
                 key: 'expWheelCenterHoldCustomize' as const,
-                titleTr: 'Çark Ortasına 3 sn Basarak Özelleştir',
-                titleEn: '3s Center-Hold Wheel Customize',
+                titleTr: 'Basılı Tutarak Özelleştir',
+                titleEn: '3s Hold to Customize',
                 descTr:
-                  'Özelleştir butonunu gizler; çarkın ortasına veya başlatıcıda sol üst m amblemine 3 saniye basılı tutarak özelleştirirsin.',
+                  'Özelleştir butonunu gizler; çarkın ortasına veya başlatıcıda m amblemine 3 saniye basılı tutarak özelleştirirsin.',
                 descEn:
                   'Hides the Customize button; hold the center Morph hub for 3 seconds to customize.',
               },
               {
                 key: 'expLegacySliders' as const,
-                titleTr: '3 Seçenekli Ayarlarda Ek Kaydırıcılar',
-                titleEn: 'Extra Sliders on 3-Option Controls',
+                titleTr: 'Ek Kaydırıcılar',
+                titleEn: 'Extra Range Sliders',
                 descTr:
                   'Arayüz boyutu ve köşe stili seçeneklerinin üstünde ek kaydırma çubuklarını gösterir.',
                 descEn:
@@ -3778,8 +4216,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 title={lang === 'tr' ? 'Arayüz Deneyleri' : 'UI Experiments'}
                 subtitle={
                   lang === 'tr'
-                    ? 'Aurora ışığı, terminal, arayüz sesleri ve klasik seçenekler'
-                    : 'Aurora glow, terminal, UI sounds & classic options'
+                    ? 'Depolama yönetimi, aurora, terminal ve sesler'
+                    : 'Storage management, aurora, terminal & UI sounds'
                 }
                 badge={
                   activeUiCount > 0
@@ -3788,7 +4226,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       ? 'Tümü kapalı'
                       : 'All off'
                 }
-                defaultOpen={false}
+                defaultOpen={true}
               >
                 <div className="space-y-2.5">
                   {uiExpItems.map((item) => {
@@ -3799,12 +4237,24 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                         type="button"
                         role="switch"
                         aria-checked={checked}
-                        onClick={() =>
+                        onClick={() => {
+                          const nextVal = !prefs[item.key];
                           onChangePrefs((p) => ({
                             ...p,
-                            [item.key]: !p[item.key],
-                          }))
-                        }
+                            [item.key]: nextVal,
+                          }));
+                          if (item.key === 'expDedicatedStorageTab') {
+                            onShowToast?.(
+                              nextVal
+                                ? lang === 'tr'
+                                  ? 'Depolama sekmesi Ayarlar çubuğuna eklendi.'
+                                  : 'Storage tab added to Settings.'
+                                : lang === 'tr'
+                                  ? 'Depolama sekmesi gizlendi.'
+                                  : 'Storage tab hidden.'
+                            );
+                          }
+                        }}
                         className="flex min-h-[64px] w-full items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
                       >
                         <div className="min-w-0">
@@ -4054,85 +4504,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </div>
           </section>
 
-          {/* Storage & Cache Management Card */}
-          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5 space-y-3.5">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)]">
-                <HardDrive className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-sm font-extrabold text-[var(--ink)]">
-                  {lang === 'tr' ? 'Depolama & Önbellek' : 'Storage & Cache'}
-                </h2>
-                <p className="text-xs text-[var(--muted)]">
-                  {lang === 'tr'
-                    ? 'Kütüphane çıktıları ve kayıtlı video projelerini yönetin.'
-                    : 'Manage exported library files and saved video projects.'}
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <div className="flex items-center justify-between gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3.5 py-2.5">
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-[var(--ink)]">{t('Library', lang)}</p>
-                  <p className="font-mono-num mt-0.5 text-[11px] text-[var(--muted)]">
-                    {libraryCount} {t('FilesCount', lang)} · {formatBytes(libraryBytes)}
-                  </p>
-                </div>
-                {onClearLibrary && libraryCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClearLibrary();
-                      onShowToast?.(
-                        lang === 'tr' ? 'Kütüphane temizlendi.' : 'Library cleared.'
-                      );
-                    }}
-                    className="flex min-h-[34px] shrink-0 items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 text-[11px] font-semibold text-[var(--danger)] hover:border-[var(--danger)]"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                    <span>{t('Clear', lang)}</span>
-                  </button>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3.5 py-2.5">
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-[var(--ink)]">
-                    {lang === 'tr' ? 'Video Projeleri' : 'Video Projects'}
-                  </p>
-                  <p className="font-mono-num mt-0.5 text-[11px] text-[var(--muted)]">
-                    {savedProjectCount}{' '}
-                    {lang === 'tr' ? 'kayıtlı proje' : 'saved projects'}
-                  </p>
-                </div>
-                {savedProjectCount > 0 && (
-                  <button
-                    type="button"
-                    disabled={clearingProjects}
-                    onClick={() => void handleClearSavedProjects()}
-                    className="flex min-h-[34px] shrink-0 items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 text-[11px] font-semibold text-[var(--danger)] hover:border-[var(--danger)] disabled:opacity-50"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                    <span>{t('Clear', lang)}</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {storageEstimate && storageEstimate.quota > 0 && (
-              <div className="flex items-center justify-between rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3.5 py-2 text-[11px] text-[var(--muted)]">
-                <span>
-                  {lang === 'tr' ? 'Uygulama Alan Kullanımı' : 'App Storage Usage'}
-                </span>
-                <span className="font-mono-num font-semibold text-[var(--ink)]">
-                  {formatBytes(storageEstimate.usage)} / {formatBytes(storageEstimate.quota)}
-                </span>
-              </div>
-            )}
-          </section>
-
           {/* Equal-Width Developer Card with permanent 8s Cloud Easter Egg */}
           <div
             onPointerDown={() => {
@@ -4159,7 +4530,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 }
                 devCloudHideTimerRef.current = window.setTimeout(() => {
                   setShowDevClouds(false);
-                }, 2800);
+                }, 6800);
               }, 8_000);
             }}
             onPointerUp={() => {
@@ -4184,109 +4555,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 aria-hidden="true"
                 className="morph-dev-hold-border pointer-events-none absolute -inset-[1px] rounded-3xl"
               />
-            )}
-            {showDevClouds && (
-              <div
-                key={cloudBurstKey}
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-x-0 -top-5 z-50 flex items-center justify-center gap-5 overflow-visible"
-              >
-                {/* Wispy Cloud-Formed H */}
-                <div
-                  className="morph-cloud-rise relative h-20 w-20"
-                  style={{animationDelay: '0ms'}}
-                >
-                  <svg viewBox="0 0 100 100" className="h-full w-full overflow-visible">
-                    <defs>
-                      <filter id="morph-wisp-h" x="-30%" y="-30%" width="160%" height="160%">
-                        <feTurbulence type="fractalNoise" baseFrequency="0.075" numOctaves="3" seed="7" result="noise" />
-                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="7" xChannelSelector="R" yChannelSelector="G" result="wisped" />
-                        <feGaussianBlur in="wisped" stdDeviation="2.1" />
-                      </filter>
-                    </defs>
-                    <g filter="url(#morph-wisp-h)" fill={isDark ? 'rgba(255,255,255,0.68)' : 'rgba(148,163,184,0.68)'}>
-                      {/* Left leg */}
-                      <circle cx="29" cy="22" r="8.5" />
-                      <circle cx="27" cy="35" r="9.5" />
-                      <circle cx="30" cy="49" r="9.5" />
-                      <circle cx="27" cy="63" r="9.5" />
-                      <circle cx="29" cy="77" r="8.5" />
-                      {/* Crossbar */}
-                      <circle cx="40" cy="50" r="8.2" />
-                      <circle cx="50" cy="49" r="8.8" />
-                      <circle cx="60" cy="50" r="8.2" />
-                      {/* Right leg */}
-                      <circle cx="71" cy="22" r="8.5" />
-                      <circle cx="73" cy="35" r="9.5" />
-                      <circle cx="70" cy="49" r="9.5" />
-                      <circle cx="73" cy="63" r="9.5" />
-                      <circle cx="71" cy="77" r="8.5" />
-                    </g>
-                  </svg>
-                </div>
-
-                {/* Wispy Cloud-Formed Heart (matching cloud texture & color) */}
-                <div
-                  className="morph-cloud-rise relative h-20 w-20"
-                  style={{animationDelay: '90ms'}}
-                >
-                  <svg viewBox="0 0 100 100" className="h-full w-full overflow-visible">
-                    <defs>
-                      <filter id="morph-wisp-heart" x="-25%" y="-25%" width="150%" height="150%">
-                        <feTurbulence type="fractalNoise" baseFrequency="0.085" numOctaves="3" seed="11" result="noise" />
-                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="3.8" xChannelSelector="R" yChannelSelector="G" result="wisped" />
-                        <feGaussianBlur in="wisped" stdDeviation="1.35" />
-                      </filter>
-                    </defs>
-                    <g filter="url(#morph-wisp-heart)" fill={isDark ? 'rgba(255,255,255,0.68)' : 'rgba(148,163,184,0.68)'}>
-                      <path d="M 50 84 C 31 70, 14 55, 14 37 C 14 23, 25 14, 37 14 C 44.5 14, 48.2 18.5, 50 24 C 51.8 18.5, 55.5 14, 63 14 C 75 14, 86 23, 86 37 C 86 55, 69 70, 50 84 Z" />
-                      {/* Subtle perimeter cloud puffs keeping cleft and tip sharp */}
-                      <circle cx="28" cy="21" r="7.5" />
-                      <circle cx="38" cy="18" r="6.5" />
-                      <circle cx="19" cy="31" r="7.5" />
-                      <circle cx="18" cy="43" r="6.5" />
-                      <circle cx="72" cy="21" r="7.5" />
-                      <circle cx="62" cy="18" r="6.5" />
-                      <circle cx="81" cy="31" r="7.5" />
-                      <circle cx="82" cy="43" r="6.5" />
-                      <circle cx="29" cy="60" r="6.2" />
-                      <circle cx="71" cy="60" r="6.2" />
-                    </g>
-                  </svg>
-                </div>
-
-                {/* Wispy Cloud-Formed S */}
-                <div
-                  className="morph-cloud-rise relative h-20 w-20"
-                  style={{animationDelay: '180ms'}}
-                >
-                  <svg viewBox="0 0 100 100" className="h-full w-full overflow-visible">
-                    <defs>
-                      <filter id="morph-wisp-s" x="-30%" y="-30%" width="160%" height="160%">
-                        <feTurbulence type="fractalNoise" baseFrequency="0.075" numOctaves="3" seed="14" result="noise" />
-                        <feDisplacementMap in="SourceGraphic" in2="noise" scale="7" xChannelSelector="R" yChannelSelector="G" result="wisped" />
-                        <feGaussianBlur in="wisped" stdDeviation="2.1" />
-                      </filter>
-                    </defs>
-                    <g filter="url(#morph-wisp-s)" fill={isDark ? 'rgba(255,255,255,0.68)' : 'rgba(148,163,184,0.68)'}>
-                      {/* Top arc */}
-                      <circle cx="65" cy="25" r="8.2" />
-                      <circle cx="52" cy="21" r="9" />
-                      <circle cx="38" cy="24" r="8.5" />
-                      <circle cx="32" cy="35" r="8.8" />
-                      {/* Middle curve */}
-                      <circle cx="40" cy="46" r="8.5" />
-                      <circle cx="52" cy="50" r="9" />
-                      <circle cx="64" cy="55" r="8.5" />
-                      {/* Bottom arc */}
-                      <circle cx="68" cy="67" r="8.8" />
-                      <circle cx="60" cy="77" r="8.8" />
-                      <circle cx="46" cy="79" r="9" />
-                      <circle cx="34" cy="74" r="8" />
-                    </g>
-                  </svg>
-                </div>
-              </div>
             )}
 
             <div className="flex items-center justify-between gap-3">
@@ -4433,6 +4701,119 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 </button>
               </form>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Android-style bottom countdown toast for last 3 taps on Permissions shield */}
+      {shieldCountdownToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`morph-android-toast pointer-events-none fixed bottom-[calc(var(--morph-safe-bottom)+5.5rem)] left-1/2 z-[95] w-max max-w-[min(90vw,22rem)] rounded-full px-4 py-2.5 text-center text-xs font-medium tracking-[0.01em] shadow-xl backdrop-blur-md ${
+            isDark
+              ? 'bg-[#F1F5F9]/95 text-[#0F172A]'
+              : 'bg-[#181B22]/92 text-white'
+          }`}
+        >
+          {shieldCountdownToast}
+        </div>
+      )}
+
+      {/* Full-viewport drifting wispy cloud H ♥ S easter egg */}
+      {showDevClouds && (
+        <div
+          key={cloudBurstKey}
+          aria-hidden="true"
+          className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--morph-safe-bottom)+5.5rem)] z-[120] flex items-center justify-center gap-6 overflow-visible"
+        >
+          {/* Wispy Cloud-Formed H */}
+          <div
+            className="morph-cloud-drift-h relative h-24 w-24"
+            style={{animationDelay: '0ms'}}
+          >
+            <svg viewBox="0 0 100 100" className="h-full w-full overflow-visible">
+              <defs>
+                <filter id="morph-wisp-h" x="-30%" y="-30%" width="160%" height="160%">
+                  <feTurbulence type="fractalNoise" baseFrequency="0.075" numOctaves="3" seed="7" result="noise" />
+                  <feDisplacementMap in="SourceGraphic" in2="noise" scale="7" xChannelSelector="R" yChannelSelector="G" result="wisped" />
+                  <feGaussianBlur in="wisped" stdDeviation="2.1" />
+                </filter>
+              </defs>
+              <g filter="url(#morph-wisp-h)" fill={isDark ? 'rgba(255,255,255,0.72)' : 'rgba(148,163,184,0.72)'}>
+                <circle cx="29" cy="22" r="8.5" />
+                <circle cx="27" cy="35" r="9.5" />
+                <circle cx="30" cy="49" r="9.5" />
+                <circle cx="27" cy="63" r="9.5" />
+                <circle cx="29" cy="77" r="8.5" />
+                <circle cx="40" cy="50" r="8.2" />
+                <circle cx="50" cy="49" r="8.8" />
+                <circle cx="60" cy="50" r="8.2" />
+                <circle cx="71" cy="22" r="8.5" />
+                <circle cx="73" cy="35" r="9.5" />
+                <circle cx="70" cy="49" r="9.5" />
+                <circle cx="73" cy="63" r="9.5" />
+                <circle cx="71" cy="77" r="8.5" />
+              </g>
+            </svg>
+          </div>
+
+          {/* Wispy Cloud-Formed Heart */}
+          <div
+            className="morph-cloud-drift-heart relative h-24 w-24"
+            style={{animationDelay: '220ms'}}
+          >
+            <svg viewBox="0 0 100 100" className="h-full w-full overflow-visible">
+              <defs>
+                <filter id="morph-wisp-heart" x="-25%" y="-25%" width="150%" height="150%">
+                  <feTurbulence type="fractalNoise" baseFrequency="0.085" numOctaves="3" seed="11" result="noise" />
+                  <feDisplacementMap in="SourceGraphic" in2="noise" scale="3.8" xChannelSelector="R" yChannelSelector="G" result="wisped" />
+                  <feGaussianBlur in="wisped" stdDeviation="1.35" />
+                </filter>
+              </defs>
+              <g filter="url(#morph-wisp-heart)" fill={isDark ? 'rgba(255,255,255,0.72)' : 'rgba(148,163,184,0.72)'}>
+                <path d="M 50 84 C 31 70, 14 55, 14 37 C 14 23, 25 14, 37 14 C 44.5 14, 48.2 18.5, 50 24 C 51.8 18.5, 55.5 14, 63 14 C 75 14, 86 23, 86 37 C 86 55, 69 70, 50 84 Z" />
+                <circle cx="28" cy="21" r="7.5" />
+                <circle cx="38" cy="18" r="6.5" />
+                <circle cx="19" cy="31" r="7.5" />
+                <circle cx="18" cy="43" r="6.5" />
+                <circle cx="72" cy="21" r="7.5" />
+                <circle cx="62" cy="18" r="6.5" />
+                <circle cx="81" cy="31" r="7.5" />
+                <circle cx="82" cy="43" r="6.5" />
+                <circle cx="29" cy="60" r="6.2" />
+                <circle cx="71" cy="60" r="6.2" />
+              </g>
+            </svg>
+          </div>
+
+          {/* Wispy Cloud-Formed S */}
+          <div
+            className="morph-cloud-drift-s relative h-24 w-24"
+            style={{animationDelay: '420ms'}}
+          >
+            <svg viewBox="0 0 100 100" className="h-full w-full overflow-visible">
+              <defs>
+                <filter id="morph-wisp-s" x="-30%" y="-30%" width="160%" height="160%">
+                  <feTurbulence type="fractalNoise" baseFrequency="0.075" numOctaves="3" seed="14" result="noise" />
+                  <feDisplacementMap in="SourceGraphic" in2="noise" scale="7" xChannelSelector="R" yChannelSelector="G" result="wisped" />
+                  <feGaussianBlur in="wisped" stdDeviation="2.1" />
+                </filter>
+              </defs>
+              <g filter="url(#morph-wisp-s)" fill={isDark ? 'rgba(255,255,255,0.72)' : 'rgba(148,163,184,0.72)'}>
+                <circle cx="65" cy="25" r="8.2" />
+                <circle cx="52" cy="21" r="9" />
+                <circle cx="38" cy="24" r="8.5" />
+                <circle cx="32" cy="35" r="8.8" />
+                <circle cx="40" cy="46" r="8.5" />
+                <circle cx="52" cy="50" r="9" />
+                <circle cx="64" cy="55" r="8.5" />
+                <circle cx="68" cy="67" r="8.8" />
+                <circle cx="60" cy="77" r="8.8" />
+                <circle cx="46" cy="79" r="9" />
+                <circle cx="34" cy="74" r="8" />
+              </g>
+            </svg>
           </div>
         </div>
       )}

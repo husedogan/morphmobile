@@ -528,6 +528,8 @@ export interface Prefs {
   expAudioLiveDspPreview?: boolean;
   /** Experimental (default true): Export Audio Pro Studio output as WAV, MP3, M4A, or OGG via FFmpeg */
   expAudioMultiFormatExport?: boolean;
+  /** Experimental (default false): Promote Storage & Cache to its own top-level Settings tab with category-by-category Library breakdown */
+  expDedicatedStorageTab?: boolean;
   // Pro Modules & Features Settings (Visibility, Ordering, Defaults)
   proShowStudioSuitesBar?: boolean;
   proSuitesOrder?: Array<'audio_studio' | 'image_pro' | 'pdf_organize' | 'archive' | 'pipeline'>;

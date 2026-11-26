@@ -516,7 +516,7 @@ export async function exportMorphPackage(
   const manifest: MorphPackageManifest = {
     format: 'morph-nle-package',
     schemaVersion: 1,
-    appVersion: '1.1.57',
+    appVersion: '1.1.59',
     exportedAt: Date.now(),
     projectName: cleanState.projectName,
     hasSourceVideo: includesVideo,

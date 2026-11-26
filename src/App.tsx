@@ -1426,6 +1426,18 @@ export default function App() {
     });
   }, []);
 
+  const handleDeleteExportBatch = useCallback(async (ids: string[]) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    await Promise.all(ids.map((id) => deleteExportItem(id)));
+    setLibrary((prev) => {
+      prev.forEach((i) => {
+        if (idSet.has(i.id) && i.previewUrl) URL.revokeObjectURL(i.previewUrl);
+      });
+      return prev.filter((i) => !idSet.has(i.id));
+    });
+  }, []);
+
   const handleSaveSources = useCallback(async () => {
     if (files.length === 0) return;
     try {
@@ -2737,7 +2749,9 @@ export default function App() {
             initialCategory={settingsCategory}
             libraryCount={library.length}
             libraryBytes={library.reduce((sum, item) => sum + item.size, 0)}
+            libraryItems={library}
             onClearLibrary={handleClearLibrary}
+            onDeleteLibraryItems={handleDeleteExportBatch}
             onChangePrefs={setPrefs}
             onTestServer={handleTestServer}
             onCheckUpdate={handleCheckUpdate}
