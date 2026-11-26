@@ -179,18 +179,16 @@ export const SettingsAccordionCard: React.FC<{
             {icon}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-              <h2 className="truncate text-sm font-bold leading-tight text-[var(--ink)] sm:text-[15px]">
-                {title}
-              </h2>
-              {badge && (
-                <span className="truncate text-[11px] font-semibold text-[var(--accent-text)]">
-                  · {badge}
-                </span>
-              )}
-            </div>
+            <h2 className="text-sm font-bold leading-snug text-[var(--ink)] sm:text-[15px]">
+              {title}
+            </h2>
+            {badge && (
+              <p className="mt-0.5 text-[11px] font-semibold leading-snug text-[var(--accent-text)]">
+                {badge}
+              </p>
+            )}
             {subtitle && (
-              <p className="mt-0.5 line-clamp-1 text-[11px] leading-snug text-[var(--muted)]">
+              <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
                 {subtitle}
               </p>
             )}
@@ -417,7 +415,7 @@ export const SettingsDownloadsExtra: React.FC<{
                         <p className="text-[11px] font-bold text-[var(--ink)]">
                           {isTr ? rule.labelTr : rule.labelEn}
                         </p>
-                        <p className="truncate font-mono text-[9px] text-[var(--muted)]">
+                        <p className="break-words font-mono text-[9.5px] leading-snug text-[var(--muted)]">
                           .{rule.extensions.slice(0, 6).join(', .')}
                           {rule.extensions.length > 6 ? '…' : ''}
                         </p>
@@ -609,7 +607,7 @@ export const SettingsDownloadsExtra: React.FC<{
                 className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2.5 text-xs font-bold text-[var(--ink)] hover:border-[var(--danger)] hover:text-[var(--danger)]"
               >
                 <Trash2 className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">{isTr ? `Geçmişi Sil (${historyCount})` : `Clear History (${historyCount})`}</span>
+                <span className="text-center leading-tight">{isTr ? `Geçmişi Sil (${historyCount})` : `Clear History (${historyCount})`}</span>
               </button>
               <button
                 type="button"
@@ -618,10 +616,10 @@ export const SettingsDownloadsExtra: React.FC<{
                   setQueueCount(0);
                   onShowToast?.(isTr ? 'İndirme kuyruğu temizlendi.' : 'Download queue cleared.');
                 }}
-                className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2.5 text-xs font-bold text-[var(--ink)] hover:border-[var(--danger)] hover:text-[var(--danger)]"
+                className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-2.5 py-1.5 text-xs font-bold text-[var(--ink)] hover:border-[var(--danger)] hover:text-[var(--danger)]"
               >
                 <ListVideo className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">{isTr ? `Kuyruğu Sil (${queueCount})` : `Clear Queue (${queueCount})`}</span>
+                <span className="text-center leading-tight">{isTr ? `Kuyruğu Sil (${queueCount})` : `Clear Queue (${queueCount})`}</span>
               </button>
             </div>
           </div>
@@ -765,8 +763,8 @@ export const SettingsStudioLayoutCard: React.FC<{
                 >
                   <Icon className="h-4 w-4 shrink-0 text-[var(--accent-text)]" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-bold text-[var(--ink)]">{isTr ? meta.tr : meta.en}</p>
-                    <p className="truncate text-[10px] text-[var(--muted)]">{isTr ? meta.descTr : meta.descEn}</p>
+                    <p className="text-xs font-bold leading-snug text-[var(--ink)]">{isTr ? meta.tr : meta.en}</p>
+                    <p className="mt-0.5 text-[10.5px] leading-snug text-[var(--muted)]">{isTr ? meta.descTr : meta.descEn}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     <button
@@ -1008,10 +1006,10 @@ export const SettingsProTab: React.FC<SettingsProTabProps> = ({
             <Layers className="h-4.5 w-4.5" />
           </div>
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-extrabold text-[var(--ink)]">
+            <h2 className="text-sm font-extrabold leading-snug text-[var(--ink)]">
               {isTr ? 'Stüdyo & İş Akışı Varsayılanları' : 'Studio & Workflow Defaults'}
             </h2>
-            <p className="truncate text-[11px] text-[var(--muted)]">
+            <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
               {isTr
                 ? 'Video, Ses, Görsel stüdyoları ve kayıtlı kısayollar.'
                 : 'Video, Audio, Image studios and saved workflow shortcuts.'}
@@ -1200,7 +1198,7 @@ export const SettingsProTab: React.FC<SettingsProTabProps> = ({
                 return (
                   <div key={key} className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3">
                     <div className="flex items-center justify-between gap-2 text-[11px]">
-                      <span className="truncate font-semibold text-[var(--ink)]">
+                      <span className="font-semibold leading-snug text-[var(--ink)]">
                         {isTr ? labelTr : labelEn}
                       </span>
                       <span className="font-mono-num shrink-0 font-bold text-[var(--accent-text)]">
@@ -1519,8 +1517,8 @@ export const SettingsProTab: React.FC<SettingsProTabProps> = ({
                   className="flex items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 py-2"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-xs font-bold text-[var(--ink)]">{pipe.name}</p>
-                    <p className="truncate text-[10px] text-[var(--muted)]">{pipe.description}</p>
+                    <p className="text-xs font-bold leading-snug text-[var(--ink)]">{pipe.name}</p>
+                    <p className="mt-0.5 text-[10.5px] leading-snug text-[var(--muted)]">{pipe.description}</p>
                   </div>
                   <button
                     type="button"

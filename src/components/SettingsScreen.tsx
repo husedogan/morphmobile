@@ -110,7 +110,7 @@ import {
   SettingsStudioLayoutCard,
 } from './SettingsProTab';
 
-export type SettingsCategory = 'appearance' | 'studio' | 'downloads' | 'experimental' | 'system';
+export type SettingsCategory = 'appearance' | 'studio' | 'downloads' | 'permissions' | 'experimental' | 'system';
 
 interface SettingsScreenProps {
   prefs: Prefs;
@@ -391,7 +391,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     setExpGateOpen(false);
     setExpPassInput('');
     setExpPassError(false);
-    setCategory('system');
+    setCategory('permissions');
     try {
       window.sessionStorage.removeItem(EXP_UNLOCK_KEY);
       window.sessionStorage.removeItem(EXP_TAB_VISIBLE_KEY);
@@ -620,6 +620,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       ? [{id: 'studio' as const, label: lang === 'tr' ? 'Stüdyo' : 'Studio', Icon: Layers}]
       : []),
     {id: 'downloads', label: t('SetCatDownloads', lang), Icon: Download},
+    {id: 'permissions', label: t('SetCatPermissions', lang), Icon: ShieldCheck},
     ...(expUnlocked && expTabVisible
       ? [{id: 'experimental' as const, label: lang === 'tr' ? 'Deneysel' : 'Experimental', Icon: FlaskConical}]
       : []),
@@ -915,10 +916,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               <div className="flex min-w-0 items-center gap-2.5">
                 <Sparkles className={`h-4 w-4 shrink-0 ${simpleMode ? 'text-[var(--accent)]' : 'text-[var(--muted)]'}`} />
                 <div className="min-w-0">
-                  <p className="truncate text-xs font-bold text-[var(--ink)]">
+                  <p className="text-xs font-bold leading-snug text-[var(--ink)]">
                     {lang === 'tr' ? 'Basit Mod' : 'Simple Mode'}
                   </p>
-                  <p className="truncate text-[10.5px] text-[var(--muted)]">
+                  <p className="text-[10.5px] leading-snug text-[var(--muted)]">
                     {lang === 'tr' ? 'Sade arayüzü açar' : 'Minimal clean UI'}
                   </p>
                 </div>
@@ -1077,7 +1078,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       )}
                     </div>
                     <p
-                      className={`mt-1 line-clamp-1 text-center text-[10.5px] font-semibold leading-tight ${
+                      className={`mt-1 text-center text-[10.5px] font-semibold leading-tight ${
                         selected ? 'text-[var(--ink)]' : 'text-[var(--muted)]'
                       }`}
                     >
@@ -1323,10 +1324,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       </span>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h2 className="truncate text-sm font-bold leading-tight text-[var(--ink)] sm:text-[15px]">
+                      <h2 className="text-sm font-bold leading-snug text-[var(--ink)] sm:text-[15px]">
                         {t('WheelFabSectionTitle', lang)}
                       </h2>
-                      <p className="mt-0.5 truncate text-[11px] font-medium text-[var(--muted)]">
+                      <p className="mt-0.5 text-[11px] font-medium leading-snug text-[var(--muted)]">
                         {activeOuterMeta ? (lang === 'tr' ? activeOuterMeta.titleTr : activeOuterMeta.titleEn) : ''}
                         {' · '}
                         {activeInnerMeta ? (lang === 'tr' ? activeInnerMeta.titleTr : activeInnerMeta.titleEn) : ''}
@@ -1497,7 +1498,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                               <polygon points="14,3.8 23.2,8.8 21.4,19.4 14,24.2 6.6,19.4 4.8,8.8" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
                             )}
                           </svg>
-                          <span className="max-w-full truncate text-[10px] font-semibold">
+                          <span className="max-w-full text-center text-[10px] font-semibold leading-tight">
                             {lang === 'tr' ? shape.titleTr : shape.titleEn}
                           </span>
                         </button>
@@ -1544,7 +1545,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                           >
                             {renderInnerSvg(core.id)}
                           </svg>
-                          <span className="max-w-full truncate text-[10px] font-semibold">
+                          <span className="max-w-full text-center text-[10px] font-semibold leading-tight">
                             {lang === 'tr' ? core.titleTr : core.titleEn}
                           </span>
                         </button>
@@ -1888,7 +1889,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               onClick={() => onChangePrefs((p) => ({...p, quickEnginePicker: !p.quickEnginePicker}))}
               className="mt-3.5 flex w-full items-center justify-between gap-3 px-1 py-1 text-left"
             >
-              <span className="min-w-0 truncate text-xs font-semibold text-[var(--ink)]">
+              <span className="min-w-0 text-xs font-semibold leading-snug text-[var(--ink)]">
                 {t('QuickEnginePickerLabel', lang)}
               </span>
               <span className="morph-switch" data-checked={prefs.quickEnginePicker ? 'true' : 'false'}>
@@ -2284,7 +2285,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   <h2 className="text-base font-bold leading-tight text-[var(--ink)]">
                     {t('ServerSection', lang)}
                   </h2>
-                  <p className="mt-0.5 truncate text-xs text-[var(--muted)]">
+                  <p className="mt-0.5 break-words text-xs leading-snug text-[var(--muted)]">
                     {prefs.serverUrl.trim()
                       ? serverStatus || prefs.serverUrl.trim()
                       : t('NoServerUrl', lang)}
@@ -2366,7 +2367,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             >
               <div className="flex min-w-0 items-center gap-2.5">
                 <Activity className="h-4 w-4 shrink-0 text-[var(--accent)]" />
-                <span className="truncate whitespace-nowrap text-xs font-bold text-[var(--ink)]">
+                <span className="text-xs font-bold leading-snug text-[var(--ink)]">
                   {t('DiagnosticsTitle', lang)}
                 </span>
               </div>
@@ -2394,10 +2395,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   <button
                     type="button"
                     onClick={handleCopyDiagnostics}
-                    className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-[var(--accent)]/45 bg-[var(--inset)] px-3.5 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] whitespace-nowrap"
+                    className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-[var(--accent)]/45 bg-[var(--inset)] px-3.5 py-1.5 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
                   >
                     <ClipboardCopy className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                    <span className="truncate">
+                    <span className="text-center leading-tight">
                       {copiedDiag
                         ? lang === 'tr'
                           ? 'Kopyalandı!'
@@ -2408,10 +2409,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   <button
                     type="button"
                     onClick={handleShareDiagnostics}
-                    className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3.5 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] whitespace-nowrap"
+                    className="flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3.5 py-1.5 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
                   >
                     <Share2 className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                    <span className="truncate">{t('ShareDiagnosticBtn', lang)}</span>
+                    <span className="text-center leading-tight">{t('ShareDiagnosticBtn', lang)}</span>
                   </button>
                 </div>
 
@@ -2452,7 +2453,109 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </div>
       )}
 
-      {/* Permissions card merged into the System (Sistem) tab below */}
+      {/* CATEGORY 3: PERMISSIONS (Dedicated tab; preserves 7-tap Shield Experimental unlock) */}
+      {category === 'permissions' && (
+        <div className="mt-4">
+          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={handlePermShieldTap}
+                  aria-label={t('PermissionsSection', lang)}
+                  className="flex h-9 w-9 shrink-0 cursor-default items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)] focus:outline-none"
+                >
+                  <ShieldCheck className="h-5 w-5" />
+                </button>
+                <div className="min-w-0">
+                  <h2 className="text-base font-bold leading-snug text-[var(--ink)]">
+                    {t('PermissionsSection', lang)}
+                  </h2>
+                  <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
+                    {t('PermissionsDesc', lang)}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={requestingPerms}
+                onClick={handleGrantAllPermissions}
+                className="morph-tonal-btn flex min-h-[44px] shrink-0 items-center justify-center gap-2 rounded-full px-4 text-xs font-semibold whitespace-nowrap transition-transform active:scale-[0.98] disabled:opacity-70"
+              >
+                <ShieldCheck className="h-4 w-4 shrink-0 text-[var(--accent)]" />
+                <span>{t('RequestPermissionsBtn', lang)}</span>
+              </button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              {(
+                [
+                  {
+                    key: 'storage' as const,
+                    title: t('PermStorage', lang),
+                    desc: t('PermStorageDesc', lang),
+                    Icon: FolderCheck,
+                  },
+                  {
+                    key: 'media' as const,
+                    title: t('PermMedia', lang),
+                    desc: t('PermMediaDesc', lang),
+                    Icon: ImageIcon,
+                  },
+                  {
+                    key: 'notifications' as const,
+                    title: t('PermNotifications', lang),
+                    desc: t('PermNotificationsDesc', lang),
+                    Icon: Bell,
+                  },
+                  {
+                    key: 'clipboard' as const,
+                    title: t('PermClipboard', lang),
+                    desc: t('PermClipboardDesc', lang),
+                    Icon: ClipboardPaste,
+                  },
+                ] as const
+              ).map(({key, title, desc, Icon}) => {
+                const state = perms[key];
+                const isActionable = state === 'prompt';
+                const isGranted = state === 'granted' || state === 'ready';
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    disabled={requestingPerms}
+                    onClick={() => handleSinglePermission(key)}
+                    className="flex min-h-[68px] items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
+                  >
+                    <div className="flex min-w-0 items-start gap-3">
+                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--accent)]">
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold leading-snug text-[var(--ink)]">{title}</p>
+                        <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">{desc}</p>
+                      </div>
+                    </div>
+                    <span
+                      className={`shrink-0 text-xs font-semibold whitespace-nowrap ${
+                        isGranted
+                          ? 'text-[var(--accent-end)]'
+                          : isActionable
+                            ? 'text-[var(--accent)]'
+                            : 'text-[var(--muted)]'
+                      }`}
+                    >
+                      {permBadgeLabel(state)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        </div>
+      )}
 
       {/* CATEGORY 4: EXPERIMENTAL & CLASSIC REVERSIBLE FEATURES (HIDDEN UNTIL 7-TAP + PASSWORD-LOCKED) */}
       {category === 'experimental' && expTabVisible && !expUnlocked && (
@@ -2539,10 +2642,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   <FlaskConical className="h-4.5 w-4.5" />
                 </div>
                 <div className="min-w-0">
-                  <h2 className="truncate text-sm font-extrabold leading-tight text-[var(--ink)] sm:text-base">
+                  <h2 className="text-sm font-extrabold leading-snug text-[var(--ink)] sm:text-base">
                     {lang === 'tr' ? 'Deneysel & Beta Özellikler' : 'Experimental & Beta Features'}
                   </h2>
-                  <p className="mt-0.5 truncate text-[11px] text-[var(--muted)]">
+                  <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
                     {lang === 'tr'
                       ? 'Yeni motor özellikleri, kademeli başlatıcı ve görsel deneyler.'
                       : 'Beta engine switches, cascading launcher & visual experiments.'}
@@ -2969,7 +3072,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                             </span>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center justify-between gap-1">
-                                <p className="truncate text-xs font-bold text-[var(--ink)]">
+                                <p className="text-xs font-bold leading-snug text-[var(--ink)]">
                                   {idx + 1}. {lang === 'tr' ? st.titleTr : st.titleEn}
                                 </p>
                                 {selected && (
@@ -3084,7 +3187,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                               </span>
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center justify-between gap-1">
-                                  <p className="truncate text-[11px] font-bold text-[var(--ink)]">
+                                  <p className="text-[11px] font-bold leading-snug text-[var(--ink)]">
                                     {lang === 'tr' ? m.titleTr : m.titleEn}
                                   </p>
                                   {selected && (
@@ -3354,7 +3457,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                                   background: `linear-gradient(135deg, ${styleItem.accent}, ${styleItem.secondary})`,
                                 }}
                               />
-                              <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-[var(--ink)]">
+                              <span className="min-w-0 flex-1 text-[11px] font-semibold leading-snug text-[var(--ink)]">
                                 {lang === 'tr' ? styleItem.titleTr : styleItem.titleEn}
                               </span>
                               {selected && burnEnabled && (
@@ -3495,12 +3598,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       aria-expanded={expSpinDetailsOpen}
                       className="mt-3 flex w-full items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface)]/75 px-3 py-2 text-left transition-colors hover:border-[var(--accent)]/50"
                     >
-                      <div className="flex min-w-0 items-center gap-2">
+                      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                         <span className="text-[11px] font-bold text-[var(--ink)]">
                           {lang === 'tr' ? 'Dönüş Detayları' : 'Rotation Details'}
                         </span>
-                        <span className="truncate text-[10.5px] font-medium text-[var(--accent-text)]">
-                          · {lang === 'tr' ? activeSpinMeta.titleTr : activeSpinMeta.titleEn} (
+                        <span className="text-[10.5px] font-medium leading-snug text-[var(--accent-text)]">
+                          {lang === 'tr' ? activeSpinMeta.titleTr : activeSpinMeta.titleEn} (
                           {activeSpinTrigger === 'press'
                             ? lang === 'tr'
                               ? 'Basınca'
@@ -3841,7 +3944,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               {updateDownload && (updateDownload.active || updateDownload.phase === 'done') && (
                 <div className="rounded-2xl border border-[var(--accent)]/45 bg-[var(--inset)] p-3">
                   <div className="flex items-center justify-between gap-2 text-xs">
-                    <span className="truncate font-semibold text-[var(--ink)]">
+                    <span className="break-all font-semibold text-[var(--ink)]">
                       {updateDownload.fileName}
                     </span>
                     <span className="font-mono-num shrink-0 font-bold text-[var(--accent-text)]">
@@ -3861,7 +3964,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
               {/* Single clean version & status row */}
               <div className="flex min-h-[48px] w-full flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-4 py-2 text-xs">
-                <div className="flex min-w-0 items-center gap-2 whitespace-nowrap">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                   <GitBranch className="h-3.5 w-3.5 shrink-0 text-[var(--accent-text)]" />
                   <span className="font-mono-num tabular-nums font-bold text-[var(--ink)]">
                     Morph {APP_VERSION}
@@ -3869,7 +3972,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   <span aria-hidden="true" className="text-[var(--muted)]">
                     ·
                   </span>
-                  <span className="truncate text-[var(--muted)]">{channelLabel}</span>
+                  <span className="text-[var(--muted)]">{channelLabel}</span>
                 </div>
 
                 <span
@@ -3923,10 +4026,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                         href={`${GITHUB_REPO_URL}/releases/latest`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex h-12 min-w-0 items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-semibold text-[var(--ink)] whitespace-nowrap transition-colors hover:border-[var(--accent)]"
+                        className="flex min-h-[48px] min-w-0 items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3 py-2 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
                       >
                         <Download className="h-3.5 w-3.5 shrink-0 text-[var(--accent-text)]" />
-                        <span className="truncate">
+                        <span className="text-center leading-tight">
                           {lang === 'tr' ? 'Sürümlerden İndir' : 'Latest Releases'}
                         </span>
                       </a>
@@ -3937,7 +4040,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       type="button"
                       onClick={onApplyUpdate}
                       disabled={(!isOnline && !apkDownloaded) || Boolean(updateDownload?.active)}
-                      className="flex h-12 min-w-0 items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-semibold text-[var(--ink)] whitespace-nowrap transition-colors hover:border-[var(--accent)] disabled:opacity-60"
+                      className="flex min-h-[48px] min-w-0 items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3 py-2 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)] disabled:opacity-60"
                     >
                       {updateDownload?.active ? (
                         <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--accent-text)]" />
@@ -3946,7 +4049,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       ) : (
                         <Download className="h-3.5 w-3.5 shrink-0 text-[var(--accent-text)]" />
                       )}
-                      <span className="truncate">
+                      <span className="text-center leading-tight">
                         {updateDownload?.active
                           ? updateDownload.phase === 'installing'
                             ? lang === 'tr'
@@ -3964,10 +4067,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   href={normalizeMorphRepoUrl(updateInfo?.repoUrl ?? GITHUB_REPO_URL)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex h-12 min-w-0 items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3 text-xs font-semibold text-[var(--ink)] whitespace-nowrap transition-colors hover:border-[var(--accent)]"
+                  className="flex min-h-[48px] min-w-0 items-center justify-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--inset)] px-3 py-2 text-xs font-semibold text-[var(--ink)] transition-colors hover:border-[var(--accent)]"
                 >
                   <ExternalLink className="h-3.5 w-3.5 shrink-0 text-[var(--accent-text)]" />
-                  <span className="truncate">{t('OpenGithubRepo', lang)}</span>
+                  <span className="text-center leading-tight">{t('OpenGithubRepo', lang)}</span>
                 </a>
               </div>
             </div>
@@ -4050,106 +4153,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 </span>
               </div>
             )}
-          </section>
-
-          {/* App Permissions Card (Merged into System tab; preserves 7-tap Shield Experimental unlock) */}
-          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  onClick={handlePermShieldTap}
-                  aria-label={t('PermissionsSection', lang)}
-                  className="flex h-9 w-9 shrink-0 cursor-default items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent)] focus:outline-none"
-                >
-                  <ShieldCheck className="h-5 w-5" />
-                </button>
-                <div className="min-w-0">
-                  <h2 className="text-sm font-extrabold leading-tight text-[var(--ink)] sm:text-base">
-                    {t('PermissionsSection', lang)}
-                  </h2>
-                  <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
-                    {t('PermissionsDesc', lang)}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                disabled={requestingPerms}
-                onClick={handleGrantAllPermissions}
-                className="morph-tonal-btn flex min-h-[42px] shrink-0 items-center justify-center gap-2 rounded-full px-4 text-xs font-semibold whitespace-nowrap transition-transform active:scale-[0.98] disabled:opacity-70"
-              >
-                <ShieldCheck className="h-4 w-4 shrink-0 text-[var(--accent)]" />
-                <span>{t('RequestPermissionsBtn', lang)}</span>
-              </button>
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              {(
-                [
-                  {
-                    key: 'storage' as const,
-                    title: t('PermStorage', lang),
-                    desc: t('PermStorageDesc', lang),
-                    Icon: FolderCheck,
-                  },
-                  {
-                    key: 'media' as const,
-                    title: t('PermMedia', lang),
-                    desc: t('PermMediaDesc', lang),
-                    Icon: ImageIcon,
-                  },
-                  {
-                    key: 'notifications' as const,
-                    title: t('PermNotifications', lang),
-                    desc: t('PermNotificationsDesc', lang),
-                    Icon: Bell,
-                  },
-                  {
-                    key: 'clipboard' as const,
-                    title: t('PermClipboard', lang),
-                    desc: t('PermClipboardDesc', lang),
-                    Icon: ClipboardPaste,
-                  },
-                ] as const
-              ).map(({key, title, desc, Icon}) => {
-                const state = perms[key];
-                const isActionable = state === 'prompt';
-                const isGranted = state === 'granted' || state === 'ready';
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    disabled={requestingPerms}
-                    onClick={() => handleSinglePermission(key)}
-                    className="flex min-h-[68px] items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-left transition-colors hover:border-[var(--accent)]/50"
-                  >
-                    <div className="flex min-w-0 items-start gap-3">
-                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--surface)] text-[var(--accent)]">
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-[var(--ink)]">{title}</p>
-                        <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">{desc}</p>
-                      </div>
-                    </div>
-                    <span
-                      className={`shrink-0 text-xs font-semibold whitespace-nowrap ${
-                        isGranted
-                          ? 'text-[var(--accent-end)]'
-                          : isActionable
-                            ? 'text-[var(--accent)]'
-                            : 'text-[var(--muted)]'
-                      }`}
-                    >
-                      {permBadgeLabel(state)}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
           </section>
 
           {/* Equal-Width Developer Card with permanent 8s Cloud Easter Egg */}
@@ -4319,10 +4322,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   </svg>
                 </div>
                 <div className="min-w-0">
-                  <p className="truncate text-xs font-bold text-[var(--ink)]">
+                  <p className="text-xs font-bold leading-snug text-[var(--ink)]">
                     {t('DeveloperLabel', lang)}
                   </p>
-                  <p className="mt-0.5 truncate text-xs text-[var(--muted)]">
+                  <p className="mt-0.5 text-xs leading-snug text-[var(--muted)]">
                     {t('DeveloperTelegramSub', lang)}
                   </p>
                 </div>
