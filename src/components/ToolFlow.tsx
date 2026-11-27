@@ -915,7 +915,7 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
   if (selectedTool === 'PDF_VIEWER' && files[0]?.kind === 'pdf') {
     const activePdf = files[0];
     return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-[var(--surface)]">
+      <div className="fixed inset-0 z-50 flex flex-col bg-[var(--surface)] px-safe">
         <PdfCanvasViewer
           file={activePdf.file}
           lang={lang}
@@ -1426,7 +1426,7 @@ const ConfigShell: React.FC<{
         }
       />
       <div className="mt-5 space-y-5">{children}</div>
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-[var(--line)] bg-[var(--paper)]/95 px-4 py-3 pb-safe backdrop-blur-md lg:static lg:mt-6 lg:border-0 lg:bg-transparent lg:p-0">
+      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-[var(--line)] bg-[var(--paper)]/95 px-4 px-safe py-3 pb-safe backdrop-blur-md lg:static lg:mt-6 lg:border-0 lg:bg-transparent lg:p-0 [@media(max-height:500px)]:static [@media(max-height:500px)]:mt-4 [@media(max-height:500px)]:border-0 [@media(max-height:500px)]:bg-transparent [@media(max-height:500px)]:p-0">
         <div className="mx-auto max-w-2xl">
           <button
             type="button"

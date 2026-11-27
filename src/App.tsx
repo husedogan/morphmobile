@@ -79,6 +79,7 @@ import {
 } from './components/ExperimentalToolLauncher';
 import {MainWheelCustomizeModal} from './components/MainWheelCustomizeModal';
 import {CustomizeWheelTab, WheelCustomizeModal} from './components/WheelCustomizeModal';
+import {resolveDeadpoolConfig} from './components/DeadpoolWheelVisual';
 import {WheelActionItem, WheelFab, WheelMenu, isLandscapeFixedWheelViewport} from './components/WheelMenu';
 import {t} from './data/i18n';
 import {
@@ -105,6 +106,7 @@ import {
   toolsForSelection,
 } from './data/models';
 import {applyThemeTokens} from './data/themes';
+import {DevPerfHud} from './components/DevPerfHud';
 import {computeBatchRenamedNames} from './engine/fileInspector';
 import {
   GithubUpdateInfo,
@@ -2513,9 +2515,15 @@ export default function App() {
         uiSoundsEnabled={Boolean(prefs.expUiSounds)}
       />
 
-      {/* Compact 3-Zone Top Bar with Android/iOS Safe-Area Top Inset */}
-      <header className="morph-app-header sticky top-0 z-30 border-b border-[var(--line)]/70 bg-[var(--paper)]/92 pt-safe backdrop-blur-md">
-        <div className="mx-auto flex h-13 max-w-6xl items-center justify-between gap-8 px-4 sm:px-6">
+      {prefs.devPerfHud && (
+        <DevPerfHud
+          onClose={() => setPrefs((p) => ({...p, devPerfHud: false}))}
+        />
+      )}
+
+      {/* Compact 3-Zone Top Bar with Android/iOS Safe-Area Top & Horizontal Insets */}
+      <header className="morph-app-header sticky top-0 z-30 border-b border-[var(--line)]/70 bg-[var(--paper)]/92 pt-safe px-safe backdrop-blur-md">
+        <div className="mx-auto flex h-13 max-w-6xl items-center justify-between gap-4 px-4 sm:gap-8 sm:px-6 [@media(max-height:500px)]:h-11">
           {/* Zone 1: Single-line Brand Wordmark */}
           <button
             type="button"
@@ -2525,17 +2533,25 @@ export default function App() {
               resetNavigationFlow();
               setTab('studio');
             }}
-            className="flex min-h-[44px] items-center gap-2 whitespace-nowrap shrink-0 text-left"
+            className="flex min-h-[44px] items-center gap-2 whitespace-nowrap shrink-0 text-left [@media(max-height:500px)]:min-h-[38px]"
           >
             <img
               src={isDark ? '/morph-wordmark.png' : '/morph-wordmark-light.png'}
               alt="Morph"
-              className="h-7 w-auto object-contain select-none"
+              className="h-7 w-auto object-contain select-none [@media(max-height:500px)]:h-6"
             />
           </button>
 
-          {/* Zone 2: Desktop Single-Line Navigation Links */}
-          <nav className="hidden items-center gap-6 md:flex">
+          {/* Zone 2: Desktop nav; in phone landscape, shown ONLY when Quick Wheel is OFF (or Simple Mode) instead of bottom bar */}
+          <nav
+            className={`${
+              isLandscapeFixedWheel
+                ? isSimpleMode || prefs.showQuickWheel === false
+                  ? 'flex'
+                  : 'hidden'
+                : 'hidden md:flex'
+            } items-center gap-5 sm:gap-6`}
+          >
             {(
               [
                 ['studio', t('Studio', lang)],
@@ -2552,7 +2568,7 @@ export default function App() {
                     resetNavigationFlow();
                     setTab(id);
                   }}
-                  className={`whitespace-nowrap shrink-0 border-b-2 py-1 text-sm font-semibold transition-colors ${
+                  className={`whitespace-nowrap shrink-0 border-b-2 py-1 text-sm font-semibold transition-colors [@media(max-height:500px)]:text-xs ${
                     active
                       ? 'border-[var(--accent)] text-[var(--ink)]'
                       : 'border-transparent text-[var(--muted)] hover:text-[var(--ink)]'
@@ -2632,7 +2648,7 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <main className="relative pb-safe">
+      <main className="relative pb-safe px-safe">
         {job.status === 'done' ? (
           <ResultView
             key={`result-${lang}-${job.result.items[0]?.id ?? 'done'}`}
@@ -2919,12 +2935,7 @@ export default function App() {
                   expWheelSpinEnabled={Boolean(prefs.expWheelSpinEnabled)}
                   expWheelSpinMode={prefs.expWheelSpinMode ?? 'outer_ccw_inner_cw'}
                   expWheelSpinTrigger={prefs.expWheelSpinTrigger ?? 'always'}
-                  deadpoolOuterSpinDir={prefs.deadpoolOuterSpinDir ?? 'off'}
-                  deadpoolOuterSpinTrigger={prefs.deadpoolOuterSpinTrigger ?? 'always'}
-                  deadpoolOuterSpinSpeed={prefs.deadpoolOuterSpinSpeed ?? 1}
-                  deadpoolOuterColor={prefs.deadpoolOuterColor ?? null}
-                  deadpoolOuterColorEnd={prefs.deadpoolOuterColorEnd ?? null}
-                  deadpoolInnerColor={prefs.deadpoolInnerColor ?? null}
+                  deadpoolConfig={resolveDeadpoolConfig(prefs)}
                   expWheelShockwave={Boolean(prefs.expWheelShockwave)}
                   onChangeSide={(wheelSide) => setPrefs((p) => ({...p, wheelSide}))}
                   onHoverChange={(hover) => {
@@ -2979,14 +2990,15 @@ export default function App() {
                 />
               )}
 
-            {/* Mobile Bottom Navigation Bar — shown on mobile when Quick Wheel is disabled OR in Simple Mode, hidden when any modal/sheet is open */}
+            {/* Mobile Portrait Bottom Navigation Bar — shown on portrait mobile when Quick Wheel is disabled OR in Simple Mode (in landscape, top header nav is used instead) */}
             {(isSimpleMode || prefs.showQuickWheel === false) &&
+              !isLandscapeFixedWheel &&
               !toolMode &&
               job.status === 'idle' &&
               !hasBlockingOverlay && (
                 <nav
                   aria-label={lang === 'tr' ? 'Alt gezinme' : 'Bottom navigation'}
-                  className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t border-[var(--line)] bg-[var(--surface)]/95 px-3 pt-1.5 pb-[calc(var(--morph-safe-bottom)+0.5rem)] backdrop-blur-md md:hidden"
+                  className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t border-[var(--line)] bg-[var(--surface)]/95 px-3 px-safe pt-1.5 pb-[calc(var(--morph-safe-bottom)+0.5rem)] backdrop-blur-md md:hidden [@media(max-height:500px)]:hidden"
                 >
                   {(
                     [
@@ -3150,11 +3162,11 @@ export default function App() {
           role="dialog"
           aria-modal="true"
           aria-label={t('ManageTools', lang)}
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-4"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-safe backdrop-blur-sm sm:items-center sm:p-4"
           onClick={() => setShowManageTools(false)}
         >
           <div
-            className="w-full max-w-md rounded-t-3xl border border-[var(--line)] bg-[var(--surface)] p-5 pt-3 pb-[calc(var(--morph-safe-bottom)+1.25rem)] shadow-2xl sm:rounded-3xl sm:pt-5 sm:pb-5"
+            className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-[var(--line)] bg-[var(--surface)] p-5 pt-3 pb-[calc(var(--morph-safe-bottom)+1.25rem)] shadow-2xl sm:rounded-3xl sm:pt-5 sm:pb-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[var(--line)] sm:hidden" aria-hidden="true" />
@@ -3244,11 +3256,11 @@ export default function App() {
           role="dialog"
           aria-modal="true"
           aria-label={previewTarget.name}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm sm:p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 px-safe backdrop-blur-sm sm:p-4"
           onClick={closeSourcePreview}
         >
           <div
-            className="flex h-[100dvh] w-full max-w-4xl flex-col overflow-hidden bg-[var(--surface)] shadow-2xl sm:h-[92vh] sm:rounded-3xl sm:border sm:border-[var(--line)]"
+            className="flex h-[100dvh] w-full max-w-4xl flex-col overflow-hidden bg-[var(--surface)] shadow-2xl sm:h-[92dvh] sm:rounded-3xl sm:border sm:border-[var(--line)]"
             onClick={(e) => e.stopPropagation()}
           >
             <PdfCanvasViewer
@@ -3279,27 +3291,27 @@ export default function App() {
           role="dialog"
           aria-modal="true"
           aria-label={previewTarget.name}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 pt-[calc(var(--morph-safe-top)+1rem)] pb-[calc(var(--morph-safe-bottom)+1rem)] backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-[calc(var(--morph-safe-left)+0.75rem)] pr-[calc(var(--morph-safe-right)+0.75rem)] pt-[calc(var(--morph-safe-top)+0.75rem)] pb-[calc(var(--morph-safe-bottom)+0.75rem)] backdrop-blur-sm sm:p-4"
           onClick={closeSourcePreview}
         >
           <div
-            className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-[var(--line)] bg-[var(--surface)]"
+            className="flex max-h-[92dvh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-[var(--line)] bg-[var(--surface)]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--line)] px-4 py-2.5 sm:py-3">
               <p className="truncate text-sm font-bold text-[var(--ink)]">{previewTarget.name}</p>
               <button
                 type="button"
                 onClick={closeSourcePreview}
                 aria-label={t('Close', lang)}
-                className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)]"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--ink)]"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="flex flex-1 items-center justify-center overflow-auto bg-black/40 p-4">
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-black/40 p-3 sm:p-4">
               {sourcePreviewText !== null ? (
-                <pre className="max-h-[72vh] w-full overflow-auto rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-4 text-xs leading-relaxed whitespace-pre-wrap text-[var(--ink)]">
+                <pre className="max-h-full w-full overflow-auto rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3.5 text-xs leading-relaxed whitespace-pre-wrap text-[var(--ink)]">
                   {sourcePreviewText}
                 </pre>
               ) : previewTarget.kind === 'video' && sourcePreviewUrl ? (
@@ -3308,10 +3320,10 @@ export default function App() {
                   controls
                   autoPlay
                   playsInline
-                  className="max-h-[72vh] max-w-full rounded-xl"
+                  className="max-h-full max-w-full rounded-xl"
                 />
               ) : previewTarget.kind === 'audio' && sourcePreviewUrl ? (
-                <div className="w-full max-w-md rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-6">
+                <div className="w-full max-w-md rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-6">
                   <p className="mb-4 truncate text-center text-sm font-semibold text-[var(--ink)]">
                     {previewTarget.name}
                   </p>
@@ -3321,7 +3333,7 @@ export default function App() {
                 <img
                   src={sourcePreviewUrl}
                   alt={previewTarget.name}
-                  className="max-h-[75vh] max-w-full rounded-xl object-contain"
+                  className="max-h-full max-w-full rounded-xl object-contain"
                 />
               ) : null}
             </div>

@@ -57,6 +57,8 @@ import {
   resolveLauncherLabelPrefs,
 } from './ExperimentalToolLauncher';
 import {isNativeApp} from '../engine/nativeBridge';
+import {applyScreenOrientationPref} from '../engine/morphEnginesBridge';
+import {loadPrefs} from '../engine/libraryDb';
 import {
   AspectRatioPreset,
   ClipTransitionType,
@@ -712,12 +714,27 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   const [isPortraitMode, setIsPortraitMode] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerHeight >= window.innerWidth : false
   );
+  const [viewportWidth, setViewportWidth] = useState<number>(() =>
+    typeof window !== 'undefined' ? (window.visualViewport?.width ?? window.innerWidth) : 1280
+  );
   const [viewportHeight, setViewportHeight] = useState<number>(() =>
     typeof window !== 'undefined' ? (window.visualViewport?.height ?? window.innerHeight) : 800
   );
+  const [landscapeLockNoticeOpen, setLandscapeLockNoticeOpen] = useState<boolean>(false);
+  const [orientationLockHint, setOrientationLockHint] = useState<boolean>(false);
   const [landscapeTimelineState, setLandscapeTimelineState] = useState<
     'compact' | 'expanded' | 'collapsed'
   >('compact');
+  const isCoarsePointer =
+    typeof window !== 'undefined' &&
+    Boolean(window.matchMedia?.('(pointer: coarse)').matches);
+  const isMobileEditorContext =
+    isNativeApp() || isCoarsePointer || viewportWidth < 1024 || viewportHeight < 620;
+  const isMobileLandscapeBlocked =
+    !isPortraitMode &&
+    (isNativeApp() ||
+      (viewportWidth < 1024 && viewportHeight < 620) ||
+      (isCoarsePointer && viewportWidth < 1024));
   const isCompactLandscape = !isPortraitMode && viewportHeight < 560;
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
   const [snapGuideTime, setSnapGuideTime] = useState<number | null>(null);
@@ -1038,11 +1055,17 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     setHasUnsavedChanges(true);
   }, []);
 
-  // Sync device orientation and viewport height for responsive mobile landscape budgeting
+  // Sync device orientation and viewport dimensions + enforce Portrait Lock on mobile devices
   useEffect(() => {
     const onResize = () => {
-      setIsPortraitMode(window.innerHeight >= window.innerWidth);
-      setViewportHeight(window.visualViewport?.height ?? window.innerHeight);
+      const vw = window.visualViewport?.width ?? window.innerWidth;
+      const vh = window.visualViewport?.height ?? window.innerHeight;
+      setViewportWidth(vw);
+      setViewportHeight(vh);
+      setIsPortraitMode(vh >= vw);
+      if (vh >= vw) {
+        setOrientationLockHint(false);
+      }
     };
     onResize();
     window.addEventListener('resize', onResize);
@@ -1055,7 +1078,59 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     };
   }, []);
 
+  // Automatically lock screen orientation to Portrait while Video Editor is open on mobile/native,
+  // and restore the user's global orientation preference cleanly on exit.
+  useEffect(() => {
+    const shouldLockPortrait =
+      isNativeApp() ||
+      window.innerWidth < 1024 ||
+      window.innerHeight < 620 ||
+      Boolean(window.matchMedia?.('(pointer: coarse)').matches);
+    if (!shouldLockPortrait) return;
+    applyScreenOrientationPref('portrait').catch(() => {});
+    return () => {
+      const savedPref = loadPrefs().screenOrientationLock ?? 'auto';
+      applyScreenOrientationPref(savedPref).catch(() => {});
+    };
+  }, []);
+
+  // Pause active playback & close overlays whenever mobile landscape warning blocks the editor
+  useEffect(() => {
+    if (!isMobileLandscapeBlocked) return;
+    try {
+      videoRef.current?.pause();
+      v2VideoRef.current?.pause();
+      compareVideoRef.current?.pause();
+    } catch {
+      // Ignore pause errors
+    }
+    setIsPlaying(false);
+    setWheelMenuOpen(false);
+    setExpEditorLauncherOpen(false);
+    applyScreenOrientationPref('portrait').catch(() => {});
+  }, [isMobileLandscapeBlocked]);
+
+  const requestPortraitRelock = async () => {
+    await applyScreenOrientationPref('portrait').catch(() => {});
+    window.setTimeout(() => {
+      const vw = window.visualViewport?.width ?? window.innerWidth;
+      const vh = window.visualViewport?.height ?? window.innerHeight;
+      if (vw > vh) {
+        setOrientationLockHint(true);
+      } else {
+        setOrientationLockHint(false);
+        setLandscapeLockNoticeOpen(false);
+      }
+    }, 280);
+  };
+
   const toggleOrientationLock = async () => {
+    // On mobile/touch devices, lock landscape transitions and inform the user that portrait is recommended
+    if (isMobileEditorContext) {
+      await applyScreenOrientationPref('portrait').catch(() => {});
+      setLandscapeLockNoticeOpen(true);
+      return;
+    }
     const nextPortrait = !isPortraitMode;
     setIsPortraitMode(nextPortrait);
     try {
@@ -1066,7 +1141,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         await scr.orientation.lock(nextPortrait ? 'portrait' : 'landscape');
       }
     } catch {
-      // Responsive layout switches immediately even if WebView blocks screen lock
+      // Responsive layout switches immediately even if browser blocks screen lock
     }
   };
 
@@ -9308,6 +9383,118 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
                   </kbd>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Mobile Landscape Lock & Portrait Recommendation Overlay */}
+      {(isMobileLandscapeBlocked || landscapeLockNoticeOpen) && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ve-portrait-lock-title"
+          className="fixed inset-0 z-[120] flex items-center justify-center overflow-y-auto bg-[#07080B]/96 px-4 py-4 pt-safe pb-safe px-safe backdrop-blur-xl"
+          onClick={() => {
+            if (!isMobileLandscapeBlocked) setLandscapeLockNoticeOpen(false);
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative flex w-full max-w-md flex-col items-center gap-4 rounded-3xl border border-white/[0.12] bg-[#12131A] p-5 text-center shadow-[0_24px_80px_rgba(0,0,0,0.75)] [@media(max-height:500px)]:max-w-lg [@media(max-height:500px)]:flex-row [@media(max-height:500px)]:items-center [@media(max-height:500px)]:gap-5 [@media(max-height:500px)]:p-4 [@media(max-height:500px)]:text-left"
+          >
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -top-12 left-1/2 h-28 w-48 -translate-x-1/2 rounded-full bg-[var(--accent)]/18 blur-2xl"
+            />
+            <div className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl border border-[var(--accent)]/35 bg-[var(--accent)]/12 text-[var(--accent)] [@media(max-height:500px)]:h-16 [@media(max-height:500px)]:w-16">
+              <svg
+                viewBox="0 0 48 48"
+                fill="none"
+                aria-hidden="true"
+                className="morph-rotate-portrait-icon h-11 w-11 [@media(max-height:500px)]:h-9 [@media(max-height:500px)]:w-9"
+              >
+                <rect
+                  x="13"
+                  y="6"
+                  width="22"
+                  height="36"
+                  rx="4.5"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                />
+                <line
+                  x1="20"
+                  y1="37"
+                  x2="28"
+                  y2="37"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                />
+                <path
+                  d="M21 19 L28 24 L21 29 Z"
+                  fill="currentColor"
+                  fillOpacity="0.9"
+                />
+              </svg>
+            </div>
+
+            <div className="relative min-w-0 flex-1">
+              <p className="text-[10.5px] font-extrabold uppercase tracking-[0.16em] text-[var(--accent)]">
+                {tr('Video Düzenleyici · Dikey Kilit', 'Video Editor · Portrait Lock')}
+              </p>
+              <h2
+                id="ve-portrait-lock-title"
+                className="mt-1 text-base font-extrabold tracking-tight text-white sm:text-lg"
+              >
+                {tr('Dikey Kullanım Önerilir', 'Portrait Mode Recommended')}
+              </h2>
+              <p className="mt-1.5 text-xs leading-relaxed text-white/70">
+                {tr(
+                  'En akıcı kurgu, önizleme ve zaman çizelgesi deneyimi için dikey kullanım öneriyoruz. Video düzenleyici mobil cihazlarda dikey moda kilitlenmiştir.',
+                  'For the smoothest timeline, preview, and touch editing experience, we recommend portrait mode. The video editor is locked to portrait on mobile devices.'
+                )}
+              </p>
+
+              {orientationLockHint && isMobileLandscapeBlocked && (
+                <p className="mt-2 rounded-xl border border-amber-400/30 bg-amber-400/10 px-2.5 py-1.5 text-[11px] font-medium text-amber-200">
+                  {tr(
+                    'Tarayıcı otomatik döndürmeyi sınırlıyorsa lütfen telefonunuzu dikey konuma çevirin.',
+                    'If your browser restricts auto-rotation, please rotate your phone upright.'
+                  )}
+                </p>
+              )}
+
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-2 [@media(max-height:500px)]:justify-start">
+                {isMobileLandscapeBlocked ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void requestPortraitRelock()}
+                      className="morph-accent-btn flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl px-4 text-xs font-extrabold shadow-md whitespace-nowrap"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5 shrink-0" />
+                      <span>{tr('Dikey Moda Kilitle', 'Lock to Portrait')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRequestExit}
+                      className="flex min-h-[44px] items-center justify-center rounded-xl border border-white/15 bg-white/[0.06] px-4 text-xs font-bold text-white/85 transition-colors hover:bg-white/[0.12] whitespace-nowrap"
+                    >
+                      {tr('Editörden Çık', 'Exit Editor')}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setLandscapeLockNoticeOpen(false)}
+                    className="morph-accent-btn flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl px-5 text-xs font-extrabold shadow-md sm:w-auto"
+                  >
+                    <Check className="h-4 w-4 shrink-0" />
+                    <span>{tr('Tamam, Dikeyde Devam Et', 'Got it, Stay in Portrait')}</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

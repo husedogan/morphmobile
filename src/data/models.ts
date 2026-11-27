@@ -334,6 +334,33 @@ export type WheelSpinModePref =
 
 export type WheelSpinTriggerPref = 'always' | 'press';
 export type DeadpoolOuterSpinDir = 'off' | 'cw' | 'ccw';
+export type DeadpoolGradientType = 'linear' | 'radial' | 'conic' | 'solid';
+export type DeadpoolSurfaceTexture = 'none' | 'carbon' | 'brushed' | 'mesh' | 'scanline' | 'hexgrid' | 'diagonal';
+export type DeadpoolGlossMode = 'none' | 'top_arc' | 'diagonal_sheen' | 'glass_dome' | 'metallic';
+export type DeadpoolEyeStyle = 'classic' | 'angry' | 'wide' | 'cyber_visor' | 'squint' | 'glowing_slit';
+export type DeadpoolLogoVariant =
+  | 'classic'
+  | 'hourglass'
+  | 'vinyl_bold'
+  | 'mask_stencil'
+  | 'decal_thin'
+  | 'inverted_vinyl';
+export type DevColorVisionMode =
+  | 'none'
+  | 'grayscale'
+  | 'high_contrast'
+  | 'protanopia'
+  | 'deuteranopia'
+  | 'invert';
+export type DevFontFamily = 'default' | 'mono' | 'serif' | 'system';
+export type DeadpoolSplitGap = 'tight' | 'normal' | 'wide';
+export type DeadpoolInnerRingStyle = 'solid' | 'dashed' | 'double' | 'tech_ticks' | 'none';
+export type DeadpoolMotionPattern = 'steady' | 'pendulum' | 'pulse_step' | 'turbo_burst';
+export type DeadpoolBreathingPulse = 'off' | 'soft' | 'heartbeat' | 'float';
+export type DeadpoolMaskMotion = 'locked' | 'counter_slow' | 'tilt_sway' | 'follow_outer';
+export type DeadpoolTapFx = 'scale' | 'bounce' | 'spin_kick' | 'flash';
+export type DeadpoolBorderStyle = 'solid' | 'dashed' | 'dotted' | 'double';
+export type DeadpoolOuterHaloRing = 'none' | 'thin' | 'dashed_orbit' | 'radar';
 export type ScreenOrientationPref = 'auto' | 'portrait' | 'landscape';
 
 export interface WheelSpinModeMeta {
@@ -477,14 +504,104 @@ export interface Prefs {
   deadpoolOuterSpinDir?: DeadpoolOuterSpinDir;
   /** Trigger for Deadpool outer-only shell spin ('always' or 'press') */
   deadpoolOuterSpinTrigger?: WheelSpinTriggerPref;
-  /** Multiplier for Deadpool outer shell spin speed (0.25 - 4.0, default 1.0) */
+  /** Multiplier for Deadpool outer shell spin speed (0.1 - 6.0, default 1.0) */
   deadpoolOuterSpinSpeed?: number;
   /** Custom primary outer shell color for Deadpool wheel (null = theme accent) */
   deadpoolOuterColor?: string | null;
+  /** Optional middle gradient stop for 3-stop Deadpool outer shell */
+  deadpoolOuterColorMid?: string | null;
   /** Custom secondary outer shell gradient color for Deadpool wheel */
   deadpoolOuterColorEnd?: string | null;
+  /** Shell fill style: linear, radial, conic, or solid */
+  deadpoolGradientType?: DeadpoolGradientType;
   /** Custom Deadpool emblem mask color (null = auto contrast ink) */
   deadpoolInnerColor?: string | null;
+  /** Custom Deadpool eye fill color (null = transparent cutout) */
+  deadpoolEyeColor?: string | null;
+  /** Custom Deadpool emblem outer ring & rim color (null = follows mask/default) */
+  deadpoolRingColor?: string | null;
+  /** Outer shell linear/conic gradient angle in degrees (0 - 360, default 135) */
+  deadpoolGradientAngle?: number;
+  /** Outer neon glow intensity (0 - 100, default 0) */
+  deadpoolGlowIntensity?: number;
+  /** Custom outer neon glow color (null = uses deadpoolOuterColor) */
+  deadpoolGlowColor?: string | null;
+  /** Pulse outer neon glow softly */
+  deadpoolGlowPulse?: boolean;
+  /** Outer shell border/rim thickness in px (0 - 4, default 1) */
+  deadpoolBorderWidth?: number;
+  /** Outer shell border line style */
+  deadpoolBorderStyle?: DeadpoolBorderStyle;
+  /** Enable luminous glow around Deadpool eyes */
+  deadpoolEyeGlow?: boolean;
+  /** Intensity of Deadpool eye glow (0 - 100, default 65) */
+  deadpoolEyeGlowStrength?: number;
+  /** Scale multiplier for Deadpool emblem inside shell (0.75 - 1.3, default 1) */
+  deadpoolMaskScale?: number;
+  /** Static tilt angle for Deadpool emblem (-45 to +45 deg, default 0) */
+  deadpoolMaskTilt?: number;
+  /** Opacity of Deadpool emblem (40 - 100%, default 100) */
+  deadpoolMaskOpacity?: number;
+  /** Vector eye expression inside Deadpool emblem */
+  deadpoolEyeStyle?: DeadpoolEyeStyle;
+  deadpoolLogoVariant?: DeadpoolLogoVariant;
+  /** Width of center vertical split gap in Deadpool mask */
+  deadpoolSplitGap?: DeadpoolSplitGap;
+  /** Emblem inner ring line style */
+  deadpoolInnerRingStyle?: DeadpoolInnerRingStyle;
+  /** Emblem inner ring stroke width (0.8 - 3.2, default 1.65) */
+  deadpoolInnerRingWidth?: number;
+  /** Overall shell size multiplier (0.85 - 1.2, default 1) */
+  deadpoolShellScale?: number;
+  /** Optional custom corner radius % override (0 - 50, null = default shape) */
+  deadpoolCornerRadius?: number | null;
+  /** Surface texture pattern overlaid on the outer shell */
+  deadpoolSurfaceTexture?: DeadpoolSurfaceTexture;
+  /** Surface texture opacity (0 - 100, default 40) */
+  deadpoolTextureOpacity?: number;
+  /** Specular gloss / glass reflection mode on shell */
+  deadpoolGlossMode?: DeadpoolGlossMode;
+  /** Specular gloss opacity (0 - 100, default 45) */
+  deadpoolGlossOpacity?: number;
+  /** Inner radial edge vignette intensity (0 - 100, default 0) */
+  deadpoolInnerVignette?: number;
+  /** Rotation choreography pattern for Deadpool outer spin */
+  deadpoolMotionPattern?: DeadpoolMotionPattern;
+  /** Idle breathing / heartbeat / floating animation */
+  deadpoolBreathingPulse?: DeadpoolBreathingPulse;
+  /** Independent inner emblem motion mode */
+  deadpoolMaskMotion?: DeadpoolMaskMotion;
+  /** Interactive tap micro-reaction effect */
+  deadpoolTapFx?: DeadpoolTapFx;
+  /** Decorative outer orbit halo ring around shell */
+  deadpoolOuterHaloRing?: DeadpoolOuterHaloRing;
+  /** Drop shadow intensity behind Deadpool mask (0 - 100, default 0) */
+  deadpoolMaskDropShadow?: number;
+  /** Color saturation boost percentage (75 - 150, default 100) */
+  deadpoolColorBoost?: number;
+  // Developer-Only ("Sana Özel") Global UI & Runtime Overrides
+  devOledBlack?: boolean;
+  devCustomAccent?: string | null;
+  devCustomAccentEnd?: string | null;
+  devCustomPaper?: string | null;
+  devCustomSurface?: string | null;
+  devCustomInk?: string | null;
+  devCustomLine?: string | null;
+  devFontFamily?: DevFontFamily;
+  devGlobalFontScale?: number;
+  devLetterSpacing?: number;
+  devGlobalRadius?: number | null;
+  devGlassBlur?: number | null;
+  devAnimationSpeed?: number;
+  devGlobalHueRotate?: number;
+  devPerfHud?: boolean;
+  devLayoutWireframe?: boolean;
+  devTouchHitboxOverlay?: boolean;
+  devPixelGrid?: boolean;
+  devCrtScanlines?: boolean;
+  devRtlMirror?: boolean;
+  devColorVisionMode?: DevColorVisionMode;
+  devCustomCss?: string;
   // Experimental / reversible UI flags
   expSpinningGear?: boolean;
   expWheelBurnEffect?: boolean;

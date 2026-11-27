@@ -1019,12 +1019,12 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
 
     return (
       <div
-        className={`mx-auto flex w-full max-w-[540px] flex-col overflow-hidden rounded-t-3xl border shadow-2xl backdrop-blur-xl sm:rounded-3xl ${panelBg}`}
+        className={`mx-auto flex max-h-[88dvh] w-full max-w-[540px] flex-col overflow-hidden rounded-t-3xl border shadow-2xl backdrop-blur-xl sm:rounded-3xl ${panelBg}`}
       >
-        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-current opacity-20 sm:hidden" />
+        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-current opacity-20 sm:hidden" />
         {renderHeader()}
 
-        <div className="relative flex flex-col items-center px-3 pb-[calc(var(--morph-safe-bottom)+0.75rem)] pt-2">
+        <div className="relative flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-3 pb-[calc(var(--morph-safe-bottom)+0.75rem)] pt-2">
           {/* Dual Concentric Fan Stage */}
           <div
             className="relative w-full overflow-visible"
@@ -1975,7 +1975,7 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="fixed inset-0 z-[70] flex flex-col justify-end sm:justify-center sm:p-4"
+      className="fixed inset-0 z-[70] flex flex-col justify-end px-safe sm:justify-center sm:p-4"
     >
       {/* Dimmed Backdrop */}
       <button

@@ -2,6 +2,8 @@ import {Capacitor, SystemBars, SystemBarsStyle} from '@capacitor/core';
 import {
   clampVideoEditorSizing,
   type CornerStylePref,
+  type DevColorVisionMode,
+  type DevFontFamily,
   type UiScalePref,
   type VideoEditorSizingPrefs,
 } from './models';
@@ -33,6 +35,27 @@ export interface AppearanceRuntimePrefs {
   hapticsEnabled?: boolean;
   expTouchTooltips?: boolean;
   videoEditorSizing?: Partial<VideoEditorSizingPrefs>;
+  devOledBlack?: boolean;
+  devCustomAccent?: string | null;
+  devCustomAccentEnd?: string | null;
+  devCustomPaper?: string | null;
+  devCustomSurface?: string | null;
+  devCustomInk?: string | null;
+  devCustomLine?: string | null;
+  devFontFamily?: DevFontFamily;
+  devGlobalFontScale?: number;
+  devLetterSpacing?: number;
+  devGlobalRadius?: number | null;
+  devGlassBlur?: number | null;
+  devAnimationSpeed?: number;
+  devGlobalHueRotate?: number;
+  devLayoutWireframe?: boolean;
+  devTouchHitboxOverlay?: boolean;
+  devPixelGrid?: boolean;
+  devCrtScanlines?: boolean;
+  devRtlMirror?: boolean;
+  devColorVisionMode?: DevColorVisionMode;
+  devCustomCss?: string;
 }
 
 /**
@@ -617,7 +640,35 @@ export function applyThemeTokens(
   const prefersDark =
     typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches;
   const isDark = mode === 'dark' ? true : mode === 'light' ? false : prefersDark;
-  const palette = getPreset(presetId)[isDark ? 'dark' : 'light'];
+  const basePalette = getPreset(presetId)[isDark ? 'dark' : 'light'];
+  const validHex = (v: string | null | undefined): string | null =>
+    typeof v === 'string' && /^#[0-9A-Fa-f]{6}$/.test(v.trim()) ? v.trim().toUpperCase() : null;
+  const customAccent = validHex(appearance?.devCustomAccent);
+  const customAccentEnd = validHex(appearance?.devCustomAccentEnd);
+  const customPaper = validHex(appearance?.devCustomPaper);
+  const customSurface = validHex(appearance?.devCustomSurface);
+  const customInk = validHex(appearance?.devCustomInk);
+  const customLine = validHex(appearance?.devCustomLine);
+  const oled = Boolean(appearance?.devOledBlack) && isDark;
+
+  const palette: Palette = {
+    ...basePalette,
+    ...(oled
+      ? {
+          paper: '#000000',
+          sidebar: '#000000',
+          surface: '#08080C',
+          inset: '#101016',
+          line: '#1E202A',
+        }
+      : {}),
+    ...(customPaper ? {paper: customPaper, sidebar: customPaper} : {}),
+    ...(customSurface ? {surface: customSurface} : {}),
+    ...(customInk ? {ink: customInk} : {}),
+    ...(customLine ? {line: customLine} : {}),
+    ...(customAccent ? {accent: customAccent} : {}),
+    ...(customAccentEnd ? {accentEnd: customAccentEnd} : customAccent ? {accentEnd: customAccent} : {}),
+  };
 
   const useDarkInkOnLightMono =
     isNearWhiteAchromatic(palette.accent) && isNearWhiteAchromatic(palette.accentEnd);
@@ -664,6 +715,137 @@ export function applyThemeTokens(
     root.dataset.haptics = appearance.hapticsEnabled === false ? 'off' : 'on';
     root.dataset.touchTooltips = appearance.expTouchTooltips ? 'on' : 'off';
     root.classList.toggle('reduce-motion', Boolean(appearance.reducedMotion));
+
+    // Developer-Only global overrides
+    const fontScale =
+      typeof appearance.devGlobalFontScale === 'number' && Number.isFinite(appearance.devGlobalFontScale)
+        ? Math.max(85, Math.min(120, appearance.devGlobalFontScale))
+        : 100;
+    if (fontScale !== 100) {
+      const basePx =
+        appearance.uiScale === 'compact' ? 14.75 : appearance.uiScale === 'large' ? 17.25 : 16;
+      root.style.fontSize = `${((basePx * fontScale) / 100).toFixed(2)}px`;
+    } else {
+      root.style.removeProperty('font-size');
+    }
+
+    if (typeof appearance.devGlobalRadius === 'number' && Number.isFinite(appearance.devGlobalRadius)) {
+      const rPx = Math.max(0, Math.min(28, Math.round(appearance.devGlobalRadius)));
+      root.dataset.devRadius = 'on';
+      root.style.setProperty('--dev-radius-3xl', `${rPx}px`);
+      root.style.setProperty('--dev-radius-2xl', `${Math.max(0, Math.round(rPx * 0.78))}px`);
+      root.style.setProperty('--dev-radius-xl', `${Math.max(0, Math.round(rPx * 0.58))}px`);
+    } else {
+      delete root.dataset.devRadius;
+      root.style.removeProperty('--dev-radius-3xl');
+      root.style.removeProperty('--dev-radius-2xl');
+      root.style.removeProperty('--dev-radius-xl');
+    }
+
+    if (typeof appearance.devGlassBlur === 'number' && Number.isFinite(appearance.devGlassBlur)) {
+      const blurPx = Math.max(0, Math.min(24, Math.round(appearance.devGlassBlur)));
+      root.dataset.devBlur = 'on';
+      root.style.setProperty('--dev-glass-blur', `${blurPx}px`);
+    } else {
+      delete root.dataset.devBlur;
+      root.style.removeProperty('--dev-glass-blur');
+    }
+
+    const animSpeed =
+      typeof appearance.devAnimationSpeed === 'number' && Number.isFinite(appearance.devAnimationSpeed)
+        ? Math.max(0, Math.min(2.5, appearance.devAnimationSpeed))
+        : 1;
+    if (animSpeed === 0) {
+      root.dataset.devAnim = 'instant';
+    } else if (animSpeed !== 1) {
+      root.dataset.devAnim = 'scaled';
+      root.style.setProperty('--dev-anim-dur', `${(0.22 / animSpeed).toFixed(3)}s`);
+    } else {
+      delete root.dataset.devAnim;
+      root.style.removeProperty('--dev-anim-dur');
+    }
+
+    if (appearance.devLayoutWireframe) {
+      root.dataset.devWireframe = 'on';
+    } else {
+      delete root.dataset.devWireframe;
+    }
+
+    if (appearance.devTouchHitboxOverlay) {
+      root.dataset.devHitboxes = 'on';
+    } else {
+      delete root.dataset.devHitboxes;
+    }
+
+    if (appearance.devPixelGrid) {
+      root.dataset.devPixelGrid = 'on';
+    } else {
+      delete root.dataset.devPixelGrid;
+    }
+
+    if (appearance.devCrtScanlines) {
+      root.dataset.devCrt = 'on';
+    } else {
+      delete root.dataset.devCrt;
+    }
+
+    root.dir = appearance.devRtlMirror ? 'rtl' : 'ltr';
+
+    const fontFam = appearance.devFontFamily ?? 'default';
+    if (fontFam !== 'default') {
+      root.dataset.devFont = fontFam;
+    } else {
+      delete root.dataset.devFont;
+    }
+
+    const tracking =
+      typeof appearance.devLetterSpacing === 'number' && Number.isFinite(appearance.devLetterSpacing)
+        ? Math.max(-0.04, Math.min(0.1, appearance.devLetterSpacing))
+        : 0;
+    if (Math.abs(tracking) >= 0.004) {
+      root.dataset.devTracking = 'on';
+      root.style.setProperty('--dev-letter-spacing', `${tracking.toFixed(3)}em`);
+    } else {
+      delete root.dataset.devTracking;
+      root.style.removeProperty('--dev-letter-spacing');
+    }
+
+    const vision = appearance.devColorVisionMode ?? 'none';
+    const hueDeg =
+      typeof appearance.devGlobalHueRotate === 'number' && Number.isFinite(appearance.devGlobalHueRotate)
+        ? Math.max(0, Math.min(360, Math.round(appearance.devGlobalHueRotate)))
+        : 0;
+    const filterParts: string[] = [];
+    if (vision === 'grayscale') filterParts.push('grayscale(100%)');
+    else if (vision === 'high_contrast') filterParts.push('contrast(135%) saturate(118%)');
+    else if (vision === 'protanopia') filterParts.push('sepia(28%) hue-rotate(-26deg) saturate(85%)');
+    else if (vision === 'deuteranopia') filterParts.push('sepia(22%) hue-rotate(18deg) saturate(82%)');
+    else if (vision === 'invert') filterParts.push('invert(92%) hue-rotate(180deg)');
+    if (hueDeg > 0 && hueDeg < 360) filterParts.push(`hue-rotate(${hueDeg}deg)`);
+    if (filterParts.length > 0) {
+      root.dataset.devFilter = 'on';
+      root.style.setProperty('--dev-root-filter', filterParts.join(' '));
+    } else {
+      delete root.dataset.devFilter;
+      root.style.removeProperty('--dev-root-filter');
+    }
+
+    // Live Custom CSS Injector (<style id="morph-dev-custom-css">)
+    const customCss = (appearance.devCustomCss ?? '').trim();
+    const styleId = 'morph-dev-custom-css';
+    let styleEl = document.getElementById(styleId) as HTMLStyleElement | null;
+    if (customCss) {
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = styleId;
+        document.head.appendChild(styleEl);
+      }
+      if (styleEl.textContent !== customCss) {
+        styleEl.textContent = customCss;
+      }
+    } else if (styleEl) {
+      styleEl.remove();
+    }
 
     const veSizing = clampVideoEditorSizing(appearance.videoEditorSizing);
     const dockIconPx = Math.round(veSizing.dockTabHeight * 0.36);

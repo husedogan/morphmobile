@@ -516,11 +516,11 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-label={fileName}
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm sm:p-4"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 px-safe backdrop-blur-sm sm:p-4"
         onClick={onClose}
       >
         <div
-          className="flex h-[100dvh] w-full max-w-4xl flex-col overflow-hidden bg-[var(--surface)] shadow-2xl sm:h-[92vh] sm:rounded-3xl sm:border sm:border-[var(--line)]"
+          className="flex h-[100dvh] w-full max-w-4xl flex-col overflow-hidden bg-[var(--surface)] shadow-2xl sm:h-[92dvh] sm:rounded-3xl sm:border sm:border-[var(--line)]"
           onClick={(e) => e.stopPropagation()}
         >
           <PdfCanvasViewer
@@ -541,11 +541,11 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label={fileName}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 px-safe backdrop-blur-sm sm:items-center sm:p-4"
       onClick={onClose}
     >
       <div
-        className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl border border-[var(--line)] bg-[var(--surface)] shadow-2xl sm:rounded-3xl"
+        className="flex max-h-[92dvh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl border border-[var(--line)] bg-[var(--surface)] shadow-2xl sm:rounded-3xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drag handle on mobile */}

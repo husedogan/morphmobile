@@ -65,6 +65,8 @@ const DICT: Record<string, {tr: string; en: string}> = {
   WheelActions: {tr: 'İşlemler', en: 'Actions'},
   WheelZip: {tr: 'ZIP Yap', en: 'Make ZIP'},
   WheelOpen: {tr: 'Aç / Gör', en: 'Preview'},
+  WheelShare: {tr: 'Paylaş', en: 'Share'},
+  WheelClear: {tr: 'Temizle', en: 'Clear'},
 
   // Primary Actions & Optional Plugins
   Convert: {tr: 'Dönüştür', en: 'Convert'},

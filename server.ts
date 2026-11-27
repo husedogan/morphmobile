@@ -88,6 +88,26 @@ async function startServer() {
     }
   };
 
+  const parseExternalHttpUrl = (rawInput: string, rewriteCloud = false): URL | null => {
+    const trimmed = rawInput.trim();
+    if (!trimmed) return null;
+    // Reject explicit non-http(s) protocols (e.g., file://, ftp://, javascript:, data:)
+    if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed) && !/^https?:\/\//i.test(trimmed)) {
+      return null;
+    }
+    const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    try {
+      const candidate = new URL(rewriteCloud ? rewriteCloudDirectUrl(withProto) : withProto);
+      if (candidate.protocol !== 'http:' && candidate.protocol !== 'https:') return null;
+      const host = candidate.hostname.replace(/^\[|\]$/g, '');
+      if (!host || isBlockedHost(host)) return null;
+      if (!net.isIP(host) && !host.includes('.')) return null;
+      return candidate;
+    } catch {
+      return null;
+    }
+  };
+
   const safeFetch = async (rawUrl: string, init: RequestInit = {}, maxRedirects = 5): Promise<Response> => {
     let currentUrl = rawUrl;
     for (let hop = 0; hop <= maxRedirects; hop += 1) {
@@ -153,16 +173,9 @@ async function startServer() {
       return;
     }
 
-    let parsed: URL;
-    try {
-      const withProto = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
-      parsed = new URL(rewriteCloudDirectUrl(withProto));
-      if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || isBlockedHost(parsed.hostname)) {
-        res.status(400).json({detail: 'Geçersiz veya desteklenmeyen bağlantı adresi.'});
-        return;
-      }
-    } catch {
-      res.status(400).json({detail: 'Geçersiz bağlantı biçimi.'});
+    const parsed = parseExternalHttpUrl(rawUrl, true);
+    if (!parsed) {
+      res.status(400).json({detail: 'Geçersiz veya desteklenmeyen bağlantı adresi.'});
       return;
     }
 
@@ -289,16 +302,9 @@ async function startServer() {
       return;
     }
 
-    let parsed: URL;
-    try {
-      const withProto = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
-      parsed = new URL(rewriteCloudDirectUrl(withProto));
-      if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || isBlockedHost(parsed.hostname)) {
-        res.status(400).json({ok: false, detail: 'Blocked URL'});
-        return;
-      }
-    } catch {
-      res.status(400).json({ok: false, detail: 'Invalid URL'});
+    const parsed = parseExternalHttpUrl(rawUrl, true);
+    if (!parsed) {
+      res.status(400).json({ok: false, detail: 'Invalid or blocked URL'});
       return;
     }
 
@@ -412,16 +418,9 @@ async function startServer() {
       return;
     }
 
-    let parsed: URL;
-    try {
-      const withProto = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
-      parsed = new URL(rewriteCloudDirectUrl(withProto));
-      if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || isBlockedHost(parsed.hostname)) {
-        res.status(400).json({detail: 'Blocked URL'});
-        return;
-      }
-    } catch {
-      res.status(400).json({detail: 'Invalid URL'});
+    const parsed = parseExternalHttpUrl(rawUrl, true);
+    if (!parsed) {
+      res.status(400).json({detail: 'Invalid or blocked URL'});
       return;
     }
 
@@ -483,16 +482,9 @@ async function startServer() {
       return;
     }
 
-    let cobaltBase: URL;
-    try {
-      const withProto = /^https?:\/\//i.test(rawCobalt) ? rawCobalt : `https://${rawCobalt}`;
-      cobaltBase = new URL(withProto);
-      if ((cobaltBase.protocol !== 'http:' && cobaltBase.protocol !== 'https:') || isBlockedHost(cobaltBase.hostname)) {
-        res.status(400).json({detail: 'Geçersiz veya engellenen Cobalt sunucu adresi.'});
-        return;
-      }
-    } catch {
-      res.status(400).json({detail: 'Geçersiz Cobalt URL biçimi.'});
+    const cobaltBase = parseExternalHttpUrl(rawCobalt, false);
+    if (!cobaltBase) {
+      res.status(400).json({detail: 'Geçersiz veya engellenen Cobalt sunucu adresi.'});
       return;
     }
 
@@ -507,7 +499,7 @@ async function startServer() {
 
     try {
       const v10Url = new URL('/', cobaltBase.origin).toString();
-      const r10 = await fetch(v10Url, {
+      const r10 = await safeFetch(v10Url, {
         method: 'POST',
         headers: reqHeaders,
         body: JSON.stringify(v10Payload),
@@ -522,7 +514,7 @@ async function startServer() {
 
       if (v7Payload) {
         const v7Url = new URL('/api/json', cobaltBase.origin).toString();
-        const r7 = await fetch(v7Url, {
+        const r7 = await safeFetch(v7Url, {
           method: 'POST',
           headers: reqHeaders,
           body: JSON.stringify(v7Payload),

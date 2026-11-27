@@ -95,7 +95,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
       : t('Download', lang);
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 pb-28 pt-6 sm:px-6 lg:pb-12">
+    <div className="mx-auto w-full max-w-2xl px-4 pb-28 pt-6 sm:px-6 lg:pb-12 [@media(max-height:500px)]:pb-10 [@media(max-height:500px)]:pt-4">
       <div className="flex items-center gap-4">
         <div className="morph-accent-btn flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl shadow-lg">
           <Check className="h-7 w-7" />
@@ -362,7 +362,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
           role="dialog"
           aria-modal="true"
           aria-label={previewItem.item.name}
-          className="fixed inset-0 z-50 flex flex-col bg-black/88 px-4 pt-[calc(var(--morph-safe-top)+0.75rem)] pb-[calc(var(--morph-safe-bottom)+1rem)] backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex flex-col bg-black/88 px-4 px-safe pt-[calc(var(--morph-safe-top)+0.75rem)] pb-[calc(var(--morph-safe-bottom)+1rem)] backdrop-blur-sm"
           onClick={closePreview}
         >
           <div className="flex items-center justify-between gap-3 pb-3 text-white" onClick={(e) => e.stopPropagation()}>
@@ -423,9 +423,9 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 <audio src={previewItem.url} controls autoPlay className="w-full" />
               </div>
             ) : (
-              <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/85 sm:p-4" onClick={closePreview}>
+              <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/85 px-safe sm:p-4" onClick={closePreview}>
                 <div
-                  className="flex h-[100dvh] w-full max-w-4xl flex-col overflow-hidden bg-[var(--surface)] shadow-2xl sm:h-[92vh] sm:rounded-3xl sm:border sm:border-[var(--line)]"
+                  className="flex h-[100dvh] w-full max-w-4xl flex-col overflow-hidden bg-[var(--surface)] shadow-2xl sm:h-[92dvh] sm:rounded-3xl sm:border sm:border-[var(--line)]"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <PdfCanvasViewer

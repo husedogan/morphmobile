@@ -11,6 +11,17 @@ import {
   WheelSpinModePref,
   WheelSpinTriggerPref,
 } from '../data/models';
+import {
+  DeadpoolEmblemGroup,
+  DeadpoolPolygonBorder,
+  DeadpoolResolvedConfig,
+  DeadpoolShellOverlays,
+  buildDeadpoolBackgroundImage,
+  buildDeadpoolBoxShadow,
+  computeDeadpoolAnimatedAngles,
+  getBreathingAnimClass,
+  resolveDeadpoolConfig,
+} from './DeadpoolWheelVisual';
 
 export function isLandscapeFixedWheelViewport(): boolean {
   if (typeof window === 'undefined') return false;
@@ -102,7 +113,7 @@ function getWheelGeometry(count: number): WheelGeometry {
       outerRingIn: 120,
       outerRingOut: 186,
       outerLabelR: 153,
-      containerWidthClass: 'w-[min(384px,92vw,74dvh)]',
+      containerWidthClass: 'w-[min(384px,92vw,70dvh)]',
     };
   }
 
@@ -121,7 +132,7 @@ function getWheelGeometry(count: number): WheelGeometry {
     outerRingIn: 57,
     outerRingOut: 166,
     outerLabelR: 112,
-    containerWidthClass: 'w-[min(344px,88vw,74dvh)]',
+    containerWidthClass: 'w-[min(344px,88vw,70dvh)]',
   };
 }
 
@@ -533,7 +544,7 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
 
   return (
     <div
-      className="no-touch-callout fixed inset-0 z-50 flex flex-col items-center justify-end gap-3 overflow-hidden pb-8 sm:justify-center sm:pb-0 [@media(max-height:540px)]:justify-center [@media(max-height:540px)]:gap-1.5 [@media(max-height:540px)]:pt-[calc(var(--morph-safe-top)+0.25rem)] [@media(max-height:540px)]:pb-[calc(var(--morph-safe-bottom)+0.25rem)]"
+      className="no-touch-callout fixed inset-0 z-50 flex flex-col items-center justify-end gap-3 overflow-hidden pb-8 px-safe sm:justify-center sm:pb-0 [@media(max-height:540px)]:justify-center [@media(max-height:540px)]:gap-1.5 [@media(max-height:540px)]:pt-[calc(var(--morph-safe-top)+0.25rem)] [@media(max-height:540px)]:pb-[calc(var(--morph-safe-bottom)+0.25rem)]"
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) {
           backdropDownRef.current = true;
@@ -1316,6 +1327,15 @@ export const WheelFab: React.FC<{
   deadpoolOuterColor?: string | null;
   deadpoolOuterColorEnd?: string | null;
   deadpoolInnerColor?: string | null;
+  deadpoolEyeColor?: string | null;
+  deadpoolRingColor?: string | null;
+  deadpoolGradientAngle?: number;
+  deadpoolGlowIntensity?: number;
+  deadpoolGlowColor?: string | null;
+  deadpoolBorderWidth?: number;
+  deadpoolEyeGlow?: boolean;
+  deadpoolMaskScale?: number;
+  deadpoolConfig?: DeadpoolResolvedConfig;
   expWheelShockwave?: boolean;
   onChangeSide?: (side: WheelSidePref) => void;
   onHoverChange?: (hover: boolean) => void;
@@ -1341,6 +1361,15 @@ export const WheelFab: React.FC<{
   deadpoolOuterColor = null,
   deadpoolOuterColorEnd = null,
   deadpoolInnerColor = null,
+  deadpoolEyeColor = null,
+  deadpoolRingColor = null,
+  deadpoolGradientAngle = 135,
+  deadpoolGlowIntensity = 0,
+  deadpoolGlowColor = null,
+  deadpoolBorderWidth = 1,
+  deadpoolEyeGlow = false,
+  deadpoolMaskScale = 1,
+  deadpoolConfig,
   expWheelShockwave = false,
   onChangeSide,
   onHoverChange,
@@ -1349,6 +1378,24 @@ export const WheelFab: React.FC<{
   onFocus,
   onBlur,
 }) => {
+  const dpCfg: DeadpoolResolvedConfig =
+    deadpoolConfig ??
+    resolveDeadpoolConfig({
+      deadpoolOuterSpinDir,
+      deadpoolOuterSpinTrigger,
+      deadpoolOuterSpinSpeed,
+      deadpoolOuterColor,
+      deadpoolOuterColorEnd,
+      deadpoolInnerColor,
+      deadpoolEyeColor,
+      deadpoolRingColor,
+      deadpoolGradientAngle,
+      deadpoolGlowIntensity,
+      deadpoolGlowColor,
+      deadpoolBorderWidth,
+      deadpoolEyeGlow,
+      deadpoolMaskScale,
+    });
   const burnTheme = BURN_THEMES[burnStyle] ?? BURN_THEMES.classic_fire;
   const burnThemeRef = useRef<BurnThemeConfig>(burnTheme);
   useEffect(() => {
@@ -1429,12 +1476,19 @@ export const WheelFab: React.FC<{
     setPreviewSide(side);
   }, [side]);
 
+  const [dpTapBounceKey, setDpTapBounceKey] = useState(0);
+  const [dpTapFlashKey, setDpTapFlashKey] = useState(0);
+  const [dpTapKickDeg, setDpTapKickDeg] = useState(0);
+
   const deadpoolOuterSpinOnly =
     innerStyle === 'deadpool' &&
-    (deadpoolOuterSpinDir === 'cw' || deadpoolOuterSpinDir === 'ccw');
+    (dpCfg.outerSpinDir === 'cw' ||
+      dpCfg.outerSpinDir === 'ccw' ||
+      dpCfg.maskMotion === 'counter_slow' ||
+      dpCfg.maskMotion === 'tilt_sway');
   const effectiveSpinEnabled = deadpoolOuterSpinOnly || expWheelSpinEnabled;
   const effectiveSpinTrigger: WheelSpinTriggerPref = deadpoolOuterSpinOnly
-    ? deadpoolOuterSpinTrigger
+    ? dpCfg.outerSpinTrigger
     : expWheelSpinTrigger;
 
   const isHeating =
@@ -1545,10 +1599,13 @@ export const WheelFab: React.FC<{
         const speedMul = effectiveSpinTrigger === 'press' ? 1.45 : 1;
 
         if (deadpoolOuterSpinOnly) {
-          const dir = deadpoolOuterSpinDir === 'ccw' ? -1 : 1;
-          const dpSpeed = Math.max(0.2, Math.min(5, deadpoolOuterSpinSpeed || 1));
-          st.outer = (st.outer + dir * 48 * dpSpeed * speedMul * dtSec + 360) % 360;
-          st.inner = 0;
+          const {outerDeltaDeg, innerDeltaDeg} = computeDeadpoolAnimatedAngles(
+            dpCfg,
+            st.elapsedSec,
+            speedMul
+          );
+          st.outer = outerDeltaDeg;
+          st.inner = innerDeltaDeg;
         } else {
           switch (expWheelSpinMode) {
             case 'both_cw':
@@ -1619,8 +1676,10 @@ export const WheelFab: React.FC<{
   }, [
     effectiveSpinEnabled,
     deadpoolOuterSpinOnly,
-    deadpoolOuterSpinDir,
-    deadpoolOuterSpinSpeed,
+    dpCfg.outerSpinDir,
+    dpCfg.outerSpinSpeed,
+    dpCfg.motionPattern,
+    dpCfg.maskMotion,
     expWheelSpinMode,
     effectiveSpinTrigger,
     spinActiveNow,
@@ -1981,6 +2040,11 @@ export const WheelFab: React.FC<{
         hoverMsRef.current = 0;
         setHeat(0);
         setBurnLevel(0);
+        if (innerStyle === 'deadpool') {
+          if (dpCfg.tapFx === 'bounce') setDpTapBounceKey((k) => k + 1);
+          else if (dpCfg.tapFx === 'flash') setDpTapFlashKey((k) => k + 1);
+          else if (dpCfg.tapFx === 'spin_kick') setDpTapKickDeg((d) => (d + 180) % 360);
+        }
         onClick();
       } else {
         suppressClickRef.current = true;
@@ -2006,12 +2070,12 @@ export const WheelFab: React.FC<{
         ? 'morph-fab-bottom left-1/2 -translate-x-1/2'
         : 'morph-fab-bottom right-5 lg:right-8';
 
-  const dpHasCustomOuter =
-    innerStyle === 'deadpool' && Boolean(deadpoolOuterColor || deadpoolOuterColorEnd);
-  const dpOuterStart = deadpoolOuterColor || deadpoolOuterColorEnd || 'var(--accent)';
-  const dpOuterEnd = deadpoolOuterColorEnd || deadpoolOuterColor || 'var(--accent-end)';
+  const isDeadpoolInner = innerStyle === 'deadpool';
+  const dpOuterStart = dpCfg.outerColor || dpCfg.outerColorEnd || 'var(--accent)';
+  const dpOuterEnd = dpCfg.outerColorEnd || dpCfg.outerColor || 'var(--accent-end)';
+  const dpGradAngle = dpCfg.gradientAngle;
   const dpBaseInnerTone =
-    innerStyle === 'deadpool' && deadpoolInnerColor ? deadpoolInnerColor : 'var(--accent-ink)';
+    isDeadpoolInner && dpCfg.innerColor ? dpCfg.innerColor : 'var(--accent-ink)';
 
   const charLevel = Math.max(0, Math.min(1, (burnLevel - 0.42) / 0.58));
   const flameFade = Math.max(0, 1 - charLevel * 1.25);
@@ -2089,15 +2153,19 @@ export const WheelFab: React.FC<{
             ? 'polygon(50% 2%, 95% 26%, 88% 78%, 50% 99%, 12% 78%, 5% 26%)'
             : undefined;
 
-  const baseOuterRot = (iconStyle === 'diamond' ? 45 : 0) + (effectiveSpinEnabled ? idleOuterDeg : 0);
+  const dpShellScaleMul = isDeadpoolInner ? dpCfg.shellScale : 1;
+  const baseOuterRot =
+    (iconStyle === 'diamond' ? 45 : 0) +
+    (effectiveSpinEnabled ? idleOuterDeg : 0) +
+    (isDeadpoolInner ? dpTapKickDeg : 0);
   const effectiveBtnScale =
-    phase === 'ash'
+    (phase === 'ash'
       ? ashBtnScale
       : isDragging
         ? 1.1
         : isBlazing || isPressing
           ? 1.05
-          : 1;
+          : 1) * dpShellScaleMul;
   const baseButtonTransform =
     baseOuterRot !== 0 || effectiveBtnScale !== 1
       ? `rotate(${baseOuterRot.toFixed(1)}deg) scale(${effectiveBtnScale.toFixed(3)})`
@@ -2107,10 +2175,25 @@ export const WheelFab: React.FC<{
   const worldInnerDeg = (deadpoolOuterSpinOnly ? 0 : spinDeg) + (effectiveSpinEnabled ? idleInnerDeg : 0);
   const localInnerDeg = worldInnerDeg - baseOuterRot;
 
+  const dpBgImage = isDeadpoolInner ? buildDeadpoolBackgroundImage(dpCfg) : undefined;
+  const dpBoxShadow = isDeadpoolInner ? buildDeadpoolBoxShadow(dpCfg, Boolean(shapeClipPath)) : undefined;
+  const dpCustomBorderRadius =
+    isDeadpoolInner && !shapeClipPath && dpCfg.cornerRadius !== null
+      ? `${dpCfg.cornerRadius}%`
+      : undefined;
+  const dpHasCustomShell =
+    isDeadpoolInner &&
+    (Boolean(dpBgImage) ||
+      Boolean(dpBoxShadow) ||
+      Boolean(dpCfg.ringColor) ||
+      dpCfg.borderWidth !== 1 ||
+      dpCfg.borderStyle !== 'solid' ||
+      Boolean(dpCustomBorderRadius));
+
   const fireStyle: React.CSSProperties | undefined =
     phase === 'idle' && heat > 0.04
       ? {
-          backgroundImage: `linear-gradient(135deg, color-mix(in srgb, ${burnTheme.charDarkA} ${Math.round(
+          backgroundImage: `linear-gradient(${dpGradAngle}deg, color-mix(in srgb, ${burnTheme.charDarkA} ${Math.round(
             charLevel * 92
           )}%, ${baseGradStart}) 0%, color-mix(in srgb, ${burnTheme.charDarkB} ${Math.round(
             charLevel * 94
@@ -2121,20 +2204,28 @@ export const WheelFab: React.FC<{
               : `rgba(${burnTheme.glowRgb1}, ${(0.35 + emberRatio * 0.58).toFixed(2)})`,
           boxShadow: shapeClipPath
             ? 'none'
-              : `0 0 ${Math.round((14 + emberRatio * 28 + burnLevel * 14) * glowFade)}px rgba(${burnTheme.glowRgb1}, ${(
-                  (emberRatio * 0.85 + burnLevel * 0.12) *
-                  glowFade
-                ).toFixed(2)}), 0 0 ${Math.round((6 + emberRatio * 16 + burnLevel * 10) * glowFade)}px rgba(${burnTheme.glowRgb2}, ${(
-                  emberRatio *
-                  0.75 *
-                  glowFade
-                ).toFixed(2)})`,
+            : `0 0 ${Math.round((14 + emberRatio * 28 + burnLevel * 14) * glowFade)}px rgba(${burnTheme.glowRgb1}, ${(
+                (emberRatio * 0.85 + burnLevel * 0.12) *
+                glowFade
+              ).toFixed(2)}), 0 0 ${Math.round((6 + emberRatio * 16 + burnLevel * 10) * glowFade)}px rgba(${burnTheme.glowRgb2}, ${(
+                emberRatio *
+                0.75 *
+                glowFade
+              ).toFixed(2)})`,
         }
-      : dpHasCustomOuter
+      : dpHasCustomShell
         ? {
-            backgroundImage: `linear-gradient(135deg, ${dpOuterStart} 0%, ${dpOuterEnd} 100%)`,
+            ...(dpBgImage ? {backgroundImage: dpBgImage} : {}),
+            ...(!shapeClipPath && dpCfg.ringColor ? {borderColor: dpCfg.ringColor} : {}),
+            ...(!shapeClipPath && dpCfg.borderWidth !== 1 ? {borderWidth: `${dpCfg.borderWidth}px`} : {}),
+            ...(!shapeClipPath && dpCfg.borderStyle !== 'solid' ? {borderStyle: dpCfg.borderStyle} : {}),
+            ...(shapeClipPath ? {borderWidth: 0, borderStyle: 'none'} : {}),
+            ...(dpBoxShadow ? {boxShadow: dpBoxShadow} : {}),
+            ...(dpCustomBorderRadius ? {borderRadius: dpCustomBorderRadius} : {}),
           }
-        : undefined;
+        : shapeClipPath
+          ? {borderWidth: 0, borderStyle: 'none'}
+          : undefined;
 
   const particleRadiusClass =
     burnTheme.particleShape === 'square'
@@ -2661,7 +2752,7 @@ export const WheelFab: React.FC<{
                 key={s}
                 style={
                   iconStyle === 'diamond'
-                    ? {transform: s === 'center' ? 'translateX(-50%) rotate(45deg)' : 'rotate(45deg)'}
+                    ? {transform: 'rotate(45deg)'}
                     : shapeClipPath
                       ? {clipPath: shapeClipPath}
                       : undefined
@@ -2798,6 +2889,15 @@ export const WheelFab: React.FC<{
               }}
             />
           ))}
+        {/* Deadpool Tap Flash */}
+        {isDeadpoolInner && dpTapFlashKey > 0 && dpCfg.tapFx === 'flash' && (
+          <span
+            key={dpTapFlashKey}
+            aria-hidden="true"
+            className="morph-dp-tap-flash pointer-events-none absolute left-1/2 top-1/2 z-0 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-2"
+            style={{borderColor: dpCfg.eyeColor || dpCfg.outerColor || '#FFFFFF'}}
+          />
+        )}
         {/* Shape-contoured glowing heat aura + perimeter flames rotated in lockstep with outer shell */}
         {renderShapeHeatAura()}
         {renderBurnCorona()}
@@ -2813,6 +2913,11 @@ export const WheelFab: React.FC<{
             hoverMsRef.current = 0;
             setHeat(0);
             setBurnLevel(0);
+            if (isDeadpoolInner) {
+              if (dpCfg.tapFx === 'bounce') setDpTapBounceKey((k) => k + 1);
+              else if (dpCfg.tapFx === 'flash') setDpTapFlashKey((k) => k + 1);
+              else if (dpCfg.tapFx === 'spin_kick') setDpTapKickDeg((d) => (d + 180) % 360);
+            }
             onClick();
           }}
           onFocus={onFocus}
@@ -2826,23 +2931,51 @@ export const WheelFab: React.FC<{
           }}
           className={`group no-touch-callout relative -m-2.5 flex touch-none select-none items-center justify-center rounded-full bg-transparent p-2.5 focus-visible:outline-none ${
             isDragging ? 'cursor-grabbing' : 'cursor-grab'
-          }`}
+          } ${isDeadpoolInner && phase === 'idle' && !isDragging ? getBreathingAnimClass(dpCfg.breathingPulse) : ''}`}
         >
           <span
+            key={isDeadpoolInner && dpTapBounceKey > 0 ? `dpb-${dpTapBounceKey}` : 'dpb-idle'}
             style={{
               ...fireStyle,
               clipPath: shapeClipPath,
               opacity: phase === 'ash' ? ashBtnOpacity : undefined,
-              filter: ashCharFilter || undefined,
+              filter:
+                [
+                  ashCharFilter,
+                  isDeadpoolInner && dpCfg.colorBoost !== 100
+                    ? `saturate(${dpCfg.colorBoost}%)`
+                    : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ') || undefined,
               transform: baseButtonTransform,
             }}
             className={
               className ??
-              `morph-accent-btn relative flex ${shapeShellClass} items-center justify-center border border-white/20 shadow-xl group-focus-visible:ring-2 group-focus-visible:ring-[var(--accent)] group-focus-visible:ring-offset-2 ${
+              `morph-accent-btn relative flex ${shapeShellClass} items-center justify-center overflow-hidden ${
+                shapeClipPath ? 'border-0' : 'border border-white/20 shadow-xl'
+              } group-focus-visible:ring-2 group-focus-visible:ring-[var(--accent)] group-focus-visible:ring-offset-2 ${
                 effectiveSpinEnabled ? '' : 'transition-transform duration-150'
-              } ${isDragging ? 'shadow-2xl' : ''}`
+              } ${isDragging && !shapeClipPath ? 'shadow-2xl' : ''} ${
+                isDeadpoolInner && dpCfg.glowPulse && dpCfg.glowIntensity > 0
+                  ? 'morph-dp-glow-pulse'
+                  : ''
+              } ${isDeadpoolInner && dpTapBounceKey > 0 && dpCfg.tapFx === 'bounce' ? 'morph-dp-tap-bounce' : ''}`
             }
           >
+            {isDeadpoolInner && phase === 'idle' && <DeadpoolShellOverlays cfg={dpCfg} />}
+            {shapeClipPath && phase === 'idle' && (
+              <DeadpoolPolygonBorder
+                shape={iconStyle}
+                color={
+                  isDeadpoolInner && dpCfg.ringColor
+                    ? dpCfg.ringColor
+                    : 'rgba(255,255,255,0.24)'
+                }
+                width={isDeadpoolInner ? dpCfg.borderWidth : 1}
+                style={isDeadpoolInner ? dpCfg.borderStyle : 'solid'}
+              />
+            )}
             <svg
               className={`pointer-events-none relative z-10 ${
                 iconStyle === 'pill_dock' ? 'h-6 w-12' : 'h-7 w-7'
@@ -3016,21 +3149,7 @@ export const WheelFab: React.FC<{
                       </>
                     );
                   case 'deadpool':
-                    return (
-                      <>
-                        <circle cx="14" cy="14" r="10.3" stroke={wheelTone} strokeWidth="1.65" />
-                        <path
-                          d="M 12.4 5.5 A 8.6 8.6 0 0 0 12.4 22.5 Z M 6.8 11.6 L 11.2 14.7 L 10.6 16.2 L 7.8 15.3 Z"
-                          fill={wheelTone}
-                          fillRule="evenodd"
-                        />
-                        <path
-                          d="M 15.6 5.5 A 8.6 8.6 0 0 1 15.6 22.5 Z M 21.2 11.6 L 16.8 14.7 L 17.4 16.2 L 20.2 15.3 Z"
-                          fill={wheelTone}
-                          fillRule="evenodd"
-                        />
-                      </>
-                    );
+                    return <DeadpoolEmblemGroup cfg={dpCfg} maskFill={wheelTone} />;
                   case 'minimal_dot':
                   default:
                     return (

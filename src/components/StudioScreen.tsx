@@ -330,7 +330,7 @@ export const StudioScreen: React.FC<StudioScreenProps> = ({
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 pb-28 pt-5 sm:px-6 lg:pb-12 lg:pt-8">
+    <div className="mx-auto w-full max-w-4xl px-4 pb-28 pt-5 sm:px-6 lg:pb-12 lg:pt-8 [@media(max-height:500px)]:pb-10 [@media(max-height:500px)]:pt-3">
       {/* Hidden file pickers */}
       <input
         ref={docInputRef}

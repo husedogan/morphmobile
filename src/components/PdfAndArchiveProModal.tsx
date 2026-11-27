@@ -734,11 +734,11 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 sm:p-5 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-safe sm:p-5 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="flex h-[100dvh] w-full max-w-3xl flex-col overflow-hidden bg-[var(--surface)] shadow-2xl sm:h-auto sm:max-h-[92vh] sm:rounded-3xl sm:border sm:border-[var(--line)]"
+        className="flex h-[100dvh] w-full max-w-3xl flex-col overflow-hidden bg-[var(--surface)] shadow-2xl sm:h-auto sm:max-h-[92dvh] sm:rounded-3xl sm:border sm:border-[var(--line)]"
         onClick={(e) => e.stopPropagation()}
       >
         <input

@@ -313,7 +313,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
     : null;
 
   return (
-    <div className={`mx-auto w-full px-4 pb-28 pt-5 sm:px-6 lg:pb-12 lg:pt-8 ${simpleMode ? 'max-w-2xl' : 'max-w-5xl'}`}>
+    <div className={`mx-auto w-full px-4 pb-28 pt-5 sm:px-6 lg:pb-12 lg:pt-8 [@media(max-height:500px)]:pb-10 [@media(max-height:500px)]:pt-3 ${simpleMode ? 'max-w-2xl' : 'max-w-5xl'}`}>
       <div className="flex items-center justify-between gap-2.5 [@media(orientation:landscape)_and_(max-height:639px)]:pr-20 [@media(orientation:landscape)_and_(max-width:1023px)]:pr-20">
         <div className="min-w-0">
           <h1 className="truncate text-2xl font-extrabold tracking-tight text-[var(--ink)] sm:text-3xl">
@@ -860,11 +860,11 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
           role="dialog"
           aria-modal="true"
           aria-label={t('ConfirmClearLibrary', lang)}
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-4"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-safe backdrop-blur-sm sm:items-center sm:p-4"
           onClick={() => setConfirmClear(false)}
         >
           <div
-            className="w-full max-w-sm rounded-t-3xl border-t border-[var(--line)] bg-[var(--surface)] px-5 pt-3 pb-[calc(var(--morph-safe-bottom)+1.25rem)] text-[var(--ink)] shadow-2xl sm:rounded-3xl sm:border sm:p-6"
+            className="max-h-[90dvh] w-full max-w-sm overflow-y-auto rounded-t-3xl border-t border-[var(--line)] bg-[var(--surface)] px-5 pt-3 pb-[calc(var(--morph-safe-bottom)+1.25rem)] text-[var(--ink)] shadow-2xl sm:rounded-3xl sm:border sm:p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mx-auto mb-3.5 h-1.5 w-11 rounded-full bg-[var(--line)] sm:hidden" />
@@ -899,11 +899,11 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
           role="dialog"
           aria-modal="true"
           aria-label={previewItem.item.name}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm sm:p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 px-safe backdrop-blur-sm sm:p-4"
           onClick={closePreview}
         >
           <div
-            className="flex h-[100dvh] w-full max-w-4xl flex-col overflow-hidden bg-[var(--surface)] shadow-2xl sm:h-[92vh] sm:rounded-3xl sm:border sm:border-[var(--line)]"
+            className="flex h-[100dvh] w-full max-w-4xl flex-col overflow-hidden bg-[var(--surface)] shadow-2xl sm:h-[92dvh] sm:rounded-3xl sm:border sm:border-[var(--line)]"
             onClick={(e) => e.stopPropagation()}
           >
             <PdfCanvasViewer
@@ -923,7 +923,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
           role="dialog"
           aria-modal="true"
           aria-label={previewItem.item.name}
-          className="fixed inset-0 z-50 flex flex-col bg-black/85 px-4 pt-[calc(var(--morph-safe-top)+0.75rem)] pb-[calc(var(--morph-safe-bottom)+1rem)] backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex flex-col bg-black/85 px-4 px-safe pt-[calc(var(--morph-safe-top)+0.75rem)] pb-[calc(var(--morph-safe-bottom)+1rem)] backdrop-blur-sm"
           onClick={closePreview}
         >
           <div className="flex items-center justify-between pb-3 text-white" onClick={(e) => e.stopPropagation()}>

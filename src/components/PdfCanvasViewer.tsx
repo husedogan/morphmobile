@@ -1816,11 +1816,11 @@ export const PdfReaderModal: React.FC<PdfReaderModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label={fileName}
-      className="fixed inset-0 z-[75] flex items-center justify-center bg-black/85 backdrop-blur-sm sm:p-4"
+      className="fixed inset-0 z-[75] flex items-center justify-center bg-black/85 px-safe backdrop-blur-sm sm:p-4"
       onClick={onClose}
     >
       <div
-        className="flex h-[100dvh] w-full max-w-4xl flex-col overflow-hidden bg-[var(--surface)] shadow-2xl sm:h-[92vh] sm:rounded-3xl sm:border sm:border-[var(--line)]"
+        className="flex h-[100dvh] w-full max-w-4xl flex-col overflow-hidden bg-[var(--surface)] shadow-2xl sm:h-[92dvh] sm:rounded-3xl sm:border sm:border-[var(--line)]"
         onClick={(e) => e.stopPropagation()}
       >
         <PdfCanvasViewer

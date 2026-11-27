@@ -120,14 +120,14 @@ export const MainWheelCustomizeModal: React.FC<MainWheelCustomizeModalProps> = (
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/65 backdrop-blur-sm sm:items-center sm:p-5"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/65 px-safe backdrop-blur-sm sm:items-center sm:p-5"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label={t('MainWheelCustomizeTitle', lang)}
     >
       <div
-        className="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-t-3xl border-t border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] shadow-2xl sm:max-h-[88vh] sm:rounded-3xl sm:border"
+        className="flex max-h-[90dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-3xl border-t border-[var(--line)] bg-[var(--surface)] text-[var(--ink)] shadow-2xl sm:max-h-[88dvh] sm:rounded-3xl sm:border"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mx-auto mt-2.5 h-1.5 w-11 shrink-0 rounded-full bg-[var(--line)] sm:hidden" />

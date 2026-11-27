@@ -231,10 +231,10 @@ export const CropEditor: React.FC<CropEditorProps> = ({
   const hPx = Math.max(4, (rect.bottom - rect.top) * bounds.height);
 
   return (
-    <div className="morph-bg fixed inset-0 z-40 flex flex-col text-[var(--ink)]">
+    <div className="morph-bg fixed inset-0 z-40 flex flex-col px-safe text-[var(--ink)]">
       {/* Compact Top Bar with Safe-Area Top Inset */}
       <header className="shrink-0 border-b border-[var(--line)] bg-[var(--paper)]/92 pt-safe backdrop-blur-md">
-        <div className="flex h-14 items-center justify-between px-3">
+        <div className="flex h-14 items-center justify-between px-3 [@media(max-height:500px)]:h-11">
           <div className="flex min-w-0 items-center gap-2">
             <button
               type="button"
@@ -322,7 +322,7 @@ export const CropEditor: React.FC<CropEditorProps> = ({
       </div>
 
       {/* Bottom Controls */}
-      <div className="shrink-0 border-t border-[var(--line)] bg-[var(--paper)] px-4 pb-safe pt-3">
+      <div className="shrink-0 border-t border-[var(--line)] bg-[var(--paper)] px-4 pb-safe pt-3 [@media(max-height:500px)]:pt-2 [@media(max-height:500px)]:pb-2">
         <div className="mx-auto max-w-xl">
           <div className="no-scrollbar flex flex-nowrap gap-2 overflow-x-auto pb-1 sm:flex-wrap">
             {aspectOptions.map((opt) => {
