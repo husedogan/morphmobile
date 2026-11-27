@@ -70,6 +70,8 @@ export const StudioDock: React.FC<StudioDockProps> = ({
           <button
             key={tab.id}
             type="button"
+            title={tab.label}
+            aria-label={tab.label}
             onMouseEnter={() => setHoveredTab(tab.id)}
             onMouseLeave={() => setHoveredTab((cur) => (cur === tab.id ? null : cur))}
             onFocus={() => setHoveredTab(tab.id)}
@@ -88,28 +90,28 @@ export const StudioDock: React.FC<StudioDockProps> = ({
                   : 'transparent',
               color: isTinted ? tab.accent : undefined,
             }}
-            className={`group relative flex min-w-0 flex-1 flex-col items-center justify-center rounded-xl border px-0.5 font-semibold transition-colors sm:px-1 ${
+            className={`group relative flex min-w-0 flex-1 items-center justify-center rounded-xl border px-0.5 transition-colors sm:px-1 ${
               isCompactLandscape
-                ? 'min-h-[34px] gap-[1px] py-0.5 text-[8.5px]'
-                : 'min-h-[var(--ve-dock-h,44px)] gap-0.5 py-1 text-[9.5px] min-[400px]:text-[length:var(--ve-dock-font,10px)]'
+                ? 'min-h-[34px] py-1'
+                : 'min-h-[var(--ve-dock-h,44px)] py-1.5'
             } ${isTinted ? '' : 'text-white/60'}`}
           >
             <Icon
               className={`shrink-0 transition-transform group-active:scale-90 ${
                 isCompactLandscape
-                  ? 'h-3.5 w-3.5'
-                  : 'h-[15px] w-[15px] min-[400px]:h-[var(--ve-dock-icon,16px)] min-[400px]:w-[var(--ve-dock-icon,16px)]'
+                  ? 'h-4 w-4'
+                  : 'h-[19px] w-[19px]'
               }`}
               style={isTinted ? {color: tab.accent} : undefined}
             />
-            <span
-              style={isTinted ? {color: tab.accent} : undefined}
-              className="max-w-full truncate leading-none"
-            >
-              {tab.label}
-            </span>
+            {isHighlighted && (
+              <span
+                style={{backgroundColor: tab.accent}}
+                className="absolute bottom-1 h-[2.5px] w-4 rounded-full"
+              />
+            )}
             {tab.badge && !isHighlighted && (
-              <span className="absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-[#34D399]" />
+              <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#34D399]" />
             )}
           </button>
         );

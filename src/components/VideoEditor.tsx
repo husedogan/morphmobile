@@ -8826,33 +8826,68 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
           )}
 
           {/* Default ergonomic StudioDock; ArmadilloReelDock (passive if expAltLauncher ON); Experimental Launcher Bar when expAltLauncher ON */}
-          {expAltLauncher ? (
-            <div className="pb-safe flex shrink-0 items-center justify-between gap-2.5 border-t border-white/[0.1] bg-[#0D0E13]/95 px-3.5 py-2.5 backdrop-blur-md">
-              <div className="flex min-w-0 items-center gap-2">
+          {expAltLauncher ? (() => {
+            const activeTabIconMap: Record<VideoEditorTab, {Icon: React.ComponentType<{className?: string; style?: React.CSSProperties}>; accent: string}> = {
+              trim: {Icon: Scissors, accent: '#F43F5E'},
+              audio: {Icon: AudioLines, accent: '#34D399'},
+              transform: {Icon: Crop, accent: '#2DD4BF'},
+              color: {Icon: Palette, accent: '#A78BFA'},
+              text: {Icon: Type, accent: '#C084FC'},
+              watermark: {Icon: Stamp, accent: '#FB923C'},
+              fx: {Icon: Gauge, accent: '#F472B6'},
+              export: {Icon: SlidersHorizontal, accent: '#FB7185'},
+            };
+            const ActiveTabIcon = activeTabIconMap[activeTab].Icon;
+            const activeTabAccent = activeTabIconMap[activeTab].accent;
+            return (
+              <div className="pb-safe flex shrink-0 items-center justify-between gap-2.5 border-t border-white/[0.1] bg-[#0D0E13]/95 px-3.5 py-2 backdrop-blur-md">
+                <div className="flex min-w-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsInspectorOpen((v) => !v)}
+                    title={activeTabTitle[activeTab]}
+                    aria-label={activeTabTitle[activeTab]}
+                    style={
+                      isInspectorOpen
+                        ? {
+                            borderColor: `${activeTabAccent}77`,
+                            backgroundColor: `${activeTabAccent}22`,
+                            color: activeTabAccent,
+                          }
+                        : {color: activeTabAccent}
+                    }
+                    className={`relative flex h-10 w-11 items-center justify-center rounded-xl border transition-all active:scale-95 ${
+                      isInspectorOpen
+                        ? ''
+                        : 'border-white/12 bg-white/[0.05] hover:border-white/25 hover:bg-white/[0.09]'
+                    }`}
+                  >
+                    <ActiveTabIcon className="h-[18px] w-[18px]" />
+                    {isInspectorOpen && (
+                      <span
+                        style={{backgroundColor: activeTabAccent}}
+                        className="absolute bottom-1 h-1 w-3.5 rounded-full"
+                      />
+                    )}
+                  </button>
+                  {expVideoExtraTimecodes && (
+                    <span className="font-mono-num text-[11px] font-semibold text-white/55 tabular-nums">
+                      {formatSmpteTimecode(playhead, project.fps)}
+                    </span>
+                  )}
+                </div>
                 <button
                   type="button"
-                  onClick={() => setIsInspectorOpen((v) => !v)}
-                  className="flex min-h-[40px] items-center gap-2 rounded-xl border border-white/12 bg-white/[0.06] px-3 text-xs font-bold text-white transition-colors hover:border-white/25"
+                  onClick={() => setExpEditorLauncherOpen(true)}
+                  title={tr('Araçlar', 'Tools')}
+                  aria-label={tr('Araçlar', 'Tools')}
+                  className="flex h-10 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-white shadow-md transition-transform active:scale-95"
                 >
-                  <Sliders className="h-3.5 w-3.5 text-[var(--accent)]" />
-                  <span className="truncate">{activeTabTitle[activeTab]}</span>
+                  <Sparkles className="h-[18px] w-[18px]" />
                 </button>
-                {expVideoExtraTimecodes && (
-                  <span className="font-mono-num text-[11px] font-semibold text-white/55 tabular-nums">
-                    {formatSmpteTimecode(playhead, project.fps)}
-                  </span>
-                )}
               </div>
-              <button
-                type="button"
-                onClick={() => setExpEditorLauncherOpen(true)}
-                className="flex min-h-[42px] shrink-0 items-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-xs font-bold text-white shadow-md transition-transform active:scale-95"
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                <span>{tr('Araçlar', 'Tools')}</span>
-              </button>
-            </div>
-          ) : effectiveArmadilloReel ? (
+            );
+          })() : effectiveArmadilloReel ? (
             <ArmadilloReelDock
               isTr={isTr}
               lang={lang}
@@ -8891,30 +8926,60 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             </div>
             <div className="col-span-6 flex min-h-0 flex-col overflow-hidden lg:col-span-5">
               {renderInspectorPanel()}
-              {expAltLauncher ? (
-                <div
-                  className={`flex shrink-0 items-center justify-between gap-2 border-t border-white/[0.1] bg-[#0D0E13] ${
-                    isCompactLandscape ? 'px-2.5 py-1' : 'px-3.5 py-2'
-                  }`}
-                >
-                  <span className="truncate text-xs font-bold text-white/80">
-                    {activeTabTitle[activeTab]}
-                    {expVideoExtraTimecodes ? ` · ${formatSmpteTimecode(playhead, project.fps)}` : ''}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setExpEditorLauncherOpen(true)}
-                    className={`flex items-center gap-1.5 rounded-xl bg-[var(--accent)] font-bold text-white transition-transform active:scale-95 ${
-                      isCompactLandscape
-                        ? 'min-h-[32px] px-2.5 text-[11px]'
-                        : 'min-h-[38px] px-3.5 text-xs'
+              {expAltLauncher ? (() => {
+                const activeTabIconMap: Record<VideoEditorTab, {Icon: React.ComponentType<{className?: string; style?: React.CSSProperties}>; accent: string}> = {
+                  trim: {Icon: Scissors, accent: '#F43F5E'},
+                  audio: {Icon: AudioLines, accent: '#34D399'},
+                  transform: {Icon: Crop, accent: '#2DD4BF'},
+                  color: {Icon: Palette, accent: '#A78BFA'},
+                  text: {Icon: Type, accent: '#C084FC'},
+                  watermark: {Icon: Stamp, accent: '#FB923C'},
+                  fx: {Icon: Gauge, accent: '#F472B6'},
+                  export: {Icon: SlidersHorizontal, accent: '#FB7185'},
+                };
+                const ActiveTabIcon = activeTabIconMap[activeTab].Icon;
+                const activeTabAccent = activeTabIconMap[activeTab].accent;
+                return (
+                  <div
+                    className={`flex shrink-0 items-center justify-between gap-2 border-t border-white/[0.1] bg-[#0D0E13] ${
+                      isCompactLandscape ? 'px-2.5 py-1' : 'px-3.5 py-2'
                     }`}
                   >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    <span>{tr('Kademeli Araçlar', 'Cascading Tools')}</span>
-                  </button>
-                </div>
-              ) : (
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span
+                        title={activeTabTitle[activeTab]}
+                        aria-label={activeTabTitle[activeTab]}
+                        style={{
+                          borderColor: `${activeTabAccent}48`,
+                          backgroundColor: `${activeTabAccent}16`,
+                          color: activeTabAccent,
+                        }}
+                        className={`flex items-center justify-center rounded-lg border ${
+                          isCompactLandscape ? 'h-7 w-7' : 'h-9 w-9'
+                        }`}
+                      >
+                        <ActiveTabIcon className="h-4 w-4" />
+                      </span>
+                      {expVideoExtraTimecodes && (
+                        <span className="font-mono-num truncate text-[11px] font-semibold text-white/60 tabular-nums">
+                          {formatSmpteTimecode(playhead, project.fps)}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setExpEditorLauncherOpen(true)}
+                      title={tr('Kademeli Araçlar', 'Cascading Tools')}
+                      aria-label={tr('Kademeli Araçlar', 'Cascading Tools')}
+                      className={`flex items-center justify-center rounded-xl bg-[var(--accent)] text-white transition-transform active:scale-95 ${
+                        isCompactLandscape ? 'h-8 w-9' : 'h-9 w-11'
+                      }`}
+                    >
+                      <Sparkles className="h-4 w-4" />
+                    </button>
+                  </div>
+                );
+              })() : (
                 studioDockNode
               )}
             </div>

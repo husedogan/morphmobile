@@ -877,10 +877,10 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
                 onResetCanvasPosition();
               }}
               title={tr('Video konumunu ortala', 'Center video position')}
-              className="pointer-events-auto absolute left-2 top-2 z-25 flex items-center gap-1 rounded-lg border border-[#38BDF8]/45 bg-[#141418]/90 px-2 py-1 text-[10px] font-bold text-[#38BDF8] shadow-lg backdrop-blur-md hover:bg-[#1E1E24]"
+              aria-label={tr('Video konumunu ortala', 'Center video position')}
+              className="pointer-events-auto absolute left-2 top-2 z-25 flex h-8 w-8 items-center justify-center rounded-lg border border-[#38BDF8]/45 bg-[#141418]/90 text-[#38BDF8] shadow-lg backdrop-blur-md hover:bg-[#1E1E24]"
             >
-              <RotateCcw className="h-3 w-3" />
-              <span>{tr('Ortala', 'Center')}</span>
+              <RotateCcw className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
@@ -908,15 +908,14 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
               align="left"
               onClick={onToggleFreePositionMode}
               className={`flex items-center justify-center rounded-lg backdrop-blur-sm transition-colors ${
-                isCompactLandscape ? 'h-7' : 'h-8 sm:h-9 sm:rounded-xl'
+                isCompactLandscape ? 'h-7 w-7' : 'h-8 w-8 sm:h-9 sm:w-9 sm:rounded-xl'
               } ${
                 freePositionMode
-                  ? 'gap-1.5 border border-[#38BDF8]/55 bg-[#0F172A]/85 px-2 text-[10.5px] font-bold text-[#38BDF8] shadow-[0_2px_10px_rgba(56,189,248,0.28)] sm:px-2.5 sm:text-[11px]'
-                  : `${isCompactLandscape ? 'w-7' : 'w-8 sm:w-9'} bg-black/55 text-white/80 hover:bg-black/80 hover:text-white`
+                  ? 'border border-[#38BDF8]/60 bg-[#0F172A]/85 text-[#38BDF8] shadow-[0_2px_10px_rgba(56,189,248,0.32)]'
+                  : 'bg-black/55 text-white/80 hover:bg-black/80 hover:text-white'
               }`}
             >
               <Move className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
-              {freePositionMode && <span>{tr('Serbest', 'Free')}</span>}
             </StudioTooltipBtn>
           </div>
         )}

@@ -10,6 +10,7 @@ import {
   ChevronUp,
   Copy,
   Crosshair,
+  EyeOff,
   Film,
   FilePlus2,
   Layers,
@@ -1203,7 +1204,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             align="left"
             onClick={onSplit}
             className={`flex shrink-0 items-center justify-center rounded-[6px] transition-colors ${
-              isCompactLandscape ? 'h-[22px] w-7' : 'h-[26px] w-7 sm:h-7 sm:w-8'
+              isCompactLandscape ? 'h-[22px] w-6' : 'h-[26px] w-[26px] min-[400px]:w-7 sm:h-7 sm:w-8'
             } ${
               canSplitActiveLayer
                 ? 'bg-[#F43F5E]/20 text-[#FB7185] hover:bg-[#F43F5E]/30'
@@ -1223,7 +1224,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             align="left"
             onClick={openCutMenuFromButton}
             className={`flex shrink-0 items-center justify-center rounded-[6px] transition-colors ${
-              isCompactLandscape ? 'h-[22px] w-7' : 'h-[26px] w-7 sm:h-7 sm:w-8'
+              isCompactLandscape ? 'h-[22px] w-6' : 'h-[26px] w-[26px] min-[400px]:w-7 sm:h-7 sm:w-8'
             } ${
               cutMenuAnchor
                 ? 'bg-[#FB923C]/24 text-[#FDBA74]'
@@ -1257,7 +1258,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
         onClick={meta.onRun}
         disabled={meta.disabled}
         className={`flex shrink-0 items-center justify-center rounded-lg border transition-colors disabled:opacity-30 ${
-          isCompactLandscape ? 'h-7 w-7' : 'h-8 w-8 sm:h-9 sm:w-9'
+          isCompactLandscape ? 'h-7 w-7' : 'h-8 w-7 min-[400px]:w-8 sm:h-9 sm:w-9'
         } ${toolVisualClass}`}
       >
         <Icon className="h-3.5 w-3.5" />
@@ -1295,28 +1296,30 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                       type="button"
                       onClick={() => setPinnedTools(DEFAULT_PINNED_TOOLBAR_TOOLS)}
                       title={tr('Varsayılana Sıfırla', 'Reset Default')}
-                      className="flex h-8 items-center gap-1 rounded-md border border-white/[0.1] bg-white/[0.04] px-2 text-[10px] font-bold text-white/65 hover:text-white"
+                      aria-label={tr('Varsayılana Sıfırla', 'Reset Default')}
+                      className="flex h-8 w-8 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-white/65 hover:text-white"
                     >
-                      <RotateCcw className="h-2.5 w-2.5" />
-                      <span>{tr('Sıfırla', 'Reset')}</span>
+                      <RotateCcw className="h-3.5 w-3.5" />
                     </button>
                     <button
                       type="button"
                       onClick={() => setTrayEditMode(false)}
-                      className="flex h-8 items-center gap-1 rounded-md border border-[#38BDF8]/50 bg-[#38BDF8]/18 px-2.5 text-[10px] font-extrabold text-[#38BDF8] hover:bg-[#38BDF8]/25"
+                      title={tr('Bitti', 'Done')}
+                      aria-label={tr('Bitti', 'Done')}
+                      className="flex h-8 w-8 items-center justify-center rounded-md border border-[#38BDF8]/50 bg-[#38BDF8]/18 text-[#38BDF8] hover:bg-[#38BDF8]/25"
                     >
-                      <Check className="h-3 w-3" />
-                      <span>{tr('Bitti', 'Done')}</span>
+                      <Check className="h-3.5 w-3.5" />
                     </button>
                   </>
                 ) : (
                   <button
                     type="button"
                     onClick={() => setTrayEditMode(true)}
-                    className="flex h-8 items-center gap-1 rounded-md border border-white/[0.1] bg-white/[0.05] px-2.5 text-[10px] font-bold text-white/75 transition-colors hover:border-[#38BDF8]/45 hover:text-[#38BDF8]"
+                    title={tr('Araç Çubuğunu Düzenle', 'Customize Toolbar')}
+                    aria-label={tr('Araç Çubuğunu Düzenle', 'Customize Toolbar')}
+                    className="flex h-8 w-8 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.05] text-white/75 transition-colors hover:border-[#38BDF8]/45 hover:text-[#38BDF8]"
                   >
-                    <SlidersHorizontal className="h-2.5 w-2.5" />
-                    <span>{tr('Düzenle', 'Edit')}</span>
+                    <SlidersHorizontal className="h-3.5 w-3.5" />
                   </button>
                 )}
               </div>
@@ -1411,9 +1414,10 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                             type="button"
                             onClick={() => togglePinTool(id)}
                             title={tr('Gizli tepsiye al', 'Move to hidden tray')}
-                            className="ml-0.5 flex h-8 items-center gap-0.5 rounded bg-white/[0.08] px-2 text-[10px] font-bold text-white/80 hover:bg-rose-500/25 hover:text-rose-300"
+                            aria-label={tr('Gizli tepsiye al', 'Move to hidden tray')}
+                            className="ml-0.5 flex h-8 w-8 items-center justify-center rounded bg-white/[0.08] text-white/80 hover:bg-rose-500/25 hover:text-rose-300"
                           >
-                            <span>{tr('Gizle', 'Hide')}</span>
+                            <EyeOff className="h-3.5 w-3.5" />
                           </button>
                         </div>
                       </div>
@@ -1444,10 +1448,11 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                           <button
                             type="button"
                             onClick={() => togglePinTool(id)}
-                            className="flex h-8 shrink-0 items-center gap-1 rounded border border-[#38BDF8]/35 bg-[#38BDF8]/12 px-2 text-[10px] font-bold text-[#38BDF8] hover:bg-[#38BDF8]/22"
+                            title={tr('Çubuğa Sabitle', 'Pin to Toolbar')}
+                            aria-label={tr('Çubuğa Sabitle', 'Pin to Toolbar')}
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-[#38BDF8]/35 bg-[#38BDF8]/12 text-[#38BDF8] hover:bg-[#38BDF8]/22"
                           >
-                            <Pin className="h-3 w-3" />
-                            <span>{tr('Sabitle', 'Pin')}</span>
+                            <Pin className="h-3.5 w-3.5" />
                           </button>
                         </div>
                       );
@@ -1530,84 +1535,88 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               </button>
             </div>
 
-            <div className="grid grid-cols-5 gap-1">
+            <div className="grid grid-cols-5 gap-1.5">
               <button
                 type="button"
+                title={tr('Video Ekle', 'Add Video')}
+                aria-label={tr('Video Ekle', 'Add Video')}
                 onClick={() => {
                   setFabAnchor(null);
                   onImportVideos(0);
                 }}
-                className="flex flex-col items-center justify-center gap-1 rounded-xl border border-white/[0.07] bg-white/[0.03] px-1 py-2 text-white/85 transition-all hover:border-[#F43F5E]/45 hover:bg-[#F43F5E]/12 hover:text-[#FB7185] active:scale-95"
+                className="flex h-10 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.03] text-white/85 transition-all hover:border-[#F43F5E]/45 hover:bg-[#F43F5E]/12 hover:text-[#FB7185] active:scale-95"
               >
-                <FilePlus2 className="h-4 w-4 text-[#FB7185]" />
-                <span className="text-[9px] font-bold leading-none">{tr('Video', 'Video')}</span>
+                <FilePlus2 className="h-[18px] w-[18px] text-[#FB7185]" />
               </button>
 
               <button
                 type="button"
+                title={tr('Video / PiP Ekle', 'Add Video / PiP')}
+                aria-label={tr('Video / PiP Ekle', 'Add Video / PiP')}
                 onClick={() => {
                   setFabAnchor(null);
                   onImportVideos(1);
                 }}
-                className="flex flex-col items-center justify-center gap-1 rounded-xl border border-white/[0.07] bg-white/[0.03] px-1 py-2 text-white/85 transition-all hover:border-[#C084FC]/45 hover:bg-[#C084FC]/12 hover:text-[#D8B4FE] active:scale-95"
+                className="flex h-10 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.03] text-white/85 transition-all hover:border-[#C084FC]/45 hover:bg-[#C084FC]/12 hover:text-[#D8B4FE] active:scale-95"
               >
-                <PictureInPicture2 className="h-4 w-4 text-[#C084FC]" />
-                <span className="text-[9px] font-bold leading-none">{tr('Video/PiP', 'Video/PiP')}</span>
+                <PictureInPicture2 className="h-[18px] w-[18px] text-[#C084FC]" />
               </button>
 
               <button
                 type="button"
+                title={tr('Ses Ekle', 'Add Audio')}
+                aria-label={tr('Ses Ekle', 'Add Audio')}
                 onClick={() => {
                   setFabAnchor(null);
                   onQuickAddAudio();
                 }}
-                className="flex flex-col items-center justify-center gap-1 rounded-xl border border-white/[0.07] bg-white/[0.03] px-1 py-2 text-white/85 transition-all hover:border-[#34D399]/45 hover:bg-[#34D399]/12 hover:text-[#6EE7B7] active:scale-95"
+                className="flex h-10 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.03] text-white/85 transition-all hover:border-[#34D399]/45 hover:bg-[#34D399]/12 hover:text-[#6EE7B7] active:scale-95"
               >
-                <Music className="h-4 w-4 text-[#34D399]" />
-                <span className="text-[9px] font-bold leading-none">{tr('Ses', 'Audio')}</span>
+                <Music className="h-[18px] w-[18px] text-[#34D399]" />
               </button>
 
               <button
                 type="button"
+                title={tr('Metin Ekle', 'Add Text')}
+                aria-label={tr('Metin Ekle', 'Add Text')}
                 onClick={() => {
                   setFabAnchor(null);
                   onQuickAddText();
                 }}
-                className="flex flex-col items-center justify-center gap-1 rounded-xl border border-white/[0.07] bg-white/[0.03] px-1 py-2 text-white/85 transition-all hover:border-[#38BDF8]/45 hover:bg-[#38BDF8]/12 hover:text-[#7DD3FC] active:scale-95"
+                className="flex h-10 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.03] text-white/85 transition-all hover:border-[#38BDF8]/45 hover:bg-[#38BDF8]/12 hover:text-[#7DD3FC] active:scale-95"
               >
-                <Type className="h-4 w-4 text-[#38BDF8]" />
-                <span className="text-[9px] font-bold leading-none">{tr('Metin', 'Text')}</span>
+                <Type className="h-[18px] w-[18px] text-[#38BDF8]" />
               </button>
 
               <button
                 type="button"
+                title={tr('Filigran', 'Watermark')}
+                aria-label={tr('Filigran', 'Watermark')}
                 onClick={() => {
                   setFabAnchor(null);
                   onOpenWatermarkTab();
                 }}
-                className="flex flex-col items-center justify-center gap-1 rounded-xl border border-white/[0.07] bg-white/[0.03] px-1 py-2 text-white/85 transition-all hover:border-[#FB923C]/45 hover:bg-[#FB923C]/12 hover:text-[#FDBA74] active:scale-95"
+                className="flex h-10 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.03] text-white/85 transition-all hover:border-[#FB923C]/45 hover:bg-[#FB923C]/12 hover:text-[#FDBA74] active:scale-95"
               >
-                <Stamp className="h-4 w-4 text-[#FB923C]" />
-                <span className="text-[9px] font-bold leading-none">{tr('Filigran', 'Mark')}</span>
+                <Stamp className="h-[18px] w-[18px] text-[#FB923C]" />
               </button>
             </div>
 
             {/* Section 2: Add Empty Track Row (A2..A6, T1..T6, V2..V5) */}
             {onAddTrackRow && (
               <div className="mt-2.5 border-t border-white/[0.08] pt-2">
-                <span className="mb-1.5 block px-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white/55">
-                  {tr('Yeni Satır Ekle', 'Add Track Row')}
-                </span>
                 <div className="grid grid-cols-3 gap-1.5">
                   <button
                     type="button"
                     disabled={audioRowCount >= 6}
+                    title={tr(`Yeni Ses Satırı Ekle (A${Math.min(6, audioRowCount + 1)})`, `Add Audio Track Row (A${Math.min(6, audioRowCount + 1)})`)}
+                    aria-label={tr(`Yeni Ses Satırı Ekle (A${Math.min(6, audioRowCount + 1)})`, `Add Audio Track Row (A${Math.min(6, audioRowCount + 1)})`)}
                     onClick={() => onAddTrackRow('audio')}
-                    className="flex items-center justify-center gap-1 rounded-xl border border-[#34D399]/28 bg-[#34D399]/10 px-2 py-1.5 text-[10px] font-bold text-[#6EE7B7] transition-all hover:border-[#34D399]/55 hover:bg-[#34D399]/18 active:scale-95 disabled:opacity-35"
+                    className="flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[#34D399]/28 bg-[#34D399]/10 px-2 text-[10px] font-bold text-[#6EE7B7] transition-all hover:border-[#34D399]/55 hover:bg-[#34D399]/18 active:scale-95 disabled:opacity-35"
                   >
                     <Plus className="h-3 w-3 shrink-0" />
-                    <span>{tr('Ses', 'Audio')}</span>
-                    <span className="font-mono-num rounded bg-black/35 px-1 text-[8.5px] opacity-85">
+                    <Music className="h-3.5 w-3.5 shrink-0" />
+                    <span className="font-mono-num rounded bg-black/35 px-1 text-[9px] opacity-90">
                       A{Math.min(6, audioRowCount + 1)}
                     </span>
                   </button>
@@ -1615,12 +1624,14 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   <button
                     type="button"
                     disabled={textRowCount >= 6}
+                    title={tr(`Yeni Metin Satırı Ekle (T${Math.min(6, textRowCount + 1)})`, `Add Text Track Row (T${Math.min(6, textRowCount + 1)})`)}
+                    aria-label={tr(`Yeni Metin Satırı Ekle (T${Math.min(6, textRowCount + 1)})`, `Add Text Track Row (T${Math.min(6, textRowCount + 1)})`)}
                     onClick={() => onAddTrackRow('text')}
-                    className="flex items-center justify-center gap-1 rounded-xl border border-[#38BDF8]/28 bg-[#38BDF8]/10 px-2 py-1.5 text-[10px] font-bold text-[#7DD3FC] transition-all hover:border-[#38BDF8]/55 hover:bg-[#38BDF8]/18 active:scale-95 disabled:opacity-35"
+                    className="flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[#38BDF8]/28 bg-[#38BDF8]/10 px-2 text-[10px] font-bold text-[#7DD3FC] transition-all hover:border-[#38BDF8]/55 hover:bg-[#38BDF8]/18 active:scale-95 disabled:opacity-35"
                   >
                     <Plus className="h-3 w-3 shrink-0" />
-                    <span>{tr('Metin', 'Text')}</span>
-                    <span className="font-mono-num rounded bg-black/35 px-1 text-[8.5px] opacity-85">
+                    <Type className="h-3.5 w-3.5 shrink-0" />
+                    <span className="font-mono-num rounded bg-black/35 px-1 text-[9px] opacity-90">
                       T{Math.min(6, textRowCount + 1)}
                     </span>
                   </button>
@@ -1628,12 +1639,14 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                   <button
                     type="button"
                     disabled={pipRowCount >= 4}
+                    title={tr(`Yeni Katman Satırı Ekle (V${Math.min(5, pipRowCount + 2)})`, `Add Layer Track Row (V${Math.min(5, pipRowCount + 2)})`)}
+                    aria-label={tr(`Yeni Katman Satırı Ekle (V${Math.min(5, pipRowCount + 2)})`, `Add Layer Track Row (V${Math.min(5, pipRowCount + 2)})`)}
                     onClick={() => onAddTrackRow('pip')}
-                    className="flex items-center justify-center gap-1 rounded-xl border border-[#C084FC]/28 bg-[#C084FC]/10 px-2 py-1.5 text-[10px] font-bold text-[#D8B4FE] transition-all hover:border-[#C084FC]/55 hover:bg-[#C084FC]/18 active:scale-95 disabled:opacity-35"
+                    className="flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[#C084FC]/28 bg-[#C084FC]/10 px-2 text-[10px] font-bold text-[#D8B4FE] transition-all hover:border-[#C084FC]/55 hover:bg-[#C084FC]/18 active:scale-95 disabled:opacity-35"
                   >
                     <Plus className="h-3 w-3 shrink-0" />
-                    <span>{tr('Katman', 'Layer')}</span>
-                    <span className="font-mono-num rounded bg-black/35 px-1 text-[8.5px] opacity-85">
+                    <Layers className="h-3.5 w-3.5 shrink-0" />
+                    <span className="font-mono-num rounded bg-black/35 px-1 text-[9px] opacity-90">
                       V{Math.min(5, pipRowCount + 2)}
                     </span>
                   </button>
@@ -1665,15 +1678,20 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
         }`}
       >
         <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pr-0.5 sm:gap-1.5 sm:pr-1">
-          {/* Active Layer Indicator Pill */}
+          {/* Active Layer Indicator (Icon-Only so all pinned tools incl. Magnet fit cleanly on 360px+) */}
           <span
-            style={{color: activeLayerMeta.color, borderColor: `${activeLayerMeta.color}40`}}
-            className={`flex shrink-0 items-center gap-1 rounded-lg border bg-white/[0.03] px-1.5 text-[10px] font-extrabold ${
-              isCompactLandscape ? 'h-7' : 'h-8 sm:h-9 sm:gap-1.5 sm:px-2'
+            title={tr(`Aktif Katman: ${activeLayerMeta.label}`, `Active Layer: ${activeLayerMeta.label}`)}
+            aria-label={tr(`Aktif Katman: ${activeLayerMeta.label}`, `Active Layer: ${activeLayerMeta.label}`)}
+            style={{
+              color: activeLayerMeta.color,
+              borderColor: `${activeLayerMeta.color}48`,
+              backgroundColor: `${activeLayerMeta.color}14`,
+            }}
+            className={`flex shrink-0 items-center justify-center rounded-lg border ${
+              isCompactLandscape ? 'h-7 w-7' : 'h-8 w-7 min-[400px]:w-8 sm:h-9 sm:w-9'
             }`}
           >
-            <ActiveLayerIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-            <span className="inline">{activeLayerMeta.label}</span>
+            <ActiveLayerIcon className="h-3.5 w-3.5" />
           </span>
 
           {/* User-Customizable Pinned Tools */}
@@ -1693,7 +1711,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             }
             aria-label={tr('Medya ve Satır Ekle', 'Add Media and Track Row')}
             className={`flex items-center justify-center rounded-lg border transition-all active:scale-95 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#F43F5E]/60 ${
-              isCompactLandscape ? 'h-7 w-7' : 'h-8 w-8 sm:h-9 sm:w-9'
+              isCompactLandscape ? 'h-7 w-7' : 'h-8 w-7 min-[400px]:w-8 sm:h-9 sm:w-9'
             } ${
               fabAnchor
                 ? 'border-[#F43F5E] bg-[#F43F5E] text-white shadow-[0_0_12px_rgba(244,63,94,0.45)]'
@@ -1717,7 +1735,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                 : tr('Gizli Öğeleri Göster & Düzenle', 'Show Hidden Tools & Customize')
             }
             className={`relative flex items-center justify-center rounded-lg border transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-white/35 ${
-              isCompactLandscape ? 'h-7 w-7' : 'h-8 w-8 sm:h-9 sm:w-9'
+              isCompactLandscape ? 'h-7 w-7' : 'h-8 w-7 min-[400px]:w-8 sm:h-9 sm:w-9'
             } ${
               trayAnchor
                 ? 'border-[#38BDF8]/50 bg-[#38BDF8]/18 text-[#38BDF8]'
@@ -1749,7 +1767,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               disabled={timelineZoom <= 1}
               onClick={onZoomOut}
               className={`flex items-center justify-center rounded-[6px] text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-25 ${
-                isCompactLandscape ? 'h-[22px] w-6' : 'h-[26px] w-6 sm:h-7 sm:w-7'
+                isCompactLandscape ? 'h-[22px] w-6' : 'h-[26px] w-[22px] min-[400px]:w-6 sm:h-7 sm:w-7'
               }`}
             >
               <ZoomOut className="h-3.5 w-3.5" />
@@ -1762,7 +1780,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               )}
               align="right"
               onClick={onResetZoom}
-              className={`flex items-center justify-center gap-[2px] rounded-[6px] px-1 transition-colors hover:bg-white/[0.08] ${
+              className={`flex items-center justify-center gap-[2px] rounded-[6px] px-0.5 min-[400px]:px-1 transition-colors hover:bg-white/[0.08] ${
                 isCompactLandscape ? 'h-[22px]' : 'h-[26px] sm:h-7 sm:px-1.5'
               }`}
             >
@@ -1785,7 +1803,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               disabled={timelineZoom >= 8}
               onClick={onZoomIn}
               className={`flex items-center justify-center rounded-[6px] text-white/65 transition-colors hover:bg-white/[0.08] hover:text-white disabled:opacity-25 ${
-                isCompactLandscape ? 'h-[22px] w-6' : 'h-[26px] w-6 sm:h-7 sm:w-7'
+                isCompactLandscape ? 'h-[22px] w-6' : 'h-[26px] w-[22px] min-[400px]:w-6 sm:h-7 sm:w-7'
               }`}
             >
               <ZoomIn className="h-3.5 w-3.5" />
@@ -2548,13 +2566,14 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             <button
               type="button"
               onClick={() => onOpenFxOrColor(project.colorFilter !== 'orig' ? 'color' : 'fx')}
+              title={tr('Efekt ve rengi düzenle', 'Edit FX & color')}
               className="flex h-6 w-full items-center justify-between rounded-md bg-[#2DD4BF]/12 px-2.5 text-[9.5px] font-bold text-[#5EEAD4] ring-1 ring-[#2DD4BF]/25 hover:bg-[#2DD4BF]/18"
             >
               <span className="flex items-center gap-1.5 truncate">
                 <Sparkles className="h-3 w-3 shrink-0" />
                 <span className="truncate">{activeFxLabel}</span>
               </span>
-              <span className="text-[9px] opacity-70">{tr('Düzenle', 'Edit')}</span>
+              <ChevronRight className="h-3 w-3 shrink-0 opacity-75" />
             </button>
           )}
 
@@ -2609,48 +2628,53 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
           </div>
           </div>
 
-          {/* SLEEK INLINE QUICK-ADD STRIP (Toggleable from ^ Hidden Tools tray) */}
+          {/* SLEEK ICON-FIRST INLINE QUICK-ADD STRIP (Toggleable from ^ Hidden Tools tray) */}
           {showQuickAddBar && (
-            <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto pt-0.5 text-[10px] font-bold">
+            <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto pt-0.5">
               <button
                 type="button"
+                title={tr('Video Ekle', 'Add Video')}
+                aria-label={tr('Video Ekle', 'Add Video')}
                 onClick={() => onImportVideos(0)}
-                className="flex h-6.5 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-white/[0.08] bg-white/[0.03] px-2 text-white/70 hover:border-[#F43F5E]/45 hover:text-[#FB7185]"
+                className="flex h-7 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.03] text-[#FB7185] hover:border-[#F43F5E]/45 hover:bg-[#F43F5E]/12"
               >
-                <FilePlus2 className="h-3 w-3 shrink-0 text-[#FB7185]" />
-                <span>{tr('+ Video', '+ Video')}</span>
+                <FilePlus2 className="h-3.5 w-3.5" />
               </button>
               <button
                 type="button"
+                title={tr('PiP Video Ekle', 'Add PiP Video')}
+                aria-label={tr('PiP Video Ekle', 'Add PiP Video')}
                 onClick={() => onImportVideos(1)}
-                className="flex h-6.5 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-white/[0.08] bg-white/[0.03] px-2 text-white/70 hover:border-[#C084FC]/40 hover:text-[#C084FC]"
+                className="flex h-7 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.03] text-[#C084FC] hover:border-[#C084FC]/40 hover:bg-[#C084FC]/12"
               >
-                <PictureInPicture2 className="h-3 w-3 shrink-0 text-[#C084FC]" />
-                <span>{tr('+ PiP', '+ PiP')}</span>
+                <PictureInPicture2 className="h-3.5 w-3.5" />
               </button>
               <button
                 type="button"
+                title={tr('Ses Ekle', 'Add Audio')}
+                aria-label={tr('Ses Ekle', 'Add Audio')}
                 onClick={() => onQuickAddAudio()}
-                className="flex h-6.5 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-white/[0.08] bg-white/[0.03] px-2 text-white/70 hover:border-[#34D399]/40 hover:text-[#34D399]"
+                className="flex h-7 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.03] text-[#34D399] hover:border-[#34D399]/40 hover:bg-[#34D399]/12"
               >
-                <Music className="h-3 w-3 shrink-0 text-[#34D399]" />
-                <span>{tr('+ Ses', '+ Audio')}</span>
+                <Music className="h-3.5 w-3.5" />
               </button>
               <button
                 type="button"
+                title={tr('Metin Ekle', 'Add Text')}
+                aria-label={tr('Metin Ekle', 'Add Text')}
                 onClick={() => onQuickAddText()}
-                className="flex h-6.5 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-white/[0.08] bg-white/[0.03] px-2 text-white/70 hover:border-[#38BDF8]/40 hover:text-[#38BDF8]"
+                className="flex h-7 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.03] text-[#38BDF8] hover:border-[#38BDF8]/40 hover:bg-[#38BDF8]/12"
               >
-                <Type className="h-3 w-3 shrink-0 text-[#38BDF8]" />
-                <span>{tr('+ Metin', '+ Text')}</span>
+                <Type className="h-3.5 w-3.5" />
               </button>
               <button
                 type="button"
+                title={tr('Filigran', 'Watermark')}
+                aria-label={tr('Filigran', 'Watermark')}
                 onClick={onOpenWatermarkTab}
-                className="flex h-6.5 shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-white/[0.08] bg-white/[0.03] px-2 text-white/70 hover:border-[#FB923C]/45 hover:text-[#FB923C]"
+                className="flex h-7 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.03] text-[#FB923C] hover:border-[#FB923C]/45 hover:bg-[#FB923C]/12"
               >
-                <Stamp className="h-3 w-3 shrink-0 text-[#FB923C]" />
-                <span>{tr('Filigran', 'Mark')}</span>
+                <Stamp className="h-3.5 w-3.5" />
               </button>
             </div>
           )}
