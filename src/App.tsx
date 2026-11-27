@@ -125,6 +125,7 @@ import {
   subscribeLibraryChanges,
 } from './engine/libraryDb';
 import {downloadBuiltInLink} from './engine/linkDownloader';
+import {applyScreenOrientationPref} from './engine/morphEnginesBridge';
 import {
   acquireJobWakeLock,
   ensureStoragePermission,
@@ -283,6 +284,10 @@ export default function App() {
     setIsDark(dark);
     savePrefs(prefs);
   }, [prefs]);
+
+  useEffect(() => {
+    applyScreenOrientationPref(prefs.screenOrientationLock ?? 'auto').catch(() => {});
+  }, [prefs.screenOrientationLock]);
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -2914,6 +2919,8 @@ export default function App() {
                   expWheelSpinEnabled={Boolean(prefs.expWheelSpinEnabled)}
                   expWheelSpinMode={prefs.expWheelSpinMode ?? 'outer_ccw_inner_cw'}
                   expWheelSpinTrigger={prefs.expWheelSpinTrigger ?? 'always'}
+                  deadpoolOuterSpinDir={prefs.deadpoolOuterSpinDir ?? 'off'}
+                  deadpoolOuterSpinTrigger={prefs.deadpoolOuterSpinTrigger ?? 'always'}
                   expWheelShockwave={Boolean(prefs.expWheelShockwave)}
                   onChangeSide={(wheelSide) => setPrefs((p) => ({...p, wheelSide}))}
                   onHoverChange={(hover) => {

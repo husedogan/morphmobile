@@ -1,5 +1,10 @@
 # Sürüm Geçmişi
 
+## [1.1.67] — Beta
+- **Ekran Döndürme Kilidi (`MorphEnginesPlugin.java`, `morphEnginesBridge.ts`, `SettingsScreen.tsx`):** Normal Ayarlar (Görünüm ve Basit Mod) içine **Otomatik / Dikey / Yatay** ekran döndürme kilidi eklendi; Android APK içinde yerel aktivite yönü doğrudan sabitlenir, web/PWA ortamında da Screen Orientation API ile senkron çalışır.
+- **Yatay Mod Çark Dokunma Güvenilirliği (`WheelMenu.tsx`, `ExperimentalToolLauncher.tsx`, `index.css`):** Yatay mobil görünümde sağ üst çark düğmesinin dokunma alanı genişletildi (`-m-2.5 p-2.5`), sürükleme eşiği yatay ergonomiye göre ayarlandı (`42px`) ve açılış sonrası sahte tıklama/arka plan kapanma sorunları giderildi.
+- **Gizli Kişisel Alan & Deadpool Dış Çerçeve Dönüşü (`SettingsScreen.tsx`, `WheelMenu.tsx`):** Deneysel sekmesi kilitliyken erişim kilidinden özel anahtar girildiğinde açılan ve ekrandan çıkınca kaybolan geçici **Sana Özel** menüsü, **H ♥ S** bulut sürprizi açma/kapama kontrolü ve Deadpool iç tasarımı seçiliyken iç simgeyi sabit tutup yalnızca dış kabuğu sağa/sola döndüren ayar eklendi.
+
 ## [1.1.53] — Beta
 - **Yerleşik PDF Görüntüleyici & Görsel PDF Araçları (`PdfCanvasViewer.tsx`, `PdfVisualTools.tsx`, `PdfAndArchiveProModal.tsx`):** Çok sayfalı, yakınlaştırılabilir ve gece okuma modlu yerleşik PDF görüntüleyici eklendi; PDF Böl, Sayfa Sil, Ayıkla, Döndür, Filigran, Sayfa Numarası, N-Up, PDF→Görsel ve Gri Tonlama araçları görsel sayfa önizlemeleri ve sadeleştirilmiş dokunmatik kontrollerle yenilendi.
 - **Akıllı Arşiv Gezgini & Belge/LUT Önizlemeleri (`DocumentViewerModal.tsx`, `previewParsers.ts`, `PdfAndArchiveProModal.tsx`):** ZIP içindeki PDF dosyaları doğrudan uygulama içi PDF görüntüleyici ile açılır, ikili (binary) dosyalar güvenli bilgi kartıyla gösterilir; `.cube` LUT dosyalarına parmakla kaydırılan öncesi/sonrası kıyaslama perdesi, HTML/Markdown belgelerine tema uyumlu güvenli önizleme ve tıklanabilir bağlantılar eklendi.

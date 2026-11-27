@@ -333,6 +333,8 @@ export type WheelSpinModePref =
   | 'turbo_counter';
 
 export type WheelSpinTriggerPref = 'always' | 'press';
+export type DeadpoolOuterSpinDir = 'off' | 'cw' | 'ccw';
+export type ScreenOrientationPref = 'auto' | 'portrait' | 'landscape';
 
 export interface WheelSpinModeMeta {
   id: WheelSpinModePref;
@@ -440,6 +442,8 @@ export interface Prefs {
   lang: 'tr' | 'en';
   /** Reversible simplified interface mode — hides advanced/Pro strips without erasing user Pro settings */
   simpleMode?: boolean;
+  /** Global screen orientation lock preference ('auto' follows device sensor) */
+  screenOrientationLock?: ScreenOrientationPref;
   serverUrl: string;
   serverToken: string;
   showQuickWheel?: boolean;
@@ -467,6 +471,12 @@ export interface Prefs {
   quickEnginePicker?: boolean;
   wheelConfig?: WheelConfigPrefs;
   videoEditorSizing?: Partial<VideoEditorSizingPrefs>;
+  /** Personal toggle (default true): enables 8s Developer card H♥S cloud easter egg */
+  devCloudEasterEggEnabled?: boolean;
+  /** Personal setting active when Deadpool inner design is chosen: spin ONLY the outer shell right/left */
+  deadpoolOuterSpinDir?: DeadpoolOuterSpinDir;
+  /** Trigger for Deadpool outer-only shell spin ('always' or 'press') */
+  deadpoolOuterSpinTrigger?: WheelSpinTriggerPref;
   // Experimental / reversible UI flags
   expSpinningGear?: boolean;
   expWheelBurnEffect?: boolean;

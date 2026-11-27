@@ -1,6 +1,8 @@
 package com.morphstudio.app;
 
+import android.app.Activity;
 import android.content.Context;
+import android.content.pm.ActivityInfo;
 import android.media.MediaCodec;
 import android.media.MediaExtractor;
 import android.media.MediaMuxer;
@@ -209,6 +211,38 @@ public class MorphEnginesPlugin extends Plugin {
             ret.put("metered", false);
             call.resolve(ret);
         }
+    }
+
+    @PluginMethod
+    public void setScreenOrientation(PluginCall call) {
+        final String orientation = call.getString("orientation", "auto");
+        final Activity activity = getActivity();
+        if (activity == null) {
+            JSObject ret = new JSObject();
+            ret.put("applied", false);
+            ret.put("orientation", orientation);
+            call.resolve(ret);
+            return;
+        }
+        final int requested;
+        if ("portrait".equalsIgnoreCase(orientation)) {
+            requested = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT;
+        } else if ("landscape".equalsIgnoreCase(orientation)) {
+            requested = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE;
+        } else {
+            requested = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+        }
+        activity.runOnUiThread(() -> {
+            try {
+                activity.setRequestedOrientation(requested);
+                JSObject ret = new JSObject();
+                ret.put("applied", true);
+                ret.put("orientation", orientation);
+                call.resolve(ret);
+            } catch (Exception e) {
+                call.reject("Ekran yönü ayarlanamadı: " + e.getMessage(), e);
+            }
+        });
     }
 
     @PluginMethod

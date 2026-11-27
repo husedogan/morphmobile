@@ -21,6 +21,7 @@ import {
   FolderOpen,
   GitBranch,
   HardDrive,
+  Heart,
   Image as ImageIcon,
   Info,
   Layers,
@@ -31,6 +32,7 @@ import {
   Play,
   RefreshCw,
   RotateCcw,
+  RotateCw,
   Share2,
   ShieldCheck,
   SlidersHorizontal,
@@ -45,12 +47,14 @@ import {
 import {Lang, t} from '../data/i18n';
 import {
   CornerStylePref,
+  DeadpoolOuterSpinDir,
   DownloadEngineId,
   ExpLauncherLabelMode,
   ExpLauncherStyle,
   ExpLauncherTextSize,
   ExportItem,
   Prefs,
+  ScreenOrientationPref,
   UiScalePref,
   VideoQualityPref,
   WHEEL_BURN_STYLES,
@@ -95,6 +99,7 @@ import {
 import {
   EngineCardInfo,
   MorphNetworkStatus,
+  applyScreenOrientationPref,
   getAllEnginesStatus,
   getLiveNetworkStatus,
   installOrUpdateEngineModule,
@@ -124,6 +129,7 @@ export type SettingsCategory =
   | 'permissions'
   | 'storage'
   | 'experimental'
+  | 'personal'
   | 'system';
 
 interface SettingsScreenProps {
@@ -283,23 +289,32 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const expTabVisibleRef = useRef(expTabVisible && expUnlocked);
   expTabVisibleRef.current = expTabVisible && expUnlocked;
 
-  useEffect(() => {
-    if (initialCategory === 'experimental' && !expTabVisibleRef.current) {
-      setCategory('appearance');
-    } else if (initialCategory === 'studio' && prefs.simpleMode) {
-      setCategory('appearance');
-    } else {
-      setCategory(initialCategory);
+  const [personalMenuOpen, setPersonalMenuOpen] = useState(false);
+
+  const selectCategory = useCallback((nextCat: SettingsCategory) => {
+    if (nextCat !== 'personal') {
+      setPersonalMenuOpen(false);
     }
-  }, [initialCategory, prefs.simpleMode]);
+    setCategory(nextCat);
+  }, []);
 
   useEffect(() => {
-    if (prefs.simpleMode && category === 'studio') {
-      setCategory('appearance');
-    } else if (!prefs.expDedicatedStorageTab && category === 'storage') {
-      setCategory('system');
+    if (initialCategory === 'experimental' && !expTabVisibleRef.current) {
+      selectCategory('appearance');
+    } else if (initialCategory === 'studio' && prefs.simpleMode) {
+      selectCategory('appearance');
+    } else {
+      selectCategory(initialCategory);
     }
-  }, [prefs.simpleMode, prefs.expDedicatedStorageTab, category]);
+  }, [initialCategory, prefs.simpleMode, selectCategory]);
+
+  useEffect(() => {
+    if (prefs.simpleMode && (category === 'studio' || category === 'personal')) {
+      selectCategory('appearance');
+    } else if (!prefs.expDedicatedStorageTab && category === 'storage') {
+      selectCategory('system');
+    }
+  }, [prefs.simpleMode, prefs.expDedicatedStorageTab, category, selectCategory]);
 
   const permShieldTapCountRef = useRef(0);
   const permShieldLastTapRef = useRef(0);
@@ -431,9 +446,23 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     return `${h1.toString(16)}-${h2.toString(16)}` === 'd76a0e7e-3f3532d8';
   };
 
+  const openPersonalMenuFromGate = useCallback(() => {
+    setExpGateOpen(false);
+    setExpPassInput('');
+    setExpPassError(false);
+    setExpPassVisible(false);
+    setPersonalMenuOpen(true);
+    setCategory('personal');
+  }, []);
+
   const handleExpUnlockSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!expUnlocked && expPassInput.trim() === '070420') {
+      openPersonalMenuFromGate();
+      return;
+    }
     if (verifyExpPassphrase(expPassInput)) {
+      setPersonalMenuOpen(false);
       setExpUnlocked(true);
       setExpTabVisible(true);
       setExpGateOpen(false);
@@ -466,6 +495,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const handleExpLock = () => {
     setExpUnlocked(false);
     setExpTabVisible(false);
+    setPersonalMenuOpen(false);
     setExpGateOpen(false);
     setExpPassInput('');
     setExpPassError(false);
@@ -688,6 +718,64 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
   const simpleMode = Boolean(prefs.simpleMode);
   const dedicatedStorageTab = Boolean(prefs.expDedicatedStorageTab);
+  const screenOrientationLock: ScreenOrientationPref = prefs.screenOrientationLock ?? 'auto';
+  const devCloudEasterEggEnabled = prefs.devCloudEasterEggEnabled !== false;
+  const deadpoolOuterSpinDir: DeadpoolOuterSpinDir = prefs.deadpoolOuterSpinDir ?? 'off';
+  const deadpoolOuterSpinTrigger: WheelSpinTriggerPref = prefs.deadpoolOuterSpinTrigger ?? 'always';
+  const [personalPreviewDeg, setPersonalPreviewDeg] = useState(0);
+
+  useEffect(() => {
+    if (!devCloudEasterEggEnabled) {
+      clearDevHoldTimer();
+      setShowDevClouds(false);
+    }
+  }, [devCloudEasterEggEnabled, clearDevHoldTimer]);
+
+  useEffect(() => {
+    if (
+      category !== 'personal' ||
+      !personalMenuOpen ||
+      expUnlocked ||
+      wheelInnerStyle !== 'deadpool' ||
+      deadpoolOuterSpinDir === 'off'
+    ) {
+      setPersonalPreviewDeg(0);
+      return;
+    }
+    let rafId = 0;
+    let last = performance.now();
+    let deg = 0;
+    const dir = deadpoolOuterSpinDir === 'ccw' ? -1 : 1;
+    const step = (now: number) => {
+      const dt = Math.min(0.05, Math.max(0.001, (now - last) / 1000));
+      last = now;
+      deg = (deg + dir * 48 * dt + 360) % 360;
+      setPersonalPreviewDeg(deg);
+      rafId = window.requestAnimationFrame(step);
+    };
+    rafId = window.requestAnimationFrame(step);
+    return () => {
+      if (rafId) window.cancelAnimationFrame(rafId);
+    };
+  }, [category, personalMenuOpen, expUnlocked, wheelInnerStyle, deadpoolOuterSpinDir]);
+
+  const handleSetScreenOrientation = (nextOri: ScreenOrientationPref) => {
+    onChangePrefs((p) => ({...p, screenOrientationLock: nextOri}));
+    applyScreenOrientationPref(nextOri).catch(() => {});
+    onShowToast?.(
+      nextOri === 'portrait'
+        ? lang === 'tr'
+          ? 'Ekran dikey moda kilitlendi.'
+          : 'Screen locked to portrait.'
+        : nextOri === 'landscape'
+          ? lang === 'tr'
+            ? 'Ekran yatay moda kilitlendi.'
+            : 'Screen locked to landscape.'
+          : lang === 'tr'
+            ? 'Ekran döndürme otomatik moda alındı.'
+            : 'Screen orientation set to auto.'
+    );
+  };
 
   const storageBreakdown = useMemo(() => {
     type BucketId = 'image' | 'video' | 'audio' | 'document' | 'archive' | 'other';
@@ -818,6 +906,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       : []),
     ...(expUnlocked && expTabVisible
       ? [{id: 'experimental' as const, label: lang === 'tr' ? 'Deneysel' : 'Experimental', Icon: FlaskConical}]
+      : []),
+    ...(personalMenuOpen && !expUnlocked
+      ? [{id: 'personal' as const, label: lang === 'tr' ? 'Sana Özel' : 'Just For You', Icon: Heart}]
       : []),
     {id: 'system', label: lang === 'tr' ? 'Sistem' : 'System', Icon: Smartphone},
   ];
@@ -955,6 +1046,35 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </div>
           </section>
 
+          {/* 3b. Screen Orientation Lock */}
+          <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4.5">
+            <p className="text-sm font-bold text-[var(--ink)]">
+              {lang === 'tr' ? 'Ekran Yönü Kilidi' : 'Orientation Lock'}
+            </p>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {(
+                [
+                  {id: 'auto' as const, tr: 'Otomatik', en: 'Auto'},
+                  {id: 'portrait' as const, tr: 'Dikey Kilit', en: 'Portrait'},
+                  {id: 'landscape' as const, tr: 'Yatay Kilit', en: 'Landscape'},
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => handleSetScreenOrientation(opt.id)}
+                  className={`min-h-[44px] rounded-2xl border px-2 text-xs font-bold whitespace-nowrap transition-colors ${
+                    screenOrientationLock === opt.id
+                      ? 'border-[var(--accent)] bg-[var(--accent)]/18 text-[var(--ink)]'
+                      : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
+                  }`}
+                >
+                  {lang === 'tr' ? opt.tr : opt.en}
+                </button>
+              ))}
+            </div>
+          </section>
+
           {/* 4. Storage & Update */}
           <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4.5 space-y-3">
             <div className="flex items-center justify-between gap-2">
@@ -1031,7 +1151,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               aria-selected={active}
               aria-label={label}
               title={label}
-              onClick={() => setCategory(id)}
+              onClick={() => selectCategory(id)}
               className={`flex min-h-[44px] items-center justify-center rounded-xl text-xs font-semibold whitespace-nowrap transition-colors duration-200 ${
                 active
                   ? 'morph-accent-solid shrink-0 gap-1.5 px-3.5 shadow-sm sm:gap-2 sm:px-4'
@@ -1123,6 +1243,56 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 <span className="morph-switch-thumb" />
               </span>
             </button>
+          </section>
+
+          {/* Orientation Lock (Portrait / Landscape / Auto) in Normal Settings */}
+          <section className="flex flex-col gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent-text)]">
+                <RotateCw className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold leading-snug text-[var(--ink)]">
+                  {lang === 'tr' ? 'Ekran Döndürme Kilidi' : 'Screen Orientation Lock'}
+                </p>
+                <p className="text-[11px] leading-snug text-[var(--muted)]">
+                  {lang === 'tr'
+                    ? 'Otomatik döndür ya da dikey/yatay konumda sabitle.'
+                    : 'Auto-rotate or lock screen to portrait or landscape.'}
+                </p>
+              </div>
+            </div>
+            <div
+              role="radiogroup"
+              aria-label={lang === 'tr' ? 'Ekran Döndürme Kilidi' : 'Screen Orientation Lock'}
+              className="grid w-full shrink-0 grid-cols-3 gap-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] p-1 sm:w-auto sm:min-w-[270px]"
+            >
+              {(
+                [
+                  {id: 'auto' as const, tr: 'Otomatik', en: 'Auto'},
+                  {id: 'portrait' as const, tr: 'Dikey', en: 'Portrait'},
+                  {id: 'landscape' as const, tr: 'Yatay', en: 'Landscape'},
+                ] as const
+              ).map((opt) => {
+                const selected = screenOrientationLock === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => handleSetScreenOrientation(opt.id)}
+                    className={`min-h-[36px] rounded-lg px-2.5 text-xs font-semibold whitespace-nowrap transition-colors ${
+                      selected
+                        ? 'bg-[var(--surface)] text-[var(--ink)] ring-1 ring-[var(--accent)]/60 shadow-sm'
+                        : 'text-[var(--muted)] hover:text-[var(--ink)]'
+                    }`}
+                  >
+                    {lang === 'tr' ? opt.tr : opt.en}
+                  </button>
+                );
+              })}
+            </div>
           </section>
 
           {/* Instant Recovery Banner when Home Quick Wheel is hidden */}
@@ -2775,7 +2945,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     type={expPassVisible ? 'text' : 'password'}
                     value={expPassInput}
                     onChange={(e) => {
-                      setExpPassInput(e.target.value);
+                      const val = e.target.value;
+                      if (!expUnlocked && val.trim() === '070420') {
+                        openPersonalMenuFromGate();
+                        return;
+                      }
+                      setExpPassInput(val);
                       if (expPassError) setExpPassError(false);
                     }}
                     autoComplete="off"
@@ -4278,6 +4453,246 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </div>
       )}
 
+      {/* EPHEMERAL PERSONAL MENU ("Sana Özel" / "Just For You"): unlocked ONLY via 070420 while Experimental is locked; vanishes upon leaving */}
+      {category === 'personal' && personalMenuOpen && !expUnlocked && (() => {
+        const isRoundOuter =
+          wheelIconStyle === 'wheel' ||
+          wheelIconStyle === 'morph' ||
+          wheelIconStyle === 'gear' ||
+          wheelIconStyle === 'compass' ||
+          wheelIconStyle === 'hex';
+        const activeOuterId: WheelIconStylePref = isRoundOuter ? 'wheel' : wheelIconStyle;
+        const previewOuterStyle: React.CSSProperties =
+          activeOuterId === 'diamond'
+            ? {
+                transform: `rotate(${(45 + personalPreviewDeg).toFixed(1)}deg) scale(0.84)`,
+                borderRadius: '10px',
+              }
+            : activeOuterId === 'squircle'
+              ? {
+                  transform: `rotate(${personalPreviewDeg.toFixed(1)}deg)`,
+                  borderRadius: '12px',
+                }
+              : activeOuterId === 'pill_dock'
+                ? {
+                    width: '54px',
+                    height: '34px',
+                    borderRadius: '999px',
+                    transform: `rotate(${personalPreviewDeg.toFixed(1)}deg)`,
+                  }
+                : activeOuterId === 'octa_shield'
+                  ? {
+                      clipPath: 'polygon(29% 2%, 71% 2%, 98% 29%, 98% 71%, 71% 98%, 29% 98%, 2% 71%, 2% 29%)',
+                      borderRadius: 0,
+                      transform: `rotate(${personalPreviewDeg.toFixed(1)}deg)`,
+                    }
+                  : activeOuterId === 'blade_hex'
+                    ? {
+                        clipPath: 'polygon(25% 4%, 75% 4%, 99% 50%, 75% 96%, 25% 96%, 1% 50%)',
+                        borderRadius: 0,
+                        transform: `rotate(${personalPreviewDeg.toFixed(1)}deg)`,
+                      }
+                    : activeOuterId === 'star_prism'
+                      ? {
+                          clipPath: 'polygon(50% 2%, 67% 33%, 98% 50%, 67% 67%, 50% 98%, 33% 67%, 2% 50%, 33% 33%)',
+                          borderRadius: 0,
+                          transform: `rotate(${personalPreviewDeg.toFixed(1)}deg)`,
+                        }
+                      : activeOuterId === 'shield_crest'
+                        ? {
+                            clipPath: 'polygon(50% 2%, 95% 26%, 88% 78%, 50% 99%, 12% 78%, 5% 26%)',
+                            borderRadius: 0,
+                            transform: `rotate(${personalPreviewDeg.toFixed(1)}deg)`,
+                          }
+                        : {
+                            borderRadius: '999px',
+                            transform: `rotate(${personalPreviewDeg.toFixed(1)}deg)`,
+                          };
+        const counterInnerDeg =
+          activeOuterId === 'diamond' ? -(45 + personalPreviewDeg) : -personalPreviewDeg;
+
+        return (
+          <div className="mt-4 space-y-4">
+            <section className="relative overflow-hidden rounded-3xl border border-rose-500/35 bg-[var(--surface)] p-5">
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute -right-10 -top-12 h-32 w-40 rounded-full bg-rose-500/12 blur-2xl"
+              />
+              <div className="relative flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-rose-500/35 bg-rose-500/12 text-rose-400">
+                    <Heart className="h-5 w-5 fill-current" />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-base font-extrabold tracking-tight text-[var(--ink)]">
+                      {lang === 'tr' ? 'Sana Özel' : 'Just For You'}
+                    </h2>
+                    <p className="mt-0.5 text-xs leading-snug text-[var(--muted)]">
+                      {lang === 'tr'
+                        ? 'Kişisel tercihlerin burada saklı; bu ekrandan çıktığında menü otomatik kapanır.'
+                        : 'Personal controls live here; this menu vanishes automatically once you leave.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* 1. H ♥ S Cloud Easter Egg Toggle */}
+            <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4.5">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={devCloudEasterEggEnabled}
+                onClick={() => {
+                  const next = !devCloudEasterEggEnabled;
+                  onChangePrefs((p) => ({...p, devCloudEasterEggEnabled: next}));
+                  onShowToast?.(
+                    next
+                      ? lang === 'tr'
+                        ? 'H ♥ S bulut sürprizi açıldı.'
+                        : 'H ♥ S cloud easter egg enabled.'
+                      : lang === 'tr'
+                        ? 'H ♥ S bulut sürprizi kapatıldı.'
+                        : 'H ♥ S cloud easter egg disabled.'
+                  );
+                }}
+                className="flex w-full items-center justify-between gap-3 text-left"
+              >
+                <div className="flex min-w-0 items-start gap-3">
+                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-rose-400">
+                    <Cloud className="h-4.5 w-4.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-[var(--ink)]">
+                      {lang === 'tr' ? 'H ♥ S Bulut Sürprizi' : 'H ♥ S Cloud Surprise'}
+                    </p>
+                    <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
+                      {lang === 'tr'
+                        ? 'Sistem sekmesindeki geliştirici kartına 8 sn basılı tutunca çıkan H ♥ S bulut animasyonunu açıp kapatır.'
+                        : 'Turns the 8-second developer card H ♥ S drifting clouds effect on or off.'}
+                    </p>
+                  </div>
+                </div>
+                <span
+                  className="morph-switch shrink-0"
+                  data-checked={devCloudEasterEggEnabled ? 'true' : 'false'}
+                >
+                  <span className="morph-switch-thumb" />
+                </span>
+              </button>
+            </section>
+
+            {/* 2. Deadpool Outer-Only Spin Setting (strictly shown when Deadpool inner style is selected) */}
+            {wheelInnerStyle === 'deadpool' && (
+              <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4.5 space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-12 w-14 shrink-0 items-center justify-center">
+                      <span
+                        style={previewOuterStyle}
+                        className="morph-accent-btn flex h-11 w-11 items-center justify-center border border-white/20 shadow-md"
+                      >
+                        <svg
+                          viewBox="0 0 28 28"
+                          fill="none"
+                          className="h-5.5 w-5.5"
+                          style={{transform: `rotate(${counterInnerDeg.toFixed(1)}deg)`}}
+                        >
+                          <circle cx="14" cy="14" r="10.1" stroke="currentColor" strokeWidth="1.6" />
+                          <path
+                            d="M 12.4 5.7 A 8.4 8.4 0 0 0 12.4 22.3 Z M 6.9 11.7 L 11.2 14.7 L 10.6 16.1 L 7.9 15.2 Z"
+                            fill="currentColor"
+                            fillRule="evenodd"
+                          />
+                          <path
+                            d="M 15.6 5.7 A 8.4 8.4 0 0 1 15.6 22.3 Z M 21.1 11.7 L 16.8 14.7 L 17.4 16.1 L 20.1 15.2 Z"
+                            fill="currentColor"
+                            fillRule="evenodd"
+                          />
+                        </svg>
+                      </span>
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-xs font-extrabold text-[var(--ink)]">
+                        {lang === 'tr' ? 'Deadpool Dış Çerçeve Dönüşü' : 'Deadpool Outer Shell Spin'}
+                      </h3>
+                      <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
+                        {lang === 'tr'
+                          ? 'Deadpool simgesi sabit kalır; sadece seçili dış kabuk sağa veya sola döner.'
+                          : 'Keeps the Deadpool emblem upright while spinning only the outer shell.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Direction: Off / Left (CCW) / Right (CW) */}
+                <div
+                  role="radiogroup"
+                  aria-label={lang === 'tr' ? 'Dış çerçeve dönüş yönü' : 'Outer shell spin direction'}
+                  className="grid grid-cols-3 gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-1"
+                >
+                  {(
+                    [
+                      {id: 'off' as const, tr: 'Durgun', en: 'Off'},
+                      {id: 'ccw' as const, tr: 'Sola Dön', en: 'Spin Left'},
+                      {id: 'cw' as const, tr: 'Sağa Dön', en: 'Spin Right'},
+                    ] as const
+                  ).map((opt) => {
+                    const selected = deadpoolOuterSpinDir === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => onChangePrefs((p) => ({...p, deadpoolOuterSpinDir: opt.id}))}
+                        className={`min-h-[40px] rounded-xl px-2 text-xs font-bold whitespace-nowrap transition-colors ${
+                          selected
+                            ? 'bg-[var(--surface)] text-[var(--ink)] ring-1 ring-[var(--accent)]/60 shadow-sm'
+                            : 'text-[var(--muted)] hover:text-[var(--ink)]'
+                        }`}
+                      >
+                        {lang === 'tr' ? opt.tr : opt.en}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Trigger: Always vs On Press */}
+                {deadpoolOuterSpinDir !== 'off' && (
+                  <div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-1">
+                    {(
+                      [
+                        {id: 'always' as const, tr: 'Her Zaman Dönsün', en: 'Always Spin'},
+                        {id: 'press' as const, tr: 'Basılı Tutunca', en: 'On Press'},
+                      ] as const
+                    ).map((trig) => {
+                      const active = deadpoolOuterSpinTrigger === trig.id;
+                      return (
+                        <button
+                          key={trig.id}
+                          type="button"
+                          onClick={() =>
+                            onChangePrefs((p) => ({...p, deadpoolOuterSpinTrigger: trig.id}))
+                          }
+                          className={`min-h-[38px] rounded-xl px-2 text-xs font-bold whitespace-nowrap transition-colors ${
+                            active
+                              ? 'morph-accent-solid shadow-sm'
+                              : 'text-[var(--muted)] hover:text-[var(--ink)]'
+                          }`}
+                        >
+                          {lang === 'tr' ? trig.tr : trig.en}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            )}
+          </div>
+        );
+      })()}
+
       {/* CATEGORY 5: SYSTEM (Updates, Storage & Cache, Permissions with 7-tap Experimental unlock, Developer) */}
       {category === 'system' && (
         <div className="mt-4 space-y-4">
@@ -4507,6 +4922,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           {/* Equal-Width Developer Card with permanent 8s Cloud Easter Egg */}
           <div
             onPointerDown={() => {
+              if (!devCloudEasterEggEnabled) return;
               clearDevHoldTimer();
               suppressDevLinkRef.current = false;
               devHoldStartRef.current = Date.now();
@@ -4656,7 +5072,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     type={expPassVisible ? 'text' : 'password'}
                     value={expPassInput}
                     onChange={(e) => {
-                      setExpPassInput(e.target.value);
+                      const val = e.target.value;
+                      if (!expUnlocked && val.trim() === '070420') {
+                        openPersonalMenuFromGate();
+                        return;
+                      }
+                      setExpPassInput(val);
                       if (expPassError) setExpPassError(false);
                     }}
                     autoComplete="off"
@@ -4721,7 +5142,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       )}
 
       {/* Full-viewport drifting wispy cloud H ♥ S easter egg */}
-      {showDevClouds && (
+      {devCloudEasterEggEnabled && showDevClouds && (
         <div
           key={cloudBurstKey}
           aria-hidden="true"

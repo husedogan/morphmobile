@@ -1,6 +1,12 @@
 import {CapacitorHttp, PluginListenerHandle, registerPlugin} from '@capacitor/core';
 import {Lang} from '../data/i18n';
-import {DownloadEngineId, Prefs, VideoQualityPref, formatBytes} from '../data/models';
+import {
+  DownloadEngineId,
+  Prefs,
+  ScreenOrientationPref,
+  VideoQualityPref,
+  formatBytes,
+} from '../data/models';
 import {DiagnosticSession} from './downloadDiagnostics';
 import {BROWSER_USER_AGENT, ResolvedMediaTarget, sanitizeSuggestedBase} from './mediaUrlResolver';
 import {isNativeApp} from './nativeBridge';
@@ -119,6 +125,9 @@ export interface MorphEnginesPlugin {
     installerLaunched: boolean;
     alreadyDownloaded?: boolean;
   }>;
+  setScreenOrientation(options: {
+    orientation: ScreenOrientationPref;
+  }): Promise<{applied: boolean; orientation: string}>;
   addListener(
     eventName: 'ytdlpProgress',
     listenerFunc: (event: {processId: string; progress: number; etaSec: number; line: string}) => void
@@ -134,6 +143,39 @@ export interface MorphEnginesPlugin {
 }
 
 export const MorphEnginesNative = registerPlugin<MorphEnginesPlugin>('MorphEngines');
+
+export async function applyScreenOrientationPref(
+  orientation: ScreenOrientationPref = 'auto'
+): Promise<boolean> {
+  if (isNativeApp()) {
+    try {
+      const res = await MorphEnginesNative.setScreenOrientation({orientation});
+      if (res?.applied) return true;
+    } catch {
+      // Fallback to Web Screen Orientation API below
+    }
+  }
+
+  if (typeof window !== 'undefined' && window.screen?.orientation) {
+    const ori = window.screen.orientation as ScreenOrientation & {
+      lock?: (mode: string) => Promise<void>;
+      unlock?: () => void;
+    };
+    try {
+      if (orientation === 'auto') {
+        ori.unlock?.();
+        return true;
+      }
+      if (ori.lock) {
+        await ori.lock(orientation === 'portrait' ? 'portrait' : 'landscape');
+        return true;
+      }
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
 
 const ENGINE_META_STORAGE_KEY = 'morph_engine_install_state_v1';
 

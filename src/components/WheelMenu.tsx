@@ -2,6 +2,7 @@ import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {LucideIcon, SlidersHorizontal} from 'lucide-react';
 import {Lang} from '../data/i18n';
 import {
+  DeadpoolOuterSpinDir,
   MAX_WHEEL_SLICES,
   WheelBurnStylePref,
   WheelIconStylePref,
@@ -1291,6 +1292,8 @@ export const WheelFab: React.FC<{
   expWheelSpinEnabled?: boolean;
   expWheelSpinMode?: WheelSpinModePref;
   expWheelSpinTrigger?: WheelSpinTriggerPref;
+  deadpoolOuterSpinDir?: DeadpoolOuterSpinDir;
+  deadpoolOuterSpinTrigger?: WheelSpinTriggerPref;
   expWheelShockwave?: boolean;
   onChangeSide?: (side: WheelSidePref) => void;
   onHoverChange?: (hover: boolean) => void;
@@ -1310,6 +1313,8 @@ export const WheelFab: React.FC<{
   expWheelSpinEnabled = false,
   expWheelSpinMode = 'outer_ccw_inner_cw',
   expWheelSpinTrigger = 'always',
+  deadpoolOuterSpinDir = 'off',
+  deadpoolOuterSpinTrigger = 'always',
   expWheelShockwave = false,
   onChangeSide,
   onHoverChange,
@@ -1398,14 +1403,23 @@ export const WheelFab: React.FC<{
     setPreviewSide(side);
   }, [side]);
 
+  const deadpoolOuterSpinOnly =
+    innerStyle === 'deadpool' &&
+    (deadpoolOuterSpinDir === 'cw' || deadpoolOuterSpinDir === 'ccw');
+  const effectiveSpinEnabled = deadpoolOuterSpinOnly || expWheelSpinEnabled;
+  const effectiveSpinTrigger: WheelSpinTriggerPref = deadpoolOuterSpinOnly
+    ? deadpoolOuterSpinTrigger
+    : expWheelSpinTrigger;
+
   const isHeating =
     expWheelBurnEffect &&
-    (expWheelSpinEnabled && expWheelSpinTrigger === 'press'
+    (effectiveSpinEnabled && effectiveSpinTrigger === 'press'
       ? isPressing
       : isPressing || isHovering);
 
   // Keep burn acceleration direction strictly aligned with the selected dual-layer spin mode's inner direction
   innerBurnDirRef.current =
+    !deadpoolOuterSpinOnly &&
     expWheelSpinEnabled &&
     (expWheelSpinMode === 'both_ccw' ||
       expWheelSpinMode === 'outer_cw_inner_ccw' ||
@@ -1441,15 +1455,16 @@ export const WheelFab: React.FC<{
 
   // Independent dual-layer rotation loop (outer button shell + inner icon artwork)
   // Supports 'always' (continuous) OR 'press' (spins strictly while pressed, smoothly settles upright on release)
+  // When deadpoolOuterSpinOnly is active, ONLY the outer shell rotates CW/CCW while Deadpool stays upright!
   const spinActiveNow =
-    expWheelSpinEnabled &&
+    effectiveSpinEnabled &&
     !hidden &&
-    (expWheelSpinTrigger === 'always' || isPressing);
+    (effectiveSpinTrigger === 'always' || isPressing);
   const spinActiveRef = useRef<boolean>(spinActiveNow);
   spinActiveRef.current = spinActiveNow;
 
   useEffect(() => {
-    if (!expWheelSpinEnabled || hidden) {
+    if (!effectiveSpinEnabled || hidden) {
       idleSpinRef.current = {outer: 0, inner: 0, elapsedSec: 0};
       setIdleOuterDeg(0);
       setIdleInnerDeg(0);
@@ -1491,42 +1506,48 @@ export const WheelFab: React.FC<{
 
       if (spinActiveRef.current) {
         st.elapsedSec += dtSec;
-        const speedMul = expWheelSpinTrigger === 'press' ? 1.45 : 1;
+        const speedMul = effectiveSpinTrigger === 'press' ? 1.45 : 1;
 
-        switch (expWheelSpinMode) {
-          case 'both_cw':
-            st.outer = (st.outer + 42 * speedMul * dtSec) % 360;
-            st.inner = (st.inner + 88 * speedMul * dtSec) % 360;
-            break;
-          case 'both_ccw':
-            st.outer = (st.outer - 42 * speedMul * dtSec + 360) % 360;
-            st.inner = (st.inner - 88 * speedMul * dtSec + 360) % 360;
-            break;
-          case 'outer_cw_inner_ccw':
-            st.outer = (st.outer + 46 * speedMul * dtSec) % 360;
-            st.inner = (st.inner - 76 * speedMul * dtSec + 360) % 360;
-            break;
-          case 'outer_fixed_inner_cw':
-            st.outer = 0;
-            st.inner = (st.inner + 92 * speedMul * dtSec) % 360;
-            break;
-          case 'outer_fixed_inner_ccw':
-            st.outer = 0;
-            st.inner = (st.inner - 92 * speedMul * dtSec + 360) % 360;
-            break;
-          case 'pendulum_gyro':
-            st.outer = Math.sin(st.elapsedSec * 2.15 * speedMul) * 34;
-            st.inner = (st.inner + 102 * speedMul * dtSec) % 360;
-            break;
-          case 'turbo_counter':
-            st.outer = (st.outer - 34 * speedMul * dtSec + 360) % 360;
-            st.inner = (st.inner + 195 * speedMul * dtSec) % 360;
-            break;
-          case 'outer_ccw_inner_cw':
-          default:
-            st.outer = (st.outer - 46 * speedMul * dtSec + 360) % 360;
-            st.inner = (st.inner + 76 * speedMul * dtSec) % 360;
-            break;
+        if (deadpoolOuterSpinOnly) {
+          const dir = deadpoolOuterSpinDir === 'ccw' ? -1 : 1;
+          st.outer = (st.outer + dir * 48 * speedMul * dtSec + 360) % 360;
+          st.inner = 0;
+        } else {
+          switch (expWheelSpinMode) {
+            case 'both_cw':
+              st.outer = (st.outer + 42 * speedMul * dtSec) % 360;
+              st.inner = (st.inner + 88 * speedMul * dtSec) % 360;
+              break;
+            case 'both_ccw':
+              st.outer = (st.outer - 42 * speedMul * dtSec + 360) % 360;
+              st.inner = (st.inner - 88 * speedMul * dtSec + 360) % 360;
+              break;
+            case 'outer_cw_inner_ccw':
+              st.outer = (st.outer + 46 * speedMul * dtSec) % 360;
+              st.inner = (st.inner - 76 * speedMul * dtSec + 360) % 360;
+              break;
+            case 'outer_fixed_inner_cw':
+              st.outer = 0;
+              st.inner = (st.inner + 92 * speedMul * dtSec) % 360;
+              break;
+            case 'outer_fixed_inner_ccw':
+              st.outer = 0;
+              st.inner = (st.inner - 92 * speedMul * dtSec + 360) % 360;
+              break;
+            case 'pendulum_gyro':
+              st.outer = Math.sin(st.elapsedSec * 2.15 * speedMul) * 34;
+              st.inner = (st.inner + 102 * speedMul * dtSec) % 360;
+              break;
+            case 'turbo_counter':
+              st.outer = (st.outer - 34 * speedMul * dtSec + 360) % 360;
+              st.inner = (st.inner + 195 * speedMul * dtSec) % 360;
+              break;
+            case 'outer_ccw_inner_cw':
+            default:
+              st.outer = (st.outer - 46 * speedMul * dtSec + 360) % 360;
+              st.inner = (st.inner + 76 * speedMul * dtSec) % 360;
+              break;
+          }
         }
 
         setIdleOuterDeg(st.outer);
@@ -1558,7 +1579,15 @@ export const WheelFab: React.FC<{
     return () => {
       if (rafId) window.cancelAnimationFrame(rafId);
     };
-  }, [expWheelSpinEnabled, expWheelSpinMode, expWheelSpinTrigger, spinActiveNow, hidden]);
+  }, [
+    effectiveSpinEnabled,
+    deadpoolOuterSpinOnly,
+    deadpoolOuterSpinDir,
+    expWheelSpinMode,
+    effectiveSpinTrigger,
+    spinActiveNow,
+    hidden,
+  ]);
 
   useEffect(() => {
     if (!expWheelBurnEffect) return;
@@ -1781,7 +1810,7 @@ export const WheelFab: React.FC<{
       ? DRAG_DISTANCE_LANDSCAPE_PX
       : DRAG_DISTANCE_PX;
     const hasLongPressHoldEffect =
-      expWheelBurnEffect || (expWheelSpinEnabled && expWheelSpinTrigger === 'press');
+      expWheelBurnEffect || (effectiveSpinEnabled && effectiveSpinTrigger === 'press');
 
     setIsPressing(true);
     emitShockwave();
@@ -2007,7 +2036,7 @@ export const WheelFab: React.FC<{
             ? 'polygon(50% 2%, 95% 26%, 88% 78%, 50% 99%, 12% 78%, 5% 26%)'
             : undefined;
 
-  const baseOuterRot = (iconStyle === 'diamond' ? 45 : 0) + (expWheelSpinEnabled ? idleOuterDeg : 0);
+  const baseOuterRot = (iconStyle === 'diamond' ? 45 : 0) + (effectiveSpinEnabled ? idleOuterDeg : 0);
   const effectiveBtnScale =
     phase === 'ash'
       ? ashBtnScale
@@ -2022,7 +2051,7 @@ export const WheelFab: React.FC<{
       : undefined;
 
   // World-space inner rotation = burn spinDeg + idleInnerDeg; subtract outer shell rotation so inner & outer spin independently!
-  const worldInnerDeg = spinDeg + (expWheelSpinEnabled ? idleInnerDeg : 0);
+  const worldInnerDeg = (deadpoolOuterSpinOnly ? 0 : spinDeg) + (effectiveSpinEnabled ? idleInnerDeg : 0);
   const localInnerDeg = worldInnerDeg - baseOuterRot;
 
   const fireStyle: React.CSSProperties | undefined =
@@ -2753,7 +2782,7 @@ export const WheelFab: React.FC<{
             className={
               className ??
               `morph-accent-btn relative flex ${shapeShellClass} items-center justify-center border border-white/20 shadow-xl group-focus-visible:ring-2 group-focus-visible:ring-[var(--accent)] group-focus-visible:ring-offset-2 ${
-                expWheelSpinEnabled ? '' : 'transition-transform duration-150'
+                effectiveSpinEnabled ? '' : 'transition-transform duration-150'
               } ${isDragging ? 'shadow-2xl' : ''}`
             }
           >
@@ -2959,7 +2988,7 @@ export const WheelFab: React.FC<{
               if (iconStyle === 'pill_dock') {
                 return (
                   <>
-                    <g transform={`rotate(${(expWheelSpinEnabled ? localInnerDeg : spinDeg).toFixed(1)} 14 12)`}>
+                    <g transform={`rotate(${(effectiveSpinEnabled ? localInnerDeg : spinDeg).toFixed(1)} 14 12)`}>
                       {innerStyle === 'auto' ? (
                         <>
                           <circle cx="14" cy="12" r="6.8" stroke={wheelTone} strokeWidth="2" strokeDasharray="7 3.5" strokeLinecap="round" />
