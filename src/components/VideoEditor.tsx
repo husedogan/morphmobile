@@ -815,7 +815,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   // Dynamically measure exact track-fit floor (maxFitVh) and Armadillo roll thresholds for ANY number of
   // bars (2, 3, 4, 5+ tracks) whenever settled in flat OR rolled state (skipping mid-drag / mid-roll).
   useEffect(() => {
-    if (!isPortraitMode || isFullscreenPreview || isInspectorOpen) {
+    if (!isPortraitMode || isFullscreenPreview || isInspectorOpen || wheelMenuOpen) {
       return;
     }
     const measure = () => {
@@ -922,6 +922,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     isFullscreenPreview,
     isExpandedWheelMode,
     isInspectorOpen,
+    wheelMenuOpen,
     extraTrackRows.audio,
     extraTrackRows.text,
     extraTrackRows.pip,
@@ -2386,10 +2387,22 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     previewSnapRafRef.current = window.requestAnimationFrame(tick);
   }, []);
 
-  const startPreviewResizeFromY = (startY: number, forceUnlocked = false) => {
+  const startPreviewResizeFromY = (
+    startY: number,
+    forceUnlocked = false,
+    activePointerId?: number,
+    captureEl?: HTMLElement | null
+  ) => {
     if (previewSnapRafRef.current) {
       window.cancelAnimationFrame(previewSnapRafRef.current);
       previewSnapRafRef.current = null;
+    }
+    if (captureEl && activePointerId !== undefined) {
+      try {
+        captureEl.setPointerCapture(activePointerId);
+      } catch {
+        // Ignore capture error
+      }
     }
     const startVh = previewHeightVhRef.current;
     const initialMaxFit = armadilloFoldRangeRef.current.maxFitVh;
@@ -2399,6 +2412,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     let latestVh = startVh;
     setIsResizingPreview(true);
     const onMove = (ev: PointerEvent) => {
+      if (activePointerId !== undefined && ev.pointerId !== activePointerId) return;
       const deltaVh = ((ev.clientY - startY) / Math.max(320, window.innerHeight)) * 100;
       const rawTargetVh = Math.min(85, Math.max(22, Number((startVh + deltaVh).toFixed(1))));
       const curMaxFit = armadilloFoldRangeRef.current.maxFitVh;
@@ -2436,11 +2450,21 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         }
       }
     };
-    const onUp = () => {
+    const onUp = (ev: PointerEvent) => {
+      if (activePointerId !== undefined && ev.pointerId !== activePointerId) return;
       setIsResizingPreview(false);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
+      if (captureEl && activePointerId !== undefined) {
+        try {
+          if (captureEl.hasPointerCapture?.(activePointerId)) {
+            captureEl.releasePointerCapture(activePointerId);
+          }
+        } catch {
+          // Ignore release error
+        }
+      }
 
       const {rollStartVh, wheelEndVh, maxFitVh} = armadilloFoldRangeRef.current;
 
@@ -2465,14 +2489,16 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
         }
       }
     };
-    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointermove', onMove, {passive: true});
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);
   };
 
   const startPreviewResize = (e: React.PointerEvent) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
     e.preventDefault();
-    startPreviewResizeFromY(e.clientY, false);
+    e.stopPropagation();
+    startPreviewResizeFromY(e.clientY, false, e.pointerId, e.currentTarget as HTMLElement);
   };
 
   const cyclePreviewHeight = () => {

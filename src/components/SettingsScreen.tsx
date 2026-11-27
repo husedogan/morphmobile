@@ -156,6 +156,114 @@ interface SettingsScreenProps {
   onShowToast?: (msg: string) => void;
 }
 
+const DEADPOOL_COLOR_PRESETS = [
+  {id: 'theme', labelTr: 'Tema', labelEn: 'Theme', outer: null, outerEnd: null, inner: null},
+  {id: 'classic', labelTr: 'Klasik', labelEn: 'Classic', outer: '#DC2626', outerEnd: '#18181B', inner: '#FFFFFF'},
+  {id: 'crimson', labelTr: 'Kızıl Gölge', labelEn: 'Crimson', outer: '#EF4444', outerEnd: '#7F1D1D', inner: '#09090B'},
+  {id: 'gold', labelTr: 'Altın Karbon', labelEn: 'Gold Carbon', outer: '#F59E0B', outerEnd: '#1F2937', inner: '#FEF08A'},
+  {id: 'neon', labelTr: 'Siber', labelEn: 'Cyber', outer: '#06B6D4', outerEnd: '#7C3AED', inner: '#FFFFFF'},
+  {id: 'emerald', labelTr: 'Zümrüt', labelEn: 'Emerald', outer: '#10B981', outerEnd: '#064E3B', inner: '#ECFDF5'},
+] as const;
+
+const OrientationLockIcon: React.FC<{mode: ScreenOrientationPref; className?: string}> = ({
+  mode,
+  className = 'h-5 w-5',
+}) => {
+  if (mode === 'auto') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+        {/* Tilted mobile phone */}
+        <g transform="rotate(-28 12 12)">
+          <rect
+            x="8.25"
+            y="5.25"
+            width="7.5"
+            height="13.5"
+            rx="1.6"
+            stroke="currentColor"
+            strokeWidth="1.75"
+          />
+          <line x1="11" y1="16.6" x2="13" y2="16.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </g>
+        {/* Top-right curved auto-rotate arrow */}
+        <path
+          d="M15.8 3.6 A8.6 8.6 0 0 1 20.6 10.4"
+          stroke="currentColor"
+          strokeWidth="1.75"
+          strokeLinecap="round"
+        />
+        <path
+          d="M18.6 9.3 L20.6 10.6 L21.7 8.4"
+          stroke="currentColor"
+          strokeWidth="1.75"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        {/* Bottom-left curved auto-rotate arrow */}
+        <path
+          d="M8.2 20.4 A8.6 8.6 0 0 1 3.4 13.6"
+          stroke="currentColor"
+          strokeWidth="1.75"
+          strokeLinecap="round"
+        />
+        <path
+          d="M5.4 14.7 L3.4 13.4 L2.3 15.6"
+          stroke="currentColor"
+          strokeWidth="1.75"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+  if (mode === 'portrait') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+        <rect
+          x="6.75"
+          y="2.75"
+          width="10.5"
+          height="18.5"
+          rx="2.2"
+          stroke="currentColor"
+          strokeWidth="1.8"
+        />
+        <line x1="10.5" y1="18.6" x2="13.5" y2="18.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        {/* Centered compact lock */}
+        <rect x="9.5" y="10.6" width="5" height="4" rx="1" fill="currentColor" />
+        <path
+          d="M10.6 10.6 V9.3 a1.4 1.4 0 0 1 2.8 0 V10.6"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+      <rect
+        x="2.75"
+        y="6.75"
+        width="18.5"
+        height="10.5"
+        rx="2.2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <line x1="18.6" y1="10.5" x2="18.6" y2="13.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      {/* Centered compact lock */}
+      <rect x="9.3" y="11" width="5" height="3.8" rx="1" fill="currentColor" />
+      <path
+        d="M10.4 11 V9.7 a1.4 1.4 0 0 1 2.8 0 V11"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+};
+
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   prefs,
   isDark,
@@ -722,6 +830,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   const devCloudEasterEggEnabled = prefs.devCloudEasterEggEnabled !== false;
   const deadpoolOuterSpinDir: DeadpoolOuterSpinDir = prefs.deadpoolOuterSpinDir ?? 'off';
   const deadpoolOuterSpinTrigger: WheelSpinTriggerPref = prefs.deadpoolOuterSpinTrigger ?? 'always';
+  const deadpoolOuterSpinSpeed = Math.max(0.25, Math.min(4, prefs.deadpoolOuterSpinSpeed ?? 1));
+  const deadpoolOuterColor = prefs.deadpoolOuterColor ?? null;
+  const deadpoolOuterColorEnd = prefs.deadpoolOuterColorEnd ?? null;
+  const deadpoolInnerColor = prefs.deadpoolInnerColor ?? null;
   const [personalPreviewDeg, setPersonalPreviewDeg] = useState(0);
 
   useEffect(() => {
@@ -749,7 +861,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     const step = (now: number) => {
       const dt = Math.min(0.05, Math.max(0.001, (now - last) / 1000));
       last = now;
-      deg = (deg + dir * 48 * dt + 360) % 360;
+      deg = (deg + dir * 48 * deadpoolOuterSpinSpeed * dt + 360) % 360;
       setPersonalPreviewDeg(deg);
       rafId = window.requestAnimationFrame(step);
     };
@@ -757,7 +869,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     return () => {
       if (rafId) window.cancelAnimationFrame(rafId);
     };
-  }, [category, personalMenuOpen, expUnlocked, wheelInnerStyle, deadpoolOuterSpinDir]);
+  }, [
+    category,
+    personalMenuOpen,
+    expUnlocked,
+    wheelInnerStyle,
+    deadpoolOuterSpinDir,
+    deadpoolOuterSpinSpeed,
+  ]);
 
   const handleSetScreenOrientation = (nextOri: ScreenOrientationPref) => {
     onChangePrefs((p) => ({...p, screenOrientationLock: nextOri}));
@@ -1046,32 +1165,44 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </div>
           </section>
 
-          {/* 3b. Screen Orientation Lock */}
+          {/* 3b. Screen Orientation Lock (Standard mobile rotation icons) */}
           <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4.5">
             <p className="text-sm font-bold text-[var(--ink)]">
-              {lang === 'tr' ? 'Ekran Yönü Kilidi' : 'Orientation Lock'}
+              {lang === 'tr' ? 'Ekran Döndürme' : 'Screen Rotation'}
             </p>
-            <div className="mt-3 grid grid-cols-3 gap-2">
+            <div
+              role="radiogroup"
+              aria-label={lang === 'tr' ? 'Ekran Döndürme' : 'Screen Rotation'}
+              className="mt-3 grid grid-cols-3 gap-2"
+            >
               {(
                 [
-                  {id: 'auto' as const, tr: 'Otomatik', en: 'Auto'},
-                  {id: 'portrait' as const, tr: 'Dikey Kilit', en: 'Portrait'},
-                  {id: 'landscape' as const, tr: 'Yatay Kilit', en: 'Landscape'},
+                  {id: 'auto' as const, tr: 'Otomatik Döndür', en: 'Auto Rotate'},
+                  {id: 'portrait' as const, tr: 'Dikey Kilit', en: 'Portrait Lock'},
+                  {id: 'landscape' as const, tr: 'Yatay Kilit', en: 'Landscape Lock'},
                 ] as const
-              ).map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => handleSetScreenOrientation(opt.id)}
-                  className={`min-h-[44px] rounded-2xl border px-2 text-xs font-bold whitespace-nowrap transition-colors ${
-                    screenOrientationLock === opt.id
-                      ? 'border-[var(--accent)] bg-[var(--accent)]/18 text-[var(--ink)]'
-                      : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
-                  }`}
-                >
-                  {lang === 'tr' ? opt.tr : opt.en}
-                </button>
-              ))}
+              ).map((opt) => {
+                const selected = screenOrientationLock === opt.id;
+                const optLabel = lang === 'tr' ? opt.tr : opt.en;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    aria-label={optLabel}
+                    title={optLabel}
+                    onClick={() => handleSetScreenOrientation(opt.id)}
+                    className={`flex min-h-[46px] items-center justify-center rounded-2xl border transition-colors ${
+                      selected
+                        ? 'border-[var(--accent)] bg-[var(--accent)]/18 text-[var(--ink)]'
+                        : 'border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]'
+                    }`}
+                  >
+                    <OrientationLockIcon mode={opt.id} className="h-5 w-5" />
+                  </button>
+                );
+              })}
             </div>
           </section>
 
@@ -1245,50 +1376,53 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             </button>
           </section>
 
-          {/* Orientation Lock (Portrait / Landscape / Auto) in Normal Settings */}
+          {/* Orientation Lock (Portrait / Landscape / Auto) in Normal Settings using crisp mobile rotation icons */}
           <section className="flex flex-col gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-center gap-2.5">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--accent-text)]">
-                <RotateCw className="h-4 w-4" />
+                <OrientationLockIcon mode={screenOrientationLock} className="h-4.5 w-4.5" />
               </div>
               <div className="min-w-0">
                 <p className="text-xs font-bold leading-snug text-[var(--ink)]">
-                  {lang === 'tr' ? 'Ekran Döndürme Kilidi' : 'Screen Orientation Lock'}
+                  {lang === 'tr' ? 'Ekran Döndürme' : 'Screen Rotation'}
                 </p>
                 <p className="text-[11px] leading-snug text-[var(--muted)]">
                   {lang === 'tr'
-                    ? 'Otomatik döndür ya da dikey/yatay konumda sabitle.'
-                    : 'Auto-rotate or lock screen to portrait or landscape.'}
+                    ? 'Otomatik döndür veya dikey/yatay kilitle.'
+                    : 'Auto-rotate or lock portrait/landscape.'}
                 </p>
               </div>
             </div>
             <div
               role="radiogroup"
-              aria-label={lang === 'tr' ? 'Ekran Döndürme Kilidi' : 'Screen Orientation Lock'}
-              className="grid w-full shrink-0 grid-cols-3 gap-1 rounded-xl border border-[var(--line)] bg-[var(--inset)] p-1 sm:w-auto sm:min-w-[270px]"
+              aria-label={lang === 'tr' ? 'Ekran Döndürme' : 'Screen Rotation'}
+              className="grid w-full shrink-0 grid-cols-3 gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--inset)] p-1 sm:w-auto sm:min-w-[216px]"
             >
               {(
                 [
-                  {id: 'auto' as const, tr: 'Otomatik', en: 'Auto'},
-                  {id: 'portrait' as const, tr: 'Dikey', en: 'Portrait'},
-                  {id: 'landscape' as const, tr: 'Yatay', en: 'Landscape'},
+                  {id: 'auto' as const, tr: 'Otomatik Döndür', en: 'Auto Rotate'},
+                  {id: 'portrait' as const, tr: 'Dikey Kilit', en: 'Portrait Lock'},
+                  {id: 'landscape' as const, tr: 'Yatay Kilit', en: 'Landscape Lock'},
                 ] as const
               ).map((opt) => {
                 const selected = screenOrientationLock === opt.id;
+                const optLabel = lang === 'tr' ? opt.tr : opt.en;
                 return (
                   <button
                     key={opt.id}
                     type="button"
                     role="radio"
                     aria-checked={selected}
+                    aria-label={optLabel}
+                    title={optLabel}
                     onClick={() => handleSetScreenOrientation(opt.id)}
-                    className={`min-h-[36px] rounded-lg px-2.5 text-xs font-semibold whitespace-nowrap transition-colors ${
+                    className={`flex min-h-[40px] items-center justify-center rounded-lg transition-colors ${
                       selected
                         ? 'bg-[var(--surface)] text-[var(--ink)] ring-1 ring-[var(--accent)]/60 shadow-sm'
                         : 'text-[var(--muted)] hover:text-[var(--ink)]'
                     }`}
                   >
-                    {lang === 'tr' ? opt.tr : opt.en}
+                    <OrientationLockIcon mode={opt.id} className="h-5 w-5" />
                   </button>
                 );
               })}
@@ -4510,6 +4644,16 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                           };
         const counterInnerDeg =
           activeOuterId === 'diamond' ? -(45 + personalPreviewDeg) : -personalPreviewDeg;
+        const dpOuterStart = deadpoolOuterColor || deadpoolOuterColorEnd;
+        const dpOuterEnd = deadpoolOuterColorEnd || deadpoolOuterColor;
+        const hasDpCustomColors = Boolean(deadpoolOuterColor || deadpoolOuterColorEnd || deadpoolInnerColor);
+        const previewOuterWithColors: React.CSSProperties =
+          dpOuterStart && dpOuterEnd
+            ? {
+                ...previewOuterStyle,
+                backgroundImage: `linear-gradient(135deg, ${dpOuterStart} 0%, ${dpOuterEnd} 100%)`,
+              }
+            : previewOuterStyle;
 
         return (
           <div className="mt-4 space-y-4">
@@ -4582,21 +4726,24 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               </button>
             </section>
 
-            {/* 2. Deadpool Outer-Only Spin Setting (strictly shown when Deadpool inner style is selected) */}
+            {/* 2. Deadpool Wheel Personalization: Outer-Only Spin + Speed + Custom Colors */}
             {wheelInnerStyle === 'deadpool' && (
               <section className="rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-4.5 space-y-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="flex h-12 w-14 shrink-0 items-center justify-center">
                       <span
-                        style={previewOuterStyle}
+                        style={previewOuterWithColors}
                         className="morph-accent-btn flex h-11 w-11 items-center justify-center border border-white/20 shadow-md"
                       >
                         <svg
                           viewBox="0 0 28 28"
                           fill="none"
                           className="h-5.5 w-5.5"
-                          style={{transform: `rotate(${counterInnerDeg.toFixed(1)}deg)`}}
+                          style={{
+                            color: deadpoolInnerColor || undefined,
+                            transform: `rotate(${counterInnerDeg.toFixed(1)}deg)`,
+                          }}
                         >
                           <circle cx="14" cy="14" r="10.1" stroke="currentColor" strokeWidth="1.6" />
                           <path
@@ -4614,12 +4761,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     </div>
                     <div className="min-w-0">
                       <h3 className="text-xs font-extrabold text-[var(--ink)]">
-                        {lang === 'tr' ? 'Deadpool Dış Çerçeve Dönüşü' : 'Deadpool Outer Shell Spin'}
+                        {lang === 'tr' ? 'Deadpool Çark Stili' : 'Deadpool Wheel Style'}
                       </h3>
                       <p className="mt-0.5 text-[11px] leading-snug text-[var(--muted)]">
                         {lang === 'tr'
-                          ? 'Deadpool simgesi sabit kalır; sadece seçili dış kabuk sağa veya sola döner.'
-                          : 'Keeps the Deadpool emblem upright while spinning only the outer shell.'}
+                          ? 'Yalnızca dış kabuğu döndür, hızı ayarla ve kendi renklerini seç.'
+                          : 'Spin only the outer shell, set spin speed, and pick custom colors.'}
                       </p>
                     </div>
                   </div>
@@ -4658,35 +4805,216 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   })}
                 </div>
 
-                {/* Trigger: Always vs On Press */}
+                {/* Trigger & Speed (active when spinning CW or CCW) */}
                 {deadpoolOuterSpinDir !== 'off' && (
-                  <div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-1">
-                    {(
-                      [
-                        {id: 'always' as const, tr: 'Her Zaman Dönsün', en: 'Always Spin'},
-                        {id: 'press' as const, tr: 'Basılı Tutunca', en: 'On Press'},
-                      ] as const
-                    ).map((trig) => {
-                      const active = deadpoolOuterSpinTrigger === trig.id;
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-1">
+                      {(
+                        [
+                          {id: 'always' as const, tr: 'Her Zaman Dönsün', en: 'Always Spin'},
+                          {id: 'press' as const, tr: 'Basılı Tutunca', en: 'On Press'},
+                        ] as const
+                      ).map((trig) => {
+                        const active = deadpoolOuterSpinTrigger === trig.id;
+                        return (
+                          <button
+                            key={trig.id}
+                            type="button"
+                            onClick={() =>
+                              onChangePrefs((p) => ({...p, deadpoolOuterSpinTrigger: trig.id}))
+                            }
+                            className={`min-h-[38px] rounded-xl px-2 text-xs font-bold whitespace-nowrap transition-colors ${
+                              active
+                                ? 'morph-accent-solid shadow-sm'
+                                : 'text-[var(--muted)] hover:text-[var(--ink)]'
+                            }`}
+                          >
+                            {lang === 'tr' ? trig.tr : trig.en}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Spin Speed Presets & Fine Slider */}
+                    <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)]/70 p-3 space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-[var(--ink)]">
+                          {lang === 'tr' ? 'Dönüş Hızı' : 'Spin Speed'}
+                        </span>
+                        <span className="font-mono-num text-xs font-bold text-[var(--accent-text)] tabular-nums">
+                          {deadpoolOuterSpinSpeed.toFixed(1)}×
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {(
+                          [
+                            {val: 0.5, tr: 'Yavaş', en: 'Slow'},
+                            {val: 1.0, tr: 'Normal', en: 'Normal'},
+                            {val: 2.0, tr: 'Hızlı', en: 'Fast'},
+                            {val: 3.5, tr: 'Turbo', en: 'Turbo'},
+                          ] as const
+                        ).map((sp) => {
+                          const active = Math.abs(deadpoolOuterSpinSpeed - sp.val) < 0.08;
+                          return (
+                            <button
+                              key={sp.val}
+                              type="button"
+                              onClick={() =>
+                                onChangePrefs((p) => ({...p, deadpoolOuterSpinSpeed: sp.val}))
+                              }
+                              className={`min-h-[36px] rounded-xl border px-1.5 text-[11px] font-bold whitespace-nowrap transition-colors ${
+                                active
+                                  ? 'border-[var(--accent)] bg-[var(--accent)]/18 text-[var(--ink)]'
+                                  : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)]'
+                              }`}
+                            >
+                              {lang === 'tr' ? sp.tr : sp.en}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <input
+                        type="range"
+                        min={0.25}
+                        max={4}
+                        step={0.15}
+                        value={deadpoolOuterSpinSpeed}
+                        onChange={(e) =>
+                          onChangePrefs((p) => ({
+                            ...p,
+                            deadpoolOuterSpinSpeed: Number(e.target.value),
+                          }))
+                        }
+                        aria-label={lang === 'tr' ? 'Deadpool dönüş hızı' : 'Deadpool spin speed'}
+                        className="h-2 w-full cursor-pointer accent-[var(--accent)]"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Color Presets & Custom Pickers */}
+                <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)]/70 p-3 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-[var(--ink)]">
+                      {lang === 'tr' ? 'Renkler' : 'Colors'}
+                    </span>
+                    {hasDpCustomColors && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onChangePrefs((p) => ({
+                            ...p,
+                            deadpoolOuterColor: null,
+                            deadpoolOuterColorEnd: null,
+                            deadpoolInnerColor: null,
+                          }))
+                        }
+                        className="flex items-center gap-1 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2 py-1 text-[10.5px] font-bold text-[var(--muted)] hover:text-[var(--ink)]"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        <span>{lang === 'tr' ? 'Sıfırla' : 'Reset'}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Quick Color Palettes */}
+                  <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
+                    {DEADPOOL_COLOR_PRESETS.map((pal) => {
+                      const active =
+                        (deadpoolOuterColor ?? null) === pal.outer &&
+                        (deadpoolOuterColorEnd ?? null) === pal.outerEnd &&
+                        (deadpoolInnerColor ?? null) === pal.inner;
                       return (
                         <button
-                          key={trig.id}
+                          key={pal.id}
                           type="button"
                           onClick={() =>
-                            onChangePrefs((p) => ({...p, deadpoolOuterSpinTrigger: trig.id}))
+                            onChangePrefs((p) => ({
+                              ...p,
+                              deadpoolOuterColor: pal.outer,
+                              deadpoolOuterColorEnd: pal.outerEnd,
+                              deadpoolInnerColor: pal.inner,
+                            }))
                           }
-                          className={`min-h-[38px] rounded-xl px-2 text-xs font-bold whitespace-nowrap transition-colors ${
+                          className={`flex min-h-[44px] flex-col items-center justify-center gap-1 rounded-xl border px-1.5 py-1.5 text-[10px] font-bold transition-colors ${
                             active
-                              ? 'morph-accent-solid shadow-sm'
-                              : 'text-[var(--muted)] hover:text-[var(--ink)]'
+                              ? 'border-[var(--accent)] bg-[var(--accent)]/15 text-[var(--ink)]'
+                              : 'border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)]'
                           }`}
                         >
-                          {lang === 'tr' ? trig.tr : trig.en}
+                          <span
+                            className="flex h-4.5 w-4.5 items-center justify-center rounded-full border border-white/25"
+                            style={{
+                              backgroundImage:
+                                pal.outer && pal.outerEnd
+                                  ? `linear-gradient(135deg, ${pal.outer}, ${pal.outerEnd})`
+                                  : 'linear-gradient(135deg, var(--accent), var(--accent-end))',
+                            }}
+                          >
+                            <span
+                              className="h-1.5 w-1.5 rounded-full"
+                              style={{backgroundColor: pal.inner || 'var(--accent-ink)'}}
+                            />
+                          </span>
+                          <span className="truncate max-w-full">
+                            {lang === 'tr' ? pal.labelTr : pal.labelEn}
+                          </span>
                         </button>
                       );
                     })}
                   </div>
-                )}
+
+                  {/* Individual Hex Color Pickers */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <label className="flex min-h-[42px] cursor-pointer items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5">
+                      <span className="truncate text-[10.5px] font-bold text-[var(--ink)]">
+                        {lang === 'tr' ? 'Dış 1' : 'Outer 1'}
+                      </span>
+                      <input
+                        type="color"
+                        value={deadpoolOuterColor || '#DC2626'}
+                        onChange={(e) =>
+                          onChangePrefs((p) => ({
+                            ...p,
+                            deadpoolOuterColor: e.target.value,
+                            deadpoolOuterColorEnd: p.deadpoolOuterColorEnd || '#18181B',
+                          }))
+                        }
+                        className="h-6 w-6 cursor-pointer rounded border-0 bg-transparent p-0"
+                      />
+                    </label>
+                    <label className="flex min-h-[42px] cursor-pointer items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5">
+                      <span className="truncate text-[10.5px] font-bold text-[var(--ink)]">
+                        {lang === 'tr' ? 'Dış 2' : 'Outer 2'}
+                      </span>
+                      <input
+                        type="color"
+                        value={deadpoolOuterColorEnd || '#18181B'}
+                        onChange={(e) =>
+                          onChangePrefs((p) => ({
+                            ...p,
+                            deadpoolOuterColor: p.deadpoolOuterColor || '#DC2626',
+                            deadpoolOuterColorEnd: e.target.value,
+                          }))
+                        }
+                        className="h-6 w-6 cursor-pointer rounded border-0 bg-transparent p-0"
+                      />
+                    </label>
+                    <label className="flex min-h-[42px] cursor-pointer items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1.5">
+                      <span className="truncate text-[10.5px] font-bold text-[var(--ink)]">
+                        {lang === 'tr' ? 'Simge' : 'Mask'}
+                      </span>
+                      <input
+                        type="color"
+                        value={deadpoolInnerColor || '#FFFFFF'}
+                        onChange={(e) =>
+                          onChangePrefs((p) => ({...p, deadpoolInnerColor: e.target.value}))
+                        }
+                        className="h-6 w-6 cursor-pointer rounded border-0 bg-transparent p-0"
+                      />
+                    </label>
+                  </div>
+                </div>
               </section>
             )}
           </div>

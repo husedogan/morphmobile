@@ -477,6 +477,14 @@ export interface Prefs {
   deadpoolOuterSpinDir?: DeadpoolOuterSpinDir;
   /** Trigger for Deadpool outer-only shell spin ('always' or 'press') */
   deadpoolOuterSpinTrigger?: WheelSpinTriggerPref;
+  /** Multiplier for Deadpool outer shell spin speed (0.25 - 4.0, default 1.0) */
+  deadpoolOuterSpinSpeed?: number;
+  /** Custom primary outer shell color for Deadpool wheel (null = theme accent) */
+  deadpoolOuterColor?: string | null;
+  /** Custom secondary outer shell gradient color for Deadpool wheel */
+  deadpoolOuterColorEnd?: string | null;
+  /** Custom Deadpool emblem mask color (null = auto contrast ink) */
+  deadpoolInnerColor?: string | null;
   // Experimental / reversible UI flags
   expSpinningGear?: boolean;
   expWheelBurnEffect?: boolean;

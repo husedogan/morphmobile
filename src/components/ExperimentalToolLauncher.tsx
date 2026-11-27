@@ -431,6 +431,8 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
   const holdHintTimerRef = useRef<number | null>(null);
   const holdTriggeredRef = useRef(false);
   const openedAtRef = useRef(0);
+  const backdropDownRef = useRef(false);
+  const holdStartPosRef = useRef<{id: number; x: number; y: number} | null>(null);
 
   const treeWrapRef = useRef<HTMLDivElement | null>(null);
   const treeSvgColRef = useRef<HTMLDivElement | null>(null);
@@ -644,12 +646,47 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
               aria-label={tr('Özelleştirmek için 3 saniye basılı tut', 'Hold 3 seconds to customize')}
               title={tr('Özelleştirmek için 3 saniye basılı tut', 'Hold 3 seconds to customize')}
               onPointerDown={(e) => {
+                if (e.button !== 0 && e.pointerType === 'mouse') return;
                 e.preventDefault();
+                e.stopPropagation();
+                holdStartPosRef.current = {id: e.pointerId, x: e.clientX, y: e.clientY};
+                try {
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                } catch {
+                  // Ignore capture error
+                }
                 startCustomizeHold();
               }}
-              onPointerUp={() => cancelCustomizeHold(true)}
-              onPointerLeave={() => cancelCustomizeHold(false)}
-              onPointerCancel={() => cancelCustomizeHold(false)}
+              onPointerMove={(e) => {
+                const start = holdStartPosRef.current;
+                if (!start || start.id !== e.pointerId) return;
+                if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > 24) {
+                  holdStartPosRef.current = null;
+                  cancelCustomizeHold(false);
+                }
+              }}
+              onPointerUp={(e) => {
+                holdStartPosRef.current = null;
+                try {
+                  if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+                    e.currentTarget.releasePointerCapture(e.pointerId);
+                  }
+                } catch {
+                  // Ignore release error
+                }
+                cancelCustomizeHold(true);
+              }}
+              onPointerCancel={(e) => {
+                holdStartPosRef.current = null;
+                try {
+                  if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+                    e.currentTarget.releasePointerCapture(e.pointerId);
+                  }
+                } catch {
+                  // Ignore release error
+                }
+                cancelCustomizeHold(false);
+              }}
               onContextMenu={(e) => e.preventDefault()}
               className={`relative flex h-9 w-9 shrink-0 touch-none select-none items-center justify-center rounded-full border transition-transform active:scale-95 ${
                 isStudio
@@ -1049,7 +1086,10 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
               const cy = originY + Math.sin(rad) * outerRy;
               const ItemIcon = item.icon;
               const col = item.accent || activeCat?.accent || '#E94F78';
-              const tileW = count >= 6 ? 'w-[60px]' : 'w-[68px]';
+              const tileW =
+                count >= 6
+                  ? 'w-[52px] min-[390px]:w-[60px]'
+                  : 'w-[58px] min-[390px]:w-[68px]';
 
               if (isCloudMode) {
                 return (
@@ -1941,13 +1981,31 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
       <button
         type="button"
         aria-label={tr('Kapat', 'Close')}
+        onPointerDown={(e) => {
+          backdropDownRef.current = true;
+          e.stopPropagation();
+        }}
+        onPointerUp={(e) => {
+          const startedHere = backdropDownRef.current;
+          backdropDownRef.current = false;
+          e.stopPropagation();
+          if (!startedHere && performance.now() - openedAtRef.current < 260) {
+            return;
+          }
+          onDismiss();
+        }}
+        onPointerCancel={() => {
+          backdropDownRef.current = false;
+        }}
         onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
           if (e.detail > 0 && performance.now() - openedAtRef.current < 260) {
             return;
           }
           onDismiss();
         }}
-        className="fixed inset-0 bg-black/55 backdrop-blur-[3px]"
+        className="no-touch-callout fixed inset-0 touch-none select-none bg-black/55 backdrop-blur-[3px]"
       />
       {/* Active Experimental Style Surface */}
       <div className="relative z-10 w-full">

@@ -1227,7 +1227,7 @@ export const PreviewMonitor: React.FC<PreviewMonitorProps> = ({
                     )
                   : tr('Önizleme yüksekliğini ayarlamak için sürükleyin', 'Drag to resize preview height')
               }
-              className={`group relative z-20 flex shrink-0 cursor-ns-resize touch-none items-center justify-center gap-2 border-b border-white/[0.08] px-2 transition-[height,background-color] duration-150 after:absolute after:-top-1.5 after:bottom-0 after:inset-x-12 after:content-[''] ${
+              className={`group relative z-20 flex shrink-0 cursor-ns-resize touch-none select-none items-center justify-center gap-2 border-b border-white/[0.08] px-2 transition-[height,background-color] duration-150 after:absolute after:-top-3.5 after:-bottom-2.5 after:inset-x-4 after:content-[''] ${
                 hasInlineControls ? 'h-8' : 'h-3.5'
               } ${
                 floorLockUnlocked

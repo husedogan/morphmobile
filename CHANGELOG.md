@@ -1,9 +1,9 @@
 # Sürüm Geçmişi
 
 ## [1.1.67] — Beta
-- **Ekran Döndürme Kilidi (`MorphEnginesPlugin.java`, `morphEnginesBridge.ts`, `SettingsScreen.tsx`):** Normal Ayarlar (Görünüm ve Basit Mod) içine **Otomatik / Dikey / Yatay** ekran döndürme kilidi eklendi; Android APK içinde yerel aktivite yönü doğrudan sabitlenir, web/PWA ortamında da Screen Orientation API ile senkron çalışır.
-- **Yatay Mod Çark Dokunma Güvenilirliği (`WheelMenu.tsx`, `ExperimentalToolLauncher.tsx`, `index.css`):** Yatay mobil görünümde sağ üst çark düğmesinin dokunma alanı genişletildi (`-m-2.5 p-2.5`), sürükleme eşiği yatay ergonomiye göre ayarlandı (`42px`) ve açılış sonrası sahte tıklama/arka plan kapanma sorunları giderildi.
-- **Gizli Kişisel Alan & Deadpool Dış Çerçeve Dönüşü (`SettingsScreen.tsx`, `WheelMenu.tsx`):** Deneysel sekmesi kilitliyken erişim kilidinden özel anahtar girildiğinde açılan ve ekrandan çıkınca kaybolan geçici **Sana Özel** menüsü, **H ♥ S** bulut sürprizi açma/kapama kontrolü ve Deadpool iç tasarımı seçiliyken iç simgeyi sabit tutup yalnızca dış kabuğu sağa/sola döndüren ayar eklendi.
+- **Ekran Döndürme Kilidi & Mobil Simgeler (`MorphEnginesPlugin.java`, `morphEnginesBridge.ts`, `SettingsScreen.tsx`):** Normal Ayarlar ve Basit Mod içine standart mobil ekran döndürme/kilit simgeleriyle çalışan **Otomatik / Dikey / Yatay** yön kilidi eklendi.
+- **Armadillo & Tüm Çarklar Dokunma Onarımı (`ArmadilloReelDock.tsx`, `PreviewMonitor.tsx`, `VideoEditor.tsx`, `WheelMenu.tsx`, `ExperimentalToolLauncher.tsx`):** Mobil dokunmatikte Armadillo yuvarlanma tutamacının dokunma alanı genişletildi, açılış sonrası sahte arka plan tıklamasıyla anında kapanma ve orta/dış dokunmalarda takılma giderildi, pointer capture ve sürükleme eşikleri tüm çark modlarında kararlı hale getirildi.
+- **Gizli Kişisel Alan & Deadpool Hız / Renk Özelleştirme (`SettingsScreen.tsx`, `WheelMenu.tsx`):** `070420` ile açılıp çıkışta kaybolan geçici **Sana Özel** menüsüne **H ♥ S** bulut kontrolünün yanı sıra Deadpool çarkı için dış çerçeve dönüş yönü, tetikleyici, **hız seçimi (`0.25×`–`4.0×`)**, hazır renk paletleri ve özel renk seçiciler eklendi.
 
 ## [1.1.53] — Beta
 - **Yerleşik PDF Görüntüleyici & Görsel PDF Araçları (`PdfCanvasViewer.tsx`, `PdfVisualTools.tsx`, `PdfAndArchiveProModal.tsx`):** Çok sayfalı, yakınlaştırılabilir ve gece okuma modlu yerleşik PDF görüntüleyici eklendi; PDF Böl, Sayfa Sil, Ayıkla, Döndür, Filigran, Sayfa Numarası, N-Up, PDF→Görsel ve Gri Tonlama araçları görsel sayfa önizlemeleri ve sadeleştirilmiş dokunmatik kontrollerle yenilendi.

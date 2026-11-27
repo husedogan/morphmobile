@@ -262,7 +262,7 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
   const openTimerRef = useRef<number | null>(null);
   const holdingCenterRef = useRef<boolean>(false);
   const completedHoldRef = useRef<boolean>(false);
-  const openedAtRef = useRef<number>(0);
+  const openedAtRef = useRef<number>(typeof performance !== 'undefined' ? performance.now() : 0);
   const backdropDownRef = useRef<boolean>(false);
 
   const cappedActions = actions.slice(0, MAX_WHEEL_SLICES);
@@ -625,12 +625,23 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
           updatePointer(e.clientX, e.clientY, true);
         }}
         onPointerMove={(e) => {
-          if (e.buttons > 0 || e.pointerType === 'touch') {
-            updatePointer(e.clientX, e.clientY, true);
+          updatePointer(e.clientX, e.clientY, e.buttons > 0 || e.pointerType === 'touch');
+        }}
+        onPointerLeave={(e) => {
+          if (e.pointerType !== 'touch' && e.buttons === 0) {
+            setActiveIndex(-1);
+            activeRef.current = -1;
           }
         }}
         onPointerUp={(e) => {
           e.stopPropagation();
+          try {
+            if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+              e.currentTarget.releasePointerCapture(e.pointerId);
+            }
+          } catch {
+            // Ignore release error
+          }
           if (completedHoldRef.current) {
             return;
           }
@@ -656,7 +667,14 @@ export const WheelMenu: React.FC<WheelMenuProps> = ({
           installGhostClickShield();
           onDismiss();
         }}
-        onPointerCancel={() => {
+        onPointerCancel={(e) => {
+          try {
+            if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+              e.currentTarget.releasePointerCapture(e.pointerId);
+            }
+          } catch {
+            // Ignore release error
+          }
           stopHoldAnimation(true);
           setActiveIndex(-1);
           activeRef.current = -1;
@@ -1278,7 +1296,7 @@ function createAshBurst(cx: number, cy: number, startId: number, theme: BurnThem
 // Landscape top-right thumb reaches roll slightly further on tap, so use a wider threshold there.
 const DRAG_DISTANCE_PX = 22;
 const DRAG_DISTANCE_LANDSCAPE_PX = 42;
-const TAP_HOLD_MAX_MS = 650;
+const TAP_HOLD_MAX_MS = 900;
 
 export const WheelFab: React.FC<{
   onClick: () => void;
@@ -1294,6 +1312,10 @@ export const WheelFab: React.FC<{
   expWheelSpinTrigger?: WheelSpinTriggerPref;
   deadpoolOuterSpinDir?: DeadpoolOuterSpinDir;
   deadpoolOuterSpinTrigger?: WheelSpinTriggerPref;
+  deadpoolOuterSpinSpeed?: number;
+  deadpoolOuterColor?: string | null;
+  deadpoolOuterColorEnd?: string | null;
+  deadpoolInnerColor?: string | null;
   expWheelShockwave?: boolean;
   onChangeSide?: (side: WheelSidePref) => void;
   onHoverChange?: (hover: boolean) => void;
@@ -1315,6 +1337,10 @@ export const WheelFab: React.FC<{
   expWheelSpinTrigger = 'always',
   deadpoolOuterSpinDir = 'off',
   deadpoolOuterSpinTrigger = 'always',
+  deadpoolOuterSpinSpeed = 1,
+  deadpoolOuterColor = null,
+  deadpoolOuterColorEnd = null,
+  deadpoolInnerColor = null,
   expWheelShockwave = false,
   onChangeSide,
   onHoverChange,
@@ -1448,6 +1474,16 @@ export const WheelFab: React.FC<{
   }, [expWheelBurnEffect]);
 
   useEffect(() => {
+    if (hidden) {
+      setIsPressing(false);
+      setIsHovering(false);
+      setIsDragging(false);
+      setIsSnapping(false);
+      setDragPos(null);
+    }
+  }, [hidden]);
+
+  useEffect(() => {
     return () => {
       if (snapTimerRef.current) window.clearTimeout(snapTimerRef.current);
     };
@@ -1510,7 +1546,8 @@ export const WheelFab: React.FC<{
 
         if (deadpoolOuterSpinOnly) {
           const dir = deadpoolOuterSpinDir === 'ccw' ? -1 : 1;
-          st.outer = (st.outer + dir * 48 * speedMul * dtSec + 360) % 360;
+          const dpSpeed = Math.max(0.2, Math.min(5, deadpoolOuterSpinSpeed || 1));
+          st.outer = (st.outer + dir * 48 * dpSpeed * speedMul * dtSec + 360) % 360;
           st.inner = 0;
         } else {
           switch (expWheelSpinMode) {
@@ -1583,6 +1620,7 @@ export const WheelFab: React.FC<{
     effectiveSpinEnabled,
     deadpoolOuterSpinOnly,
     deadpoolOuterSpinDir,
+    deadpoolOuterSpinSpeed,
     expWheelSpinMode,
     effectiveSpinTrigger,
     spinActiveNow,
@@ -1796,6 +1834,7 @@ export const WheelFab: React.FC<{
     if (e.pointerType === 'touch') {
       e.preventDefault();
     }
+    e.stopPropagation();
 
     if (snapTimerRef.current) {
       window.clearTimeout(snapTimerRef.current);
@@ -1862,6 +1901,13 @@ export const WheelFab: React.FC<{
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onCancel);
+      try {
+        if (targetBtn.hasPointerCapture?.(pointerId)) {
+          targetBtn.releasePointerCapture(pointerId);
+        }
+      } catch {
+        // Ignore release error
+      }
 
       setIsPressing(false);
       const heldFor = performance.now() - downAt;
@@ -1960,6 +2006,13 @@ export const WheelFab: React.FC<{
         ? 'morph-fab-bottom left-1/2 -translate-x-1/2'
         : 'morph-fab-bottom right-5 lg:right-8';
 
+  const dpHasCustomOuter =
+    innerStyle === 'deadpool' && Boolean(deadpoolOuterColor || deadpoolOuterColorEnd);
+  const dpOuterStart = deadpoolOuterColor || deadpoolOuterColorEnd || 'var(--accent)';
+  const dpOuterEnd = deadpoolOuterColorEnd || deadpoolOuterColor || 'var(--accent-end)';
+  const dpBaseInnerTone =
+    innerStyle === 'deadpool' && deadpoolInnerColor ? deadpoolInnerColor : 'var(--accent-ink)';
+
   const charLevel = Math.max(0, Math.min(1, (burnLevel - 0.42) / 0.58));
   const flameFade = Math.max(0, 1 - charLevel * 1.25);
   const isBlazing = heat >= 0.92 && phase === 'idle' && flameFade > 0.05;
@@ -1973,7 +2026,7 @@ export const WheelFab: React.FC<{
         ? burnTheme.iconCharMid
         : isBlazing || heat > 0.35
           ? burnTheme.iconHotTone
-          : 'var(--accent-ink)';
+          : dpBaseInnerTone;
 
   let ashBtnOpacity = 1;
   let ashBtnScale = 1;
@@ -1996,15 +2049,15 @@ export const WheelFab: React.FC<{
   const rainbowHueA = ((Math.round(Math.abs(spinDeg) * 1.4) % 360) + 360) % 360;
   const rainbowHueB = (rainbowHueA + 130) % 360;
   const baseGradStart = burnTheme.isRainbow
-    ? `color-mix(in srgb, hsl(${rainbowHueA} 92% 58%) ${Math.round(emberRatio * 100)}%, var(--accent))`
+    ? `color-mix(in srgb, hsl(${rainbowHueA} 92% 58%) ${Math.round(emberRatio * 100)}%, ${dpOuterStart})`
     : `color-mix(in srgb, ${
         heat > 0.62 ? burnTheme.gradHotStart : burnTheme.gradWarmStart
-      } ${Math.round(emberRatio * 100)}%, var(--accent))`;
+      } ${Math.round(emberRatio * 100)}%, ${dpOuterStart})`;
   const baseGradEnd = burnTheme.isRainbow
-    ? `color-mix(in srgb, hsl(${rainbowHueB} 92% 52%) ${Math.round(emberRatio * 100)}%, var(--accent-end))`
+    ? `color-mix(in srgb, hsl(${rainbowHueB} 92% 52%) ${Math.round(emberRatio * 100)}%, ${dpOuterEnd})`
     : `color-mix(in srgb, ${
         heat > 0.72 ? burnTheme.gradHotEnd : burnTheme.gradWarmEnd
-      } ${Math.round(emberRatio * 100)}%, var(--accent-end))`;
+      } ${Math.round(emberRatio * 100)}%, ${dpOuterEnd})`;
 
   // Shape geometry for both classic circular & 7 sculpted non-circular designs
 
@@ -2077,7 +2130,11 @@ export const WheelFab: React.FC<{
                   glowFade
                 ).toFixed(2)})`,
         }
-      : undefined;
+      : dpHasCustomOuter
+        ? {
+            backgroundImage: `linear-gradient(135deg, ${dpOuterStart} 0%, ${dpOuterEnd} 100%)`,
+          }
+        : undefined;
 
   const particleRadiusClass =
     burnTheme.particleShape === 'square'
@@ -2722,7 +2779,7 @@ export const WheelFab: React.FC<{
               }
             : undefined
         }
-        className={`no-touch-callout fixed z-40 select-none transition-opacity duration-150 ${
+        className={`no-touch-callout fixed z-40 touch-none select-none transition-opacity duration-150 ${
           dragPos ? '' : cornerClass
         } ${hidden ? 'pointer-events-none invisible opacity-0' : ''}`}
       >

@@ -2921,6 +2921,10 @@ export default function App() {
                   expWheelSpinTrigger={prefs.expWheelSpinTrigger ?? 'always'}
                   deadpoolOuterSpinDir={prefs.deadpoolOuterSpinDir ?? 'off'}
                   deadpoolOuterSpinTrigger={prefs.deadpoolOuterSpinTrigger ?? 'always'}
+                  deadpoolOuterSpinSpeed={prefs.deadpoolOuterSpinSpeed ?? 1}
+                  deadpoolOuterColor={prefs.deadpoolOuterColor ?? null}
+                  deadpoolOuterColorEnd={prefs.deadpoolOuterColorEnd ?? null}
+                  deadpoolInnerColor={prefs.deadpoolInnerColor ?? null}
                   expWheelShockwave={Boolean(prefs.expWheelShockwave)}
                   onChangeSide={(wheelSide) => setPrefs((p) => ({...p, wheelSide}))}
                   onHoverChange={(hover) => {
