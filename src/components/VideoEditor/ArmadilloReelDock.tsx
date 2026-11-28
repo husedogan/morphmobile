@@ -1035,7 +1035,7 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
             e.preventDefault();
             e.stopPropagation();
           }}
-          className="fixed inset-0 z-[75] bg-transparent pointer-events-auto"
+          className="fixed inset-0 z-[71] bg-transparent pointer-events-auto"
         />
       )}
     </>

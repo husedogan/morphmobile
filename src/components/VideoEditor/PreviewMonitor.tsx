@@ -1360,6 +1360,16 @@ const PipLayerVideo: React.FC<PipLayerVideoProps> = ({
     if (isPrimaryPip && primaryRef) {
       primaryRef.current = el;
     }
+    return () => {
+      if (isPrimaryPip && primaryRef && primaryRef.current === el) {
+        primaryRef.current = null;
+      }
+    };
+  }, [isPrimaryPip, primaryRef]);
+
+  React.useEffect(() => {
+    const el = localRef.current;
+    if (!el) return;
     const localOffset = Math.max(0, playhead - pipClip.timelineStart);
     const spd = Math.min(4, Math.max(0.25, pipClip.speed || 1));
     const targetSrcTime = pipClip.isFreezeFrame

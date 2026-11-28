@@ -1433,6 +1433,14 @@ export const WheelFab: React.FC<{
     };
   }, []);
 
+  const cleanupWindowListenersRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    return () => {
+      cleanupWindowListenersRef.current?.();
+      cleanupWindowListenersRef.current = null;
+    };
+  }, []);
+
   const emitShockwave = () => {
     if (!expWheelShockwave) return;
     const id = shockIdRef.current++;
@@ -2060,6 +2068,17 @@ export const WheelFab: React.FC<{
 
     const onUp = (ev: PointerEvent) => cleanup(ev, false);
     const onCancel = (ev: PointerEvent) => cleanup(ev, true);
+
+    const detachListeners = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onCancel);
+      if (cleanupWindowListenersRef.current === detachListeners) {
+        cleanupWindowListenersRef.current = null;
+      }
+    };
+    cleanupWindowListenersRef.current?.();
+    cleanupWindowListenersRef.current = detachListeners;
 
     window.addEventListener('pointermove', onMove, {passive: true});
     window.addEventListener('pointerup', onUp);
@@ -2901,8 +2920,16 @@ export const WheelFab: React.FC<{
             }}
           />
         )}
-        {/* Deadpool Outer Halo Ring */}
-        {isDeadpoolInner && phase === 'idle' && <DeadpoolOuterHalo cfg={dpCfg} sizePx={78} />}
+        {/* Deadpool Outer Halo Ring (shape-matched & rotated in lockstep with outer shell) */}
+        {isDeadpoolInner && phase === 'idle' && (
+          <DeadpoolOuterHalo
+            cfg={dpCfg}
+            iconStyle={iconStyle}
+            outerRotationDeg={baseOuterRot}
+            shellScale={effectiveBtnScale}
+            sizePx={78}
+          />
+        )}
         {/* Shape-contoured glowing heat aura + perimeter flames rotated in lockstep with outer shell */}
         {renderShapeHeatAura()}
         {renderBurnCorona()}

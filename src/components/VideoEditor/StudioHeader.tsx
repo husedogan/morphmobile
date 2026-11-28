@@ -414,7 +414,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
               }
               placement="bottom"
               onClick={onToggleSplitCompare}
-              className={`${showMobileGridBtn ? 'flex' : 'flex'} h-[var(--ve-btn-size,38px)] w-[var(--ve-btn-size,38px)] shrink-0 items-center justify-center rounded-xl transition-colors ${
+              className={`flex h-[var(--ve-btn-size,38px)] w-[var(--ve-btn-size,38px)] shrink-0 items-center justify-center rounded-xl transition-colors ${
                 splitCompareEnabled
                   ? 'bg-[#F43F5E]/20 text-[#FB7185]'
                   : 'text-white/70 hover:bg-white/[0.07] hover:text-white'

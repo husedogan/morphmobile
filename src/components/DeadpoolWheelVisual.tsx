@@ -1115,14 +1115,174 @@ export const DeadpoolPolygonBorder: React.FC<{
 };
 
 /**
- * Real working outer halo ring around the shell (previously stubbed to return null).
+ * Shape-contoured outer halo ring around the shell, rotating in lockstep with the outer shell.
  */
 export const DeadpoolOuterHalo: React.FC<{
   cfg: DeadpoolResolvedConfig;
+  iconStyle?: WheelIconStylePref;
+  outerRotationDeg?: number;
+  shellScale?: number;
   sizePx?: number;
-}> = ({cfg, sizePx = 88}) => {
+}> = ({cfg, iconStyle = 'morph_ring' as WheelIconStylePref, outerRotationDeg = 0, shellScale = 1, sizePx = 88}) => {
   if (cfg.outerHaloRing === 'none') return null;
   const strokeCol = cfg.glowColor || cfg.ringColor || cfg.outerColor || '#DC2626';
+  const geom = getDeadpoolOuterShapeGeometry(iconStyle, cfg.cornerRadius);
+  const totalRot = outerRotationDeg + geom.baseRotationDeg;
+  const isPill = iconStyle === 'pill_dock';
+  const isPolygon = isPolygonOuterShape(iconStyle) && Boolean(geom.polygonPoints);
+
+  const renderShapeContour = (
+    scaleFactor: number,
+    opts: {
+      strokeWidth: number;
+      strokeOpacity: number;
+      strokeDasharray?: string;
+      strokeDashoffset?: number;
+      strokeLinecap?: 'round' | 'butt' | 'square';
+      pathLength?: number;
+      className?: string;
+    }
+  ) => {
+    const transform = `translate(50 50) scale(${scaleFactor.toFixed(3)}) translate(-50 -50)`;
+    if (isPolygon && geom.polygonPoints) {
+      return (
+        <polygon
+          points={geom.polygonPoints}
+          fill="none"
+          stroke={strokeCol}
+          strokeWidth={opts.strokeWidth}
+          strokeOpacity={opts.strokeOpacity}
+          strokeDasharray={opts.strokeDasharray}
+          strokeDashoffset={opts.strokeDashoffset}
+          strokeLinejoin="round"
+          strokeLinecap={opts.strokeLinecap}
+          pathLength={opts.pathLength}
+          transform={transform}
+          className={opts.className}
+        />
+      );
+    }
+    if (iconStyle === 'diamond') {
+      const rx = cfg.cornerRadius !== null ? Math.min(34, cfg.cornerRadius * 0.86) : 20;
+      return (
+        <rect
+          x="7"
+          y="7"
+          width="86"
+          height="86"
+          rx={rx}
+          fill="none"
+          stroke={strokeCol}
+          strokeWidth={opts.strokeWidth}
+          strokeOpacity={opts.strokeOpacity}
+          strokeDasharray={opts.strokeDasharray}
+          strokeDashoffset={opts.strokeDashoffset}
+          strokeLinecap={opts.strokeLinecap}
+          pathLength={opts.pathLength}
+          transform={transform}
+          className={opts.className}
+        />
+      );
+    }
+    if (iconStyle === 'squircle') {
+      const rx = cfg.cornerRadius !== null ? Math.min(40, cfg.cornerRadius * 0.9) : 26;
+      return (
+        <rect
+          x="5"
+          y="5"
+          width="90"
+          height="90"
+          rx={rx}
+          fill="none"
+          stroke={strokeCol}
+          strokeWidth={opts.strokeWidth}
+          strokeOpacity={opts.strokeOpacity}
+          strokeDasharray={opts.strokeDasharray}
+          strokeDashoffset={opts.strokeDashoffset}
+          strokeLinecap={opts.strokeLinecap}
+          pathLength={opts.pathLength}
+          transform={transform}
+          className={opts.className}
+        />
+      );
+    }
+    if (isPill) {
+      return (
+        <rect
+          x="-6"
+          y="18"
+          width="112"
+          height="64"
+          rx="32"
+          fill="none"
+          stroke={strokeCol}
+          strokeWidth={opts.strokeWidth}
+          strokeOpacity={opts.strokeOpacity}
+          strokeDasharray={opts.strokeDasharray}
+          strokeDashoffset={opts.strokeDashoffset}
+          strokeLinecap={opts.strokeLinecap}
+          pathLength={opts.pathLength}
+          transform={transform}
+          className={opts.className}
+        />
+      );
+    }
+    return (
+      <circle
+        cx="50"
+        cy="50"
+        r="45"
+        fill="none"
+        stroke={strokeCol}
+        strokeWidth={opts.strokeWidth}
+        strokeOpacity={opts.strokeOpacity}
+        strokeDasharray={opts.strokeDasharray}
+        strokeDashoffset={opts.strokeDashoffset}
+        strokeLinecap={opts.strokeLinecap}
+        pathLength={opts.pathLength}
+        transform={transform}
+        className={opts.className}
+      />
+    );
+  };
+
+  const orbitDotCoords: Array<{x: number; y: number}> = (() => {
+    const scaleDot = (x: number, y: number, s = 0.95) => ({
+      x: 50 + (x - 50) * s,
+      y: 50 + (y - 50) * s,
+    });
+    if (isPolygon && geom.polygonPoints) {
+      const pts = geom.polygonPoints
+        .trim()
+        .split(/\s+/)
+        .map((pair) => {
+          const [px, py] = pair.split(',').map(Number);
+          return scaleDot(px || 50, py || 50, 0.97);
+        });
+      // For 10-point star, place dots on the 5 outer tips (even indices)
+      return iconStyle === 'star_prism' ? pts.filter((_, i) => i % 2 === 0) : pts;
+    }
+    if (iconStyle === 'diamond' || iconStyle === 'squircle') {
+      return [
+        {x: 9, y: 9},
+        {x: 91, y: 9},
+        {x: 91, y: 91},
+        {x: 9, y: 91},
+      ];
+    }
+    if (isPill) {
+      return [
+        {x: -4, y: 50},
+        {x: 104, y: 50},
+        {x: 50, y: 18},
+        {x: 50, y: 82},
+      ];
+    }
+    return [0, 90, 180, 270].map((deg) => {
+      const rad = (deg * Math.PI) / 180;
+      return {x: 50 + 45.5 * Math.cos(rad), y: 50 + 45.5 * Math.sin(rad)};
+    });
+  })();
 
   return (
     <svg
@@ -1130,81 +1290,62 @@ export const DeadpoolOuterHalo: React.FC<{
       viewBox="0 0 100 100"
       width={sizePx}
       height={sizePx}
-      className="pointer-events-none absolute left-1/2 top-1/2 z-0 -translate-x-1/2 -translate-y-1/2 overflow-visible"
+      className="pointer-events-none absolute left-1/2 top-1/2 z-0 overflow-visible"
+      style={{
+        transform: `translate(-50%, -50%) rotate(${totalRot.toFixed(1)}deg) scale(${shellScale.toFixed(3)})`,
+      }}
     >
-      {cfg.outerHaloRing === 'pulse' && (
-        <circle
-          cx="50"
-          cy="50"
-          r="45"
-          fill="none"
-          stroke={strokeCol}
-          strokeWidth="1.8"
-          strokeOpacity="0.72"
-          className="morph-dp-glow-pulse"
-        />
-      )}
+      {cfg.outerHaloRing === 'pulse' &&
+        renderShapeContour(0.95, {
+          strokeWidth: 1.8,
+          strokeOpacity: 0.72,
+          className: 'morph-dp-glow-pulse',
+        })}
       {cfg.outerHaloRing === 'double_ring' && (
         <>
-          <circle
-            cx="50"
-            cy="50"
-            r="44"
-            fill="none"
-            stroke={strokeCol}
-            strokeWidth="1.2"
-            strokeOpacity="0.68"
-          />
-          <circle
-            cx="50"
-            cy="50"
-            r="48.5"
-            fill="none"
-            stroke={strokeCol}
-            strokeWidth="0.9"
-            strokeOpacity="0.36"
-            strokeDasharray="6 4"
-          />
+          {renderShapeContour(0.92, {
+            strokeWidth: 1.25,
+            strokeOpacity: 0.7,
+          })}
+          {renderShapeContour(1.01, {
+            strokeWidth: 0.95,
+            strokeOpacity: 0.38,
+            strokeDasharray: '6 4',
+            pathLength: 100,
+          })}
         </>
       )}
       {cfg.outerHaloRing === 'energy_arc' && (
         <>
-          <path
-            d="M 18 22 A 44 44 0 0 1 82 22"
-            fill="none"
-            stroke={strokeCol}
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeOpacity="0.88"
-          />
-          <path
-            d="M 82 78 A 44 44 0 0 1 18 78"
-            fill="none"
-            stroke={strokeCol}
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeOpacity="0.88"
-          />
+          {renderShapeContour(0.95, {
+            strokeWidth: 2.2,
+            strokeOpacity: 0.9,
+            strokeDasharray: '26 24',
+            strokeDashoffset: 0,
+            strokeLinecap: 'round',
+            pathLength: 100,
+          })}
+          {renderShapeContour(0.95, {
+            strokeWidth: 2.2,
+            strokeOpacity: 0.9,
+            strokeDasharray: '26 24',
+            strokeDashoffset: 50,
+            strokeLinecap: 'round',
+            pathLength: 100,
+          })}
         </>
       )}
       {cfg.outerHaloRing === 'orbit_dots' && (
         <>
-          <circle
-            cx="50"
-            cy="50"
-            r="45.5"
-            fill="none"
-            stroke={strokeCol}
-            strokeWidth="1"
-            strokeOpacity="0.32"
-            strokeDasharray="3 5"
-          />
-          {[0, 90, 180, 270].map((deg) => {
-            const rad = (deg * Math.PI) / 180;
-            const cx = 50 + 45.5 * Math.cos(rad);
-            const cy = 50 + 45.5 * Math.sin(rad);
-            return <circle key={deg} cx={cx} cy={cy} r="2.2" fill={strokeCol} fillOpacity="0.9" />;
+          {renderShapeContour(0.96, {
+            strokeWidth: 1,
+            strokeOpacity: 0.34,
+            strokeDasharray: '2.5 4.5',
+            pathLength: 100,
           })}
+          {orbitDotCoords.map((pt, idx) => (
+            <circle key={idx} cx={pt.x} cy={pt.y} r="2.1" fill={strokeCol} fillOpacity="0.9" />
+          ))}
         </>
       )}
     </svg>

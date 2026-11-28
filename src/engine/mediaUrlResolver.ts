@@ -16,7 +16,7 @@ declare const __MORPH_VERSION__: string | undefined;
 const MORPH_AGENT_VERSION =
   typeof __MORPH_VERSION__ === 'string' && __MORPH_VERSION__.trim().length > 0
     ? __MORPH_VERSION__
-    : '1.1.73';
+    : '1.1.75';
 
 export const BROWSER_USER_AGENT =
   'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36';

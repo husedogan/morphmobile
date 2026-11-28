@@ -1688,7 +1688,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
             </div>
           )}
 
-          {/* ==================== TAB 3: ZARCHIVER-STYLE SMART ARCHIVE EXPLORER ==================== */}
+          {/* ==================== TAB 3: SMART ARCHIVE EXPLORER ==================== */}
           {tab === 'archive' && (
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">

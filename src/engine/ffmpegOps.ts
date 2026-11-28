@@ -185,7 +185,18 @@ async function execSingle(
     }
     if (signal?.aborted) throw new Error('Cancelled');
 
-    const exitCode = await ffmpeg.exec(args);
+    let watchdogId: ReturnType<typeof setTimeout> | null = null;
+    const exitCode = await Promise.race([
+      ffmpeg.exec(args),
+      new Promise<number>((_, reject) => {
+        watchdogId = setTimeout(() => {
+          terminateFFmpegInstance();
+          reject(new Error('FFmpeg işlemi zaman aşımına uğradı.'));
+        }, 5 * 60 * 1000);
+      }),
+    ]).finally(() => {
+      if (watchdogId !== null) clearTimeout(watchdogId);
+    });
     if (signal?.aborted) throw new Error('Cancelled');
     if (exitCode !== 0) {
       throw new Error(describeFfmpegFailure(logTail, 'FFmpeg işlemi tamamlanamadı.'));
@@ -1702,6 +1713,7 @@ async function runLocalFfmpegToolInternal(
           if (!entry?.blob || entry.blob.size < 64) continue;
           const extGuess = entry.fileName.match(/\.([a-z0-9]{2,5})$/i)?.[1]?.toLowerCase() || 'mp4';
           const vfsName = `nle_src_${secMediaCounter++}.${extGuess}`;
+          assertLocalFfmpegFileSize(entry.blob, entry.fileName);
           await ffmpeg.writeFile(vfsName, await fetchFile(entry.blob));
           tempFilesToClean.push(vfsName);
           const secInfo = await probeStreamInfo(ffmpeg, vfsName);
@@ -2614,6 +2626,7 @@ async function runLocalFfmpegToolInternal(
                   ? 'm4a'
                   : 'webm';
             const vfsName = `nle_ext_aud_${i}.${extGuess}`;
+            assertLocalFfmpegFileSize(aBlob, vfsName);
             await ffmpeg.writeFile(vfsName, await fetchFile(aBlob));
             tempFilesToClean.push(vfsName);
             resolvedExtTracks.push({clip: aClip, vfsName});
@@ -3007,6 +3020,7 @@ async function runLocalFfmpegToolInternal(
         outName = `${curFile.baseName}-speed.mp4`;
         const speed = Math.min(2, Math.max(0.5, Number(options.speed) || 1.5));
         const setpts = (1 / speed).toFixed(3);
+        assertLocalFfmpegFileSize(curFile.file, curFile.file.name);
         await ffmpeg.writeFile(curInName, await fetchFile(curFile.file));
         let hasAudio = false;
         try {
@@ -3034,6 +3048,7 @@ async function runLocalFfmpegToolInternal(
       }
       case 'video_reverse': {
         outName = `${curFile.baseName}-reversed.mp4`;
+        assertLocalFfmpegFileSize(curFile.file, curFile.file.name);
         await ffmpeg.writeFile(curInName, await fetchFile(curFile.file));
         let hasAudio = false;
         try {
@@ -3178,6 +3193,7 @@ async function runLocalFfmpegToolInternal(
       case 'audio_fade': {
         const fadeD = Math.min(15, Math.max(0.5, Number(options.fadeSec) || 2));
         outName = `${curFile.baseName}-fade.mp3`;
+        assertLocalFfmpegFileSize(curFile.file, curFile.file.name);
         await ffmpeg.writeFile(curInName, await fetchFile(curFile.file));
         let dur = 0;
         try {

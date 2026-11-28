@@ -128,9 +128,6 @@ import {
   resolveDeadpoolShellBackground,
   resolveDeadpoolShellBorderColor,
 } from './DeadpoolWheelVisual';
-const GodModeShell = React.lazy(() =>
-  import('./GodMode/GodModeShell').then((mod) => ({default: mod.GodModeShell}))
-);
 import {
   SettingsAccordionCard,
   SettingsDownloadsExtra,
@@ -4645,25 +4642,131 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </div>
       )}
 
-      {/* EPHEMERAL PERSONAL MENU ("Sana Özel" / "Just For You"): hosts MORPH // GOD MODE Command Center + preserved 100-feature Deadpool & Chaos Studio */}
+      {/* EPHEMERAL PERSONAL MENU ("Sana Özel" / "Just For You") */}
       {category === 'personal' && personalMenuOpen && !expUnlocked && (
-        <React.Suspense
-          fallback={
-            <div className="mt-4 flex min-h-[260px] flex-col items-center justify-center gap-3 rounded-3xl border border-[#8B5CF6]/25 bg-[#09090D] p-6 text-center">
-              <div className="h-7 w-7 animate-spin rounded-full border-2 border-[#8B5CF6]/30 border-t-[#A855F7]" />
-              <p className="text-xs font-semibold tracking-wide text-[#C4B5FD]">
-                {lang === 'tr' ? 'GOD MODE Konsolu yükleniyor…' : 'Loading GOD MODE Console…'}
-              </p>
+        <div className="mt-4 space-y-4">
+          <section className="rounded-3xl border border-[#DC2626]/30 bg-[var(--surface)] p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-[var(--ink)]">
+                  {lang === 'tr' ? 'Sana Özel — Çark & Amblem' : 'Just For You — Wheel & Emblem'}
+                </h3>
+                <p className="mt-0.5 text-xs text-[var(--muted)]">
+                  {lang === 'tr'
+                    ? 'Deadpool amblemi, dış şekle uyumlu hale ve dış kabuk dönüşü.'
+                    : 'Deadpool emblem, shape-matched outer halo and outer-shell spin.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  onChangePrefs((p) => ({
+                    ...p,
+                    wheelInnerStyle:
+                      (p.wheelInnerStyle ?? 'auto') === 'deadpool' ? 'auto' : 'deadpool',
+                  }))
+                }
+                className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
+                  prefs.wheelInnerStyle === 'deadpool'
+                    ? 'border-[#DC2626] bg-[#DC2626]/15 text-[#F87171]'
+                    : 'border-[var(--line)] bg-[var(--inset)] text-[var(--ink)]'
+                }`}
+              >
+                {prefs.wheelInnerStyle === 'deadpool'
+                  ? lang === 'tr'
+                    ? 'Deadpool Aktif'
+                    : 'Deadpool On'
+                  : lang === 'tr'
+                    ? 'Deadpool Aç'
+                    : 'Enable Deadpool'}
+              </button>
             </div>
-          }
-        >
-          <GodModeShell
-            prefs={prefs}
-            lang={lang}
-            onChangePrefs={onChangePrefs}
-            onShowToast={onShowToast}
-          />
-        </React.Suspense>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3">
+                <p className="text-[11px] font-semibold text-[var(--muted)]">
+                  {lang === 'tr' ? 'Dış Dönsün, İç Sabit' : 'Outer Spin, Inner Fixed'}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {(['cw', 'ccw', 'off'] as const).map((dir) => {
+                    const active = (prefs.deadpoolOuterSpinDir ?? 'cw') === dir;
+                    const label =
+                      dir === 'cw'
+                        ? lang === 'tr'
+                          ? 'Saat Yönü'
+                          : 'CW'
+                        : dir === 'ccw'
+                          ? lang === 'tr'
+                            ? 'Ters Yön'
+                            : 'CCW'
+                          : lang === 'tr'
+                            ? 'Kapalı'
+                            : 'Off';
+                    return (
+                      <button
+                        key={dir}
+                        type="button"
+                        onClick={() =>
+                          onChangePrefs((p) => ({
+                            ...p,
+                            wheelInnerStyle: 'deadpool',
+                            deadpoolOuterSpinDir: dir,
+                          }))
+                        }
+                        className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition ${
+                          active
+                            ? 'border-[#DC2626] bg-[#DC2626]/20 text-[var(--ink)]'
+                            : 'border-[var(--line)] text-[var(--muted)]'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-[var(--line)] bg-[var(--inset)] p-3">
+                <p className="text-[11px] font-semibold text-[var(--muted)]">
+                  {lang === 'tr' ? 'Dış Hale (Şekle Uyumlu)' : 'Outer Halo (Shape-Matched)'}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {(
+                    [
+                      ['pulse', lang === 'tr' ? 'Nabız' : 'Pulse'],
+                      ['double_ring', lang === 'tr' ? 'Çift Çizgi' : 'Double'],
+                      ['energy_arc', lang === 'tr' ? 'Enerji Yayı' : 'Arc'],
+                      ['orbit_dots', lang === 'tr' ? 'Yörünge' : 'Orbit'],
+                      ['none', lang === 'tr' ? 'Kapalı' : 'Off'],
+                    ] as const
+                  ).map(([haloId, label]) => {
+                    const active = (prefs.deadpoolOuterHaloRing ?? 'pulse') === haloId;
+                    return (
+                      <button
+                        key={haloId}
+                        type="button"
+                        onClick={() =>
+                          onChangePrefs((p) => ({
+                            ...p,
+                            wheelInnerStyle: 'deadpool',
+                            deadpoolOuterHaloRing: haloId,
+                          }))
+                        }
+                        className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition ${
+                          active
+                            ? 'border-[#DC2626] bg-[#DC2626]/20 text-[var(--ink)]'
+                            : 'border-[var(--line)] text-[var(--muted)]'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
       )}
 
       {/* CATEGORY 5: SYSTEM (Updates, Storage & Cache, Permissions with 7-tap Experimental unlock, Developer) */}

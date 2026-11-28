@@ -250,8 +250,11 @@ export function requestFilmstripFrames(
   }
 }
 
+const MAX_CONCURRENT_RUNNERS = 2;
+
 async function processAssetQueue(versionKey: string): Promise<void> {
   if (typeof document === 'undefined' || activeAssetRunners.has(versionKey)) return;
+  if (activeAssetRunners.size >= MAX_CONCURRENT_RUNNERS) return;
   activeAssetRunners.add(versionKey);
   const myGen = sessionGeneration;
 
@@ -368,6 +371,10 @@ async function processAssetQueue(versionKey: string): Promise<void> {
   } finally {
     disposeVideo();
     activeAssetRunners.delete(versionKey);
+    const nextJob = jobQueue.find((j) => !activeAssetRunners.has(j.versionKey));
+    if (nextJob && activeAssetRunners.size < MAX_CONCURRENT_RUNNERS) {
+      void processAssetQueue(nextJob.versionKey);
+    }
   }
 }
 

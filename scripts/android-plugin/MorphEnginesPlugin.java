@@ -247,11 +247,16 @@ public class MorphEnginesPlugin extends Plugin {
 
     @PluginMethod
     public void getEnginesStatus(PluginCall call) {
+        final Context appCtx = getContext() != null ? getContext().getApplicationContext() : null;
+        if (appCtx == null) {
+            call.reject("Uygulama bağlamı hazır değil.");
+            return;
+        }
         executor.execute(() -> {
-            Context appCtx = getContext().getApplicationContext();
-            boolean wasReady = appCtx
-                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .getBoolean(KEY_YTDLP_READY, false);
+            try {
+                boolean wasReady = appCtx
+                    .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .getBoolean(KEY_YTDLP_READY, false);
             File ytdlpDir = new File(new File(appCtx.getNoBackupFilesDir(), YoutubeDL.baseName), YoutubeDL.ytdlpDirName);
             boolean binaryExists = new File(ytdlpDir, YoutubeDL.ytdlpBin).exists();
             String ver = null;
@@ -265,6 +270,9 @@ public class MorphEnginesPlugin extends Plugin {
             ret.put("newpipeReady", true);
             ret.put("newpipeVersion", "v0.27.1");
             call.resolve(ret);
+            } catch (Exception e) {
+                call.reject("Motor durumu okunamadı: " + e.getMessage());
+            }
         });
     }
 
@@ -866,20 +874,25 @@ public class MorphEnginesPlugin extends Plugin {
         final int concurrentFragments = fragsObj != null ? Math.max(1, Math.min(16, fragsObj)) : 4;
         final String processId = call.getString("processId", "morph-" + System.currentTimeMillis());
 
-        if (url == null || url.trim().isEmpty()) {
-            call.reject("Bağlantı adresi boş.");
+        final String trimmedUrl = url != null ? url.trim() : "";
+        if (trimmedUrl.isEmpty() || !trimmedUrl.matches("(?i)^https?://.+") || trimmedUrl.startsWith("-")) {
+            call.reject("Geçerli bir http/https bağlantısı girin.");
+            return;
+        }
+        final Context appCtx = getContext() != null ? getContext().getApplicationContext() : null;
+        if (appCtx == null) {
+            call.reject("Uygulama bağlamı hazır değil.");
             return;
         }
 
         executor.execute(() -> {
-            Context appCtx = getContext().getApplicationContext();
             File stageDir = new File(appCtx.getCacheDir(), "ytdlp-" + processId.replaceAll("[^a-zA-Z0-9_-]", ""));
             if (!stageDir.exists()) stageDir.mkdirs();
 
             try {
                 ensureYtDlpReady(appCtx);
 
-                YoutubeDLRequest req = new YoutubeDLRequest(url.trim());
+                YoutubeDLRequest req = new YoutubeDLRequest(trimmedUrl);
                 req.addOption("--no-playlist");
                 req.addOption("--no-mtime");
                 req.addOption("--windows-filenames");
@@ -1209,6 +1222,22 @@ public class MorphEnginesPlugin extends Plugin {
             "github.com/husedogan/morph/",
             "github.com/husedogan/morphmobile/"
         );
+        try {
+            URI parsedApkUri = URI.create(targetUrl);
+            String scheme = parsedApkUri.getScheme() != null ? parsedApkUri.getScheme().toLowerCase(Locale.ROOT) : "";
+            String host = parsedApkUri.getHost() != null ? parsedApkUri.getHost().toLowerCase(Locale.ROOT) : "";
+            boolean allowedHost =
+                host.equals("github.com") ||
+                host.equals("objects.githubusercontent.com") ||
+                host.equals("release-assets.githubusercontent.com");
+            if (!"https".equals(scheme) || !allowedHost) {
+                call.reject("Yalnızca resmi GitHub HTTPS APK bağlantıları desteklenir.");
+                return;
+            }
+        } catch (Exception e) {
+            call.reject("Geçersiz APK bağlantısı.");
+            return;
+        }
         final Context appCtx = getContext().getApplicationContext();
 
         executor.execute(() -> {
@@ -1447,5 +1476,18 @@ public class MorphEnginesPlugin extends Plugin {
         }
         //noinspection ResultOfMethodCallIgnored
         f.delete();
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        try {
+            for (Future<?> job : newPipeJobs.values()) {
+                job.cancel(true);
+            }
+            newPipeJobs.clear();
+            executor.shutdownNow();
+        } catch (Exception ignored) {
+        }
+        super.handleOnDestroy();
     }
 }

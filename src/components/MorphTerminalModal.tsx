@@ -514,7 +514,6 @@ export const MorphTerminalModal: React.FC<MorphTerminalModalProps> = ({
         const sub = (args[0] || 'compare').toLowerCase();
         const map: Record<string, 'compare' | 'target_kb' | 'bg_palette' | 'modern'> = {
           compare: 'compare',
-          squoosh: 'compare',
           kb: 'target_kb',
           target: 'target_kb',
           bg: 'bg_palette',

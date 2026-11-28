@@ -115,8 +115,8 @@ export async function probeVideoAssetMetadata(
 
   if (typeof document === 'undefined') return fallbackMeta;
 
+  const vid = document.createElement('video');
   try {
-    const vid = document.createElement('video');
     vid.src = registered.objectUrl;
     vid.muted = true;
     vid.playsInline = true;
@@ -171,5 +171,13 @@ export async function probeVideoAssetMetadata(
     };
   } catch {
     return fallbackMeta;
+  } finally {
+    try {
+      vid.pause();
+      vid.removeAttribute('src');
+      vid.load();
+    } catch {
+      // Ignore cleanup errors
+    }
   }
 }

@@ -1245,6 +1245,16 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
   useEffect(() => {
     return () => {
       clearFilmstripCache();
+      const rec = mediaRecorderRef.current;
+      if (rec) {
+        try {
+          if (rec.state !== 'inactive') rec.stop();
+          rec.stream?.getTracks().forEach((tr) => tr.stop());
+        } catch {
+          // Ignore unmount stop errors
+        }
+        mediaRecorderRef.current = null;
+      }
     };
   }, []);
 
@@ -2117,6 +2127,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     if (!canUndo) return;
     const nextIdx = historyIdx - 1;
     const snap = history[nextIdx];
+    historyIdxRef.current = nextIdx;
+    projectRef.current = snap;
     setHistoryIdx(nextIdx);
     setProject(snap);
     notifyStatus(tr('İşlem geri alındı.', 'Action undone.'));
@@ -2126,6 +2138,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     if (!canRedo) return;
     const nextIdx = historyIdx + 1;
     const snap = history[nextIdx];
+    historyIdxRef.current = nextIdx;
+    projectRef.current = snap;
     setHistoryIdx(nextIdx);
     setProject(snap);
     notifyStatus(tr('İşlem ileri alındı.', 'Action redone.'));
@@ -2250,11 +2264,18 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             (project.mediaAssets || []).find((m) => m.id === mediaId)?.durationSec ||
             duration ||
             vc.sourceEnd;
+          const spanSec = Math.max(0.25, vc.sourceEnd - vc.sourceStart);
           const detachedClip: TimelineAudioClip = {
             id: newId,
             label: `${tr('Video Sesi', 'Video Audio')} · ${vc.label}`,
             kind: 'music',
-            trackRow: 0,
+            trackRow: findAvailableAudioRow(
+              project.audioClips,
+              project.videoClips,
+              vc.timelineStart,
+              vc.timelineStart + spanSec,
+              0
+            ),
             sourceStart: vc.sourceStart,
             sourceEnd: vc.sourceEnd,
             sourceDurationSec: Math.max(assetDur, vc.sourceEnd),
@@ -2394,11 +2415,18 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             (project.mediaAssets || []).find((m) => m.id === mediaId)?.durationSec ||
             duration ||
             vc.sourceEnd;
+          const spanSec = Math.max(0.25, vc.sourceEnd - vc.sourceStart);
           const detachedClip: TimelineAudioClip = {
             id: newId,
             label: `${tr('Video Sesi', 'Video Audio')} · ${vc.label}`,
             kind: 'music',
-            trackRow: 0,
+            trackRow: findAvailableAudioRow(
+              project.audioClips,
+              project.videoClips,
+              vc.timelineStart,
+              vc.timelineStart + spanSec,
+              0
+            ),
             sourceStart: vc.sourceStart,
             sourceEnd: vc.sourceEnd,
             sourceDurationSec: Math.max(assetDur, vc.sourceEnd),
@@ -4671,11 +4699,13 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       cleanup();
       if (didMutate && mode !== 'playhead') {
         setHasUnsavedChanges(true);
-        setProject((latest) => {
-          setHistory((h) => [...h.slice(0, historyIdx + 1).slice(-35), latest]);
-          setHistoryIdx((idx) => Math.min(35, idx + 1));
-          return latest;
-        });
+        const latest = projectRef.current;
+        const baseIdx = historyIdxRef.current;
+        const nextHistory = [...history.slice(0, baseIdx + 1).slice(-35), latest];
+        const nextIdx = nextHistory.length - 1;
+        historyIdxRef.current = nextIdx;
+        setHistory(nextHistory);
+        setHistoryIdx(nextIdx);
       }
     };
 

@@ -106,8 +106,6 @@ import {
   toolsForSelection,
 } from './data/models';
 import {applyThemeTokens} from './data/themes';
-import {DevPerfHud} from './components/DevPerfHud';
-import {DevChaosOverlay} from './components/DevChaosOverlay';
 import {computeBatchRenamedNames} from './engine/fileInspector';
 import {
   GithubUpdateInfo,
@@ -2516,15 +2514,7 @@ export default function App() {
         uiSoundsEnabled={Boolean(prefs.expUiSounds)}
       />
 
-      {prefs.devPerfHud && (
-        <DevPerfHud
-          onClose={() => setPrefs((p) => ({...p, devPerfHud: false}))}
-        />
-      )}
-
-      <DevChaosOverlay />
-
-      <div data-chaos-canvas="true">
+      <div>
       {/* Compact 3-Zone Top Bar with Android/iOS Safe-Area Top & Horizontal Insets */}
       <header className="morph-app-header sticky top-0 z-30 border-b border-[var(--line)]/70 bg-[var(--paper)]/92 pt-safe px-safe backdrop-blur-md">
         <div className="mx-auto flex h-13 max-w-6xl items-center justify-between gap-4 px-4 sm:gap-8 sm:px-6 [@media(max-height:500px)]:h-11">
@@ -2941,7 +2931,6 @@ export default function App() {
                   expWheelSpinMode={prefs.expWheelSpinMode ?? 'outer_ccw_inner_cw'}
                   expWheelSpinTrigger={prefs.expWheelSpinTrigger ?? 'always'}
                   deadpoolConfig={resolveDeadpoolConfig(prefs)}
-                  expWheelShockwave={Boolean(prefs.expWheelShockwave)}
                   onChangeSide={(wheelSide) => setPrefs((p) => ({...p, wheelSide}))}
                   onHoverChange={(hover) => {
                     if (!hover || window.matchMedia?.('(hover: hover) and (pointer: fine)').matches) {
