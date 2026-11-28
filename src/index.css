@@ -1390,31 +1390,31 @@ html[data-chaos-wobble="quake"][data-chaos-rainbow="on"] #root {
   animation: morph-chaos-wobble-quake 140ms linear infinite, morph-chaos-rainbow 1.5s linear infinite;
 }
 
-html[data-chaos-gravity="on"] #root section:not([data-chaos-safe="true"]),
-html[data-chaos-gravity="on"] #root article:not([data-chaos-safe="true"]),
-html[data-chaos-gravity="on"] #root button:not([data-chaos-safe="true"]) {
+html[data-chaos-gravity="on"] #root section:not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *),
+html[data-chaos-gravity="on"] #root article:not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *),
+html[data-chaos-gravity="on"] #root button:not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *) {
   transition: transform 420ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-html[data-chaos-gravity="on"] #root section:nth-child(odd):not([data-chaos-safe="true"]),
-html[data-chaos-gravity="on"] #root article:nth-child(odd):not([data-chaos-safe="true"]) {
+html[data-chaos-gravity="on"] #root section:nth-child(odd):not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *),
+html[data-chaos-gravity="on"] #root article:nth-child(odd):not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *) {
   transform: rotate(-3.2deg) translateY(10px);
 }
 
-html[data-chaos-gravity="on"] #root section:nth-child(even):not([data-chaos-safe="true"]),
-html[data-chaos-gravity="on"] #root article:nth-child(even):not([data-chaos-safe="true"]) {
+html[data-chaos-gravity="on"] #root section:nth-child(even):not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *),
+html[data-chaos-gravity="on"] #root article:nth-child(even):not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *) {
   transform: rotate(3.6deg) translateY(14px);
 }
 
-html[data-chaos-gravity="on"] #root button:nth-child(3n+1):not([data-chaos-safe="true"]) {
+html[data-chaos-gravity="on"] #root button:nth-child(3n+1):not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *) {
   transform: rotate(-7deg) translateY(6px);
 }
 
-html[data-chaos-gravity="on"] #root button:nth-child(3n+2):not([data-chaos-safe="true"]) {
+html[data-chaos-gravity="on"] #root button:nth-child(3n+2):not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *) {
   transform: rotate(8deg) translateY(9px);
 }
 
-html[data-chaos-gravity="on"] #root button:nth-child(3n):not([data-chaos-safe="true"]) {
+html[data-chaos-gravity="on"] #root button:nth-child(3n):not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *) {
   transform: rotate(-5deg) translateY(4px);
 }
 
@@ -1422,26 +1422,20 @@ html[data-chaos-glitch="on"] #root {
   animation: morph-chaos-glitch-flicker 0.9s steps(2, end) infinite;
 }
 
-html[data-chaos-glitch="on"] #root button:not([data-chaos-safe="true"]),
-html[data-chaos-glitch="on"] #root section:not([data-chaos-safe="true"]) {
+html[data-chaos-glitch="on"] #root button:not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *),
+html[data-chaos-glitch="on"] #root section:not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *) {
   box-shadow: -2px 0 0 rgba(255, 0, 85, 0.65), 2px 0 0 rgba(0, 240, 255, 0.65) !important;
 }
 
-html[data-chaos-runaway="on"] #root button:not([data-chaos-safe="true"]):hover,
-html[data-chaos-runaway="on"] #root button:not([data-chaos-safe="true"]):active {
+html[data-chaos-runaway="on"] #root button:not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *):hover,
+html[data-chaos-runaway="on"] #root button:not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *):active {
   animation: morph-chaos-runaway-jitter 360ms ease-in-out infinite !important;
 }
 
-html[data-chaos-nuke="on"] #root,
-html[data-chaos-nuke="on"] #root * {
-  cursor: crosshair !important;
-}
-
-html[data-chaos-nuke="on"] #root button:not([data-chaos-safe="true"]):hover,
-html[data-chaos-nuke="on"] #root section:not([data-chaos-safe="true"]):hover,
-html[data-chaos-nuke="on"] #root article:not([data-chaos-safe="true"]):hover {
+html[data-chaos-nuke="on"] #root [data-chaos-nuke-target="true"]:hover {
   outline: 2px solid #F43F5E !important;
   outline-offset: 2px;
+  cursor: crosshair !important;
 }
 
 .morph-chaos-gpu-bar {

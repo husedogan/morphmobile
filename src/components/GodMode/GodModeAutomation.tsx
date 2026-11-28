@@ -523,7 +523,7 @@ export const GodModeAutomation: React.FC<GodModeAutomationProps> = ({
             <div className="gm-inset space-y-2 p-3">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[10px] font-bold uppercase tracking-wider" style={{color: 'var(--gm-accent)'}}>
-                  1 · {t.automation.triggerLabel}
+                  {t.automation.triggerLabel}
                 </span>
                 <span className="gm-mono text-[10px]" style={{color: 'var(--gm-muted)'}}>
                   {t.automation.triggers[selected.trigger ?? 'manual']}
@@ -558,7 +558,7 @@ export const GodModeAutomation: React.FC<GodModeAutomationProps> = ({
             <div className="gm-inset space-y-2 p-3">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[10px] font-bold uppercase tracking-wider" style={{color: 'var(--gm-accent-2)'}}>
-                  2 · {t.automation.conditionLabel}
+                  {t.automation.conditionLabel}
                 </span>
                 <span
                   className={`gm-mono text-[10px] font-semibold ${

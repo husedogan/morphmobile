@@ -115,6 +115,11 @@ import {
 } from '../engine/nativeBridge';
 import {deleteNleProjectIdb, listNleProjectsIdb} from '../engine/projectStorage';
 import {PWAInstallButton} from './PWAInstallButton';
+import {
+  DeadpoolEmblemGroup,
+  resolveDeadpoolConfig,
+  resolveDeadpoolShellBackground,
+} from './DeadpoolWheelVisual';
 import {GodModeShell} from './GodMode/GodModeShell';
 import {
   SettingsAccordionCard,
@@ -1646,8 +1651,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   const dpFill = opts?.deadpoolFill || 'currentColor';
                   const dpRing = opts?.deadpoolRing || dpFill;
                   const dpEye = opts?.deadpoolEye ?? null;
-                  const lEye = 'M 6.2 11.5 L 11.4 14.9 Q 9.0 16.9 6.8 15.2 Z';
-                  const rEye = 'M 21.8 11.5 L 16.6 14.9 Q 19.0 16.9 21.2 15.2 Z';
+                  const lEye = 'M 6.45 11.2 L 11.4 14.8 C 9.35 16.55 5.45 14.15 6.45 11.2 Z';
+                  const rEye = 'M 21.55 11.2 L 16.6 14.8 C 18.65 16.55 22.55 14.15 21.55 11.2 Z';
                   return (
                     <>
                       <circle cx="14" cy="14" r="10.7" stroke={dpRing} strokeWidth="1.95" />
@@ -1693,7 +1698,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       : activeOuterId === 'blade_hex'
                         ? {clipPath: 'polygon(25% 4%, 75% 4%, 99% 50%, 75% 96%, 25% 96%, 1% 50%)', borderRadius: 0}
                         : activeOuterId === 'star_prism'
-                          ? {clipPath: 'polygon(50% 2%, 67% 33%, 98% 50%, 67% 67%, 50% 98%, 33% 67%, 2% 50%, 33% 33%)', borderRadius: 0}
+                          ? {clipPath: 'polygon(50% 2%, 69% 31%, 98% 50%, 69% 69%, 50% 98%, 31% 69%, 2% 50%, 31% 31%)', borderRadius: 0}
                           : activeOuterId === 'shield_crest'
                             ? {clipPath: 'polygon(50% 2%, 95% 26%, 88% 78%, 50% 99%, 12% 78%, 5% 26%)', borderRadius: 0}
                             : {borderRadius: '999px'};
@@ -1720,57 +1725,79 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                     className="flex min-w-0 flex-1 items-center gap-3 text-left transition-opacity hover:opacity-90"
                   >
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center">
-                      <span
-                        style={previewBadgeStyle}
-                        className={`morph-accent-btn flex h-10 w-10 items-center justify-center shadow-sm transition-all ${
-                          wheelEnabled ? 'opacity-100' : 'opacity-40 grayscale'
-                        }`}
-                      >
-                        <svg
-                          viewBox={activeOuterId === 'pill_dock' ? '0 0 48 24' : '0 0 28 28'}
-                          fill="none"
-                          className={
-                            activeOuterId === 'pill_dock'
-                              ? 'h-5 w-10'
-                              : effectivePreviewCore === 'deadpool'
-                                ? 'h-6 w-6'
-                                : 'h-5 w-5'
-                          }
-                          style={activeOuterId === 'diamond' ? {transform: 'rotate(-45deg)'} : undefined}
-                        >
-                          {(() => {
-                            const dpBadgeOpts =
-                              effectivePreviewCore === 'deadpool'
+                      {(() => {
+                        const isDpBadge = effectivePreviewCore === 'deadpool';
+                        const dpPreviewCfg = isDpBadge ? resolveDeadpoolConfig(prefs) : null;
+                        const dpPreviewBg = dpPreviewCfg ? resolveDeadpoolShellBackground(dpPreviewCfg) : undefined;
+                        const dpTransparent = Boolean(dpPreviewCfg && dpPreviewCfg.logoBg === 'transparent');
+                        return (
+                          <span
+                            style={{
+                              ...previewBadgeStyle,
+                              ...(isDpBadge && dpPreviewBg
                                 ? {
-                                    deadpoolFill: prefs.deadpoolInnerColor || '#0B0B0E',
-                                    deadpoolRing: prefs.deadpoolRingColor || prefs.deadpoolInnerColor || '#0B0B0E',
-                                    deadpoolEye:
-                                      prefs.deadpoolEyeColor?.trim().toLowerCase() === 'transparent'
-                                        ? null
-                                        : prefs.deadpoolEyeColor || '#FFFFFF',
+                                    backgroundImage: dpPreviewBg,
+                                    backgroundColor: dpTransparent ? 'transparent' : undefined,
+                                    boxShadow: dpTransparent ? 'none' : undefined,
                                   }
-                                : undefined;
-                            const dpPillTone =
-                              effectivePreviewCore === 'deadpool'
-                                ? prefs.deadpoolInnerColor || '#0B0B0E'
-                                : 'currentColor';
-                            if (activeOuterId === 'pill_dock') {
-                              const cx = effectivePreviewCore === 'deadpool' ? 13 : 14;
-                              const sc = effectivePreviewCore === 'deadpool' ? 0.84 : 0.68;
-                              return (
-                                <>
-                                  <g transform={`translate(${cx} 12) scale(${sc}) translate(-14 -14)`}>
-                                    {renderInnerSvg(effectivePreviewCore, dpBadgeOpts)}
-                                  </g>
-                                  <rect x={effectivePreviewCore === 'deadpool' ? '26.5' : '26'} y="7.5" width="13" height="2.4" rx="1.2" fill={dpPillTone} fillOpacity="0.92" />
-                                  <rect x={effectivePreviewCore === 'deadpool' ? '26.5' : '26'} y="12.2" width="9.5" height="2.4" rx="1.2" fill={dpPillTone} fillOpacity="0.65" />
-                                </>
-                              );
-                            }
-                            return renderInnerSvg(effectivePreviewCore, dpBadgeOpts);
-                          })()}
-                        </svg>
-                      </span>
+                                : {}),
+                            }}
+                            className={`${isDpBadge ? '' : 'morph-accent-btn '}flex h-10 w-10 items-center justify-center ${
+                              dpTransparent ? '' : 'shadow-sm'
+                            } transition-all ${wheelEnabled ? 'opacity-100' : 'opacity-40 grayscale'}`}
+                          >
+                            <svg
+                              viewBox={activeOuterId === 'pill_dock' ? '0 0 48 24' : '0 0 28 28'}
+                              fill="none"
+                              className={
+                                activeOuterId === 'pill_dock'
+                                  ? 'h-5 w-10'
+                                  : isDpBadge
+                                    ? activeOuterId === 'star_prism'
+                                      ? 'h-[22px] w-[22px]'
+                                      : 'h-8 w-8'
+                                    : 'h-5 w-5'
+                              }
+                              style={activeOuterId === 'diamond' ? {transform: 'rotate(-45deg)'} : undefined}
+                            >
+                              {(() => {
+                                const dpPillTone = isDpBadge
+                                  ? prefs.deadpoolInnerColor || '#0B0B0E'
+                                  : 'currentColor';
+                                if (activeOuterId === 'pill_dock') {
+                                  const cx = isDpBadge ? 13 : 14;
+                                  const sc = isDpBadge ? 0.84 : 0.68;
+                                  return (
+                                    <>
+                                      <g transform={`translate(${cx} 12) scale(${sc}) translate(-14 -14)`}>
+                                        {isDpBadge && dpPreviewCfg ? (
+                                          <DeadpoolEmblemGroup
+                                            cfg={dpPreviewCfg}
+                                            maskFill={dpPreviewCfg.innerColor || '#0B0B0E'}
+                                          />
+                                        ) : (
+                                          renderInnerSvg(effectivePreviewCore)
+                                        )}
+                                      </g>
+                                      <rect x={isDpBadge ? '26.5' : '26'} y="7.5" width="13" height="2.4" rx="1.2" fill={dpPillTone} fillOpacity="0.92" />
+                                      <rect x={isDpBadge ? '26.5' : '26'} y="12.2" width="9.5" height="2.4" rx="1.2" fill={dpPillTone} fillOpacity="0.65" />
+                                    </>
+                                  );
+                                }
+                                if (isDpBadge && dpPreviewCfg) {
+                                  return (
+                                    <DeadpoolEmblemGroup
+                                      cfg={dpPreviewCfg}
+                                      maskFill={dpPreviewCfg.innerColor || '#0B0B0E'}
+                                    />
+                                  );
+                                }
+                                return renderInnerSvg(effectivePreviewCore);
+                              })()}
+                            </svg>
+                          </span>
+                        );
+                      })()}
                     </div>
                     <div className="min-w-0 flex-1">
                       <h2 className="text-sm font-bold leading-snug text-[var(--ink)] sm:text-[15px]">

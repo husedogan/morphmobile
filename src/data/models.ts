@@ -339,12 +339,14 @@ export type DeadpoolSurfaceTexture = 'none' | 'carbon' | 'brushed' | 'mesh' | 's
 export type DeadpoolGlossMode = 'none' | 'top_arc' | 'diagonal_sheen' | 'glass_dome' | 'metallic';
 export type DeadpoolEyeStyle = 'classic' | 'angry' | 'wide' | 'cyber_visor' | 'squint' | 'glowing_slit';
 export type DeadpoolLogoVariant =
-  | 'classic'
-  | 'hourglass'
-  | 'vinyl_bold'
-  | 'mask_stencil'
-  | 'decal_thin'
-  | 'inverted_vinyl';
+  | 'original'
+  | 'pure_bw'
+  | 'white_on_black'
+  | 'tactical_metallic'
+  | 'minimal_flat'
+  | 'crimson_dark'
+  | 'monochrome_inverted';
+export type DeadpoolLogoBgMode = 'auto' | 'dark' | 'crimson' | 'light' | 'transparent';
 export type DevColorVisionMode =
   | 'none'
   | 'grayscale'
@@ -358,9 +360,17 @@ export type DeadpoolInnerRingStyle = 'solid' | 'dashed' | 'double' | 'tech_ticks
 export type DeadpoolMotionPattern = 'steady' | 'pendulum' | 'pulse_step' | 'turbo_burst';
 export type DeadpoolBreathingPulse = 'off' | 'soft' | 'heartbeat' | 'float';
 export type DeadpoolMaskMotion = 'locked' | 'counter_slow' | 'tilt_sway' | 'follow_outer';
-export type DeadpoolTapFx = 'scale' | 'bounce' | 'spin_kick' | 'flash';
+export type DeadpoolTapFx = 'none' | 'scale' | 'bounce' | 'spin_kick' | 'flash';
 export type DeadpoolBorderStyle = 'solid' | 'dashed' | 'dotted' | 'double';
-export type DeadpoolOuterHaloRing = 'none' | 'thin' | 'dashed_orbit' | 'radar';
+export type DeadpoolOuterHaloRing =
+  | 'none'
+  | 'pulse'
+  | 'orbit_dots'
+  | 'energy_arc'
+  | 'double_ring'
+  | 'thin'
+  | 'dashed_orbit'
+  | 'radar';
 export type ScreenOrientationPref = 'auto' | 'portrait' | 'landscape';
 
 export interface WheelSpinModeMeta {
@@ -579,6 +589,12 @@ export interface Prefs {
   deadpoolMaskDropShadow?: number;
   /** Color saturation boost percentage (75 - 150, default 100) */
   deadpoolColorBoost?: number;
+  /** Logo margin / padding inside the emblem frame (0 - 24%, default 6) */
+  deadpoolLogoPadding?: number;
+  /** Dedicated logo background preset ('auto' uses outer shell gradient) */
+  deadpoolLogoBg?: DeadpoolLogoBgMode;
+  /** Emblem contrast adjustment (75 - 150%, default 100) */
+  deadpoolLogoContrast?: number;
   // Developer-Only ("Sana Özel") Global UI & Runtime Overrides
   devOledBlack?: boolean;
   devCustomAccent?: string | null;

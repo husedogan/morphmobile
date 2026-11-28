@@ -552,10 +552,6 @@ export const GodModeDesignLab: React.FC<GodModeDesignLabProps> = ({
                   </div>
                 </div>
 
-                <p className="text-xs leading-snug" style={{color: 'var(--gm-muted)'}}>
-                  {lang === 'tr' ? theme.descriptionTr : theme.descriptionEn}
-                </p>
-
                 <LiveDesignPreviewSurface
                   themeId={theme.id}
                   telemetry={telemetry}

@@ -92,6 +92,9 @@ export interface GodModeDictionary {
     dashboard: {label: string; short: string; summary: string};
     design_lab: {label: string; short: string; summary: string};
     system_core: {label: string; short: string; summary: string};
+    performance_lab: {label: string; short: string; summary: string};
+    ui_inspector: {label: string; short: string; summary: string};
+    animation_lab: {label: string; short: string; summary: string};
     diagnostics: {label: string; short: string; summary: string};
     dev_toolkit: {label: string; short: string; summary: string};
     security_center: {label: string; short: string; summary: string};
@@ -101,6 +104,8 @@ export interface GodModeDictionary {
     ai_lab: {label: string; short: string; summary: string};
     autonomous_agents: {label: string; short: string; summary: string};
     experimental_lab: {label: string; short: string; summary: string};
+    experimental_tools: {label: string; short: string; summary: string};
+    logs_events: {label: string; short: string; summary: string};
     media_engine: {label: string; short: string; summary: string};
     terminal: {label: string; short: string; summary: string};
     automation_studio: {label: string; short: string; summary: string};
@@ -742,30 +747,35 @@ export interface GodModeDictionary {
 export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
   tr: {
     modules: {
-      dashboard: {label: 'Ana Ekran', short: 'Ana Ekran', summary: 'Canlı performans, AI motorları ve sistem özeti.'},
+      dashboard: {label: 'Komuta Paneli', short: 'Panel', summary: 'Canlı telemetri ve sistem özeti.'},
       design_lab: {label: 'Tasarım Laboratuvarı', short: 'Tasarım', summary: 'İzole GOD MODE temaları ve canlı karşılaştırma.'},
-      system_core: {label: 'Sistem Merkezi', short: 'Sistem', summary: 'Canlı FPS, bellek, depolama ve sunucu metrikleri.'},
-      diagnostics: {label: 'Tanılama', short: 'Tanılama', summary: '8 canlı sistem, depolama ve medya doğrulama testi.'},
-      dev_toolkit: {label: 'Geliştirici Araçları', short: 'Araçlar', summary: 'Modül grafiği, maskeli state, log, ağ ve profilleyici.'},
+      system_core: {label: 'Sistem İzleyici', short: 'Sistem', summary: 'Canlı FPS, bellek, depolama ve cihaz metrikleri.'},
+      performance_lab: {label: 'Performans', short: 'Performans', summary: 'HUD kontrolü, kare hızı geçmişi ve JSON dışa aktarma.'},
+      ui_inspector: {label: 'Arayüz Müfettişi', short: 'Arayüz', summary: 'Izgara, dokunma hedefleri ve canlı token denetimi.'},
+      animation_lab: {label: 'Animasyon', short: 'Animasyon', summary: 'Global animasyon hızı, hareket ve dokunsal tezgâh.'},
+      diagnostics: {label: 'Tanılama', short: 'Tanılama', summary: 'Sistem, depolama, ağ ve medya doğrulama testleri.'},
+      dev_toolkit: {label: 'Geliştirici Araçları', short: 'Araçlar', summary: 'Modül grafiği, maskeli durum ve profilleyici.'},
       security_center: {label: 'Güvenlik Merkezi', short: 'Güvenlik', summary: 'Sahip doğrulama, cihaz yönetimi ve denetim günlüğü.'},
-      settings: {label: 'Ayarlar', short: 'Ayarlar', summary: 'Bağımsız GOD MODE dili, tasarım ve görünüm tercihleri.'},
-      deadpool_studio: {label: 'Deadpool Stüdyosu', short: 'Deadpool', summary: 'Çark kabuğu, logo varyantları, palet ve hareket stüdyosu.'},
-      chaos_lab: {label: 'Kaos Laboratuvarı', short: 'Kaos', summary: 'Ekran bükme, görsel bozulma ve stres testi motoru.'},
-      ai_lab: {label: 'Yapay Zekâ Laboratuvarı', short: 'YZ Lab', summary: 'Model yönetimi, canlı Gemini istem stüdyosu ve token izleyici.'},
-      autonomous_agents: {label: 'Otonom Ajanlar', short: 'Ajanlar', summary: '7 uzman ajan ve onay kapılı sistem geliştirme önerileri.'},
-      experimental_lab: {label: 'Deneysel Laboratuvar', short: 'Deneysel', summary: 'Özellik bayrakları, geçersiz kılma ve tek tıkla geri alma.'},
-      media_engine: {label: 'Medya Motorları', short: 'Medya', summary: 'FFmpeg WASM denetimi, komut oluşturucu ve render testi.'},
+      settings: {label: 'Ayarlar', short: 'Ayarlar', summary: 'Bağımsız panel dili, tasarım ve görünüm tercihleri.'},
+      deadpool_studio: {label: 'Deadpool Stüdyosu', short: 'Deadpool', summary: 'Özel logo, renk, maske ve efekt kontrolleri.'},
+      chaos_lab: {label: 'Kaos Laboratuvarı', short: 'Kaos', summary: 'Risk dereceli, süre sınırlı ve kurtarmalı stres testleri.'},
+      ai_lab: {label: 'Yapay Zekâ', short: 'Yapay Zekâ', summary: 'Model yönetimi, canlı istem stüdyosu ve token izleyici.'},
+      autonomous_agents: {label: 'Otonom Ajanlar', short: 'Ajanlar', summary: 'Uzman ajanlar ve onay kapılı sistem önerileri.'},
+      experimental_lab: {label: 'Özellik Bayrakları', short: 'Bayraklar', summary: 'Canlı özellik bayrakları ve tek tıkla geri alma.'},
+      experimental_tools: {label: 'Deneysel Araçlar', short: 'Deneysel', summary: 'Deneysel etkileşim anahtarları ve platform motorları.'},
+      logs_events: {label: 'Kayıtlar ve Olaylar', short: 'Kayıtlar', summary: 'Canlı çalışma zamanı olay akışı ve dışa aktarma.'},
+      media_engine: {label: 'Medya Motorları', short: 'Medya', summary: 'FFmpeg WASM denetimi, komut oluşturucu ve test.'},
       terminal: {label: 'Terminal', short: 'Terminal', summary: 'Otomatik tamamlamalı canlı Morph komut motoru.'},
-      automation_studio: {label: 'Otomasyon', short: 'Otomasyon', summary: 'Düğüm tabanlı otomasyon akış editörü ve çalıştırıcı.'},
-      network_lab: {label: 'Ağ Laboratuvarı', short: 'Ağ Lab', summary: 'SSRF korumalı sunucu ve istemci gecikme testleri.'},
-      storage_lab: {label: 'Depolama', short: 'Depolama', summary: 'LocalStorage, IndexedDB ve önbellek gezgini.'},
-      time_machine: {label: 'Zaman Makinesi', short: 'Zaman', summary: 'Yapılandırma anlık görüntüleri, fark ve geri yükleme.'},
+      automation_studio: {label: 'Otomasyon', short: 'Otomasyon', summary: 'Görsel otomasyon akış editörü ve çalıştırıcı.'},
+      network_lab: {label: 'Ağ Tanılama', short: 'Ağ', summary: 'SSRF korumalı sunucu ve istemci gecikme testleri.'},
+      storage_lab: {label: 'Depolama İnceleyici', short: 'Depolama', summary: 'LocalStorage, IndexedDB ve önbellek gezgini.'},
+      time_machine: {label: 'Zaman Makinesi', short: 'Zaman', summary: 'Yapılandırma anlık görüntüleri ve geri yükleme.'},
       digital_twin: {label: 'Dijital İkiz', short: 'İkiz', summary: 'İzole hata enjeksiyonu ve gecikme simülatörü.'},
     },
     shell: {
-      activeSection: 'Çekirdek Modüller',
-      roadmapSection: 'Laboratuvarlar',
-      roadmapShort: 'Lab & Araç',
+      activeSection: 'Komuta Merkezi',
+      roadmapSection: 'Platform Motorları',
+      roadmapShort: 'Motorlar',
       allModules: 'Tüm Modüller',
       collapseDock: 'Simgelere Daralt',
       expandDock: 'Etiketleri Genişlet',
@@ -1389,7 +1399,7 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       resetBtn: 'Sıfırla',
       runSimBtn: 'Simülasyonu Çalıştır',
       runningSim: 'Simüle Ediliyor...',
-      openChaosBtn: 'Kaos Laboratuvarı (23 Araç)',
+      openChaosBtn: 'Kaos Laboratuvarı',
       latencyLabel: 'Yapay Gecikme',
       errorRateLabel: 'Hata Enjeksiyon Oranı',
       frameStressLabel: 'Kare Bütçesi Yükü',
@@ -1411,30 +1421,35 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
   },
   en: {
     modules: {
-      dashboard: {label: 'Dashboard', short: 'Dashboard', summary: 'Live telemetry, AI engines and system overview.'},
+      dashboard: {label: 'Dashboard', short: 'Home', summary: 'Live telemetry and system health overview.'},
       design_lab: {label: 'Design Lab', short: 'Design', summary: 'Isolated GOD MODE themes and live comparison.'},
-      system_core: {label: 'System Core', short: 'System', summary: 'Live FPS, memory, storage and server health.'},
-      diagnostics: {label: 'Diagnostics', short: 'Probes', summary: '8 live probes for API, storage and media engine.'},
-      dev_toolkit: {label: 'Developer Tools', short: 'Tools', summary: 'Module graph, masked state, logs, network and profiler.'},
+      system_core: {label: 'System Monitor', short: 'System', summary: 'Live FPS, memory, storage and device metrics.'},
+      performance_lab: {label: 'Performance', short: 'Performance', summary: 'HUD toggle, frame history and JSON export.'},
+      ui_inspector: {label: 'UI Inspector', short: 'Inspector', summary: 'Grid, touch targets and live token inspection.'},
+      animation_lab: {label: 'Animation', short: 'Animation', summary: 'Global animation speed, motion and haptic bench.'},
+      diagnostics: {label: 'Diagnostics', short: 'Probes', summary: 'Live probes for API, storage, network and media.'},
+      dev_toolkit: {label: 'Dev Toolkit', short: 'Toolkit', summary: 'Module architecture graph, masked state and profiler.'},
       security_center: {label: 'Security Center', short: 'Security', summary: 'Owner verification, device registry and audit log.'},
-      settings: {label: 'Settings', short: 'Settings', summary: 'Independent GOD MODE language, design and layout.'},
-      deadpool_studio: {label: 'Deadpool Studio', short: 'Deadpool', summary: 'Wheel shell, logo variants, palette and motion studio.'},
-      chaos_lab: {label: 'Chaos Lab', short: 'Chaos', summary: 'Screen warp, visual corruption and stress-test engine.'},
-      ai_lab: {label: 'AI Lab', short: 'AI Lab', summary: 'Model registry, live Gemini prompt studio and token inspector.'},
-      autonomous_agents: {label: 'Autonomous Agents', short: 'Agents', summary: '7 specialized agents and approval-gated self-evolution.'},
-      experimental_lab: {label: 'Experimental Lab', short: 'Exp Lab', summary: 'Feature flags, overrides and one-click rollback.'},
+      settings: {label: 'Settings', short: 'Settings', summary: 'Independent panel language, design and layout.'},
+      deadpool_studio: {label: 'Deadpool Studio', short: 'Deadpool', summary: 'Custom logo, color, mask and visual controls.'},
+      chaos_lab: {label: 'Chaos Lab', short: 'Chaos', summary: 'Risk-rated, time-bounded UI stress tests with recovery.'},
+      ai_lab: {label: 'AI Studio', short: 'AI Studio', summary: 'Model registry, live prompt studio and token monitor.'},
+      autonomous_agents: {label: 'Autonomous Agents', short: 'Agents', summary: 'Specialized agents and approval-gated proposals.'},
+      experimental_lab: {label: 'Feature Flags', short: 'Flags', summary: 'Runtime feature flags and one-click rollback.'},
+      experimental_tools: {label: 'Experiments', short: 'Experiments', summary: 'Experimental Morph switches and platform engines.'},
+      logs_events: {label: 'Logs & Events', short: 'Logs', summary: 'Live runtime event stream, search and JSON export.'},
       media_engine: {label: 'Media Engines', short: 'Media', summary: 'FFmpeg WASM inspector, command builder and benchmark.'},
       terminal: {label: 'Terminal', short: 'Terminal', summary: 'Live autocomplete Morph command engine.'},
-      automation_studio: {label: 'Automation', short: 'Flows', summary: 'Visual node-based workflow builder and runner.'},
-      network_lab: {label: 'Network Lab', short: 'Network', summary: 'SSRF-hardened server & client latency diagnostics.'},
-      storage_lab: {label: 'Storage', short: 'Storage', summary: 'LocalStorage, IndexedDB and Cache Storage explorer.'},
+      automation_studio: {label: 'Automation', short: 'Automation', summary: 'Visual node-based workflow builder and runner.'},
+      network_lab: {label: 'Network Diagnostics', short: 'Network', summary: 'SSRF-hardened server & client latency diagnostics.'},
+      storage_lab: {label: 'Storage Inspector', short: 'Storage', summary: 'LocalStorage, IndexedDB and Cache Storage explorer.'},
       time_machine: {label: 'Time Machine', short: 'Time', summary: 'Configuration snapshots, diff viewer and restore.'},
       digital_twin: {label: 'Digital Twin', short: 'Twin', summary: 'Isolated fault-injection and latency simulator.'},
     },
     shell: {
-      activeSection: 'Core Modules',
-      roadmapSection: 'Labs & Engines',
-      roadmapShort: 'Labs',
+      activeSection: 'Command Center',
+      roadmapSection: 'Platform Engines',
+      roadmapShort: 'Engines',
       allModules: 'All Modules',
       collapseDock: 'Icon Dock',
       expandDock: 'Expand Labels',

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useId} from 'react';
 import {
   DeadpoolBorderStyle,
   DeadpoolBreathingPulse,
@@ -6,6 +6,7 @@ import {
   DeadpoolGlossMode,
   DeadpoolGradientType,
   DeadpoolInnerRingStyle,
+  DeadpoolLogoBgMode,
   DeadpoolLogoVariant,
   DeadpoolMaskMotion,
   DeadpoolMotionPattern,
@@ -60,609 +61,597 @@ export interface DeadpoolResolvedConfig {
   outerHaloRing: DeadpoolOuterHaloRing;
   maskDropShadow: number;
   colorBoost: number;
+  logoPadding: number;
+  logoBg: DeadpoolLogoBgMode;
+  logoContrast: number;
 }
 
-export interface DeadpoolEditionPreset {
-  id: string;
-  labelTr: string;
-  labelEn: string;
-  patch: Partial<Prefs>;
-  previewOuter: string | null;
-  previewMid?: string | null;
-  previewEnd: string | null;
-  previewMask: string | null;
-  previewEye: string | null;
-  previewRing: string | null;
-  previewAngle: number;
+export interface DeadpoolLogoCatalogItem {
+  id: DeadpoolLogoVariant;
+  nameTr: string;
+  nameEn: string;
+  descTr: string;
+  descEn: string;
+  defaultBg: string;
+  defaultMask: string;
+  defaultEye: string;
 }
 
-export const DEADPOOL_SIGNATURE_PRESETS: readonly DeadpoolEditionPreset[] = [
+export const DEADPOOL_LOGO_CATALOG: ReadonlyArray<DeadpoolLogoCatalogItem> = [
   {
-    id: 'theme',
-    labelTr: 'Tema',
-    labelEn: 'Theme',
-    previewOuter: null,
-    previewEnd: null,
-    previewMask: '#0B0B0E',
-    previewEye: '#FFFFFF',
-    previewRing: '#0B0B0E',
-    previewAngle: 135,
-    patch: {
-      deadpoolOuterColor: null,
-      deadpoolOuterColorMid: null,
-      deadpoolOuterColorEnd: null,
-      deadpoolGradientType: 'linear',
-      deadpoolInnerColor: null,
-      deadpoolEyeColor: null,
-      deadpoolRingColor: null,
-      deadpoolGradientAngle: 135,
-      deadpoolGlowIntensity: 0,
-      deadpoolGlowColor: null,
-      deadpoolGlowPulse: false,
-      deadpoolBorderWidth: 1,
-      deadpoolBorderStyle: 'solid',
-      deadpoolEyeGlow: false,
-      deadpoolSurfaceTexture: 'none',
-      deadpoolGlossMode: 'none',
-      deadpoolOuterHaloRing: 'none',
-      deadpoolInnerRingStyle: 'solid',
-      deadpoolEyeStyle: 'classic',
-    },
+    id: 'original',
+    nameTr: 'Orijinal Kırmızı & Siyah',
+    nameEn: 'Original Red & Black',
+    descTr: 'Keskin kırmızı-siyah ikonik maske geometrisi',
+    descEn: 'Crisp iconic red & black mask geometry',
+    defaultBg: '#C8102E',
+    defaultMask: '#0B0B0E',
+    defaultEye: '#FFFFFF',
   },
   {
+    id: 'pure_bw',
+    nameTr: 'Saf Siyah & Beyaz',
+    nameEn: 'Pure Black & White',
+    descTr: 'Yüksek kontrastlı baskı şablonu stili',
+    descEn: 'High-contrast graphic stencil finish',
+    defaultBg: '#F8FAFC',
+    defaultMask: '#09090B',
+    defaultEye: '#FFFFFF',
+  },
+  {
+    id: 'white_on_black',
+    nameTr: 'Siyah Üzerinde Beyaz',
+    nameEn: 'White Emblem on Black',
+    descTr: 'Mat siyah zemin üzerinde net beyaz amblem',
+    descEn: 'Sharp white emblem on matte black disc',
+    defaultBg: '#09090D',
+    defaultMask: '#F8FAFC',
+    defaultEye: '#09090D',
+  },
+  {
+    id: 'tactical_metallic',
+    nameTr: 'Taktik Metalik',
+    nameEn: 'Tactical Metallic',
+    descTr: 'Köşeli zırh çerçeve, fırçalı çelik plakalar',
+    descEn: 'Chamfered armor bezel with brushed steel plates',
+    defaultBg: '#1E293B',
+    defaultMask: '#94A3B8',
+    defaultEye: '#F8FAFC',
+  },
+  {
+    id: 'minimal_flat',
+    nameTr: 'Minimal Düz',
+    nameEn: 'Minimal Flat',
+    descTr: 'Çerçevesiz, sade geometrik küçük boyut dostu',
+    descEn: 'Frameless flat geometry built for small sizes',
+    defaultBg: '#111116',
+    defaultMask: '#DC2626',
+    defaultEye: '#FFFFFF',
+  },
+  {
+    id: 'crimson_dark',
+    nameTr: 'Koyu Kızıl',
+    nameEn: 'Crimson Dark',
+    descTr: 'Keskin açılı zırhlı koyu kan kırmızısı maske',
+    descEn: 'Faceted deep blood-crimson armored mask',
+    defaultBg: '#09060A',
+    defaultMask: '#991B1B',
+    defaultEye: '#FEE2E2',
+  },
+  {
+    id: 'monochrome_inverted',
+    nameTr: 'Ters Monokrom',
+    nameEn: 'Monochrome Inverted',
+    descTr: 'Negatif alan kesimli parlak plaka amblemi',
+    descEn: 'Negative-space knockout emblem on light plate',
+    defaultBg: '#E4E4E7',
+    defaultMask: '#111115',
+    defaultEye: '#E4E4E7',
+  },
+];
+
+export interface DeadpoolPresetDef {
+  id: 'classic' | 'stealth' | 'tactical' | 'crimson' | 'minimal' | 'premium';
+  labelTr: string;
+  labelEn: string;
+  descTr: string;
+  descEn: string;
+  previewOuter: string;
+  previewEnd: string;
+  previewMask: string;
+  previewEye: string;
+  previewRing: string;
+  previewAngle: number;
+  logoVariant: DeadpoolLogoVariant;
+  patch: Partial<Prefs>;
+}
+
+export const DEADPOOL_DESIGN_PROFILES: ReadonlyArray<DeadpoolPresetDef> = [
+  {
     id: 'classic',
-    labelTr: 'Klasik',
+    labelTr: 'Classic',
     labelEn: 'Classic',
+    descTr: 'Orijinal kırmızı-siyah maske, net kontrast',
+    descEn: 'Original red-black mask with sharp contrast',
     previewOuter: '#DC2626',
     previewEnd: '#7F1D1D',
     previewMask: '#0B0B0E',
     previewEye: '#FFFFFF',
-    previewRing: '#0B0B0E',
+    previewRing: '#18181B',
     previewAngle: 135,
+    logoVariant: 'original',
     patch: {
+      wheelIconStyle: 'wheel',
+      expWheelShape: null,
+      deadpoolLogoVariant: 'original',
+      deadpoolLogoBg: 'auto',
+      deadpoolLogoPadding: 6,
+      deadpoolLogoContrast: 105,
       deadpoolOuterColor: '#DC2626',
       deadpoolOuterColorMid: null,
       deadpoolOuterColorEnd: '#7F1D1D',
       deadpoolGradientType: 'linear',
+      deadpoolGradientAngle: 135,
       deadpoolInnerColor: '#0B0B0E',
       deadpoolEyeColor: '#FFFFFF',
-      deadpoolRingColor: '#0B0B0E',
-      deadpoolGradientAngle: 135,
-      deadpoolGlowIntensity: 34,
-      deadpoolGlowColor: '#DC2626',
-      deadpoolBorderWidth: 2,
+      deadpoolRingColor: '#18181B',
+      deadpoolBorderWidth: 1.5,
       deadpoolBorderStyle: 'solid',
-      deadpoolEyeGlow: true,
-      deadpoolEyeGlowStrength: 65,
-      deadpoolSurfaceTexture: 'carbon',
-      deadpoolTextureOpacity: 32,
-      deadpoolGlossMode: 'top_arc',
-      deadpoolGlossOpacity: 40,
+      deadpoolGlowIntensity: 18,
+      deadpoolGlowColor: '#DC2626',
+      deadpoolGlowPulse: false,
+      deadpoolEyeGlow: false,
       deadpoolEyeStyle: 'classic',
+      deadpoolSplitGap: 'normal',
       deadpoolInnerRingStyle: 'solid',
+      deadpoolInnerRingWidth: 1.65,
+      deadpoolSurfaceTexture: 'none',
+      deadpoolGlossMode: 'top_arc',
+      deadpoolGlossOpacity: 28,
+      deadpoolInnerVignette: 12,
+      deadpoolOuterHaloRing: 'none',
+      deadpoolMaskDropShadow: 18,
+      deadpoolColorBoost: 105,
     },
   },
   {
-    id: 'xforce',
-    labelTr: 'X-Force',
-    labelEn: 'X-Force',
-    previewOuter: '#52525B',
+    id: 'stealth',
+    labelTr: 'Stealth',
+    labelEn: 'Stealth',
+    descTr: 'Mat siyah karbon zemin, beyaz keskin amblem',
+    descEn: 'Matte obsidian carbon shell with crisp white emblem',
+    previewOuter: '#18181B',
     previewEnd: '#09090B',
-    previewMask: '#18181B',
-    previewEye: '#EF4444',
-    previewRing: '#D4D4D8',
-    previewAngle: 145,
+    previewMask: '#F4F4F5',
+    previewEye: '#09090B',
+    previewRing: '#3F3F46',
+    previewAngle: 160,
+    logoVariant: 'white_on_black',
     patch: {
-      deadpoolOuterColor: '#52525B',
+      wheelIconStyle: 'squircle',
+      expWheelShape: 'squircle',
+      deadpoolLogoVariant: 'white_on_black',
+      deadpoolLogoBg: 'dark',
+      deadpoolLogoPadding: 8,
+      deadpoolLogoContrast: 112,
+      deadpoolOuterColor: '#18181B',
       deadpoolOuterColorMid: null,
       deadpoolOuterColorEnd: '#09090B',
       deadpoolGradientType: 'linear',
-      deadpoolInnerColor: '#18181B',
-      deadpoolEyeColor: '#EF4444',
-      deadpoolRingColor: '#D4D4D8',
-      deadpoolGradientAngle: 145,
-      deadpoolGlowIntensity: 42,
-      deadpoolGlowColor: '#EF4444',
-      deadpoolBorderWidth: 2,
-      deadpoolEyeGlow: true,
-      deadpoolEyeGlowStrength: 80,
-      deadpoolSurfaceTexture: 'brushed',
-      deadpoolTextureOpacity: 45,
-      deadpoolGlossMode: 'metallic',
-      deadpoolGlossOpacity: 50,
-      deadpoolEyeStyle: 'angry',
-      deadpoolInnerRingStyle: 'tech_ticks',
-    },
-  },
-  {
-    id: 'crimson_gold',
-    labelTr: 'Sarı Kırmızı',
-    labelEn: 'Crimson Gold',
-    previewOuter: '#DC2626',
-    previewEnd: '#7F1D1D',
-    previewMask: '#120809',
-    previewEye: '#FEF08A',
-    previewRing: '#FACC15',
-    previewAngle: 135,
-    patch: {
-      deadpoolOuterColor: '#DC2626',
-      deadpoolOuterColorMid: '#F59E0B',
-      deadpoolOuterColorEnd: '#7F1D1D',
-      deadpoolGradientType: 'linear',
-      deadpoolInnerColor: '#120809',
-      deadpoolEyeColor: '#FEF08A',
-      deadpoolRingColor: '#FACC15',
-      deadpoolGradientAngle: 135,
-      deadpoolGlowIntensity: 42,
-      deadpoolGlowColor: '#EF4444',
-      deadpoolBorderWidth: 2,
-      deadpoolEyeGlow: true,
-      deadpoolSurfaceTexture: 'diagonal',
-      deadpoolTextureOpacity: 30,
-      deadpoolGlossMode: 'diagonal_sheen',
-      deadpoolGlossOpacity: 42,
-    },
-  },
-  {
-    id: 'venom',
-    labelTr: 'Venom',
-    labelEn: 'Venom',
-    previewOuter: '#27272A',
-    previewEnd: '#020617',
-    previewMask: '#000000',
-    previewEye: '#F8FAFC',
-    previewRing: '#E2E8F0',
-    previewAngle: 160,
-    patch: {
-      deadpoolOuterColor: '#27272A',
-      deadpoolOuterColorMid: null,
-      deadpoolOuterColorEnd: '#020617',
-      deadpoolGradientType: 'radial',
-      deadpoolInnerColor: '#000000',
-      deadpoolEyeColor: '#F8FAFC',
-      deadpoolRingColor: '#E2E8F0',
       deadpoolGradientAngle: 160,
-      deadpoolGlowIntensity: 32,
-      deadpoolGlowColor: '#94A3B8',
-      deadpoolBorderWidth: 2,
-      deadpoolEyeGlow: true,
-      deadpoolSurfaceTexture: 'mesh',
-      deadpoolTextureOpacity: 35,
-      deadpoolGlossMode: 'glass_dome',
-      deadpoolGlossOpacity: 50,
-      deadpoolEyeStyle: 'wide',
+      deadpoolInnerColor: '#F4F4F5',
+      deadpoolEyeColor: '#09090B',
+      deadpoolRingColor: '#3F3F46',
+      deadpoolBorderWidth: 1.5,
+      deadpoolBorderStyle: 'solid',
+      deadpoolGlowIntensity: 0,
+      deadpoolGlowColor: '#52525B',
+      deadpoolGlowPulse: false,
+      deadpoolEyeGlow: false,
+      deadpoolEyeStyle: 'classic',
+      deadpoolSplitGap: 'normal',
       deadpoolInnerRingStyle: 'solid',
+      deadpoolInnerRingWidth: 1.5,
+      deadpoolSurfaceTexture: 'carbon',
+      deadpoolTextureOpacity: 36,
+      deadpoolGlossMode: 'none',
+      deadpoolInnerVignette: 22,
+      deadpoolOuterHaloRing: 'none',
+      deadpoolMaskDropShadow: 0,
+      deadpoolColorBoost: 100,
+    },
+  },
+  {
+    id: 'tactical',
+    labelTr: 'Tactical',
+    labelEn: 'Tactical',
+    descTr: 'Fırçalı çelik plakalar, sekizgen zırh çerçeve',
+    descEn: 'Brushed steel armor plates inside tactical octagon',
+    previewOuter: '#334155',
+    previewEnd: '#0F172A',
+    previewMask: '#CBD5E1',
+    previewEye: '#F8FAFC',
+    previewRing: '#94A3B8',
+    previewAngle: 135,
+    logoVariant: 'tactical_metallic',
+    patch: {
+      wheelIconStyle: 'octa_shield',
+      expWheelShape: 'octa_shield',
+      deadpoolLogoVariant: 'tactical_metallic',
+      deadpoolLogoBg: 'auto',
+      deadpoolLogoPadding: 5,
+      deadpoolLogoContrast: 110,
+      deadpoolOuterColor: '#334155',
+      deadpoolOuterColorMid: '#1E293B',
+      deadpoolOuterColorEnd: '#0F172A',
+      deadpoolGradientType: 'linear',
+      deadpoolGradientAngle: 135,
+      deadpoolInnerColor: '#CBD5E1',
+      deadpoolEyeColor: '#F8FAFC',
+      deadpoolRingColor: '#64748B',
+      deadpoolBorderWidth: 1.5,
+      deadpoolBorderStyle: 'solid',
+      deadpoolGlowIntensity: 14,
+      deadpoolGlowColor: '#94A3B8',
+      deadpoolGlowPulse: false,
+      deadpoolEyeGlow: false,
+      deadpoolEyeStyle: 'cyber_visor',
+      deadpoolSplitGap: 'tight',
+      deadpoolInnerRingStyle: 'tech_ticks',
+      deadpoolInnerRingWidth: 1.6,
+      deadpoolSurfaceTexture: 'brushed',
+      deadpoolTextureOpacity: 38,
+      deadpoolGlossMode: 'metallic',
+      deadpoolGlossOpacity: 36,
+      deadpoolInnerVignette: 18,
+      deadpoolOuterHaloRing: 'orbit_dots',
+      deadpoolMaskDropShadow: 22,
+      deadpoolColorBoost: 100,
     },
   },
   {
     id: 'crimson',
-    labelTr: 'Kızıl Gölge',
+    labelTr: 'Crimson',
     labelEn: 'Crimson',
-    previewOuter: '#EF4444',
-    previewEnd: '#450A0A',
-    previewMask: '#09090B',
-    previewEye: '#FECACA',
-    previewRing: '#F87171',
-    previewAngle: 135,
+    descTr: 'Derin kan kırmızısı zırh ve karanlık parlama',
+    descEn: 'Deep blood-crimson faceted visor with subtle ember glow',
+    previewOuter: '#991B1B',
+    previewEnd: '#2B060D',
+    previewMask: '#DC2626',
+    previewEye: '#FEF2F2',
+    previewRing: '#EF4444',
+    previewAngle: 145,
+    logoVariant: 'crimson_dark',
     patch: {
-      deadpoolOuterColor: '#EF4444',
-      deadpoolOuterColorMid: '#991B1B',
-      deadpoolOuterColorEnd: '#450A0A',
-      deadpoolGradientType: 'linear',
-      deadpoolInnerColor: '#09090B',
-      deadpoolEyeColor: '#FECACA',
-      deadpoolRingColor: '#F87171',
-      deadpoolGradientAngle: 135,
-      deadpoolGlowIntensity: 52,
-      deadpoolGlowColor: '#EF4444',
-      deadpoolBorderWidth: 2,
-      deadpoolEyeGlow: true,
-      deadpoolSurfaceTexture: 'carbon',
-      deadpoolTextureOpacity: 30,
-      deadpoolGlossMode: 'top_arc',
-      deadpoolGlossOpacity: 35,
-      deadpoolEyeStyle: 'classic',
-    },
-  },
-  {
-    id: 'gold',
-    labelTr: 'Altın Karbon',
-    labelEn: 'Gold Carbon',
-    previewOuter: '#F59E0B',
-    previewEnd: '#18181B',
-    previewMask: '#111827',
-    previewEye: '#FEF08A',
-    previewRing: '#FBBF24',
-    previewAngle: 130,
-    patch: {
-      deadpoolOuterColor: '#F59E0B',
-      deadpoolOuterColorMid: '#92400E',
-      deadpoolOuterColorEnd: '#18181B',
-      deadpoolGradientType: 'linear',
-      deadpoolInnerColor: '#111827',
-      deadpoolEyeColor: '#FEF08A',
-      deadpoolRingColor: '#FBBF24',
-      deadpoolGradientAngle: 130,
-      deadpoolGlowIntensity: 44,
-      deadpoolGlowColor: '#F59E0B',
-      deadpoolBorderWidth: 2,
-      deadpoolEyeGlow: true,
-      deadpoolSurfaceTexture: 'carbon',
-      deadpoolTextureOpacity: 50,
-      deadpoolGlossMode: 'metallic',
-      deadpoolGlossOpacity: 55,
-      deadpoolInnerRingStyle: 'double',
-    },
-  },
-  {
-    id: 'neon',
-    labelTr: 'Siber Neon',
-    labelEn: 'Cyber Neon',
-    previewOuter: '#06B6D4',
-    previewEnd: '#7C3AED',
-    previewMask: '#09090B',
-    previewEye: '#67E8F9',
-    previewRing: '#22D3EE',
-    previewAngle: 135,
-    patch: {
-      deadpoolOuterColor: '#06B6D4',
-      deadpoolOuterColorMid: '#2563EB',
-      deadpoolOuterColorEnd: '#7C3AED',
-      deadpoolGradientType: 'conic',
-      deadpoolInnerColor: '#09090B',
-      deadpoolEyeColor: '#67E8F9',
-      deadpoolRingColor: '#22D3EE',
-      deadpoolGradientAngle: 135,
-      deadpoolGlowIntensity: 62,
-      deadpoolGlowColor: '#06B6D4',
-      deadpoolGlowPulse: true,
-      deadpoolBorderWidth: 2,
-      deadpoolEyeGlow: true,
-      deadpoolSurfaceTexture: 'scanline',
-      deadpoolTextureOpacity: 45,
-      deadpoolGlossMode: 'diagonal_sheen',
-      deadpoolEyeStyle: 'cyber_visor',
-      deadpoolOuterHaloRing: 'dashed_orbit',
-    },
-  },
-  {
-    id: 'emerald',
-    labelTr: 'Zümrüt',
-    labelEn: 'Emerald',
-    previewOuter: '#10B981',
-    previewEnd: '#064E3B',
-    previewMask: '#022C22',
-    previewEye: '#A7F3D0',
-    previewRing: '#34D399',
-    previewAngle: 135,
-    patch: {
-      deadpoolOuterColor: '#10B981',
-      deadpoolOuterColorMid: null,
-      deadpoolOuterColorEnd: '#064E3B',
-      deadpoolGradientType: 'linear',
-      deadpoolInnerColor: '#022C22',
-      deadpoolEyeColor: '#A7F3D0',
-      deadpoolRingColor: '#34D399',
-      deadpoolGradientAngle: 135,
-      deadpoolGlowIntensity: 42,
-      deadpoolGlowColor: '#10B981',
-      deadpoolBorderWidth: 2,
-      deadpoolEyeGlow: true,
-      deadpoolSurfaceTexture: 'hexgrid',
-      deadpoolTextureOpacity: 42,
-      deadpoolGlossMode: 'glass_dome',
-    },
-  },
-  {
-    id: 'amethyst',
-    labelTr: 'Ametist',
-    labelEn: 'Amethyst',
-    previewOuter: '#A855F7',
-    previewEnd: '#2E1065',
-    previewMask: '#0F0720',
-    previewEye: '#F5D0FE',
-    previewRing: '#C084FC',
-    previewAngle: 140,
-    patch: {
-      deadpoolOuterColor: '#A855F7',
-      deadpoolOuterColorMid: '#6D28D9',
-      deadpoolOuterColorEnd: '#2E1065',
+      wheelIconStyle: 'wheel',
+      expWheelShape: null,
+      deadpoolLogoVariant: 'crimson_dark',
+      deadpoolLogoBg: 'crimson',
+      deadpoolLogoPadding: 5,
+      deadpoolLogoContrast: 114,
+      deadpoolOuterColor: '#991B1B',
+      deadpoolOuterColorMid: '#590A14',
+      deadpoolOuterColorEnd: '#180408',
       deadpoolGradientType: 'radial',
-      deadpoolInnerColor: '#0F0720',
-      deadpoolEyeColor: '#F5D0FE',
-      deadpoolRingColor: '#C084FC',
-      deadpoolGradientAngle: 140,
-      deadpoolGlowIntensity: 54,
-      deadpoolGlowColor: '#A855F7',
-      deadpoolBorderWidth: 2,
+      deadpoolGradientAngle: 145,
+      deadpoolInnerColor: '#DC2626',
+      deadpoolEyeColor: '#FEF2F2',
+      deadpoolRingColor: '#B91C1C',
+      deadpoolBorderWidth: 1.5,
+      deadpoolBorderStyle: 'solid',
+      deadpoolGlowIntensity: 36,
+      deadpoolGlowColor: '#DC2626',
+      deadpoolGlowPulse: false,
       deadpoolEyeGlow: true,
-      deadpoolGlossMode: 'glass_dome',
-      deadpoolOuterHaloRing: 'thin',
-    },
-  },
-  {
-    id: 'lava',
-    labelTr: 'Volkanik Lav',
-    labelEn: 'Volcanic Lava',
-    previewOuter: '#F97316',
-    previewEnd: '#431407',
-    previewMask: '#1C1917',
-    previewEye: '#FDE047',
-    previewRing: '#FB923C',
-    previewAngle: 120,
-    patch: {
-      deadpoolOuterColor: '#F97316',
-      deadpoolOuterColorMid: '#DC2626',
-      deadpoolOuterColorEnd: '#431407',
-      deadpoolGradientType: 'linear',
-      deadpoolInnerColor: '#1C1917',
-      deadpoolEyeColor: '#FDE047',
-      deadpoolRingColor: '#FB923C',
-      deadpoolGradientAngle: 120,
-      deadpoolGlowIntensity: 56,
-      deadpoolGlowColor: '#F97316',
-      deadpoolGlowPulse: true,
-      deadpoolBorderWidth: 2,
-      deadpoolEyeGlow: true,
-      deadpoolEyeStyle: 'glowing_slit',
-      deadpoolSurfaceTexture: 'hexgrid',
-    },
-  },
-  {
-    id: 'rosegold',
-    labelTr: 'Gül Altın',
-    labelEn: 'Rose Gold',
-    previewOuter: '#FB7185',
-    previewEnd: '#4C0519',
-    previewMask: '#1F1218',
-    previewEye: '#FFE4E6',
-    previewRing: '#FDA4AF',
-    previewAngle: 135,
-    patch: {
-      deadpoolOuterColor: '#FB7185',
-      deadpoolOuterColorMid: null,
-      deadpoolOuterColorEnd: '#4C0519',
-      deadpoolGradientType: 'linear',
-      deadpoolInnerColor: '#1F1218',
-      deadpoolEyeColor: '#FFE4E6',
-      deadpoolRingColor: '#FDA4AF',
-      deadpoolGradientAngle: 135,
-      deadpoolGlowIntensity: 38,
-      deadpoolGlowColor: '#FB7185',
-      deadpoolBorderWidth: 2,
-      deadpoolEyeGlow: true,
-      deadpoolGlossMode: 'metallic',
-      deadpoolGlossOpacity: 55,
-    },
-  },
-  {
-    id: 'katana',
-    labelTr: 'Katana Çelik',
-    labelEn: 'Katana Steel',
-    previewOuter: '#CBD5E1',
-    previewEnd: '#1E293B',
-    previewMask: '#0F172A',
-    previewEye: '#38BDF8',
-    previewRing: '#F1F5F9',
-    previewAngle: 125,
-    patch: {
-      deadpoolOuterColor: '#CBD5E1',
-      deadpoolOuterColorMid: '#64748B',
-      deadpoolOuterColorEnd: '#1E293B',
-      deadpoolGradientType: 'linear',
-      deadpoolInnerColor: '#0F172A',
-      deadpoolEyeColor: '#38BDF8',
-      deadpoolRingColor: '#F1F5F9',
-      deadpoolGradientAngle: 125,
-      deadpoolGlowIntensity: 26,
-      deadpoolGlowColor: '#94A3B8',
-      deadpoolBorderWidth: 2,
-      deadpoolEyeGlow: true,
-      deadpoolSurfaceTexture: 'brushed',
-      deadpoolTextureOpacity: 55,
-      deadpoolGlossMode: 'diagonal_sheen',
-      deadpoolEyeStyle: 'squint',
-      deadpoolInnerRingStyle: 'tech_ticks',
-    },
-  },
-  {
-    id: 'ghost',
-    labelTr: 'Hayalet Beyaz',
-    labelEn: 'Ghost White',
-    previewOuter: '#F8FAFC',
-    previewEnd: '#94A3B8',
-    previewMask: '#0F172A',
-    previewEye: '#E11D48',
-    previewRing: '#CBD5E1',
-    previewAngle: 150,
-    patch: {
-      deadpoolOuterColor: '#F8FAFC',
-      deadpoolOuterColorMid: null,
-      deadpoolOuterColorEnd: '#94A3B8',
-      deadpoolGradientType: 'radial',
-      deadpoolInnerColor: '#0F172A',
-      deadpoolEyeColor: '#E11D48',
-      deadpoolRingColor: '#475569',
-      deadpoolGradientAngle: 150,
-      deadpoolGlowIntensity: 30,
-      deadpoolGlowColor: '#E2E8F0',
-      deadpoolBorderWidth: 2,
-      deadpoolEyeGlow: true,
-      deadpoolGlossMode: 'glass_dome',
-      deadpoolGlossOpacity: 50,
-    },
-  },
-  {
-    id: 'plasma',
-    labelTr: 'Mavi Plazma',
-    labelEn: 'Blue Plasma',
-    previewOuter: '#38BDF8',
-    previewEnd: '#0F172A',
-    previewMask: '#020617',
-    previewEye: '#E0F2FE',
-    previewRing: '#7DD3FC',
-    previewAngle: 135,
-    patch: {
-      deadpoolOuterColor: '#38BDF8',
-      deadpoolOuterColorMid: '#2563EB',
-      deadpoolOuterColorEnd: '#0F172A',
-      deadpoolGradientType: 'linear',
-      deadpoolInnerColor: '#020617',
-      deadpoolEyeColor: '#E0F2FE',
-      deadpoolRingColor: '#7DD3FC',
-      deadpoolGradientAngle: 135,
-      deadpoolGlowIntensity: 60,
-      deadpoolGlowColor: '#38BDF8',
-      deadpoolBorderWidth: 2,
-      deadpoolEyeGlow: true,
-      deadpoolEyeStyle: 'cyber_visor',
-      deadpoolOuterHaloRing: 'radar',
-    },
-  },
-  {
-    id: 'toxic',
-    labelTr: 'Asit Zehir',
-    labelEn: 'Toxic Acid',
-    previewOuter: '#84CC16',
-    previewEnd: '#14532D',
-    previewMask: '#052E16',
-    previewEye: '#ECFCCB',
-    previewRing: '#A3E635',
-    previewAngle: 135,
-    patch: {
-      deadpoolOuterColor: '#84CC16',
-      deadpoolOuterColorMid: '#22C55E',
-      deadpoolOuterColorEnd: '#14532D',
-      deadpoolGradientType: 'radial',
-      deadpoolInnerColor: '#052E16',
-      deadpoolEyeColor: '#ECFCCB',
-      deadpoolRingColor: '#A3E635',
-      deadpoolGradientAngle: 135,
-      deadpoolGlowIntensity: 55,
-      deadpoolGlowColor: '#84CC16',
-      deadpoolBorderWidth: 2,
-      deadpoolEyeGlow: true,
-      deadpoolSurfaceTexture: 'mesh',
+      deadpoolEyeGlowStrength: 55,
       deadpoolEyeStyle: 'angry',
+      deadpoolSplitGap: 'normal',
+      deadpoolInnerRingStyle: 'double',
+      deadpoolInnerRingWidth: 1.6,
+      deadpoolSurfaceTexture: 'hexgrid',
+      deadpoolTextureOpacity: 26,
+      deadpoolGlossMode: 'diagonal_sheen',
+      deadpoolGlossOpacity: 30,
+      deadpoolInnerVignette: 32,
+      deadpoolOuterHaloRing: 'energy_arc',
+      deadpoolMaskDropShadow: 30,
+      deadpoolColorBoost: 112,
     },
   },
   {
-    id: 'midnight',
-    labelTr: 'Gece Yarısı',
-    labelEn: 'Midnight',
-    previewOuter: '#312E81',
-    previewEnd: '#020617',
-    previewMask: '#09090B',
-    previewEye: '#C4B5FD',
-    previewRing: '#818CF8',
-    previewAngle: 165,
-    patch: {
-      deadpoolOuterColor: '#312E81',
-      deadpoolOuterColorMid: null,
-      deadpoolOuterColorEnd: '#020617',
-      deadpoolGradientType: 'linear',
-      deadpoolInnerColor: '#09090B',
-      deadpoolEyeColor: '#C4B5FD',
-      deadpoolRingColor: '#818CF8',
-      deadpoolGradientAngle: 165,
-      deadpoolGlowIntensity: 46,
-      deadpoolGlowColor: '#6366F1',
-      deadpoolBorderWidth: 2,
-      deadpoolEyeGlow: true,
-      deadpoolInnerVignette: 40,
-      deadpoolOuterHaloRing: 'thin',
-    },
-  },
-  {
-    id: 'copper',
-    labelTr: 'Bakır Zırh',
-    labelEn: 'Copper Armor',
-    previewOuter: '#D97706',
-    previewEnd: '#29150B',
-    previewMask: '#1C110A',
-    previewEye: '#FDE68A',
-    previewRing: '#F59E0B',
+    id: 'minimal',
+    labelTr: 'Minimal',
+    labelEn: 'Minimal',
+    descTr: 'Çerçevesiz saf geometrik maske, sıfır gürültü',
+    descEn: 'Frameless flat geometric mark with zero visual noise',
+    previewOuter: '#141418',
+    previewEnd: '#141418',
+    previewMask: '#DC2626',
+    previewEye: '#FFFFFF',
+    previewRing: '#27272A',
     previewAngle: 135,
+    logoVariant: 'minimal_flat',
     patch: {
-      deadpoolOuterColor: '#D97706',
-      deadpoolOuterColorMid: '#9A3412',
-      deadpoolOuterColorEnd: '#29150B',
-      deadpoolGradientType: 'linear',
-      deadpoolInnerColor: '#1C110A',
-      deadpoolEyeColor: '#FDE68A',
-      deadpoolRingColor: '#F59E0B',
+      wheelIconStyle: 'wheel',
+      expWheelShape: null,
+      deadpoolLogoVariant: 'minimal_flat',
+      deadpoolLogoBg: 'dark',
+      deadpoolLogoPadding: 10,
+      deadpoolLogoContrast: 100,
+      deadpoolOuterColor: '#141418',
+      deadpoolOuterColorMid: null,
+      deadpoolOuterColorEnd: '#141418',
+      deadpoolGradientType: 'solid',
       deadpoolGradientAngle: 135,
-      deadpoolGlowIntensity: 34,
-      deadpoolGlowColor: '#D97706',
-      deadpoolBorderWidth: 2,
-      deadpoolEyeGlow: true,
-      deadpoolSurfaceTexture: 'brushed',
-      deadpoolTextureOpacity: 50,
-      deadpoolGlossMode: 'metallic',
-      deadpoolGlossOpacity: 55,
+      deadpoolInnerColor: '#DC2626',
+      deadpoolEyeColor: '#FFFFFF',
+      deadpoolRingColor: '#27272A',
+      deadpoolBorderWidth: 1,
+      deadpoolBorderStyle: 'solid',
+      deadpoolGlowIntensity: 0,
+      deadpoolGlowColor: null,
+      deadpoolGlowPulse: false,
+      deadpoolEyeGlow: false,
+      deadpoolEyeStyle: 'classic',
+      deadpoolSplitGap: 'wide',
+      deadpoolInnerRingStyle: 'none',
+      deadpoolInnerRingWidth: 1.2,
+      deadpoolSurfaceTexture: 'none',
+      deadpoolGlossMode: 'none',
+      deadpoolInnerVignette: 0,
+      deadpoolOuterHaloRing: 'none',
+      deadpoolMaskDropShadow: 0,
+      deadpoolColorBoost: 100,
     },
   },
-] as const;
+  {
+    id: 'premium',
+    labelTr: 'Premium',
+    labelEn: 'Premium',
+    descTr: 'Obsidyen-kızıl saten geçiş, ince hassas halka',
+    descEn: 'Obsidian-crimson satin finish with precision halo ring',
+    previewOuter: '#B91C1C',
+    previewEnd: '#12101A',
+    previewMask: '#09090D',
+    previewEye: '#FFFFFF',
+    previewRing: '#E11D48',
+    previewAngle: 140,
+    logoVariant: 'original',
+    patch: {
+      wheelIconStyle: 'wheel',
+      expWheelShape: null,
+      deadpoolLogoVariant: 'original',
+      deadpoolLogoBg: 'auto',
+      deadpoolLogoPadding: 6,
+      deadpoolLogoContrast: 108,
+      deadpoolOuterColor: '#B91C1C',
+      deadpoolOuterColorMid: '#4C0D1D',
+      deadpoolOuterColorEnd: '#12101A',
+      deadpoolGradientType: 'linear',
+      deadpoolGradientAngle: 140,
+      deadpoolInnerColor: '#09090D',
+      deadpoolEyeColor: '#FFFFFF',
+      deadpoolRingColor: '#F43F5E',
+      deadpoolBorderWidth: 1.5,
+      deadpoolBorderStyle: 'solid',
+      deadpoolGlowIntensity: 28,
+      deadpoolGlowColor: '#E11D48',
+      deadpoolGlowPulse: false,
+      deadpoolEyeGlow: true,
+      deadpoolEyeGlowStrength: 42,
+      deadpoolEyeStyle: 'classic',
+      deadpoolSplitGap: 'normal',
+      deadpoolInnerRingStyle: 'solid',
+      deadpoolInnerRingWidth: 1.75,
+      deadpoolSurfaceTexture: 'diagonal',
+      deadpoolTextureOpacity: 18,
+      deadpoolGlossMode: 'glass_dome',
+      deadpoolGlossOpacity: 36,
+      deadpoolInnerVignette: 20,
+      deadpoolOuterHaloRing: 'double_ring',
+      deadpoolMaskDropShadow: 28,
+      deadpoolColorBoost: 106,
+    },
+  },
+];
+
+// Backward-compatible export alias
+export const DEADPOOL_SIGNATURE_PRESETS = DEADPOOL_DESIGN_PROFILES;
 
 export function normalizeHexColor(raw: string): string | null {
-  const cleaned = raw.trim().replace(/^#/, '').toUpperCase();
-  if (/^[0-9A-F]{6}$/.test(cleaned)) return `#${cleaned}`;
-  if (/^[0-9A-F]{3}$/.test(cleaned)) {
-    return `#${cleaned[0]}${cleaned[0]}${cleaned[1]}${cleaned[1]}${cleaned[2]}${cleaned[2]}`;
+  const cleaned = raw.trim().replace(/^#/, '');
+  if (/^[0-9a-fA-F]{3}$/.test(cleaned)) {
+    return (
+      '#' +
+      cleaned
+        .split('')
+        .map((c) => c + c)
+        .join('')
+        .toUpperCase()
+    );
+  }
+  if (/^[0-9a-fA-F]{6}$/.test(cleaned)) {
+    return `#${cleaned.toUpperCase()}`;
   }
   return null;
 }
 
-export function resolveDeadpoolConfig(prefs: Partial<Prefs> | undefined): DeadpoolResolvedConfig {
-  const p = prefs ?? {};
+const VALID_VARIANTS: ReadonlyArray<DeadpoolLogoVariant> = [
+  'original',
+  'pure_bw',
+  'white_on_black',
+  'tactical_metallic',
+  'minimal_flat',
+  'crimson_dark',
+  'monochrome_inverted',
+];
+
+function normalizeLogoVariant(raw: string | undefined | null): DeadpoolLogoVariant {
+  if (!raw) return 'original';
+  if ((VALID_VARIANTS as readonly string[]).includes(raw)) {
+    return raw as DeadpoolLogoVariant;
+  }
+  // Transparent backward-compatibility mapping for legacy saved localStorage prefs
+  switch (raw) {
+    case 'classic':
+    case 'hourglass':
+      return 'original';
+    case 'mask_stencil':
+      return 'pure_bw';
+    case 'vinyl_bold':
+      return 'crimson_dark';
+    case 'decal_thin':
+      return 'minimal_flat';
+    case 'inverted_vinyl':
+      return 'monochrome_inverted';
+    default:
+      return 'original';
+  }
+}
+
+export function resolveDeadpoolConfig(p: Partial<Prefs>): DeadpoolResolvedConfig {
+  const clamp = (v: number | undefined, min: number, max: number, fallback: number) =>
+    typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
+
+  const validEyes: ReadonlyArray<DeadpoolEyeStyle> = [
+    'classic',
+    'angry',
+    'wide',
+    'cyber_visor',
+    'squint',
+    'glowing_slit',
+  ];
+  const validGaps: ReadonlyArray<DeadpoolSplitGap> = ['tight', 'normal', 'wide'];
+  const validInnerRings: ReadonlyArray<DeadpoolInnerRingStyle> = [
+    'solid',
+    'dashed',
+    'double',
+    'tech_ticks',
+    'none',
+  ];
+  const validHalos: ReadonlyArray<DeadpoolOuterHaloRing> = [
+    'none',
+    'pulse',
+    'orbit_dots',
+    'energy_arc',
+    'double_ring',
+  ];
+  const validBgModes: ReadonlyArray<DeadpoolLogoBgMode> = [
+    'auto',
+    'dark',
+    'crimson',
+    'light',
+    'transparent',
+  ];
+
   return {
-    outerSpinDir: p.deadpoolOuterSpinDir ?? 'off',
-    outerSpinTrigger: p.deadpoolOuterSpinTrigger ?? 'always',
-    outerSpinSpeed: Math.max(0.1, Math.min(6, p.deadpoolOuterSpinSpeed ?? 1)),
+    outerSpinDir:
+      p.deadpoolOuterSpinDir === 'cw' || p.deadpoolOuterSpinDir === 'ccw'
+        ? p.deadpoolOuterSpinDir
+        : 'off',
+    outerSpinTrigger: p.deadpoolOuterSpinTrigger === 'press' ? 'press' : 'always',
+    outerSpinSpeed: clamp(p.deadpoolOuterSpinSpeed, 0.1, 6, 1),
     outerColor: p.deadpoolOuterColor ?? null,
     outerColorMid: p.deadpoolOuterColorMid ?? null,
     outerColorEnd: p.deadpoolOuterColorEnd ?? null,
-    gradientType: p.deadpoolGradientType ?? 'linear',
+    gradientType:
+      p.deadpoolGradientType === 'radial' ||
+      p.deadpoolGradientType === 'conic' ||
+      p.deadpoolGradientType === 'solid'
+        ? p.deadpoolGradientType
+        : 'linear',
     innerColor: p.deadpoolInnerColor ?? null,
     eyeColor: p.deadpoolEyeColor ?? null,
     ringColor: p.deadpoolRingColor ?? null,
-    gradientAngle: Math.max(0, Math.min(360, p.deadpoolGradientAngle ?? 135)),
-    glowIntensity: Math.max(0, Math.min(100, p.deadpoolGlowIntensity ?? 0)),
+    gradientAngle: clamp(p.deadpoolGradientAngle, 0, 360, 135),
+    glowIntensity: clamp(p.deadpoolGlowIntensity, 0, 100, 0),
     glowColor: p.deadpoolGlowColor ?? null,
     glowPulse: Boolean(p.deadpoolGlowPulse),
-    borderWidth: Math.max(0, Math.min(4, p.deadpoolBorderWidth ?? 1)),
-    borderStyle: p.deadpoolBorderStyle ?? 'solid',
+    borderWidth: clamp(p.deadpoolBorderWidth, 0, 4, 1),
+    borderStyle:
+      p.deadpoolBorderStyle === 'dashed' ||
+      p.deadpoolBorderStyle === 'dotted' ||
+      p.deadpoolBorderStyle === 'double'
+        ? p.deadpoolBorderStyle
+        : 'solid',
     eyeGlow: Boolean(p.deadpoolEyeGlow),
-    eyeGlowStrength: Math.max(0, Math.min(100, p.deadpoolEyeGlowStrength ?? 65)),
-    maskScale: Math.max(0.75, Math.min(1.3, p.deadpoolMaskScale ?? 1)),
-    maskTilt: Math.max(-45, Math.min(45, p.deadpoolMaskTilt ?? 0)),
-    maskOpacity: Math.max(40, Math.min(100, p.deadpoolMaskOpacity ?? 100)),
-    eyeStyle: 'classic',
-    logoVariant: (
-      ['classic', 'hourglass', 'vinyl_bold', 'mask_stencil', 'decal_thin', 'inverted_vinyl'] as const
-    ).includes(p.deadpoolLogoVariant as DeadpoolLogoVariant)
-      ? (p.deadpoolLogoVariant as DeadpoolLogoVariant)
-      : 'classic',
-    splitGap: 'normal',
-    innerRingStyle: 'solid',
-    innerRingWidth: Math.max(0.8, Math.min(3.2, p.deadpoolInnerRingWidth ?? 1.65)),
-    shellScale: Math.max(0.85, Math.min(1.2, p.deadpoolShellScale ?? 1)),
+    eyeGlowStrength: clamp(p.deadpoolEyeGlowStrength, 10, 100, 65),
+    maskScale: clamp(p.deadpoolMaskScale, 0.75, 1.3, 1),
+    maskTilt: clamp(p.deadpoolMaskTilt, -45, 45, 0),
+    maskOpacity: clamp(p.deadpoolMaskOpacity, 40, 100, 100),
+    eyeStyle:
+      p.deadpoolEyeStyle && validEyes.includes(p.deadpoolEyeStyle)
+        ? p.deadpoolEyeStyle
+        : 'classic',
+    logoVariant: normalizeLogoVariant(p.deadpoolLogoVariant),
+    splitGap:
+      p.deadpoolSplitGap && validGaps.includes(p.deadpoolSplitGap)
+        ? p.deadpoolSplitGap
+        : 'normal',
+    innerRingStyle:
+      p.deadpoolInnerRingStyle && validInnerRings.includes(p.deadpoolInnerRingStyle)
+        ? p.deadpoolInnerRingStyle
+        : 'solid',
+    innerRingWidth: clamp(p.deadpoolInnerRingWidth, 0.8, 3.2, 1.65),
+    shellScale: clamp(p.deadpoolShellScale, 0.85, 1.2, 1),
     cornerRadius:
       typeof p.deadpoolCornerRadius === 'number' && Number.isFinite(p.deadpoolCornerRadius)
-        ? Math.max(0, Math.min(50, Math.round(p.deadpoolCornerRadius)))
+        ? Math.min(50, Math.max(0, p.deadpoolCornerRadius))
         : null,
-    surfaceTexture: p.deadpoolSurfaceTexture ?? 'none',
-    textureOpacity: Math.max(0, Math.min(100, p.deadpoolTextureOpacity ?? 40)),
-    glossMode: p.deadpoolGlossMode ?? 'none',
-    glossOpacity: Math.max(0, Math.min(100, p.deadpoolGlossOpacity ?? 45)),
-    innerVignette: Math.max(0, Math.min(100, p.deadpoolInnerVignette ?? 0)),
-    motionPattern: p.deadpoolMotionPattern ?? 'steady',
-    breathingPulse: p.deadpoolBreathingPulse ?? 'off',
-    maskMotion: p.deadpoolMaskMotion ?? 'locked',
-    tapFx: p.deadpoolTapFx ?? 'scale',
-    outerHaloRing: 'none',
-    maskDropShadow: Math.max(0, Math.min(100, p.deadpoolMaskDropShadow ?? 0)),
-    colorBoost: Math.max(75, Math.min(150, p.deadpoolColorBoost ?? 100)),
+    surfaceTexture:
+      p.deadpoolSurfaceTexture &&
+      (['none', 'carbon', 'brushed', 'mesh', 'scanline', 'hexgrid', 'diagonal'] as const).includes(
+        p.deadpoolSurfaceTexture
+      )
+        ? p.deadpoolSurfaceTexture
+        : 'none',
+    textureOpacity: clamp(p.deadpoolTextureOpacity, 10, 100, 40),
+    glossMode:
+      p.deadpoolGlossMode &&
+      (['none', 'top_arc', 'diagonal_sheen', 'glass_dome', 'metallic'] as const).includes(
+        p.deadpoolGlossMode
+      )
+        ? p.deadpoolGlossMode
+        : 'none',
+    glossOpacity: clamp(p.deadpoolGlossOpacity, 10, 100, 45),
+    innerVignette: clamp(p.deadpoolInnerVignette, 0, 100, 0),
+    motionPattern:
+      p.deadpoolMotionPattern &&
+      (['steady', 'pendulum', 'pulse_step', 'turbo_burst'] as const).includes(
+        p.deadpoolMotionPattern
+      )
+        ? p.deadpoolMotionPattern
+        : 'steady',
+    breathingPulse:
+      p.deadpoolBreathingPulse &&
+      (['off', 'soft', 'heartbeat', 'float'] as const).includes(p.deadpoolBreathingPulse)
+        ? p.deadpoolBreathingPulse
+        : 'off',
+    maskMotion:
+      p.deadpoolMaskMotion &&
+      (['locked', 'counter_slow', 'tilt_sway', 'follow_outer'] as const).includes(
+        p.deadpoolMaskMotion
+      )
+        ? p.deadpoolMaskMotion
+        : 'locked',
+    tapFx:
+      p.deadpoolTapFx && (['none', 'scale', 'spin_kick', 'flash', 'bounce'] as const).includes(
+        p.deadpoolTapFx
+      )
+        ? p.deadpoolTapFx
+        : 'scale',
+    outerHaloRing:
+      p.deadpoolOuterHaloRing && validHalos.includes(p.deadpoolOuterHaloRing)
+        ? p.deadpoolOuterHaloRing
+        : 'none',
+    maskDropShadow: clamp(p.deadpoolMaskDropShadow, 0, 100, 0),
+    colorBoost: clamp(p.deadpoolColorBoost, 75, 150, 100),
+    logoPadding: clamp(p.deadpoolLogoPadding, 0, 24, 6),
+    logoBg:
+      p.deadpoolLogoBg && validBgModes.includes(p.deadpoolLogoBg)
+        ? p.deadpoolLogoBg
+        : 'auto',
+    logoContrast: clamp(p.deadpoolLogoContrast, 75, 150, 100),
   };
 }
 
@@ -676,480 +665,128 @@ export function isPolygonOuterShape(shape: WheelIconStylePref): boolean {
 }
 
 export function buildDeadpoolBackgroundImage(cfg: DeadpoolResolvedConfig): string | undefined {
-  const hasCustom = Boolean(cfg.outerColor || cfg.outerColorMid || cfg.outerColorEnd);
-  if (!hasCustom && cfg.gradientType === 'linear' && cfg.gradientAngle === 135) {
-    return undefined;
+  if (cfg.logoBg === 'transparent') {
+    return 'none';
   }
-  const c1 = cfg.outerColor || cfg.outerColorEnd || 'var(--accent)';
-  const cMid = cfg.outerColorMid;
-  const c2 = cfg.outerColorEnd || cfg.outerColor || 'var(--accent-end)';
+  if (cfg.logoBg === 'dark') {
+    return 'linear-gradient(145deg, #16161C 0%, #09090D 100%)';
+  }
+  if (cfg.logoBg === 'crimson') {
+    return 'linear-gradient(145deg, #B91C1C 0%, #450A0A 100%)';
+  }
+  if (cfg.logoBg === 'light') {
+    return 'linear-gradient(145deg, #F8FAFC 0%, #E2E8F0 100%)';
+  }
 
-  if (cfg.gradientType === 'solid') {
-    return `linear-gradient(0deg, ${c1} 0%, ${c1} 100%)`;
+  const c1 = cfg.outerColor;
+  const cm = cfg.outerColorMid;
+  const c2 = cfg.outerColorEnd || c1;
+  if (!c1 && !c2) return undefined;
+  const start = c1 || c2!;
+  const end = c2 || c1!;
+  const stops = cm ? `${start} 0%, ${cm} 50%, ${end} 100%` : `${start} 0%, ${end} 100%`;
+
+  switch (cfg.gradientType) {
+    case 'solid':
+      return `linear-gradient(0deg, ${start}, ${start})`;
+    case 'radial':
+      return `radial-gradient(circle at 32% 28%, ${stops})`;
+    case 'conic':
+      return `conic-gradient(from ${cfg.gradientAngle}deg, ${start}, ${cm || end}, ${end}, ${start})`;
+    case 'linear':
+    default:
+      return `linear-gradient(${cfg.gradientAngle}deg, ${stops})`;
   }
-  if (cfg.gradientType === 'radial') {
-    return cMid
-      ? `radial-gradient(circle at 34% 28%, ${c1} 0%, ${cMid} 52%, ${c2} 100%)`
-      : `radial-gradient(circle at 34% 28%, ${c1} 0%, ${c2} 100%)`;
+}
+
+/**
+ * Returns the definitive shell backgroundImage for Deadpool Mode across WheelFab,
+ * Deadpool Studio, and Settings previews so they render identically (never falling back
+ * to the generic Morph pink-cyan accent gradient).
+ */
+export function resolveDeadpoolShellBackground(cfg: DeadpoolResolvedConfig): string {
+  const custom = buildDeadpoolBackgroundImage(cfg);
+  if (custom) return custom;
+  switch (cfg.logoVariant) {
+    case 'pure_bw':
+      return 'linear-gradient(145deg, #FFFFFF 0%, #E4E4E7 100%)';
+    case 'white_on_black':
+      return 'linear-gradient(145deg, #18181B 0%, #09090B 100%)';
+    case 'tactical_metallic':
+      return 'linear-gradient(145deg, #334155 0%, #0F172A 100%)';
+    case 'minimal_flat':
+      return 'linear-gradient(145deg, #141418 0%, #0B0B0E 100%)';
+    case 'crimson_dark':
+      return 'linear-gradient(145deg, #991B1B 0%, #180408 100%)';
+    case 'monochrome_inverted':
+      return 'linear-gradient(145deg, #18181B 0%, #09090D 100%)';
+    case 'original':
+    default:
+      return 'linear-gradient(135deg, #DC2626 0%, #7F1D1D 100%)';
   }
-  if (cfg.gradientType === 'conic') {
-    return cMid
-      ? `conic-gradient(from ${cfg.gradientAngle}deg at 50% 50%, ${c1}, ${cMid}, ${c2}, ${c1})`
-      : `conic-gradient(from ${cfg.gradientAngle}deg at 50% 50%, ${c1}, ${c2}, ${c1})`;
-  }
-  return cMid
-    ? `linear-gradient(${cfg.gradientAngle}deg, ${c1} 0%, ${cMid} 50%, ${c2} 100%)`
-    : `linear-gradient(${cfg.gradientAngle}deg, ${c1} 0%, ${c2} 100%)`;
+}
+
+export function buildDeadpoolShellFilter(cfg: DeadpoolResolvedConfig): string | undefined {
+  const parts: string[] = [];
+  if (cfg.colorBoost !== 100) parts.push(`saturate(${cfg.colorBoost}%)`);
+  if (cfg.logoContrast !== 100) parts.push(`contrast(${cfg.logoContrast}%)`);
+  return parts.length > 0 ? parts.join(' ') : undefined;
 }
 
 export function buildDeadpoolBoxShadow(
   cfg: DeadpoolResolvedConfig,
   hasClipPath: boolean
 ): string | undefined {
-  const shadows: string[] = [];
-  if (cfg.glowIntensity > 0 && !hasClipPath) {
-    const tone = cfg.glowColor || cfg.outerColor || '#DC2626';
-    const alpha1 = Math.round(Math.min(255, 72 + cfg.glowIntensity * 1.72))
-      .toString(16)
-      .padStart(2, '0');
-    const alpha2 = Math.round(Math.min(255, 110 + cfg.glowIntensity * 1.35))
-      .toString(16)
-      .padStart(2, '0');
-    shadows.push(
-      `0 0 ${Math.round(9 + cfg.glowIntensity * 0.34)}px ${tone}${alpha1}`,
-      `0 0 ${Math.round(3 + cfg.glowIntensity * 0.14)}px ${tone}${alpha2}`
-    );
+  if (hasClipPath) return undefined;
+  const parts: string[] = [];
+  if (cfg.glowIntensity > 0) {
+    const col = cfg.glowColor || cfg.outerColor || '#DC2626';
+    const spread1 = Math.round(6 + cfg.glowIntensity * 0.22);
+    const spread2 = Math.round(12 + cfg.glowIntensity * 0.36);
+    const a1 = Math.min(0.85, 0.22 + (cfg.glowIntensity / 100) * 0.62);
+    const a2 = Math.min(0.48, 0.1 + (cfg.glowIntensity / 100) * 0.36);
+    parts.push(`0 0 ${spread1}px color-mix(in srgb, ${col} ${Math.round(a1 * 100)}%, transparent)`);
+    parts.push(`0 0 ${spread2}px color-mix(in srgb, ${col} ${Math.round(a2 * 100)}%, transparent)`);
   }
   if (cfg.innerVignette > 0) {
-    const alpha = ((cfg.innerVignette / 100) * 0.72).toFixed(2);
-    const spread = Math.round(6 + cfg.innerVignette * 0.14);
-    shadows.push(`inset 0 0 ${spread}px rgba(0, 0, 0, ${alpha})`);
+    const vigSpread = Math.round(6 + cfg.innerVignette * 0.16);
+    const vigAlpha = ((cfg.innerVignette / 100) * 0.72).toFixed(2);
+    parts.push(`inset 0 0 ${vigSpread}px rgba(0, 0, 0, ${vigAlpha})`);
   }
-  return shadows.length > 0 ? shadows.join(', ') : undefined;
+  return parts.length > 0 ? parts.join(', ') : undefined;
 }
-
-export function getDeadpoolTextureCss(texture: DeadpoolSurfaceTexture): React.CSSProperties | null {
-  switch (texture) {
-    case 'carbon':
-      return {
-        backgroundImage:
-          'repeating-linear-gradient(45deg, rgba(255,255,255,0.22) 0 2px, transparent 2px 5px), repeating-linear-gradient(-45deg, rgba(0,0,0,0.34) 0 2px, transparent 2px 5px)',
-      };
-    case 'brushed':
-      return {
-        backgroundImage:
-          'repeating-linear-gradient(90deg, rgba(255,255,255,0.26) 0 1px, rgba(0,0,0,0.16) 1px 2px, transparent 2px 4px)',
-      };
-    case 'mesh':
-      return {
-        backgroundImage:
-          'radial-gradient(rgba(255,255,255,0.36) 1px, transparent 1.2px)',
-        backgroundSize: '6px 6px',
-      };
-    case 'scanline':
-      return {
-        backgroundImage:
-          'repeating-linear-gradient(0deg, rgba(0,0,0,0.36) 0 1.5px, transparent 1.5px 4px)',
-      };
-    case 'hexgrid':
-      return {
-        backgroundImage:
-          'linear-gradient(30deg, rgba(255,255,255,0.2) 12%, transparent 12.5%, transparent 87%, rgba(255,255,255,0.2) 87.5%), linear-gradient(150deg, rgba(255,255,255,0.2) 12%, transparent 12.5%, transparent 87%, rgba(255,255,255,0.2) 87.5%)',
-        backgroundSize: '10px 17px',
-      };
-    case 'diagonal':
-      return {
-        backgroundImage:
-          'repeating-linear-gradient(-45deg, rgba(255,255,255,0.26) 0 3px, transparent 3px 8px)',
-      };
-    case 'none':
-    default:
-      return null;
-  }
-}
-
-export function getDeadpoolGlossCss(mode: DeadpoolGlossMode): React.CSSProperties | null {
-  switch (mode) {
-    case 'top_arc':
-      return {
-        backgroundImage:
-          'radial-gradient(ellipse 92% 52% at 50% 6%, rgba(255,255,255,0.82) 0%, rgba(255,255,255,0.14) 62%, transparent 72%)',
-      };
-    case 'diagonal_sheen':
-      return {
-        backgroundImage:
-          'linear-gradient(132deg, transparent 28%, rgba(255,255,255,0.72) 47%, rgba(255,255,255,0.18) 54%, transparent 66%)',
-      };
-    case 'glass_dome':
-      return {
-        backgroundImage:
-          'radial-gradient(circle at 32% 24%, rgba(255,255,255,0.82) 0%, rgba(255,255,255,0.22) 32%, transparent 64%), linear-gradient(180deg, rgba(255,255,255,0.25) 0%, transparent 45%, rgba(0,0,0,0.24) 100%)',
-      };
-    case 'metallic':
-      return {
-        backgroundImage:
-          'conic-gradient(from 45deg at 50% 50%, rgba(255,255,255,0.58) 0deg, transparent 70deg, rgba(0,0,0,0.22) 140deg, rgba(255,255,255,0.55) 220deg, transparent 300deg, rgba(255,255,255,0.58) 360deg)',
-      };
-    case 'none':
-    default:
-      return null;
-  }
-}
-
-export const DeadpoolShellOverlays: React.FC<{
-  cfg: DeadpoolResolvedConfig;
-}> = ({cfg}) => {
-  const texCss = getDeadpoolTextureCss(cfg.surfaceTexture);
-  const glossCss = getDeadpoolGlossCss(cfg.glossMode);
-  return (
-    <>
-      {texCss && cfg.textureOpacity > 0 && (
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 rounded-[inherit]"
-          style={{
-            ...texCss,
-            opacity: cfg.textureOpacity / 100,
-          }}
-        />
-      )}
-      {glossCss && cfg.glossOpacity > 0 && (
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 rounded-[inherit]"
-          style={{
-            ...glossCss,
-            opacity: cfg.glossOpacity / 100,
-          }}
-        />
-      )}
-    </>
-  );
-};
-
-export const DeadpoolOuterHalo: React.FC<{
-  cfg: DeadpoolResolvedConfig;
-  isPill?: boolean;
-  sizePx?: number;
-}> = () => null;
-
-const POLYGON_SVG_POINTS: Record<string, string> = {
-  octa_shield: '29,2 71,2 98,29 98,71 71,98 29,98 2,71 2,29',
-  blade_hex: '25,4 75,4 99,50 75,96 25,96 1,50',
-  star_prism: '50,2 67,33 98,50 67,67 50,98 33,67 2,50 33,33',
-  shield_crest: '50,2 95,26 88,78 50,99 12,78 5,26',
-};
-
-/**
- * Draws a true contour-aligned SVG polygon border inside clip-path shapes so
- * rectangular CSS borders never bleed into the top/bottom polygon vertices.
- */
-export const DeadpoolPolygonBorder: React.FC<{
-  shape: WheelIconStylePref;
-  color: string;
-  width: number;
-  style?: DeadpoolBorderStyle;
-}> = ({shape, color, width, style = 'solid'}) => {
-  const points = POLYGON_SVG_POINTS[shape];
-  if (!points || width <= 0) return null;
-  const strokeDasharray =
-    style === 'dashed' ? '8 5' : style === 'dotted' ? '2 5' : undefined;
-  const sw = Math.max(1.8, width * 2.2);
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      className="pointer-events-none absolute inset-0 z-20 h-full w-full"
-      fill="none"
-    >
-      <polygon
-        points={points}
-        stroke={color}
-        strokeWidth={sw}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        strokeDasharray={strokeDasharray}
-      />
-      {style === 'double' && (
-        <polygon
-          points={points}
-          stroke={color}
-          strokeWidth={Math.max(1.2, sw * 0.45)}
-          strokeOpacity="0.6"
-          strokeLinejoin="round"
-          transform="translate(50 50) scale(0.86) translate(-50 -50)"
-        />
-      )}
-    </svg>
-  );
-};
-
-export const DeadpoolMiniSwatch: React.FC<{
-  outer: string | null;
-  end: string | null;
-  mask: string | null;
-  eye: string | null;
-  ring: string | null;
-  angle?: number;
-}> = ({outer, end, mask, eye, ring, angle = 135}) => {
-  const maskCol = mask || '#0B0B0E';
-  const ringCol = ring || maskCol;
-  const borderCol = ring || 'rgba(255,255,255,0.38)';
-  const isTransparentEye = eye?.trim().toLowerCase() === 'transparent';
-  const eyeCol = isTransparentEye ? null : eye || '#FFFFFF';
-  const showEyeFill =
-    Boolean(eyeCol) && eyeCol!.trim().toUpperCase() !== maskCol.trim().toUpperCase();
-  return (
-    <span
-      className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border shadow-xs"
-      style={{
-        backgroundImage:
-          outer && end
-            ? `linear-gradient(${angle}deg, ${outer}, ${end})`
-            : 'linear-gradient(135deg, var(--accent), var(--accent-end))',
-        borderColor: borderCol,
-      }}
-    >
-      <svg viewBox="0 0 28 28" fill="none" className="h-6 w-6">
-        <circle cx="14" cy="14" r="10.7" stroke={ringCol} strokeWidth="1.95" />
-        <path
-          d="M 12.25 5.53 A 8.65 8.65 0 0 0 12.25 22.47 Z M 6.2 11.5 L 11.4 14.9 Q 9.0 16.9 6.8 15.2 Z"
-          fill={maskCol}
-          fillRule="evenodd"
-        />
-        <path
-          d="M 15.75 5.53 A 8.65 8.65 0 0 1 15.75 22.47 Z M 21.8 11.5 L 16.6 14.9 Q 19.0 16.9 21.2 15.2 Z"
-          fill={maskCol}
-          fillRule="evenodd"
-        />
-        {showEyeFill && (
-          <>
-            <path d="M 6.2 11.5 L 11.4 14.9 Q 9.0 16.9 6.8 15.2 Z" fill={eyeCol!} />
-            <path d="M 21.8 11.5 L 16.6 14.9 Q 19.0 16.9 21.2 15.2 Z" fill={eyeCol!} />
-          </>
-        )}
-      </svg>
-    </span>
-  );
-};
-
-export const DeadpoolEmblemGroup: React.FC<{
-  cfg: DeadpoolResolvedConfig;
-  maskFill: string;
-  extraRotateDeg?: number;
-  variantOverride?: DeadpoolLogoVariant;
-}> = ({cfg, maskFill, extraRotateDeg = 0, variantOverride}) => {
-  const ringTone = cfg.ringColor || maskFill;
-  const isTransparentEye = cfg.eyeColor?.trim().toLowerCase() === 'transparent';
-  const explicitEyeColor = isTransparentEye ? null : cfg.eyeColor || '#FFFFFF';
-  const rawVariant = variantOverride ?? cfg.logoVariant ?? 'classic';
-  const variant: DeadpoolLogoVariant = (
-    ['classic', 'hourglass', 'vinyl_bold', 'mask_stencil', 'decal_thin', 'inverted_vinyl'] as const
-  ).includes(rawVariant)
-    ? rawVariant
-    : 'classic';
-  const totalTilt = cfg.maskTilt + extraRotateDeg;
-
-  const eyeGlowPx = (0.7 + (cfg.eyeGlowStrength / 100) * 2.8).toFixed(2);
-  const eyeGlowStyle: React.CSSProperties | undefined =
-    cfg.eyeGlow && explicitEyeColor
-      ? {filter: `drop-shadow(0 0 ${eyeGlowPx}px ${explicitEyeColor})`}
-      : undefined;
-
-  const dropShadowStyle: React.CSSProperties | undefined =
-    cfg.maskDropShadow > 0
-      ? {
-          filter: `drop-shadow(0 ${(0.6 + cfg.maskDropShadow * 0.015).toFixed(2)}px ${(
-            1 +
-            cfg.maskDropShadow * 0.025
-          ).toFixed(2)}px rgba(0,0,0,${(0.25 + (cfg.maskDropShadow / 100) * 0.6).toFixed(2)}))`,
-        }
-      : undefined;
-
-  // Mathematically concentric authentic Deadpool logo geometry centered at (14, 14)
-  // 1. classic — Iconic vertical split + bold diagonal-brow curved-belly transparent eyes
-  const classicLeftEye = 'M 6.2 11.5 L 11.4 14.9 Q 9.0 16.9 6.8 15.2 Z';
-  const classicRightEye = 'M 21.8 11.5 L 16.6 14.9 Q 19.0 16.9 21.2 15.2 Z';
-
-  // 2. hourglass — Iconic curved hourglass Deadpool mask patches + large curved almond eyes
-  const hourglassLeftEye = 'M 6.2 11.9 C 8.5 11.8 10.6 12.8 12.0 14.5 C 10.3 16.2 7.7 15.8 6.2 11.9 Z';
-  const hourglassRightEye = 'M 21.8 11.9 C 19.5 11.8 17.4 12.8 16.0 14.5 C 17.7 16.2 20.3 15.8 21.8 11.9 Z';
-
-  // 3. vinyl_bold — Bold outer ring with clear breathing gap + vertical-split vinyl decal
-  const vinylLeftEye = 'M 7.0 12.0 L 11.5 14.9 Q 9.5 16.4 7.7 15.1 Z';
-  const vinylRightEye = 'M 21.0 12.0 L 16.5 14.9 Q 18.5 16.4 20.3 15.1 Z';
-
-  // 4. mask_stencil — Marvel one-color hourglass vinyl decal with sharp expressive eyes
-  const stencilLeftEye = 'M 6.0 12.1 L 12.1 14.6 Q 9.5 16.2 6.8 14.6 Z';
-  const stencilRightEye = 'M 22.0 12.1 L 15.9 14.6 Q 18.5 16.2 21.2 14.6 Z';
-
-  // 5. decal_thin — Thin crisp outer ring + generous vertical-split halves
-  const decalLeftEye = 'M 6.5 12.0 L 11.5 15.0 Q 9.3 16.7 7.2 15.3 Z';
-  const decalRightEye = 'M 21.5 12.0 L 16.5 15.0 Q 18.7 16.7 20.8 15.3 Z';
-
-  // Inverted vinyl: light mask halves; keep eyes transparent when explicitEyeColor is null
-  const maskNorm = maskFill.trim().toUpperCase();
-  const isLightMask =
-    maskNorm === '#FFFFFF' ||
-    maskNorm === '#FFF' ||
-    maskNorm === 'WHITE' ||
-    maskNorm === 'CURRENTCOLOR';
-  const invertedHalvesFill = isLightMask ? '#0B0B0E' : '#FFFFFF';
-  const invertedEyeFill =
-    isTransparentEye ||
-    !cfg.eyeColor ||
-    cfg.eyeColor.trim().toUpperCase() === '#FFFFFF' ||
-    cfg.eyeColor.trim().toUpperCase() === '#FFF'
-      ? null
-      : cfg.eyeColor;
-
-  const renderStandardHalves = (
-    leftHalfPath: string,
-    rightHalfPath: string,
-    lEye: string,
-    rEye: string,
-    fillColor: string,
-    eyeFill: string | null,
-    ringRadius: number,
-    ringStroke: string,
-    ringWidth: number
-  ) => {
-    const showSolidEye =
-      Boolean(eyeFill) && eyeFill!.trim().toUpperCase() !== fillColor.trim().toUpperCase();
-    return (
-      <>
-        <circle cx="14" cy="14" r={ringRadius} stroke={ringStroke} strokeWidth={ringWidth} />
-        <path d={`${leftHalfPath} ${lEye}`} fill={fillColor} fillRule="evenodd" />
-        <path d={`${rightHalfPath} ${rEye}`} fill={fillColor} fillRule="evenodd" />
-        {showSolidEye && (
-          <g style={variant === 'inverted_vinyl' ? undefined : eyeGlowStyle}>
-            <path d={lEye} fill={eyeFill!} />
-            <path d={rEye} fill={eyeFill!} />
-          </g>
-        )}
-      </>
-    );
-  };
-
-  return (
-    <g
-      transform={`translate(14 14) rotate(${totalTilt.toFixed(1)}) scale(${cfg.maskScale.toFixed(
-        2
-      )}) translate(-14 -14)`}
-      opacity={cfg.maskOpacity / 100}
-      style={dropShadowStyle}
-    >
-      {variant === 'hourglass' &&
-        renderStandardHalves(
-          'M 10.6 6.05 A 8.65 8.65 0 0 0 10.6 21.95 C 12.1 18.8 13.05 16.4 13.05 14.0 C 13.05 11.6 12.1 9.2 10.6 6.05 Z',
-          'M 17.4 6.05 A 8.65 8.65 0 0 1 17.4 21.95 C 15.9 18.8 14.95 16.4 14.95 14.0 C 14.95 11.6 15.9 9.2 17.4 6.05 Z',
-          hourglassLeftEye,
-          hourglassRightEye,
-          maskFill,
-          explicitEyeColor,
-          10.7,
-          ringTone,
-          Math.max(1.95, cfg.innerRingWidth)
-        )}
-
-      {variant === 'vinyl_bold' &&
-        renderStandardHalves(
-          'M 12.4 5.86 A 8.3 8.3 0 0 0 12.4 22.14 Z',
-          'M 15.6 5.86 A 8.3 8.3 0 0 1 15.6 22.14 Z',
-          vinylLeftEye,
-          vinylRightEye,
-          maskFill,
-          explicitEyeColor,
-          11.0,
-          ringTone,
-          Math.max(2.15, cfg.innerRingWidth)
-        )}
-
-      {variant === 'mask_stencil' &&
-        renderStandardHalves(
-          'M 10.4 5.32 A 9.4 9.4 0 0 0 10.4 22.68 C 12.0 19.1 13.05 16.6 13.05 14.0 C 13.05 11.4 12.0 8.9 10.4 5.32 Z',
-          'M 17.6 5.32 A 9.4 9.4 0 0 1 17.6 22.68 C 16.0 19.1 14.95 16.6 14.95 14.0 C 14.95 11.4 16.0 8.9 17.6 5.32 Z',
-          stencilLeftEye,
-          stencilRightEye,
-          maskFill,
-          explicitEyeColor,
-          11.0,
-          ringTone,
-          1.2
-        )}
-
-      {variant === 'decal_thin' &&
-        renderStandardHalves(
-          'M 12.25 5.07 A 9.1 9.1 0 0 0 12.25 22.93 Z',
-          'M 15.75 5.07 A 9.1 9.1 0 0 1 15.75 22.93 Z',
-          decalLeftEye,
-          decalRightEye,
-          maskFill,
-          explicitEyeColor,
-          11.0,
-          ringTone,
-          1.2
-        )}
-
-      {variant === 'inverted_vinyl' &&
-        renderStandardHalves(
-          'M 12.35 5.46 A 8.7 8.7 0 0 0 12.35 22.54 Z',
-          'M 15.65 5.46 A 8.7 8.7 0 0 1 15.65 22.54 Z',
-          classicLeftEye,
-          classicRightEye,
-          invertedHalvesFill,
-          invertedEyeFill,
-          10.8,
-          invertedHalvesFill,
-          1.85
-        )}
-
-      {variant === 'classic' &&
-        renderStandardHalves(
-          'M 12.25 5.53 A 8.65 8.65 0 0 0 12.25 22.47 Z',
-          'M 15.75 5.53 A 8.65 8.65 0 0 1 15.75 22.47 Z',
-          classicLeftEye,
-          classicRightEye,
-          maskFill,
-          explicitEyeColor,
-          10.7,
-          ringTone,
-          Math.max(1.95, cfg.innerRingWidth)
-        )}
-    </g>
-  );
-};
 
 export function computeDeadpoolAnimatedAngles(
   cfg: DeadpoolResolvedConfig,
   elapsedSec: number,
-  speedMul = 1
+  energyMultiplier = 1
 ): {outerDeltaDeg: number; innerDeltaDeg: number} {
   const dir = cfg.outerSpinDir === 'ccw' ? -1 : cfg.outerSpinDir === 'cw' ? 1 : 0;
-  const spd = cfg.outerSpinSpeed * speedMul;
+  const spd = cfg.outerSpinSpeed * energyMultiplier;
   let outerDeltaDeg = 0;
 
   if (dir !== 0) {
+    const baseRate = 85 * spd;
     switch (cfg.motionPattern) {
       case 'pendulum':
-        outerDeltaDeg = Math.sin(elapsedSec * 2.1 * spd) * 42 * dir;
+        outerDeltaDeg = dir * Math.sin(elapsedSec * 2.1 * spd) * 62;
         break;
       case 'pulse_step': {
-        const phase = (elapsedSec * spd * 1.15) % 1;
-        const stepIdx = Math.floor(elapsedSec * spd * 1.15);
-        const eased = phase < 0.35 ? Math.pow(phase / 0.35, 2) * 0.5 : 0.5 + ((phase - 0.35) / 0.65) * 0.5;
-        outerDeltaDeg = ((stepIdx + eased) * 45 * dir) % 360;
+        const beat = elapsedSec * 1.45 * spd;
+        const stepIdx = Math.floor(beat);
+        const frac = beat - stepIdx;
+        const eased = frac < 0.55 ? Math.pow(frac / 0.55, 2) * (3 - 2 * (frac / 0.55)) : 1;
+        outerDeltaDeg = dir * (stepIdx + eased) * 45;
         break;
       }
       case 'turbo_burst': {
-        const wave = 1 + 0.72 * Math.sin(elapsedSec * 2.6);
-        outerDeltaDeg = (elapsedSec * 52 * spd * wave * dir) % 360;
+        const cycle = elapsedSec * 0.85 * spd;
+        outerDeltaDeg = dir * (cycle * 195 + Math.sin(cycle * Math.PI * 2) * 34);
         break;
       }
       case 'steady':
       default:
-        outerDeltaDeg = (elapsedSec * 48 * spd * dir) % 360;
+        outerDeltaDeg = dir * elapsedSec * baseRate;
         break;
     }
   }
@@ -1157,10 +794,10 @@ export function computeDeadpoolAnimatedAngles(
   let innerDeltaDeg = 0;
   switch (cfg.maskMotion) {
     case 'counter_slow':
-      innerDeltaDeg = (elapsedSec * -22 * Math.max(0.5, cfg.outerSpinSpeed * 0.7)) % 360;
+      innerDeltaDeg = (dir !== 0 ? -dir : -1) * elapsedSec * 28 * Math.max(0.5, spd * 0.7);
       break;
     case 'tilt_sway':
-      innerDeltaDeg = Math.sin(elapsedSec * 2.2) * 14;
+      innerDeltaDeg = Math.sin(elapsedSec * 2.4 * Math.max(0.6, spd * 0.7)) * 16;
       break;
     case 'follow_outer':
       innerDeltaDeg = outerDeltaDeg;
@@ -1174,19 +811,709 @@ export function computeDeadpoolAnimatedAngles(
   return {outerDeltaDeg, innerDeltaDeg};
 }
 
-export function getBreathingAnimClass(pulse: DeadpoolBreathingPulse): string {
-  switch (pulse) {
+export function getBreathingAnimClass(mode: DeadpoolBreathingPulse): string {
+  switch (mode) {
     case 'soft':
-      return 'morph-dp-anim-soft';
+      return 'morph-dp-breath-soft';
     case 'heartbeat':
-      return 'morph-dp-anim-heartbeat';
+      return 'morph-dp-breath-heartbeat';
     case 'float':
-      return 'morph-dp-anim-float';
+      return 'morph-dp-breath-float';
     case 'off':
     default:
       return '';
   }
 }
+
+export const DeadpoolShellOverlays: React.FC<{cfg: DeadpoolResolvedConfig}> = ({cfg}) => {
+  const texAlpha = (cfg.textureOpacity / 100) * 0.52;
+  const glossAlpha = (cfg.glossOpacity / 100) * 0.65;
+
+  const textureStyle: React.CSSProperties | null = (() => {
+    switch (cfg.surfaceTexture) {
+      case 'carbon':
+        return {
+          backgroundImage: `repeating-linear-gradient(45deg, rgba(255,255,255,${(texAlpha * 0.35).toFixed(
+            3
+          )}) 0px, rgba(255,255,255,${(texAlpha * 0.35).toFixed(
+            3
+          )}) 2px, transparent 2px, transparent 5px), repeating-linear-gradient(-45deg, rgba(0,0,0,${(
+            texAlpha * 0.7
+          ).toFixed(3)}) 0px, rgba(0,0,0,${(texAlpha * 0.7).toFixed(
+            3
+          )}) 2px, transparent 2px, transparent 5px)`,
+        };
+      case 'brushed':
+        return {
+          backgroundImage: `repeating-linear-gradient(90deg, rgba(255,255,255,${(texAlpha * 0.28).toFixed(
+            3
+          )}) 0px, rgba(255,255,255,${(texAlpha * 0.28).toFixed(
+            3
+          )}) 1px, transparent 1px, transparent 3px)`,
+        };
+      case 'mesh':
+        return {
+          backgroundImage: `radial-gradient(rgba(255,255,255,${(texAlpha * 0.5).toFixed(
+            3
+          )}) 1px, transparent 1.2px)`,
+          backgroundSize: '5px 5px',
+        };
+      case 'scanline':
+        return {
+          backgroundImage: `repeating-linear-gradient(0deg, rgba(0,0,0,${(texAlpha * 0.55).toFixed(
+            3
+          )}) 0px, rgba(0,0,0,${(texAlpha * 0.55).toFixed(
+            3
+          )}) 1px, transparent 1px, transparent 3px)`,
+        };
+      case 'hexgrid':
+        return {
+          backgroundImage: `repeating-linear-gradient(60deg, rgba(255,255,255,${(texAlpha * 0.3).toFixed(
+            3
+          )}) 0px, rgba(255,255,255,${(texAlpha * 0.3).toFixed(
+            3
+          )}) 1px, transparent 1px, transparent 6px), repeating-linear-gradient(-60deg, rgba(255,255,255,${(
+            texAlpha * 0.3
+          ).toFixed(3)}) 0px, rgba(255,255,255,${(texAlpha * 0.3).toFixed(
+            3
+          )}) 1px, transparent 1px, transparent 6px)`,
+        };
+      case 'diagonal':
+        return {
+          backgroundImage: `repeating-linear-gradient(135deg, rgba(255,255,255,${(texAlpha * 0.38).toFixed(
+            3
+          )}) 0px, rgba(255,255,255,${(texAlpha * 0.38).toFixed(
+            3
+          )}) 2px, transparent 2px, transparent 7px)`,
+        };
+      case 'none':
+      default:
+        return null;
+    }
+  })();
+
+  const glossStyle: React.CSSProperties | null = (() => {
+    switch (cfg.glossMode) {
+      case 'top_arc':
+        return {
+          backgroundImage: `linear-gradient(180deg, rgba(255,255,255,${glossAlpha.toFixed(
+            3
+          )}) 0%, rgba(255,255,255,${(glossAlpha * 0.14).toFixed(3)}) 46%, transparent 52%)`,
+        };
+      case 'diagonal_sheen':
+        return {
+          backgroundImage: `linear-gradient(125deg, transparent 28%, rgba(255,255,255,${(
+            glossAlpha * 0.92
+          ).toFixed(3)}) 48%, rgba(255,255,255,${(glossAlpha * 0.25).toFixed(
+            3
+          )}) 54%, transparent 72%)`,
+        };
+      case 'glass_dome':
+        return {
+          backgroundImage: `radial-gradient(circle at 30% 22%, rgba(255,255,255,${(
+            glossAlpha * 0.95
+          ).toFixed(3)}) 0%, rgba(255,255,255,${(glossAlpha * 0.22).toFixed(
+            3
+          )}) 38%, transparent 66%)`,
+        };
+      case 'metallic':
+        return {
+          backgroundImage: `linear-gradient(135deg, rgba(255,255,255,${(glossAlpha * 0.45).toFixed(
+            3
+          )}) 0%, rgba(0,0,0,${(glossAlpha * 0.35).toFixed(3)}) 35%, rgba(255,255,255,${(
+            glossAlpha * 0.72
+          ).toFixed(3)}) 52%, rgba(0,0,0,${(glossAlpha * 0.32).toFixed(
+            3
+          )}) 74%, rgba(255,255,255,${(glossAlpha * 0.35).toFixed(3)}) 100%)`,
+        };
+      case 'none':
+      default:
+        return null;
+    }
+  })();
+
+  return (
+    <>
+      {textureStyle && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-[1]"
+          style={textureStyle}
+        />
+      )}
+      {glossStyle && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-[2]"
+          style={glossStyle}
+        />
+      )}
+    </>
+  );
+};
+
+export const DeadpoolPolygonBorder: React.FC<{
+  shape: WheelIconStylePref;
+  color: string;
+  width: number;
+  style: DeadpoolBorderStyle;
+}> = ({shape, color, width, style}) => {
+  if (!isPolygonOuterShape(shape) || width <= 0.1) return null;
+  const points =
+    shape === 'octa_shield'
+      ? '29,2 71,2 98,29 98,71 71,98 29,98 2,71 2,29'
+      : shape === 'blade_hex'
+        ? '25,4 75,4 99,50 75,96 25,96 1,50'
+        : shape === 'star_prism'
+          ? '50,2 69,31 98,50 69,69 50,98 31,69 2,50 31,31'
+          : '50,2 95,26 88,78 50,99 12,78 5,26';
+  const dash = style === 'dashed' ? '7 4' : style === 'dotted' ? '2 4' : undefined;
+  const sw = Math.max(1.5, width * 1.9);
+
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      className="pointer-events-none absolute inset-0 z-[3] h-full w-full"
+    >
+      <polygon
+        points={points}
+        fill="none"
+        stroke={color}
+        strokeWidth={sw}
+        strokeDasharray={dash}
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      {style === 'double' && (
+        <polygon
+          points={points}
+          fill="none"
+          stroke={color}
+          strokeWidth={Math.max(1, sw * 0.45)}
+          strokeOpacity="0.65"
+          strokeLinejoin="round"
+          transform="translate(50 50) scale(0.9) translate(-50 -50)"
+          vectorEffect="non-scaling-stroke"
+        />
+      )}
+    </svg>
+  );
+};
+
+/**
+ * Real working outer halo ring around the shell (previously stubbed to return null).
+ */
+export const DeadpoolOuterHalo: React.FC<{
+  cfg: DeadpoolResolvedConfig;
+  sizePx?: number;
+}> = ({cfg, sizePx = 88}) => {
+  if (cfg.outerHaloRing === 'none') return null;
+  const strokeCol = cfg.glowColor || cfg.ringColor || cfg.outerColor || '#DC2626';
+
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 100 100"
+      width={sizePx}
+      height={sizePx}
+      className="pointer-events-none absolute left-1/2 top-1/2 z-0 -translate-x-1/2 -translate-y-1/2 overflow-visible"
+    >
+      {cfg.outerHaloRing === 'pulse' && (
+        <circle
+          cx="50"
+          cy="50"
+          r="45"
+          fill="none"
+          stroke={strokeCol}
+          strokeWidth="1.8"
+          strokeOpacity="0.72"
+          className="morph-dp-glow-pulse"
+        />
+      )}
+      {cfg.outerHaloRing === 'double_ring' && (
+        <>
+          <circle
+            cx="50"
+            cy="50"
+            r="44"
+            fill="none"
+            stroke={strokeCol}
+            strokeWidth="1.2"
+            strokeOpacity="0.68"
+          />
+          <circle
+            cx="50"
+            cy="50"
+            r="48.5"
+            fill="none"
+            stroke={strokeCol}
+            strokeWidth="0.9"
+            strokeOpacity="0.36"
+            strokeDasharray="6 4"
+          />
+        </>
+      )}
+      {cfg.outerHaloRing === 'energy_arc' && (
+        <>
+          <path
+            d="M 18 22 A 44 44 0 0 1 82 22"
+            fill="none"
+            stroke={strokeCol}
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeOpacity="0.88"
+          />
+          <path
+            d="M 82 78 A 44 44 0 0 1 18 78"
+            fill="none"
+            stroke={strokeCol}
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeOpacity="0.88"
+          />
+        </>
+      )}
+      {cfg.outerHaloRing === 'orbit_dots' && (
+        <>
+          <circle
+            cx="50"
+            cy="50"
+            r="45.5"
+            fill="none"
+            stroke={strokeCol}
+            strokeWidth="1"
+            strokeOpacity="0.32"
+            strokeDasharray="3 5"
+          />
+          {[0, 90, 180, 270].map((deg) => {
+            const rad = (deg * Math.PI) / 180;
+            const cx = 50 + 45.5 * Math.cos(rad);
+            const cy = 50 + 45.5 * Math.sin(rad);
+            return <circle key={deg} cx={cx} cy={cy} r="2.2" fill={strokeCol} fillOpacity="0.9" />;
+          })}
+        </>
+      )}
+    </svg>
+  );
+};
+
+export function buildEyePaths(style: DeadpoolEyeStyle, spreadOffset = 0): {left: string; right: string} {
+  const o = spreadOffset;
+  switch (style) {
+    case 'angry':
+      // Fiercer 41° comic scowl — sharp diagonal brow with crisp pointed inner wedge
+      return {
+        left: `M ${(6.65 - o).toFixed(2)} 10.80 L ${(11.50 - o).toFixed(2)} 15.05 L ${(9.30 - o).toFixed(2)} 16.25 Q ${(6.20 - o).toFixed(2)} 14.65 ${(6.65 - o).toFixed(2)} 10.80 Z`,
+        right: `M ${(21.35 + o).toFixed(2)} 10.80 L ${(16.50 + o).toFixed(2)} 15.05 L ${(18.70 + o).toFixed(2)} 16.25 Q ${(21.80 + o).toFixed(2)} 14.65 ${(21.35 + o).toFixed(2)} 10.80 Z`,
+      };
+    case 'wide':
+      // Expressive comic Deadpool wide eyes — fuller lower arc while keeping iconic inward slant
+      return {
+        left: `M ${(6.45 - o).toFixed(2)} 10.95 Q ${(9.45 - o).toFixed(2)} 11.95 ${(11.45 - o).toFixed(2)} 14.55 C ${(9.45 - o).toFixed(2)} 17.35 ${(5.15 - o).toFixed(2)} 14.85 ${(6.45 - o).toFixed(2)} 10.95 Z`,
+        right: `M ${(21.55 + o).toFixed(2)} 10.95 Q ${(18.55 + o).toFixed(2)} 11.95 ${(16.55 + o).toFixed(2)} 14.55 C ${(18.55 + o).toFixed(2)} 17.35 ${(22.85 + o).toFixed(2)} 14.85 ${(21.55 + o).toFixed(2)} 10.95 Z`,
+      };
+    case 'cyber_visor':
+      // Angular tactical Deadpool visor — faceted polygon matching the steep 35° Deadpool slant
+      return {
+        left: `M ${(6.45 - o).toFixed(2)} 11.30 L ${(11.45 - o).toFixed(2)} 14.70 L ${(10.30 - o).toFixed(2)} 15.95 L ${(6.40 - o).toFixed(2)} 13.65 Z`,
+        right: `M ${(21.55 + o).toFixed(2)} 11.30 L ${(16.55 + o).toFixed(2)} 14.70 L ${(17.70 + o).toFixed(2)} 15.95 L ${(21.60 + o).toFixed(2)} 13.65 Z`,
+      };
+    case 'squint':
+      // Focused Deadpool squint — sleeker half-oval preserving the steep 35° diagonal brow
+      return {
+        left: `M ${(6.45 - o).toFixed(2)} 11.50 L ${(11.40 - o).toFixed(2)} 14.95 C ${(9.45 - o).toFixed(2)} 15.85 ${(6.30 - o).toFixed(2)} 14.10 ${(6.45 - o).toFixed(2)} 11.50 Z`,
+        right: `M ${(21.55 + o).toFixed(2)} 11.50 L ${(16.60 + o).toFixed(2)} 14.95 C ${(18.55 + o).toFixed(2)} 15.85 ${(21.70 + o).toFixed(2)} 14.10 ${(21.55 + o).toFixed(2)} 11.50 Z`,
+      };
+    case 'glowing_slit':
+      // Razor-sharp angled Deadpool eye slash — steep 35° diagonal thin wedge
+      return {
+        left: `M ${(6.45 - o).toFixed(2)} 11.55 L ${(11.45 - o).toFixed(2)} 14.95 L ${(10.55 - o).toFixed(2)} 15.55 L ${(6.45 - o).toFixed(2)} 12.90 Z`,
+        right: `M ${(21.55 + o).toFixed(2)} 11.55 L ${(16.55 + o).toFixed(2)} 14.95 L ${(17.45 + o).toFixed(2)} 15.55 L ${(21.55 + o).toFixed(2)} 12.90 Z`,
+      };
+    case 'classic':
+    default:
+      // Iconic Deadpool mask eyes — straight 36° downward-inward brow with bold curved half-oval belly
+      return {
+        left: `M ${(6.45 - o).toFixed(2)} 11.20 L ${(11.40 - o).toFixed(2)} 14.80 C ${(9.35 - o).toFixed(2)} 16.55 ${(5.45 - o).toFixed(2)} 14.15 ${(6.45 - o).toFixed(2)} 11.20 Z`,
+        right: `M ${(21.55 + o).toFixed(2)} 11.20 L ${(16.60 + o).toFixed(2)} 14.80 C ${(18.65 + o).toFixed(2)} 16.55 ${(22.55 + o).toFixed(2)} 14.15 ${(21.55 + o).toFixed(2)} 11.20 Z`,
+      };
+  }
+}
+
+function renderInnerRing(
+  style: DeadpoolInnerRingStyle,
+  stroke: string,
+  width: number,
+  radius: number
+): React.ReactNode {
+  if (style === 'none') return null;
+  if (style === 'dashed') {
+    return (
+      <circle
+        cx="14"
+        cy="14"
+        r={radius}
+        fill="none"
+        stroke={stroke}
+        strokeWidth={width}
+        strokeDasharray="3.4 2.2"
+        strokeLinecap="round"
+      />
+    );
+  }
+  if (style === 'double') {
+    return (
+      <>
+        <circle cx="14" cy="14" r={radius + 0.35} fill="none" stroke={stroke} strokeWidth={Math.max(0.85, width * 0.62)} />
+        <circle cx="14" cy="14" r={radius - 1.05} fill="none" stroke={stroke} strokeWidth={Math.max(0.75, width * 0.5)} strokeOpacity="0.82" />
+      </>
+    );
+  }
+  if (style === 'tech_ticks') {
+    return (
+      <>
+        <circle
+          cx="14"
+          cy="14"
+          r={radius}
+          fill="none"
+          stroke={stroke}
+          strokeWidth={Math.max(0.95, width * 0.72)}
+          strokeOpacity="0.85"
+        />
+        {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => {
+          const rad = (deg * Math.PI) / 180;
+          const r1 = radius - 1.1;
+          const r2 = radius + 0.9;
+          return (
+            <line
+              key={deg}
+              x1={(14 + r1 * Math.cos(rad)).toFixed(2)}
+              y1={(14 + r1 * Math.sin(rad)).toFixed(2)}
+              x2={(14 + r2 * Math.cos(rad)).toFixed(2)}
+              y2={(14 + r2 * Math.sin(rad)).toFixed(2)}
+              stroke={stroke}
+              strokeWidth={deg % 90 === 0 ? '1.35' : '0.85'}
+              strokeLinecap="round"
+            />
+          );
+        })}
+      </>
+    );
+  }
+  return (
+    <circle cx="14" cy="14" r={radius} fill="none" stroke={stroke} strokeWidth={width} />
+  );
+}
+
+/**
+ * Renders 7 genuinely distinct geometric Deadpool logo variants inside a 28×28 viewBox.
+ * All vector geometry is 100% original inline SVG (no unverified external assets).
+ */
+export const DeadpoolEmblemGroup: React.FC<{
+  cfg: DeadpoolResolvedConfig;
+  maskFill: string;
+  variantOverride?: DeadpoolLogoVariant;
+}> = ({cfg, maskFill, variantOverride}) => {
+  const uid = useId().replace(/:/g, '');
+  const variant = variantOverride ?? cfg.logoVariant;
+
+  const isCustomColorActive = Boolean(cfg.innerColor || cfg.eyeColor || cfg.ringColor);
+  const gapHalf = cfg.splitGap === 'tight' ? 1.15 : cfg.splitGap === 'wide' ? 2.15 : 1.6;
+  const eyeSpread = cfg.splitGap === 'wide' ? 0.35 : cfg.splitGap === 'tight' ? -0.25 : 0;
+  const eyes = buildEyePaths(cfg.eyeStyle, eyeSpread);
+
+  // Respect logoPadding (0 - 24%) combined with maskScale
+  const paddingScale = 1 - (cfg.logoPadding / 100) * 1.15;
+  const totalScale = Math.max(0.55, Math.min(1.3, cfg.maskScale * paddingScale));
+  const opacity = cfg.maskOpacity / 100;
+
+  const filterParts: string[] = [];
+  if (cfg.maskDropShadow > 0) {
+    const blur = (0.5 + (cfg.maskDropShadow / 100) * 2.2).toFixed(2);
+    const alpha = (0.28 + (cfg.maskDropShadow / 100) * 0.52).toFixed(2);
+    filterParts.push(`drop-shadow(0px 1px ${blur}px rgba(0,0,0,${alpha}))`);
+  }
+
+  const eyeGlowFilter =
+    cfg.eyeGlow
+      ? `drop-shadow(0 0 ${(0.7 + (cfg.eyeGlowStrength / 100) * 2.1).toFixed(2)}px ${
+          cfg.eyeColor && cfg.eyeColor !== 'transparent' ? cfg.eyeColor : '#FFFFFF'
+        })`
+      : undefined;
+
+  // Split half-circle D-paths using gapHalf
+  const buildSplitDomes = (r: number) => {
+    const xL = 14 - gapHalf;
+    const xR = 14 + gapHalf;
+    const dy = Math.sqrt(Math.max(1, r * r - gapHalf * gapHalf));
+    const yTop = 14 - dy;
+    const yBot = 14 + dy;
+    return {
+      left: `M ${xL.toFixed(2)} ${yTop.toFixed(2)} A ${r} ${r} 0 0 0 ${xL.toFixed(2)} ${yBot.toFixed(2)} Z`,
+      right: `M ${xR.toFixed(2)} ${yTop.toFixed(2)} A ${r} ${r} 0 0 1 ${xR.toFixed(2)} ${yBot.toFixed(2)} Z`,
+    };
+  };
+
+  const renderVariantGeometry = () => {
+    switch (variant) {
+      case 'pure_bw': {
+        // 2. Pure Black & White — sharp high-contrast graphic stencil on bright field
+        const fg = cfg.innerColor || '#09090B';
+        const bg = '#FFFFFF';
+        const ringCol = cfg.ringColor || fg;
+        const eyeCol = cfg.eyeColor && cfg.eyeColor !== 'transparent' ? cfg.eyeColor : bg;
+        const domes = buildSplitDomes(8.85);
+        return (
+          <>
+            <circle cx="14" cy="14" r="10.9" fill={bg} />
+            {renderInnerRing(cfg.innerRingStyle, ringCol, Math.max(1.8, cfg.innerRingWidth), 10.65)}
+            <path d={domes.left} fill={fg} />
+            <path d={domes.right} fill={fg} />
+            <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
+              <path d={eyes.left} fill={eyeCol} />
+              <path d={eyes.right} fill={eyeCol} />
+            </g>
+          </>
+        );
+      }
+
+      case 'white_on_black': {
+        // 3. White Emblem on Black — dark solid disc with stark white split emblem & dark pierced eyes
+        const discBg = '#09090D';
+        const emblemFg = cfg.innerColor && isCustomColorActive ? cfg.innerColor : '#F8FAFC';
+        const eyeCol =
+          cfg.eyeColor && cfg.eyeColor !== 'transparent' && isCustomColorActive
+            ? cfg.eyeColor
+            : discBg;
+        const ringCol = cfg.ringColor && isCustomColorActive ? cfg.ringColor : emblemFg;
+        const domes = buildSplitDomes(8.6);
+        return (
+          <>
+            <circle cx="14" cy="14" r="11.4" fill={discBg} />
+            {renderInnerRing(cfg.innerRingStyle, ringCol, Math.max(1.4, cfg.innerRingWidth * 0.92), 10.55)}
+            <path d={domes.left} fill={emblemFg} />
+            <path d={domes.right} fill={emblemFg} />
+            <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
+              <path d={eyes.left} fill={eyeCol} />
+              <path d={eyes.right} fill={eyeCol} />
+            </g>
+          </>
+        );
+      }
+
+      case 'tactical_metallic': {
+        // 4. Tactical Metallic — chamfered octagon armor ring, brushed steel split plates, notched ticks
+        const metalId = `dp-metal-${uid}`;
+        const plateColTop = cfg.innerColor && isCustomColorActive ? cfg.innerColor : '#E2E8F0';
+        const plateColBot = '#475569';
+        const ringCol = cfg.ringColor && isCustomColorActive ? cfg.ringColor : '#94A3B8';
+        const eyeCol = cfg.eyeColor && cfg.eyeColor !== 'transparent' ? cfg.eyeColor : '#FFFFFF';
+        const xL = (14 - gapHalf).toFixed(2);
+        const xR = (14 + gapHalf).toFixed(2);
+        return (
+          <>
+            <defs>
+              <linearGradient id={metalId} x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor={plateColTop} />
+                <stop offset="52%" stopColor="#94A3B8" />
+                <stop offset="100%" stopColor={plateColBot} />
+              </linearGradient>
+            </defs>
+            {/* Chamfered octagonal armor frame */}
+            <polygon
+              points="9.4,2.8 18.6,2.8 25.2,9.4 25.2,18.6 18.6,25.2 9.4,25.2 2.8,18.6 2.8,9.4"
+              fill="#0B1120"
+              stroke={ringCol}
+              strokeWidth={cfg.innerRingStyle === 'none' ? 0 : Math.max(1.3, cfg.innerRingWidth * 0.88)}
+              strokeDasharray={cfg.innerRingStyle === 'dashed' ? '3 2' : undefined}
+              strokeLinejoin="miter"
+            />
+            {/* Cardinal tactical rangefinder notches */}
+            <line x1="14" y1="2.2" x2="14" y2="4.9" stroke={ringCol} strokeWidth="1.25" />
+            <line x1="14" y1="23.1" x2="14" y2="25.8" stroke={ringCol} strokeWidth="1.25" />
+            <line x1="2.2" y1="14" x2="4.9" y2="14" stroke={ringCol} strokeWidth="1.25" />
+            <line x1="23.1" y1="14" x2="25.8" y2="14" stroke={ringCol} strokeWidth="1.25" />
+            {/* Faceted left & right metallic armor mask plates */}
+            <polygon
+              points={`${xL},5.6 8.8,6.2 5.4,10.2 5.4,17.8 8.8,21.8 ${xL},22.4`}
+              fill={`url(#${metalId})`}
+            />
+            <polygon
+              points={`${xR},5.6 19.2,6.2 22.6,10.2 22.6,17.8 19.2,21.8 ${xR},22.4`}
+              fill={`url(#${metalId})`}
+            />
+            {/* Dark eye socket cutouts + crisp visor eyes */}
+            <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
+              <path d={eyes.left} fill={eyeCol} stroke="#0B1120" strokeWidth="0.65" />
+              <path d={eyes.right} fill={eyeCol} stroke="#0B1120" strokeWidth="0.65" />
+            </g>
+          </>
+        );
+      }
+
+      case 'minimal_flat': {
+        // 5. Minimal Flat — zero outer ring, clean flat geometric D-halves, built for ultra-small legibility
+        const flatFg = cfg.innerColor || maskFill || '#DC2626';
+        const eyeCol = cfg.eyeColor && cfg.eyeColor !== 'transparent' ? cfg.eyeColor : '#FFFFFF';
+        const domes = buildSplitDomes(10.2);
+        return (
+          <>
+            {cfg.innerRingStyle !== 'none' && cfg.innerRingStyle !== 'solid' &&
+              renderInnerRing(cfg.innerRingStyle, cfg.ringColor || flatFg, 1.1, 11.4)}
+            <path d={domes.left} fill={flatFg} />
+            <path d={domes.right} fill={flatFg} />
+            <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
+              <path d={eyes.left} fill={eyeCol} />
+              <path d={eyes.right} fill={eyeCol} />
+            </g>
+          </>
+        );
+      }
+
+      case 'crimson_dark': {
+        // 6. Crimson Dark — obsidian carbon base with deep faceted blood-crimson mask panels & sharp ridge
+        const crimsonId = `dp-crim-${uid}`;
+        const panelTop = cfg.innerColor && isCustomColorActive ? cfg.innerColor : '#DC2626';
+        const panelBot = '#7F1D1D';
+        const ringCol = cfg.ringColor && isCustomColorActive ? cfg.ringColor : '#991B1B';
+        const eyeCol = cfg.eyeColor && cfg.eyeColor !== 'transparent' ? cfg.eyeColor : '#FEF2F2';
+        const xL = (14 - gapHalf).toFixed(2);
+        const xR = (14 + gapHalf).toFixed(2);
+        return (
+          <>
+            <defs>
+              <linearGradient id={crimsonId} x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor={panelTop} />
+                <stop offset="100%" stopColor={panelBot} />
+              </linearGradient>
+            </defs>
+            <circle cx="14" cy="14" r="11.3" fill="#0A0609" />
+            {renderInnerRing(cfg.innerRingStyle, ringCol, Math.max(1.5, cfg.innerRingWidth), 10.6)}
+            {/* Aggressive swept visor halves */}
+            <path
+              d={`M ${xL} 5.4 C 8.4 5.6 5.2 9.2 5.2 14 C 5.2 18.8 8.4 22.4 ${xL} 22.6 L ${(14 - gapHalf - 0.5).toFixed(2)} 14 Z`}
+              fill={`url(#${crimsonId})`}
+            />
+            <path
+              d={`M ${xR} 5.4 C 19.6 5.6 22.8 9.2 22.8 14 C 22.8 18.8 19.6 22.4 ${xR} 22.6 L ${(14 + gapHalf + 0.5).toFixed(2)} 14 Z`}
+              fill={`url(#${crimsonId})`}
+            />
+            {/* Black eye sockets around bright eyes */}
+            <path
+              d="M 5.8 9.9 L 12.2 14.6 L 10.0 17.4 C 7.0 17.2 4.8 14.2 5.8 9.9 Z"
+              fill="#0A0609"
+            />
+            <path
+              d="M 22.2 9.9 L 15.8 14.6 L 18.0 17.4 C 21.0 17.2 23.2 14.2 22.2 9.9 Z"
+              fill="#0A0609"
+            />
+            <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
+              <path d={eyes.left} fill={eyeCol} />
+              <path d={eyes.right} fill={eyeCol} />
+            </g>
+          </>
+        );
+      }
+
+      case 'monochrome_inverted': {
+        // 7. Monochrome Inverted — solid bright circular plate with negative-space dark mask cutout
+        const cutMaskId = `dp-inv-${uid}`;
+        const plateFill = cfg.innerColor && isCustomColorActive ? cfg.innerColor : '#F4F4F8';
+        const cutoutBg = '#0D0D12';
+        const ringCol = cfg.ringColor && isCustomColorActive ? cfg.ringColor : plateFill;
+        const domes = buildSplitDomes(8.9);
+        return (
+          <>
+            <defs>
+              <mask id={cutMaskId}>
+                <circle cx="14" cy="14" r="10.9" fill="white" />
+                <path d={domes.left} fill="black" />
+                <path d={domes.right} fill="black" />
+                <path d={eyes.left} fill="white" />
+                <path d={eyes.right} fill="white" />
+              </mask>
+            </defs>
+            <circle cx="14" cy="14" r="11.1" fill={cutoutBg} />
+            <circle cx="14" cy="14" r="10.9" fill={plateFill} mask={`url(#${cutMaskId})`} />
+            {cfg.innerRingStyle !== 'none' &&
+              renderInnerRing(cfg.innerRingStyle, ringCol, Math.max(1.1, cfg.innerRingWidth * 0.72), 11.1)}
+          </>
+        );
+      }
+
+      case 'original':
+      default: {
+        // 1. Original Red & Black — crisp iconic Deadpool emblem (default)
+        const baseRed = cfg.outerColor || '#C8102E';
+        const maskDark = cfg.innerColor || maskFill || '#0B0B0E';
+        const ringCol = cfg.ringColor || maskDark;
+        const eyeCol =
+          cfg.eyeColor && cfg.eyeColor !== 'transparent' ? cfg.eyeColor : '#FFFFFF';
+        const domes = buildSplitDomes(8.85);
+        return (
+          <>
+            {/* Crisp red inner field so emblem stays unmistakably red/black even on custom backgrounds */}
+            <circle cx="14" cy="14" r="10.6" fill={baseRed} />
+            {renderInnerRing(cfg.innerRingStyle, ringCol, cfg.innerRingWidth, 10.65)}
+            <path d={domes.left} fill={maskDark} />
+            <path d={domes.right} fill={maskDark} />
+            <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
+              <path d={eyes.left} fill={eyeCol} />
+              <path d={eyes.right} fill={eyeCol} />
+            </g>
+          </>
+        );
+      }
+    }
+  };
+
+  return (
+    <g
+      transform={`translate(14 14) rotate(${cfg.maskTilt}) scale(${totalScale.toFixed(3)}) translate(-14 -14)`}
+      opacity={opacity}
+      style={filterParts.length > 0 ? {filter: filterParts.join(' ')} : undefined}
+    >
+      {renderVariantGeometry()}
+    </g>
+  );
+};
+
+export const DeadpoolMiniSwatch: React.FC<{
+  outer: string;
+  end: string;
+  mask: string;
+  eye: string;
+  ring: string;
+  angle?: number;
+  variant?: DeadpoolLogoVariant;
+}> = ({outer, end, mask, eye, ring, angle = 135, variant = 'original'}) => {
+  const miniCfg = resolveDeadpoolConfig({
+    deadpoolOuterColor: outer,
+    deadpoolOuterColorEnd: end,
+    deadpoolInnerColor: mask,
+    deadpoolEyeColor: eye,
+    deadpoolRingColor: ring,
+    deadpoolLogoVariant: variant,
+    deadpoolLogoPadding: 4,
+  });
+
+  return (
+    <span
+      className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow-xs"
+      style={{
+        backgroundImage: `linear-gradient(${angle}deg, ${outer} 0%, ${end} 100%)`,
+        border: `1.5px solid ${ring}`,
+      }}
+    >
+      <svg viewBox="0 0 28 28" className="h-6 w-6" fill="none" aria-hidden="true">
+        <DeadpoolEmblemGroup cfg={miniCfg} maskFill={mask} variantOverride={variant} />
+      </svg>
+    </span>
+  );
+};
 
 export function buildDeadpoolResetPatch(): Partial<Prefs> {
   return {
@@ -1212,7 +1539,7 @@ export function buildDeadpoolResetPatch(): Partial<Prefs> {
     deadpoolMaskTilt: 0,
     deadpoolMaskOpacity: 100,
     deadpoolEyeStyle: 'classic',
-    deadpoolLogoVariant: 'classic',
+    deadpoolLogoVariant: 'original',
     deadpoolSplitGap: 'normal',
     deadpoolInnerRingStyle: 'solid',
     deadpoolInnerRingWidth: 1.65,
@@ -1230,5 +1557,8 @@ export function buildDeadpoolResetPatch(): Partial<Prefs> {
     deadpoolOuterHaloRing: 'none',
     deadpoolMaskDropShadow: 0,
     deadpoolColorBoost: 100,
+    deadpoolLogoPadding: 6,
+    deadpoolLogoBg: 'auto',
+    deadpoolLogoContrast: 100,
   };
 }

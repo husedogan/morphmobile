@@ -13,14 +13,16 @@ import {
 } from '../data/models';
 import {
   DeadpoolEmblemGroup,
+  DeadpoolOuterHalo,
   DeadpoolPolygonBorder,
   DeadpoolResolvedConfig,
   DeadpoolShellOverlays,
-  buildDeadpoolBackgroundImage,
   buildDeadpoolBoxShadow,
+  buildDeadpoolShellFilter,
   computeDeadpoolAnimatedAngles,
   getBreathingAnimClass,
   resolveDeadpoolConfig,
+  resolveDeadpoolShellBackground,
 } from './DeadpoolWheelVisual';
 
 export function isLandscapeFixedWheelViewport(): boolean {
@@ -2149,7 +2151,7 @@ export const WheelFab: React.FC<{
       : iconStyle === 'blade_hex'
         ? 'polygon(25% 4%, 75% 4%, 99% 50%, 75% 96%, 25% 96%, 1% 50%)'
         : iconStyle === 'star_prism'
-          ? 'polygon(50% 2%, 67% 33%, 98% 50%, 67% 67%, 50% 98%, 33% 67%, 2% 50%, 33% 33%)'
+          ? 'polygon(50% 2%, 69% 31%, 98% 50%, 69% 69%, 50% 98%, 31% 69%, 2% 50%, 31% 31%)'
           : iconStyle === 'shield_crest'
             ? 'polygon(50% 2%, 95% 26%, 88% 78%, 50% 99%, 12% 78%, 5% 26%)'
             : undefined;
@@ -2176,20 +2178,13 @@ export const WheelFab: React.FC<{
   const worldInnerDeg = (deadpoolOuterSpinOnly ? 0 : spinDeg) + (effectiveSpinEnabled ? idleInnerDeg : 0);
   const localInnerDeg = worldInnerDeg - baseOuterRot;
 
-  const dpBgImage = isDeadpoolInner ? buildDeadpoolBackgroundImage(dpCfg) : undefined;
+  const dpBgImage = isDeadpoolInner ? resolveDeadpoolShellBackground(dpCfg) : undefined;
+  const dpIsTransparentBg = isDeadpoolInner && dpCfg.logoBg === 'transparent';
   const dpBoxShadow = isDeadpoolInner ? buildDeadpoolBoxShadow(dpCfg, Boolean(shapeClipPath)) : undefined;
   const dpCustomBorderRadius =
     isDeadpoolInner && !shapeClipPath && dpCfg.cornerRadius !== null
       ? `${dpCfg.cornerRadius}%`
       : undefined;
-  const dpHasCustomShell =
-    isDeadpoolInner &&
-    (Boolean(dpBgImage) ||
-      Boolean(dpBoxShadow) ||
-      Boolean(dpCfg.ringColor) ||
-      dpCfg.borderWidth !== 1 ||
-      dpCfg.borderStyle !== 'solid' ||
-      Boolean(dpCustomBorderRadius));
 
   const fireStyle: React.CSSProperties | undefined =
     phase === 'idle' && heat > 0.04
@@ -2214,14 +2209,24 @@ export const WheelFab: React.FC<{
                 glowFade
               ).toFixed(2)})`,
         }
-      : dpHasCustomShell
+      : isDeadpoolInner
         ? {
-            ...(dpBgImage ? {backgroundImage: dpBgImage} : {}),
-            ...(!shapeClipPath && dpCfg.ringColor ? {borderColor: dpCfg.ringColor} : {}),
-            ...(!shapeClipPath && dpCfg.borderWidth !== 1 ? {borderWidth: `${dpCfg.borderWidth}px`} : {}),
-            ...(!shapeClipPath && dpCfg.borderStyle !== 'solid' ? {borderStyle: dpCfg.borderStyle} : {}),
-            ...(shapeClipPath ? {borderWidth: 0, borderStyle: 'none'} : {}),
-            ...(dpBoxShadow ? {boxShadow: dpBoxShadow} : {}),
+            backgroundColor: dpIsTransparentBg ? 'transparent' : undefined,
+            backgroundImage: dpBgImage,
+            ...(!shapeClipPath
+              ? {
+                  borderColor:
+                    dpCfg.ringColor ||
+                    (dpIsTransparentBg ? 'transparent' : 'rgba(255,255,255,0.22)'),
+                  borderWidth: `${dpCfg.borderWidth}px`,
+                  borderStyle: dpCfg.borderStyle,
+                }
+              : {borderWidth: 0, borderStyle: 'none'}),
+            ...(dpBoxShadow
+              ? {boxShadow: dpBoxShadow}
+              : dpIsTransparentBg
+                ? {boxShadow: 'none'}
+                : {}),
             ...(dpCustomBorderRadius ? {borderRadius: dpCustomBorderRadius} : {}),
           }
         : shapeClipPath
@@ -2365,13 +2370,13 @@ export const WheelFab: React.FC<{
 
     const starVerts: Array<[number, number]> = [
       [0, -29.8],
-      [10.5, -10.5],
+      [11.8, -11.8],
       [29.8, 0],
-      [10.5, 10.5],
+      [11.8, 11.8],
       [0, 29.8],
-      [-10.5, 10.5],
+      [-11.8, 11.8],
       [-29.8, 0],
-      [-10.5, -10.5],
+      [-11.8, -11.8],
     ];
     const octaVerts: Array<[number, number]> = [
       [-12.2, -27.8],
@@ -2904,11 +2909,15 @@ export const WheelFab: React.FC<{
             }}
           />
         )}
+        {/* Deadpool Outer Halo Ring */}
+        {isDeadpoolInner && phase === 'idle' && <DeadpoolOuterHalo cfg={dpCfg} sizePx={78} />}
         {/* Shape-contoured glowing heat aura + perimeter flames rotated in lockstep with outer shell */}
         {renderShapeHeatAura()}
         {renderBurnCorona()}
         <button
           type="button"
+          data-wheel-fab="true"
+          data-chaos-safe="true"
           onContextMenu={(e) => e.preventDefault()}
           onPointerDown={handlePointerDown}
           onClick={() => {
@@ -2948,9 +2957,7 @@ export const WheelFab: React.FC<{
               filter:
                 [
                   ashCharFilter,
-                  isDeadpoolInner && dpCfg.colorBoost !== 100
-                    ? `saturate(${dpCfg.colorBoost}%)`
-                    : '',
+                  isDeadpoolInner ? buildDeadpoolShellFilter(dpCfg) ?? '' : '',
                 ]
                   .filter(Boolean)
                   .join(' ') || undefined,
@@ -2958,11 +2965,11 @@ export const WheelFab: React.FC<{
             }}
             className={
               className ??
-              `morph-accent-btn relative flex ${shapeShellClass} items-center justify-center overflow-hidden ${
-                shapeClipPath ? 'border-0' : 'border border-white/20 shadow-xl'
+              `${isDeadpoolInner ? '' : 'morph-accent-btn '}relative flex ${shapeShellClass} items-center justify-center overflow-hidden ${
+                shapeClipPath || dpIsTransparentBg ? 'border-0' : 'border border-white/20 shadow-xl'
               } group-focus-visible:ring-2 group-focus-visible:ring-[var(--accent)] group-focus-visible:ring-offset-2 ${
                 effectiveSpinEnabled ? '' : 'transition-transform duration-150'
-              } ${isDragging && !shapeClipPath ? 'shadow-2xl' : ''} ${
+              } ${isDragging && !shapeClipPath && !dpIsTransparentBg ? 'shadow-2xl' : ''} ${
                 isDeadpoolInner && dpCfg.glowPulse && dpCfg.glowIntensity > 0
                   ? 'morph-dp-glow-pulse'
                   : ''
@@ -2986,18 +2993,18 @@ export const WheelFab: React.FC<{
               className={`pointer-events-none relative z-10 ${
                 iconStyle === 'pill_dock'
                   ? isDeadpoolInner
-                    ? 'h-7 w-[54px]'
+                    ? 'h-8 w-[58px]'
                     : 'h-6 w-12'
                   : isDeadpoolInner
                     ? iconStyle === 'star_prism'
-                      ? 'h-[27px] w-[27px]'
+                      ? 'h-[33px] w-[33px]'
                       : iconStyle === 'diamond'
-                        ? 'h-7 w-7'
+                        ? 'h-[36px] w-[36px]'
                         : iconStyle === 'blade_hex'
-                          ? 'h-[30px] w-[30px]'
+                          ? 'h-[39px] w-[39px]'
                           : iconStyle === 'shield_crest'
-                            ? 'h-[30px] w-[30px] -translate-y-[0.5px]'
-                            : 'h-8 w-8'
+                            ? 'h-[40px] w-[40px] -translate-y-[0.5px]'
+                            : 'h-[44px] w-[44px]'
                     : 'h-7 w-7'
               }`}
               viewBox={iconStyle === 'pill_dock' ? '0 0 48 24' : '0 0 28 28'}

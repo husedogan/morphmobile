@@ -5,9 +5,12 @@ import {
   BrainCircuit,
   Clock,
   Database,
+  FileText,
   Film,
+  Flag,
   Flame,
   FlaskConical,
+  Gauge,
   Globe,
   Grip,
   Layers,
@@ -15,17 +18,19 @@ import {
   Palette,
   PanelLeftClose,
   PanelLeftOpen,
+  Scan,
   Settings,
   ShieldCheck,
   Stethoscope,
   Terminal,
+  Waves,
   Workflow,
   Wrench,
   X,
 } from 'lucide-react';
 import {Lang} from '../../data/i18n';
 import {Prefs} from '../../data/models';
-import {APP_VERSION, getVersionChannel} from '../../engine/githubUpdater';
+import {APP_VERSION} from '../../engine/githubUpdater';
 import {
   GOD_MODE_I18N,
   GodModeLang,
@@ -76,12 +81,20 @@ import {GodModeNetworkLab} from './GodModeNetworkLab';
 import {GodModeStorageLab} from './GodModeStorageLab';
 import {GodModeTimeMachine} from './GodModeTimeMachine';
 import {GodModeDigitalTwin} from './GodModeDigitalTwin';
+import {GodModePerformanceLab} from './GodModePerformanceLab';
+import {GodModeUiInspector} from './GodModeUiInspector';
+import {GodModeAnimationLab} from './GodModeAnimationLab';
+import {GodModeLogsEvents} from './GodModeLogsEvents';
+import {GodModeExperimentalTools} from './GodModeExperimentalTools';
 import {DeadpoolLogoIcon} from './DeadpoolLogoIcon';
 
 export type GodModeModuleId =
   | 'dashboard'
   | 'design_lab'
   | 'system_core'
+  | 'performance_lab'
+  | 'ui_inspector'
+  | 'animation_lab'
   | 'diagnostics'
   | 'dev_toolkit'
   | 'security_center'
@@ -91,6 +104,8 @@ export type GodModeModuleId =
   | 'ai_lab'
   | 'autonomous_agents'
   | 'experimental_lab'
+  | 'experimental_tools'
+  | 'logs_events'
   | 'media_engine'
   | 'terminal'
   | 'automation_studio'
@@ -105,27 +120,43 @@ interface ModuleNavDef {
   group: 'core' | 'labs';
 }
 
+const SELF_HEADER_MODULES = new Set<GodModeModuleId>([
+  'deadpool_studio',
+  'chaos_lab',
+  'performance_lab',
+  'ui_inspector',
+  'animation_lab',
+  'logs_events',
+  'experimental_tools',
+]);
+
 const GOD_MODE_MODULES: ReadonlyArray<ModuleNavDef> = [
+  // 12 Developer Command Center Core Categories
   {id: 'dashboard', icon: LayoutDashboard, group: 'core'},
-  {id: 'ai_lab', icon: BrainCircuit, group: 'core'},
-  {id: 'autonomous_agents', icon: Bot, group: 'core'},
-  {id: 'design_lab', icon: Palette, group: 'core'},
   {id: 'system_core', icon: Activity, group: 'core'},
-  {id: 'diagnostics', icon: Stethoscope, group: 'core'},
-  {id: 'security_center', icon: ShieldCheck, group: 'core'},
-  {id: 'settings', icon: Settings, group: 'core'},
-  // Labs & Engines (All Live)
-  {id: 'dev_toolkit', icon: Wrench, group: 'labs'},
-  {id: 'experimental_lab', icon: FlaskConical, group: 'labs'},
+  {id: 'performance_lab', icon: Gauge, group: 'core'},
+  {id: 'ui_inspector', icon: Scan, group: 'core'},
+  {id: 'animation_lab', icon: Waves, group: 'core'},
+  {id: 'deadpool_studio', icon: DeadpoolLogoIcon, group: 'core'},
+  {id: 'chaos_lab', icon: Flame, group: 'core'},
+  {id: 'network_lab', icon: Globe, group: 'core'},
+  {id: 'storage_lab', icon: Database, group: 'core'},
+  {id: 'logs_events', icon: FileText, group: 'core'},
+  {id: 'experimental_lab', icon: Flag, group: 'core'},
+  {id: 'experimental_tools', icon: FlaskConical, group: 'core'},
+  // Platform Engines & Management (All Existing Live Features Preserved)
+  {id: 'ai_lab', icon: BrainCircuit, group: 'labs'},
+  {id: 'autonomous_agents', icon: Bot, group: 'labs'},
   {id: 'media_engine', icon: Film, group: 'labs'},
   {id: 'terminal', icon: Terminal, group: 'labs'},
   {id: 'automation_studio', icon: Workflow, group: 'labs'},
-  {id: 'network_lab', icon: Globe, group: 'labs'},
-  {id: 'storage_lab', icon: Database, group: 'labs'},
   {id: 'time_machine', icon: Clock, group: 'labs'},
   {id: 'digital_twin', icon: Layers, group: 'labs'},
-  {id: 'deadpool_studio', icon: DeadpoolLogoIcon, group: 'labs'},
-  {id: 'chaos_lab', icon: Flame, group: 'labs'},
+  {id: 'diagnostics', icon: Stethoscope, group: 'labs'},
+  {id: 'dev_toolkit', icon: Wrench, group: 'labs'},
+  {id: 'design_lab', icon: Palette, group: 'labs'},
+  {id: 'security_center', icon: ShieldCheck, group: 'labs'},
+  {id: 'settings', icon: Settings, group: 'labs'},
 ];
 
 interface GodModeShellProps {
@@ -315,17 +346,21 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
 
   const coreModules = GOD_MODE_MODULES.filter((m) => m.group === 'core');
   const labModules = GOD_MODE_MODULES.filter((m) => m.group === 'labs');
-  // Top-right header already holds Design Lab, Security Center, and Settings — never duplicate them in the mobile bar
-  const HEADER_UTILITY_IDS: ReadonlyArray<GodModeModuleId> = [
-    'design_lab',
-    'security_center',
-    'settings',
+  const MOBILE_PINNED_IDS: ReadonlyArray<GodModeModuleId> = [
+    'dashboard',
+    'system_core',
+    'deadpool_studio',
+    'chaos_lab',
   ];
-  const primaryMobileModules = coreModules.filter((m) => !HEADER_UTILITY_IDS.includes(m.id));
-  const activeExtraModule = labModules.find((m) => m.id === activeModule);
-  const mobileQuickBarModules = activeExtraModule
-    ? [...primaryMobileModules, activeExtraModule]
-    : primaryMobileModules;
+  const mobilePinnedModules = MOBILE_PINNED_IDS.map(
+    (id) => GOD_MODE_MODULES.find((m) => m.id === id)!
+  );
+  const mobileFifthModule =
+    GOD_MODE_MODULES.find(
+      (m) => m.id === activeModule && !MOBILE_PINNED_IDS.includes(m.id)
+    ) ?? GOD_MODE_MODULES.find((m) => m.id === 'performance_lab')!;
+  const mobileQuickBarModules = [...mobilePinnedModules, mobileFifthModule];
+  const activeModuleMeta = t.modules[activeModule];
 
   const ownerStatusText =
     security.mode === 'server_verified'
@@ -446,15 +481,15 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
   );
 
   const renderModuleGridLauncher = () => (
-    <div className="space-y-4">
+    <div className="space-y-2.5">
       <div>
         <div
-          className="pb-2 text-[10px] font-semibold uppercase tracking-wider"
+          className="pb-1.5 text-[10px] font-semibold uppercase tracking-wider"
           style={{color: 'var(--gm-muted)'}}
         >
           {t.shell.activeSection}
         </div>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-4 gap-1.5">
           {coreModules.map((mod) => {
             const Icon = mod.icon;
             const active = activeModule === mod.id;
@@ -465,13 +500,13 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
                 type="button"
                 onClick={() => selectModule(mod.id)}
                 title={modCopy.label}
-                className={`flex min-h-[66px] flex-col items-center justify-center gap-1.5 px-1.5 py-2 text-center transition-all ${
+                className={`flex min-h-[52px] flex-col items-center justify-center gap-1 px-1 py-1.5 text-center transition-all ${
                   active ? 'gm-nav-icon-active' : 'gm-inset hover:border-[var(--gm-border-strong)]'
                 }`}
                 style={active ? undefined : {color: 'var(--gm-ink)'}}
               >
-                <Icon className="h-[18px] w-[18px] shrink-0" />
-                <span className="w-full truncate text-[10px] font-semibold leading-tight">
+                <Icon className="h-[17px] w-[17px] shrink-0" />
+                <span className="w-full truncate text-[9.5px] font-semibold leading-tight">
                   {modCopy.short}
                 </span>
               </button>
@@ -480,14 +515,14 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
         </div>
       </div>
 
-      <div className="border-t pt-3.5" style={{borderColor: 'var(--gm-border)'}}>
+      <div className="border-t pt-2.5" style={{borderColor: 'var(--gm-border)'}}>
         <div
-          className="pb-2 text-[10px] font-semibold uppercase tracking-wider"
+          className="pb-1.5 text-[10px] font-semibold uppercase tracking-wider"
           style={{color: 'var(--gm-muted)'}}
         >
           {t.shell.roadmapSection}
         </div>
-        <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+        <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-5">
           {labModules.map((mod) => {
             const Icon = mod.icon;
             const active = activeModule === mod.id;
@@ -498,13 +533,13 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
                 type="button"
                 onClick={() => selectModule(mod.id)}
                 title={modCopy.label}
-                className={`flex min-h-[62px] flex-col items-center justify-center gap-1.5 px-1.5 py-2 text-center transition-all ${
+                className={`flex min-h-[52px] flex-col items-center justify-center gap-1 px-1 py-1.5 text-center transition-all ${
                   active ? 'gm-nav-icon-active' : 'gm-inset hover:border-[var(--gm-border-strong)]'
                 }`}
                 style={active ? undefined : {color: 'var(--gm-ink)'}}
               >
-                <Icon className="h-4 w-4 shrink-0" />
-                <span className="w-full truncate text-[10px] font-medium leading-tight">
+                <Icon className="h-[16px] w-[16px] shrink-0" />
+                <span className="w-full truncate text-[9.5px] font-medium leading-tight">
                   {modCopy.short}
                 </span>
               </button>
@@ -518,6 +553,7 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
   return (
     <div
       data-god-theme={effectiveTheme}
+      data-chaos-safe="true"
       className="morph-godmode-root mt-4 overflow-hidden rounded-3xl border shadow-2xl transition-colors"
       style={{borderColor: 'var(--gm-border-strong)'}}
     >
@@ -601,11 +637,11 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
         </div>
       </header>
 
-      {/* MOBILE / TABLET ICON-FIRST EXPANDING ACTIVE TAB BAR */}
+      {/* MOBILE / TABLET ZERO-OVERFLOW 5-SLOT SMART TAB BAR */}
       <div
         role="tablist"
         aria-label={`MORPH ${brandUpper}`}
-        className="no-scrollbar flex w-full items-center gap-1 overflow-x-auto border-b p-1.5 lg:hidden"
+        className="flex w-full items-center gap-1 overflow-hidden border-b p-1.5 lg:hidden"
         style={{background: 'var(--gm-inset)', borderColor: 'var(--gm-border)'}}
       >
         {mobileQuickBarModules.map((mod) => {
@@ -621,10 +657,10 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
               aria-label={modCopy.label}
               title={modCopy.label}
               onClick={() => selectModule(mod.id)}
-              className={`flex min-h-[44px] items-center justify-center text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
+              className={`flex h-11 items-center justify-center text-xs font-semibold transition-all duration-200 ${
                 active
-                  ? 'gm-nav-icon-active shrink-0 gap-1.5 px-3'
-                  : 'min-w-[34px] flex-1 px-0 hover:bg-white/[0.04] sm:w-11 sm:flex-none'
+                  ? 'gm-nav-icon-active min-w-0 flex-1 gap-1.5 px-2.5'
+                  : 'w-11 shrink-0 hover:bg-white/[0.04]'
               }`}
               style={
                 active
@@ -633,7 +669,7 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
               }
             >
               <Icon className="h-[17px] w-[17px] shrink-0" />
-              {active && <span className="whitespace-nowrap">{modCopy.short}</span>}
+              {active && <span className="min-w-0 truncate">{modCopy.short}</span>}
             </button>
           );
         })}
@@ -653,12 +689,86 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
         </aside>
 
         <main className="min-w-0 max-w-full overflow-x-hidden p-3.5 sm:p-5">
+          {!SELF_HEADER_MODULES.has(activeModule) && (() => {
+            const activeNavDef = GOD_MODE_MODULES.find((m) => m.id === activeModule);
+            const HeaderIcon = activeNavDef?.icon ?? LayoutDashboard;
+            return (
+              <div
+                className="mb-3.5 flex items-center gap-2.5 border-b pb-2.5"
+                style={{borderColor: 'var(--gm-border)'}}
+                title={activeModuleMeta.summary}
+              >
+                <span
+                  className="gm-inset flex h-8 w-8 shrink-0 items-center justify-center"
+                  style={{color: 'var(--gm-accent)'}}
+                >
+                  <HeaderIcon className="h-4 w-4" />
+                </span>
+                <h2
+                  className="truncate text-sm font-bold tracking-tight sm:text-base"
+                  style={{color: 'var(--gm-ink)'}}
+                >
+                  {activeModuleMeta.label}
+                </h2>
+              </div>
+            );
+          })()}
+
           {activeModule === 'dashboard' && (
             <GodModeOverviewBento
               lang={godLang}
               activeTheme={effectiveTheme}
               telemetry={telemetry}
               security={security}
+              onSelectModule={selectModule}
+            />
+          )}
+
+          {activeModule === 'performance_lab' && (
+            <GodModePerformanceLab
+              lang={godLang}
+              prefs={prefs}
+              telemetry={telemetry}
+              onChangePrefs={onChangePrefs}
+              onShowToast={onShowToast}
+            />
+          )}
+
+          {activeModule === 'ui_inspector' && (
+            <GodModeUiInspector
+              lang={godLang}
+              prefs={prefs}
+              onChangePrefs={onChangePrefs}
+              onSelectModule={selectModule}
+              onShowToast={onShowToast}
+            />
+          )}
+
+          {activeModule === 'animation_lab' && (
+            <GodModeAnimationLab
+              lang={godLang}
+              prefs={prefs}
+              onChangePrefs={onChangePrefs}
+              onShowToast={onShowToast}
+            />
+          )}
+
+          {activeModule === 'logs_events' && (
+            <GodModeLogsEvents
+              lang={godLang}
+              prefs={prefs}
+              telemetry={telemetry}
+              onChangePrefs={onChangePrefs}
+              onSelectModule={selectModule}
+              onShowToast={onShowToast}
+            />
+          )}
+
+          {activeModule === 'experimental_tools' && (
+            <GodModeExperimentalTools
+              lang={godLang}
+              prefs={prefs}
+              onChangePrefs={onChangePrefs}
               onSelectModule={selectModule}
             />
           )}
@@ -832,24 +942,26 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
         </main>
       </div>
 
-      {/* MOBILE BOTTOM-SHEET ICON GRID LAUNCHER (No Left Side Drawer) */}
+      {/* MOBILE BOTTOM-SHEET ICON GRID LAUNCHER (Fits all modules cleanly without bottom clipping) */}
       {mobileDrawerOpen && (
         <div
-          className="fixed inset-0 z-[92] flex items-end justify-center p-2.5 sm:items-center lg:hidden"
+          data-chaos-safe="true"
+          className="fixed inset-0 z-[92] flex items-end justify-center p-2 sm:items-center lg:hidden"
           style={{background: 'rgba(0, 0, 0, 0.72)', backdropFilter: 'blur(6px)'}}
           onClick={() => setMobileDrawerOpen(false)}
         >
           <div
             data-god-theme={effectiveTheme}
-            className="morph-godmode-root gm-modal-safe flex w-full max-w-md flex-col overflow-hidden rounded-3xl border shadow-2xl"
+            data-chaos-safe="true"
+            className="morph-godmode-root flex max-h-[92dvh] w-full max-w-md flex-col overflow-hidden rounded-3xl border shadow-2xl"
             style={{background: 'var(--gm-bg-elevated)', borderColor: 'var(--gm-border-strong)'}}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-center pt-2.5 pb-1">
+            <div className="flex shrink-0 justify-center pt-2 pb-0.5">
               <span className="h-1 w-10 rounded-full opacity-30" style={{background: 'var(--gm-muted)'}} />
             </div>
             <div
-              className="flex items-center justify-between border-b px-4 pb-3 pt-1"
+              className="flex shrink-0 items-center justify-between border-b px-3.5 pb-2 pt-0.5"
               style={{borderColor: 'var(--gm-border)'}}
             >
               <span className="gm-mono text-xs font-bold" style={{color: 'var(--gm-ink)'}}>
@@ -859,12 +971,17 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
                 type="button"
                 onClick={() => setMobileDrawerOpen(false)}
                 aria-label={t.shell.close}
-                className="gm-btn-ghost flex h-10 w-10 items-center justify-center"
+                className="gm-btn-ghost flex h-9 w-9 items-center justify-center"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">{renderModuleGridLauncher()}</div>
+            <div
+              className="min-h-0 flex-1 overflow-y-auto px-3 pt-2.5"
+              style={{paddingBottom: 'max(0.85rem, env(safe-area-inset-bottom))'}}
+            >
+              {renderModuleGridLauncher()}
+            </div>
           </div>
         </div>
       )}

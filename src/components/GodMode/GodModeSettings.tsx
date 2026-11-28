@@ -55,28 +55,16 @@ export const GodModeSettings: React.FC<GodModeSettingsProps> = ({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-lg font-bold tracking-tight" style={{color: 'var(--gm-ink)'}}>
-          {t.settings.title}
-        </h2>
-        <span className="gm-mono text-[11px]" style={{color: 'var(--gm-muted)'}}>
-          {t.settings.isolatedBadge}
-        </span>
-      </div>
-
       <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
         {/* 1. Independent GOD MODE Language Switcher */}
-        <section className="gm-card-featured flex flex-col justify-between gap-4 p-4">
-          <div className="flex items-start gap-2.5">
-            <Globe2 className="mt-0.5 h-4 w-4 shrink-0" style={{color: 'var(--gm-accent)'}} />
-            <div>
-              <h3 className="text-sm font-bold" style={{color: 'var(--gm-ink)'}}>
-                {t.settings.languageTitle}
-              </h3>
-              <p className="mt-0.5 text-xs" style={{color: 'var(--gm-muted)'}}>
-                {t.settings.languageDesc}
-              </p>
-            </div>
+        <section className="gm-card-featured flex flex-col justify-between gap-3.5 p-4">
+          <div className="flex items-center gap-2.5" title={t.settings.languageDesc}>
+            <span className="gm-inset flex h-8 w-8 shrink-0 items-center justify-center" style={{color: 'var(--gm-accent)'}}>
+              <Globe2 className="h-4 w-4" />
+            </span>
+            <h3 className="text-sm font-bold" style={{color: 'var(--gm-ink)'}}>
+              {t.settings.languageTitle}
+            </h3>
           </div>
 
           <div
@@ -227,17 +215,14 @@ export const GodModeSettings: React.FC<GodModeSettingsProps> = ({
         </section>
 
         {/* 5. Console Title Switcher (Administrator <-> God Mode) */}
-        <section className="gm-card flex flex-col justify-between gap-4 p-4 md:col-span-2">
-          <div className="flex items-start gap-2.5">
-            <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0" style={{color: 'var(--gm-accent)'}} />
-            <div>
-              <h3 className="text-sm font-bold" style={{color: 'var(--gm-ink)'}}>
-                {t.settings.brandTitle}
-              </h3>
-              <p className="mt-0.5 text-xs" style={{color: 'var(--gm-muted)'}}>
-                {t.settings.brandDesc}
-              </p>
-            </div>
+        <section className="gm-card flex flex-col justify-between gap-3.5 p-4 md:col-span-2">
+          <div className="flex items-center gap-2.5" title={t.settings.brandDesc}>
+            <span className="gm-inset flex h-8 w-8 shrink-0 items-center justify-center" style={{color: 'var(--gm-accent)'}}>
+              <BadgeCheck className="h-4 w-4" />
+            </span>
+            <h3 className="text-sm font-bold" style={{color: 'var(--gm-ink)'}}>
+              {t.settings.brandTitle}
+            </h3>
           </div>
 
           <div
