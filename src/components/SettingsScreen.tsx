@@ -1783,6 +1783,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                             )}
                             <svg
                               viewBox={activeOuterId === 'pill_dock' ? '0 0 48 24' : '0 0 28 28'}
+                              preserveAspectRatio="xMidYMid meet"
                               fill="none"
                               className={`relative z-[4] ${
                                 activeOuterId === 'pill_dock'
@@ -1797,7 +1798,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                             >
                               {(() => {
                                 const dpPillTone = isDpBadge
-                                  ? prefs.deadpoolInnerColor || '#0B0B0E'
+                                  ? dpPreviewCfg?.logoVariant === 'pure_bw'
+                                    ? '#09090D'
+                                    : prefs.deadpoolEyeColor && prefs.deadpoolEyeColor !== 'transparent'
+                                      ? prefs.deadpoolEyeColor
+                                      : '#F8FAFC'
                                   : 'currentColor';
                                 if (activeOuterId === 'pill_dock') {
                                   const cx = isDpBadge ? 13 : 14;

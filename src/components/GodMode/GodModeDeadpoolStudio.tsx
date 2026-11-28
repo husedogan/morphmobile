@@ -873,6 +873,7 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
         )}
         <svg
           viewBox="0 0 28 28"
+          preserveAspectRatio="xMidYMid meet"
           className="relative z-[4]"
           style={{
             width: svgDim,
@@ -1106,6 +1107,7 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
                 >
                   <svg
                     viewBox="0 0 28 28"
+                    preserveAspectRatio="xMidYMid meet"
                     style={{
                       width: Math.round(
                         stageSizePx *

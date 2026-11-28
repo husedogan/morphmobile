@@ -3005,6 +3005,7 @@ export const WheelFab: React.FC<{
                     : 'h-7 w-7'
               }`}
               viewBox={iconStyle === 'pill_dock' ? '0 0 48 24' : '0 0 28 28'}
+              preserveAspectRatio="xMidYMid meet"
               fill="none"
             style={{
               transform:

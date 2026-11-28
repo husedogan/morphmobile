@@ -85,68 +85,68 @@ export const DEADPOOL_LOGO_CATALOG: ReadonlyArray<DeadpoolLogoCatalogItem> = [
     id: 'original',
     nameTr: 'Orijinal Kırmızı & Siyah',
     nameEn: 'Original Red & Black',
-    descTr: 'Keskin kırmızı-siyah ikonik maske geometrisi',
-    descEn: 'Crisp iconic red & black mask geometry',
+    descTr: 'Klasik kırmızı-siyah Deadpool kafa maskesi silueti',
+    descEn: 'Classic iconic red & black Deadpool head mask silhouette',
     defaultBg: '#C8102E',
-    defaultMask: '#0B0B0E',
+    defaultMask: '#0B0B0F',
     defaultEye: '#FFFFFF',
   },
   {
     id: 'pure_bw',
     nameTr: 'Saf Siyah & Beyaz',
     nameEn: 'Pure Black & White',
-    descTr: 'Yüksek kontrastlı baskı şablonu stili',
-    descEn: 'High-contrast graphic stencil finish',
-    defaultBg: '#F8FAFC',
-    defaultMask: '#09090B',
+    descTr: 'Yüksek kontrastlı çizgi roman mürekkep maskesi',
+    descEn: 'High-contrast comic ink black & white head mask',
+    defaultBg: '#FFFFFF',
+    defaultMask: '#050507',
     defaultEye: '#FFFFFF',
   },
   {
     id: 'white_on_black',
     nameTr: 'Siyah Üzerinde Beyaz',
     nameEn: 'White Emblem on Black',
-    descTr: 'Mat siyah zemin üzerinde net beyaz amblem',
-    descEn: 'Sharp white emblem on matte black disc',
+    descTr: 'Mat siyah maske üzerinde keskin beyaz kontur ve göz çevresi',
+    descEn: 'Matte black head mask with stark white outline and eye patches',
     defaultBg: '#09090D',
-    defaultMask: '#F8FAFC',
+    defaultMask: '#FFFFFF',
     defaultEye: '#09090D',
   },
   {
     id: 'tactical_metallic',
     nameTr: 'Taktik Metalik',
     nameEn: 'Tactical Metallic',
-    descTr: 'Köşeli zırh çerçeve, fırçalı çelik plakalar',
-    descEn: 'Chamfered armor bezel with brushed steel plates',
-    defaultBg: '#1E293B',
-    defaultMask: '#94A3B8',
+    descTr: 'Çelik çerçeveli fırçalı zırh Deadpool maskesi',
+    descEn: 'Brushed armored crimson-steel mask with silver contour',
+    defaultBg: '#8E1420',
+    defaultMask: '#141720',
     defaultEye: '#F8FAFC',
   },
   {
     id: 'minimal_flat',
     nameTr: 'Minimal Düz',
     nameEn: 'Minimal Flat',
-    descTr: 'Çerçevesiz, sade geometrik küçük boyut dostu',
-    descEn: 'Frameless flat geometry built for small sizes',
-    defaultBg: '#111116',
-    defaultMask: '#DC2626',
+    descTr: 'Çerçevesiz, düz vektör küçük boyut dostu kafa silueti',
+    descEn: 'Frameless pure flat vector head silhouette for small sizes',
+    defaultBg: '#DC2626',
+    defaultMask: '#111116',
     defaultEye: '#FFFFFF',
   },
   {
     id: 'crimson_dark',
     nameTr: 'Koyu Kızıl',
     nameEn: 'Crimson Dark',
-    descTr: 'Keskin açılı zırhlı koyu kan kırmızısı maske',
-    descEn: 'Faceted deep blood-crimson armored mask',
-    defaultBg: '#09060A',
-    defaultMask: '#991B1B',
-    defaultEye: '#FEE2E2',
+    descTr: 'Derin kan kırmızısı zırh maske ve parlak kızıl kenar',
+    descEn: 'Deep blood-crimson stealth head mask with crimson edge rim',
+    defaultBg: '#6B0718',
+    defaultMask: '#050507',
+    defaultEye: '#FFF1F2',
   },
   {
     id: 'monochrome_inverted',
     nameTr: 'Ters Monokrom',
     nameEn: 'Monochrome Inverted',
-    descTr: 'Negatif alan kesimli parlak plaka amblemi',
-    descEn: 'Negative-space knockout emblem on light plate',
+    descTr: 'Şeffaf maske oyuklu negatif alan monokrom şablon',
+    descEn: 'True transparent-cutout negative-space monochrome stencil',
     defaultBg: '#E4E4E7',
     defaultMask: '#111115',
     defaultEye: '#E4E4E7',
@@ -270,11 +270,11 @@ export const DEADPOOL_DESIGN_PROFILES: ReadonlyArray<DeadpoolPresetDef> = [
     labelEn: 'Tactical',
     descTr: 'Fırçalı çelik plakalar, sekizgen zırh çerçeve',
     descEn: 'Brushed steel armor plates inside tactical octagon',
-    previewOuter: '#334155',
-    previewEnd: '#0F172A',
-    previewMask: '#CBD5E1',
+    previewOuter: '#8E1420',
+    previewEnd: '#3F1D2B',
+    previewMask: '#141720',
     previewEye: '#F8FAFC',
-    previewRing: '#94A3B8',
+    previewRing: '#CBD5E1',
     previewAngle: 135,
     logoVariant: 'tactical_metallic',
     patch: {
@@ -284,14 +284,14 @@ export const DEADPOOL_DESIGN_PROFILES: ReadonlyArray<DeadpoolPresetDef> = [
       deadpoolLogoBg: 'auto',
       deadpoolLogoPadding: 5,
       deadpoolLogoContrast: 110,
-      deadpoolOuterColor: '#334155',
-      deadpoolOuterColorMid: '#1E293B',
-      deadpoolOuterColorEnd: '#0F172A',
+      deadpoolOuterColor: '#991B1B',
+      deadpoolOuterColorMid: '#64748B',
+      deadpoolOuterColorEnd: '#1E293B',
       deadpoolGradientType: 'linear',
       deadpoolGradientAngle: 135,
-      deadpoolInnerColor: '#CBD5E1',
+      deadpoolInnerColor: '#0F172A',
       deadpoolEyeColor: '#F8FAFC',
-      deadpoolRingColor: '#64748B',
+      deadpoolRingColor: '#CBD5E1',
       deadpoolBorderWidth: 1.5,
       deadpoolBorderStyle: 'solid',
       deadpoolGlowIntensity: 14,
@@ -301,7 +301,7 @@ export const DEADPOOL_DESIGN_PROFILES: ReadonlyArray<DeadpoolPresetDef> = [
       deadpoolEyeStyle: 'cyber_visor',
       deadpoolSplitGap: 'tight',
       deadpoolInnerRingStyle: 'tech_ticks',
-      deadpoolInnerRingWidth: 1.6,
+      deadpoolInnerRingWidth: 1.5,
       deadpoolSurfaceTexture: 'brushed',
       deadpoolTextureOpacity: 38,
       deadpoolGlossMode: 'metallic',
@@ -318,9 +318,9 @@ export const DEADPOOL_DESIGN_PROFILES: ReadonlyArray<DeadpoolPresetDef> = [
     labelEn: 'Crimson',
     descTr: 'Derin kan kırmızısı zırh ve karanlık parlama',
     descEn: 'Deep blood-crimson faceted visor with subtle ember glow',
-    previewOuter: '#991B1B',
+    previewOuter: '#7A0A1B',
     previewEnd: '#2B060D',
-    previewMask: '#DC2626',
+    previewMask: '#070407',
     previewEye: '#FEF2F2',
     previewRing: '#EF4444',
     previewAngle: 145,
@@ -332,14 +332,14 @@ export const DEADPOOL_DESIGN_PROFILES: ReadonlyArray<DeadpoolPresetDef> = [
       deadpoolLogoBg: 'crimson',
       deadpoolLogoPadding: 5,
       deadpoolLogoContrast: 114,
-      deadpoolOuterColor: '#991B1B',
+      deadpoolOuterColor: '#881337',
       deadpoolOuterColorMid: '#590A14',
-      deadpoolOuterColorEnd: '#180408',
+      deadpoolOuterColorEnd: '#2B040A',
       deadpoolGradientType: 'radial',
       deadpoolGradientAngle: 145,
-      deadpoolInnerColor: '#DC2626',
+      deadpoolInnerColor: '#070407',
       deadpoolEyeColor: '#FEF2F2',
-      deadpoolRingColor: '#B91C1C',
+      deadpoolRingColor: '#EF4444',
       deadpoolBorderWidth: 1.5,
       deadpoolBorderStyle: 'solid',
       deadpoolGlowIntensity: 36,
@@ -350,7 +350,7 @@ export const DEADPOOL_DESIGN_PROFILES: ReadonlyArray<DeadpoolPresetDef> = [
       deadpoolEyeStyle: 'angry',
       deadpoolSplitGap: 'normal',
       deadpoolInnerRingStyle: 'double',
-      deadpoolInnerRingWidth: 1.6,
+      deadpoolInnerRingWidth: 1.5,
       deadpoolSurfaceTexture: 'hexgrid',
       deadpoolTextureOpacity: 26,
       deadpoolGlossMode: 'diagonal_sheen',
@@ -367,9 +367,9 @@ export const DEADPOOL_DESIGN_PROFILES: ReadonlyArray<DeadpoolPresetDef> = [
     labelEn: 'Minimal',
     descTr: 'Çerçevesiz saf geometrik maske, sıfır gürültü',
     descEn: 'Frameless flat geometric mark with zero visual noise',
-    previewOuter: '#141418',
-    previewEnd: '#141418',
-    previewMask: '#DC2626',
+    previewOuter: '#DC2626',
+    previewEnd: '#DC2626',
+    previewMask: '#111116',
     previewEye: '#FFFFFF',
     previewRing: '#27272A',
     previewAngle: 135,
@@ -379,14 +379,14 @@ export const DEADPOOL_DESIGN_PROFILES: ReadonlyArray<DeadpoolPresetDef> = [
       expWheelShape: null,
       deadpoolLogoVariant: 'minimal_flat',
       deadpoolLogoBg: 'dark',
-      deadpoolLogoPadding: 10,
+      deadpoolLogoPadding: 8,
       deadpoolLogoContrast: 100,
-      deadpoolOuterColor: '#141418',
+      deadpoolOuterColor: '#DC2626',
       deadpoolOuterColorMid: null,
-      deadpoolOuterColorEnd: '#141418',
+      deadpoolOuterColorEnd: '#DC2626',
       deadpoolGradientType: 'solid',
       deadpoolGradientAngle: 135,
-      deadpoolInnerColor: '#DC2626',
+      deadpoolInnerColor: '#111116',
       deadpoolEyeColor: '#FFFFFF',
       deadpoolRingColor: '#27272A',
       deadpoolBorderWidth: 1,
@@ -396,9 +396,9 @@ export const DEADPOOL_DESIGN_PROFILES: ReadonlyArray<DeadpoolPresetDef> = [
       deadpoolGlowPulse: false,
       deadpoolEyeGlow: false,
       deadpoolEyeStyle: 'classic',
-      deadpoolSplitGap: 'wide',
+      deadpoolSplitGap: 'normal',
       deadpoolInnerRingStyle: 'none',
-      deadpoolInnerRingWidth: 1.2,
+      deadpoolInnerRingWidth: 1.0,
       deadpoolSurfaceTexture: 'none',
       deadpoolGlossMode: 'none',
       deadpoolInnerVignette: 0,
@@ -754,59 +754,42 @@ export function buildDeadpoolBackgroundImage(cfg: DeadpoolResolvedConfig): strin
     return `linear-gradient(0deg, ${cfg.customBgColor}, ${cfg.customBgColor})`;
   }
   if (cfg.logoBg === 'dark') {
-    return 'linear-gradient(145deg, #16161C 0%, #09090D 100%)';
+    return 'linear-gradient(145deg, #16161F 0%, #09090E 100%)';
   }
   if (cfg.logoBg === 'crimson') {
-    return 'linear-gradient(145deg, #B91C1C 0%, #450A0A 100%)';
+    return 'linear-gradient(145deg, #3D0711 0%, #140206 100%)';
   }
   if (cfg.logoBg === 'light') {
     return 'linear-gradient(145deg, #F8FAFC 0%, #E2E8F0 100%)';
   }
-
-  const c1 = cfg.outerColor;
-  const cm = cfg.outerColorMid;
-  const c2 = cfg.outerColorEnd || c1;
-  if (!c1 && !c2) return undefined;
-  const start = c1 || c2!;
-  const end = c2 || c1!;
-  const stops = cm ? `${start} 0%, ${cm} 50%, ${end} 100%` : `${start} 0%, ${end} 100%`;
-
-  switch (cfg.gradientType) {
-    case 'solid':
-      return `linear-gradient(0deg, ${start}, ${start})`;
-    case 'radial':
-      return `radial-gradient(circle at 32% 28%, ${stops})`;
-    case 'conic':
-      return `conic-gradient(from ${cfg.gradientAngle}deg, ${start}, ${cm || end}, ${end}, ${start})`;
-    case 'linear':
-    default:
-      return `linear-gradient(${cfg.gradientAngle}deg, ${stops})`;
-  }
+  return undefined;
 }
 
 /**
- * Returns the definitive shell backgroundImage for Deadpool Mode across WheelFab,
- * Deadpool Studio, Settings previews, and Mini Swatches so they render identically.
+ * Returns the isolated outer shell backgroundImage for Deadpool Mode across WheelFab,
+ * Deadpool Studio, Settings previews, and Mini Swatches.
+ * Keeps shell backdrop strictly separated from the Deadpool head mask colors so the iconic
+ * red-and-black head silhouette always reads with crisp figure-ground contrast.
  */
 export function resolveDeadpoolShellBackground(cfg: DeadpoolResolvedConfig): string {
   const custom = buildDeadpoolBackgroundImage(cfg);
   if (custom) return custom;
   switch (cfg.logoVariant) {
     case 'pure_bw':
-      return 'linear-gradient(145deg, #FFFFFF 0%, #E4E4E7 100%)';
+      return 'linear-gradient(145deg, #F8FAFC 0%, #E4E4E7 100%)';
     case 'white_on_black':
-      return 'linear-gradient(145deg, #18181B 0%, #09090B 100%)';
+      return 'linear-gradient(145deg, #16161D 0%, #09090D 100%)';
     case 'tactical_metallic':
-      return 'linear-gradient(145deg, #334155 0%, #0F172A 100%)';
+      return 'linear-gradient(145deg, #1E293B 0%, #090D16 100%)';
     case 'minimal_flat':
-      return 'linear-gradient(145deg, #141418 0%, #0B0B0E 100%)';
+      return 'linear-gradient(145deg, #14141B 0%, #0B0B10 100%)';
     case 'crimson_dark':
-      return 'linear-gradient(145deg, #991B1B 0%, #180408 100%)';
+      return 'linear-gradient(145deg, #2B060D 0%, #0C0205 100%)';
     case 'monochrome_inverted':
-      return 'linear-gradient(145deg, #18181B 0%, #09090D 100%)';
+      return 'linear-gradient(145deg, #161622 0%, #09090E 100%)';
     case 'original':
     default:
-      return 'linear-gradient(135deg, #DC2626 0%, #7F1D1D 100%)';
+      return 'linear-gradient(145deg, #161622 0%, #09090E 100%)';
   }
 }
 
@@ -1210,121 +1193,161 @@ export const DeadpoolOuterHalo: React.FC<{
   );
 };
 
+/**
+ * Centralized iconic Deadpool HEAD MASK geometry (viewBox 0 0 28 28).
+ * Single source of truth shared across WheelFab, Deadpool Studio, Settings, Mini Swatches,
+ * and GodMode DeadpoolLogoIcon so every instance has identical head silhouette,
+ * sweeping eye mask patches, and razor-sharp angled eyes.
+ */
+export const DEADPOOL_HEAD_PATH =
+  'M 14 1.5 C 19.8 1.5 23.3 4.9 23.5 10.3 C 23.6 13.0 23.1 15.8 22.1 18.2 C 21.0 20.8 19.3 23.4 16.9 25.3 C 15.8 26.1 14.9 26.5 14 26.5 C 13.1 26.5 12.2 26.1 11.1 25.3 C 8.7 23.4 7.0 20.8 5.9 18.2 C 4.9 15.8 4.4 13.0 4.5 10.3 C 4.7 4.9 8.2 1.5 14 1.5 Z';
+
+export const DEADPOOL_CROWN_HIGHLIGHT_PATH =
+  'M 9.6 3.5 C 12.2 2.4 15.8 2.4 18.4 3.5 C 16.0 3.0 12.0 3.0 9.6 3.5 Z';
+
+/**
+ * Builds the iconic symmetric sweeping Deadpool mask eye patches inside the head silhouette,
+ * leaving a bold forehead, crisp center nose bridge, outer cheek rims, and sculpted chin.
+ */
+export function buildDeadpoolMaskPatches(gapHalf = 1.55): {left: string; right: string} {
+  const g = Math.max(1.05, Math.min(2.15, gapHalf));
+  const delta = g - 1.55;
+  const xL = (12.45 - delta).toFixed(2);
+  const xR = (15.55 + delta).toFixed(2);
+  const xInnerL = (12.65 - delta * 0.85).toFixed(2);
+  const xInnerR = (15.35 + delta * 0.85).toFixed(2);
+  const xLowL = (10.9 - delta * 0.65).toFixed(2);
+  const xLowR = (17.1 + delta * 0.65).toFixed(2);
+  return {
+    left: `M ${xL} 10.1 C ${(11.1 - delta * 0.6).toFixed(2)} 7.4 8.7 6.1 6.6 7.3 C 5.5 8.1 5.3 11.4 6.1 14.9 C 6.8 17.8 8.7 19.6 ${xLowL} 19.2 C ${(11.9 - delta * 0.8).toFixed(2)} 19.0 ${xInnerL} 17.7 ${(12.65 - delta * 0.85).toFixed(2)} 15.6 C ${(12.75 - delta * 0.85).toFixed(2)} 13.6 ${(12.7 - delta * 0.9).toFixed(2)} 11.4 ${xL} 10.1 Z`,
+    right: `M ${xR} 10.1 C ${(16.9 + delta * 0.6).toFixed(2)} 7.4 19.3 6.1 21.4 7.3 C 22.5 8.1 22.7 11.4 21.9 14.9 C 21.2 17.8 19.3 19.6 ${xLowR} 19.2 C ${(16.1 + delta * 0.8).toFixed(2)} 19.0 ${xInnerR} 17.7 ${(15.35 + delta * 0.85).toFixed(2)} 15.6 C ${(15.25 + delta * 0.85).toFixed(2)} 13.6 ${(15.3 + delta * 0.9).toFixed(2)} 11.4 ${xR} 10.1 Z`,
+  };
+}
+
 export function buildEyePaths(style: DeadpoolEyeStyle, spreadOffset = 0): {left: string; right: string} {
-  const o = spreadOffset;
+  const o = Math.max(-0.35, Math.min(0.45, spreadOffset));
   switch (style) {
     case 'angry':
-      // Fiercer 41° comic scowl — sharp diagonal brow with crisp pointed inner wedge
+      // Fiercer comic scowl seated cleanly inside the sweeping mask patches
       return {
-        left: `M ${(6.65 - o).toFixed(2)} 10.80 L ${(11.50 - o).toFixed(2)} 15.05 L ${(9.30 - o).toFixed(2)} 16.25 Q ${(6.20 - o).toFixed(2)} 14.65 ${(6.65 - o).toFixed(2)} 10.80 Z`,
-        right: `M ${(21.35 + o).toFixed(2)} 10.80 L ${(16.50 + o).toFixed(2)} 15.05 L ${(18.70 + o).toFixed(2)} 16.25 Q ${(21.80 + o).toFixed(2)} 14.65 ${(21.35 + o).toFixed(2)} 10.80 Z`,
+        left: `M ${(7.0 - o * 0.6).toFixed(2)} 10.55 L ${(12.0 - o).toFixed(2)} 14.25 L ${(10.05 - o).toFixed(2)} 15.25 C ${(8.35 - o * 0.8).toFixed(2)} 14.75 ${(6.85 - o * 0.6).toFixed(2)} 13.00 ${(7.0 - o * 0.6).toFixed(2)} 10.55 Z`,
+        right: `M ${(21.0 + o * 0.6).toFixed(2)} 10.55 L ${(16.0 + o).toFixed(2)} 14.25 L ${(17.95 + o).toFixed(2)} 15.25 C ${(19.65 + o * 0.8).toFixed(2)} 14.75 ${(21.15 + o * 0.6).toFixed(2)} 13.00 ${(21.0 + o * 0.6).toFixed(2)} 10.55 Z`,
       };
     case 'wide':
-      // Expressive comic Deadpool wide eyes — fuller lower arc while keeping iconic inward slant
+      // Expressive comic Deadpool wide eyes inside the black mask patches
       return {
-        left: `M ${(6.45 - o).toFixed(2)} 10.95 Q ${(9.45 - o).toFixed(2)} 11.95 ${(11.45 - o).toFixed(2)} 14.55 C ${(9.45 - o).toFixed(2)} 17.35 ${(5.15 - o).toFixed(2)} 14.85 ${(6.45 - o).toFixed(2)} 10.95 Z`,
-        right: `M ${(21.55 + o).toFixed(2)} 10.95 Q ${(18.55 + o).toFixed(2)} 11.95 ${(16.55 + o).toFixed(2)} 14.55 C ${(18.55 + o).toFixed(2)} 17.35 ${(22.85 + o).toFixed(2)} 14.85 ${(21.55 + o).toFixed(2)} 10.95 Z`,
+        left: `M ${(7.05 - o * 0.6).toFixed(2)} 10.65 C ${(8.9 - o * 0.8).toFixed(2)} 11.25 ${(10.75 - o).toFixed(2)} 12.25 ${(12.0 - o).toFixed(2)} 13.85 C ${(10.55 - o * 0.9).toFixed(2)} 15.85 ${(7.95 - o * 0.7).toFixed(2)} 15.55 ${(7.15 - o * 0.6).toFixed(2)} 13.35 C ${(6.85 - o * 0.6).toFixed(2)} 12.35 ${(6.85 - o * 0.6).toFixed(2)} 11.40 ${(7.05 - o * 0.6).toFixed(2)} 10.65 Z`,
+        right: `M ${(20.95 + o * 0.6).toFixed(2)} 10.65 C ${(19.1 + o * 0.8).toFixed(2)} 11.25 ${(17.25 + o).toFixed(2)} 12.25 ${(16.0 + o).toFixed(2)} 13.85 C ${(17.45 + o * 0.9).toFixed(2)} 15.85 ${(20.05 + o * 0.7).toFixed(2)} 15.55 ${(20.85 + o * 0.6).toFixed(2)} 13.35 C ${(21.15 + o * 0.6).toFixed(2)} 12.35 ${(21.15 + o * 0.6).toFixed(2)} 11.40 ${(20.95 + o * 0.6).toFixed(2)} 10.65 Z`,
       };
     case 'cyber_visor':
-      // Angular tactical Deadpool visor — faceted polygon matching the steep 35° Deadpool slant
+      // Angular tactical visor polygons seated inside the patches
       return {
-        left: `M ${(6.45 - o).toFixed(2)} 11.30 L ${(11.45 - o).toFixed(2)} 14.70 L ${(10.30 - o).toFixed(2)} 15.95 L ${(6.40 - o).toFixed(2)} 13.65 Z`,
-        right: `M ${(21.55 + o).toFixed(2)} 11.30 L ${(16.55 + o).toFixed(2)} 14.70 L ${(17.70 + o).toFixed(2)} 15.95 L ${(21.60 + o).toFixed(2)} 13.65 Z`,
+        left: `M ${(7.05 - o * 0.6).toFixed(2)} 11.10 L ${(11.95 - o).toFixed(2)} 13.95 L ${(10.95 - o).toFixed(2)} 15.05 L ${(7.20 - o * 0.6).toFixed(2)} 13.35 Z`,
+        right: `M ${(20.95 + o * 0.6).toFixed(2)} 11.10 L ${(16.05 + o).toFixed(2)} 13.95 L ${(17.05 + o).toFixed(2)} 15.05 L ${(20.80 + o * 0.6).toFixed(2)} 13.35 Z`,
       };
     case 'squint':
-      // Focused Deadpool squint — sleeker half-oval preserving the steep 35° diagonal brow
+      // Focused narrowed Deadpool squint
       return {
-        left: `M ${(6.45 - o).toFixed(2)} 11.50 L ${(11.40 - o).toFixed(2)} 14.95 C ${(9.45 - o).toFixed(2)} 15.85 ${(6.30 - o).toFixed(2)} 14.10 ${(6.45 - o).toFixed(2)} 11.50 Z`,
-        right: `M ${(21.55 + o).toFixed(2)} 11.50 L ${(16.60 + o).toFixed(2)} 14.95 C ${(18.55 + o).toFixed(2)} 15.85 ${(21.70 + o).toFixed(2)} 14.10 ${(21.55 + o).toFixed(2)} 11.50 Z`,
+        left: `M ${(7.10 - o * 0.6).toFixed(2)} 11.50 C ${(8.85 - o * 0.8).toFixed(2)} 12.10 ${(10.55 - o).toFixed(2)} 12.90 ${(11.95 - o).toFixed(2)} 14.05 C ${(10.55 - o * 0.9).toFixed(2)} 14.75 ${(8.55 - o * 0.7).toFixed(2)} 14.40 ${(7.30 - o * 0.6).toFixed(2)} 13.00 Z`,
+        right: `M ${(20.90 + o * 0.6).toFixed(2)} 11.50 C ${(19.15 + o * 0.8).toFixed(2)} 12.10 ${(17.45 + o).toFixed(2)} 12.90 ${(16.05 + o).toFixed(2)} 14.05 C ${(17.45 + o * 0.9).toFixed(2)} 14.75 ${(19.45 + o * 0.7).toFixed(2)} 14.40 ${(20.70 + o * 0.6).toFixed(2)} 13.00 Z`,
       };
     case 'glowing_slit':
-      // Razor-sharp angled Deadpool eye slash — steep 35° diagonal thin wedge
+      // Razor-sharp angled diagonal eye slash
       return {
-        left: `M ${(6.45 - o).toFixed(2)} 11.55 L ${(11.45 - o).toFixed(2)} 14.95 L ${(10.55 - o).toFixed(2)} 15.55 L ${(6.45 - o).toFixed(2)} 12.90 Z`,
-        right: `M ${(21.55 + o).toFixed(2)} 11.55 L ${(16.55 + o).toFixed(2)} 14.95 L ${(17.45 + o).toFixed(2)} 15.55 L ${(21.55 + o).toFixed(2)} 12.90 Z`,
+        left: `M ${(7.05 - o * 0.6).toFixed(2)} 11.45 L ${(11.95 - o).toFixed(2)} 14.05 L ${(11.20 - o).toFixed(2)} 14.75 L ${(7.15 - o * 0.6).toFixed(2)} 12.65 Z`,
+        right: `M ${(20.95 + o * 0.6).toFixed(2)} 11.45 L ${(16.05 + o).toFixed(2)} 14.05 L ${(16.80 + o).toFixed(2)} 14.75 L ${(20.85 + o * 0.6).toFixed(2)} 12.65 Z`,
       };
     case 'classic':
     default:
-      // Iconic Deadpool mask eyes — straight 36° downward-inward brow with bold curved half-oval belly
+      // Iconic sharp angled Deadpool comic/movie white eyes
       return {
-        left: `M ${(6.45 - o).toFixed(2)} 11.20 L ${(11.40 - o).toFixed(2)} 14.80 C ${(9.35 - o).toFixed(2)} 16.55 ${(5.45 - o).toFixed(2)} 14.15 ${(6.45 - o).toFixed(2)} 11.20 Z`,
-        right: `M ${(21.55 + o).toFixed(2)} 11.20 L ${(16.60 + o).toFixed(2)} 14.80 C ${(18.65 + o).toFixed(2)} 16.55 ${(22.55 + o).toFixed(2)} 14.15 ${(21.55 + o).toFixed(2)} 11.20 Z`,
+        left: `M ${(7.10 - o * 0.6).toFixed(2)} 11.10 C ${(8.80 - o * 0.8).toFixed(2)} 11.90 ${(10.50 - o).toFixed(2)} 12.70 ${(11.95 - o).toFixed(2)} 14.00 C ${(10.55 - o * 0.9).toFixed(2)} 15.15 ${(8.45 - o * 0.7).toFixed(2)} 14.85 ${(7.35 - o * 0.6).toFixed(2)} 13.25 C ${(6.95 - o * 0.6).toFixed(2)} 12.60 ${(6.90 - o * 0.6).toFixed(2)} 11.80 ${(7.10 - o * 0.6).toFixed(2)} 11.10 Z`,
+        right: `M ${(20.90 + o * 0.6).toFixed(2)} 11.10 C ${(19.20 + o * 0.8).toFixed(2)} 11.90 ${(17.50 + o).toFixed(2)} 12.70 ${(16.05 + o).toFixed(2)} 14.00 C ${(17.45 + o * 0.9).toFixed(2)} 15.15 ${(19.55 + o * 0.7).toFixed(2)} 14.85 ${(20.65 + o * 0.6).toFixed(2)} 13.25 C ${(21.05 + o * 0.6).toFixed(2)} 12.60 ${(21.10 + o * 0.6).toFixed(2)} 11.80 ${(20.90 + o * 0.6).toFixed(2)} 11.10 Z`,
       };
   }
 }
 
-function renderInnerRing(
+/**
+ * Renders the head-mask contour directly along DEADPOOL_HEAD_PATH (never a circular ring badge)
+ * so contour style & width controls enhance the Deadpool head silhouette cleanly.
+ */
+function renderHeadContour(
   style: DeadpoolInnerRingStyle,
   stroke: string,
-  width: number,
-  radius: number
+  width: number
 ): React.ReactNode {
-  if (style === 'none') return null;
+  if (style === 'none' || width <= 0.05) return null;
+  const sw = Math.max(0.45, Math.min(1.65, width * 0.65));
   if (style === 'dashed') {
     return (
-      <circle
-        cx="14"
-        cy="14"
-        r={radius}
+      <path
+        d={DEADPOOL_HEAD_PATH}
         fill="none"
         stroke={stroke}
-        strokeWidth={width}
-        strokeDasharray="3.4 2.2"
+        strokeWidth={sw}
+        strokeDasharray="2.8 1.8"
         strokeLinecap="round"
+        strokeLinejoin="round"
       />
     );
   }
   if (style === 'double') {
     return (
       <>
-        <circle cx="14" cy="14" r={radius + 0.35} fill="none" stroke={stroke} strokeWidth={Math.max(0.85, width * 0.62)} />
-        <circle cx="14" cy="14" r={radius - 1.05} fill="none" stroke={stroke} strokeWidth={Math.max(0.75, width * 0.5)} strokeOpacity="0.82" />
+        <path
+          d={DEADPOOL_HEAD_PATH}
+          fill="none"
+          stroke={stroke}
+          strokeWidth={Math.max(0.65, sw * 0.95)}
+          strokeLinejoin="round"
+        />
+        <path
+          d={DEADPOOL_HEAD_PATH}
+          fill="none"
+          stroke={stroke}
+          strokeWidth={Math.max(0.4, sw * 0.48)}
+          strokeOpacity="0.65"
+          strokeLinejoin="round"
+          transform="translate(14 14) scale(0.925) translate(-14 -14)"
+        />
       </>
     );
   }
   if (style === 'tech_ticks') {
     return (
       <>
-        <circle
-          cx="14"
-          cy="14"
-          r={radius}
+        <path
+          d={DEADPOOL_HEAD_PATH}
           fill="none"
           stroke={stroke}
-          strokeWidth={Math.max(0.95, width * 0.72)}
-          strokeOpacity="0.85"
+          strokeWidth={Math.max(0.65, sw * 0.92)}
+          strokeLinejoin="round"
         />
-        {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => {
-          const rad = (deg * Math.PI) / 180;
-          const r1 = radius - 1.1;
-          const r2 = radius + 0.9;
-          return (
-            <line
-              key={deg}
-              x1={(14 + r1 * Math.cos(rad)).toFixed(2)}
-              y1={(14 + r1 * Math.sin(rad)).toFixed(2)}
-              x2={(14 + r2 * Math.cos(rad)).toFixed(2)}
-              y2={(14 + r2 * Math.sin(rad)).toFixed(2)}
-              stroke={stroke}
-              strokeWidth={deg % 90 === 0 ? '1.35' : '0.85'}
-              strokeLinecap="round"
-            />
-          );
-        })}
+        <line x1="14" y1="0.8" x2="14" y2="2.6" stroke={stroke} strokeWidth="0.95" strokeLinecap="round" />
+        <line x1="14" y1="25.2" x2="14" y2="27.0" stroke={stroke} strokeWidth="0.95" strokeLinecap="round" />
+        <line x1="3.4" y1="12.5" x2="5.1" y2="12.5" stroke={stroke} strokeWidth="0.95" strokeLinecap="round" />
+        <line x1="22.9" y1="12.5" x2="24.6" y2="12.5" stroke={stroke} strokeWidth="0.95" strokeLinecap="round" />
       </>
     );
   }
   return (
-    <circle cx="14" cy="14" r={radius} fill="none" stroke={stroke} strokeWidth={width} />
+    <path
+      d={DEADPOOL_HEAD_PATH}
+      fill="none"
+      stroke={stroke}
+      strokeWidth={sw}
+      strokeLinejoin="round"
+    />
   );
 }
 
 /**
- * Renders 7 genuinely distinct geometric Deadpool logo variants inside a 28×28 viewBox.
+ * Renders 7 genuinely distinct Deadpool HEAD MASK variants inside a 28×28 viewBox.
  * Single source of truth used by WheelFab, Deadpool Studio, Settings previews, and Mini Swatches.
- * - Independent color channels: outer shell, inner mask, eyes, ring, and custom/transparent background
- * - True alpha cutouts when eyeColor === 'transparent' or logoBg === 'transparent'
- * - Small-size legibility optimization via optional `compact` prop (e.g. 24px / 32px swatches)
+ * - Authentic sculpted Deadpool head silhouette + sweeping black eye mask patches + razor white eyes
+ * - Independent color channels: head fill/gradient (outerColor/Mid/End), eye mask patches (innerColor),
+ *   eyes (eyeColor), head contour (ringColor), and outer shell background (logoBg/customBgColor)
+ * - True SVG <mask> alpha cutouts when eyeColor === 'transparent' or variant === 'monochrome_inverted'
  */
 export const DeadpoolEmblemGroup: React.FC<{
   cfg: DeadpoolResolvedConfig;
@@ -1335,20 +1358,11 @@ export const DeadpoolEmblemGroup: React.FC<{
   const uid = useId().replace(/:/g, '');
   const variant = variantOverride ?? cfg.logoVariant;
 
-  const isTransparentBg = cfg.logoBg === 'transparent';
   const isTransparentEyes = cfg.eyeColor === 'transparent';
-  const hasRichOuterSurface = Boolean(
-    cfg.outerColorMid ||
-      (cfg.outerColor && cfg.outerColorEnd && cfg.outerColorEnd !== cfg.outerColor) ||
-      cfg.gradientType === 'radial' ||
-      cfg.gradientType === 'conic' ||
-      cfg.surfaceTexture !== 'none' ||
-      cfg.customBgColor ||
-      cfg.logoBg !== 'auto'
-  );
 
-  const gapHalf = cfg.splitGap === 'tight' ? 1.15 : cfg.splitGap === 'wide' ? 2.15 : 1.6;
-  const eyeSpread = cfg.splitGap === 'wide' ? 0.35 : cfg.splitGap === 'tight' ? -0.25 : 0;
+  const gapHalf = cfg.splitGap === 'tight' ? 1.18 : cfg.splitGap === 'wide' ? 2.0 : 1.55;
+  const eyeSpread = cfg.splitGap === 'wide' ? 0.3 : cfg.splitGap === 'tight' ? -0.22 : 0;
+  const patches = buildDeadpoolMaskPatches(gapHalf);
   const eyes = buildEyePaths(cfg.eyeStyle, eyeSpread);
 
   // Respect logoPadding (0 - 24%) combined with maskScale
@@ -1368,55 +1382,69 @@ export const DeadpoolEmblemGroup: React.FC<{
       : undefined;
 
   const eyeCutMaskId = `dp-eyecut-${uid}`;
+  const headGradId = `dp-headgrad-${uid}`;
 
-  // Split half-circle D-paths using gapHalf
-  const buildSplitDomes = (r: number) => {
-    const xL = 14 - gapHalf;
-    const xR = 14 + gapHalf;
-    const dy = Math.sqrt(Math.max(1, r * r - gapHalf * gapHalf));
-    const yTop = 14 - dy;
-    const yBot = 14 + dy;
-    return {
-      left: `M ${xL.toFixed(2)} ${yTop.toFixed(2)} A ${r} ${r} 0 0 0 ${xL.toFixed(2)} ${yBot.toFixed(2)} Z`,
-      right: `M ${xR.toFixed(2)} ${yTop.toFixed(2)} A ${r} ${r} 0 0 1 ${xR.toFixed(2)} ${yBot.toFixed(2)} Z`,
-    };
+  // Convert CSS gradient angle (deg) to SVG linearGradient vector coords
+  const angleRad = ((cfg.gradientAngle - 90) * Math.PI) / 180;
+  const gx1 = (50 - Math.cos(angleRad) * 50).toFixed(1) + '%';
+  const gy1 = (50 - Math.sin(angleRad) * 50).toFixed(1) + '%';
+  const gx2 = (50 + Math.cos(angleRad) * 50).toFixed(1) + '%';
+  const gy2 = (50 + Math.sin(angleRad) * 50).toFixed(1) + '%';
+
+  const renderHeadGradientDef = (start: string, mid: string | null, end: string) => {
+    if (cfg.gradientType === 'solid' || (start === end && !mid)) {
+      return null;
+    }
+    if (cfg.gradientType === 'radial') {
+      return (
+        <radialGradient id={headGradId} cx="38%" cy="28%" r="74%">
+          <stop offset="0%" stopColor={start} />
+          {mid && <stop offset="52%" stopColor={mid} />}
+          <stop offset="100%" stopColor={end} />
+        </radialGradient>
+      );
+    }
+    return (
+      <linearGradient id={headGradId} x1={gx1} y1={gy1} x2={gx2} y2={gy2}>
+        <stop offset="0%" stopColor={start} />
+        {mid && <stop offset="52%" stopColor={mid} />}
+        <stop offset="100%" stopColor={end} />
+      </linearGradient>
+    );
   };
 
   const renderEyeCutMaskDef = () => (
-    <defs>
-      <mask id={eyeCutMaskId}>
-        <rect x="0" y="0" width="28" height="28" fill="white" />
-        <path d={eyes.left} fill="black" />
-        <path d={eyes.right} fill="black" />
-      </mask>
-    </defs>
+    <mask id={eyeCutMaskId}>
+      <rect x="0" y="0" width="28" height="28" fill="white" />
+      <path d={eyes.left} fill="black" />
+      <path d={eyes.right} fill="black" />
+    </mask>
   );
 
   const renderVariantGeometry = () => {
-    const ringBoost = compact ? 1.14 : 1;
+    const contourBoost = compact ? 1.15 : 1;
 
     switch (variant) {
       case 'pure_bw': {
-        // 2. Pure Black & White — sharp high-contrast graphic stencil
-        const fg = cfg.innerColor || '#09090B';
-        const discBg = cfg.customBgColor || '#FFFFFF';
-        const ringCol = cfg.ringColor || fg;
+        // 2. Pure Black & White — stark comic ink white head, crisp black outline & sweeping black eye patches
+        const headCol = '#FFFFFF';
+        const patchCol = cfg.innerColor || '#050507';
+        const contourCol = cfg.ringColor || '#050507';
         const eyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : '#FFFFFF';
-        const domes = buildSplitDomes(8.85);
+        const contourStyle = cfg.innerRingStyle === 'none' ? 'solid' : cfg.innerRingStyle;
         return (
           <>
-            {isTransparentEyes && renderEyeCutMaskDef()}
-            {!isTransparentBg && <circle cx="14" cy="14" r="10.9" fill={discBg} />}
-            {renderInnerRing(
-              cfg.innerRingStyle,
-              ringCol,
-              Math.max(1.8, cfg.innerRingWidth) * ringBoost,
-              10.65
-            )}
+            {isTransparentEyes && <defs>{renderEyeCutMaskDef()}</defs>}
             <g mask={isTransparentEyes ? `url(#${eyeCutMaskId})` : undefined}>
-              <path d={domes.left} fill={fg} />
-              <path d={domes.right} fill={fg} />
+              <path d={DEADPOOL_HEAD_PATH} fill={headCol} />
+              <path d={patches.left} fill={patchCol} />
+              <path d={patches.right} fill={patchCol} />
             </g>
+            {renderHeadContour(
+              contourStyle,
+              contourCol,
+              Math.max(1.25, cfg.innerRingWidth * 0.85) * contourBoost
+            )}
             {!isTransparentEyes && (
               <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
                 <path d={eyes.left} fill={eyeCol} />
@@ -1428,26 +1456,25 @@ export const DeadpoolEmblemGroup: React.FC<{
       }
 
       case 'white_on_black': {
-        // 3. White Emblem on Black — dark solid disc with stark white split emblem & dark pierced eyes
-        const discBg = cfg.customBgColor || '#09090D';
-        const emblemFg = cfg.innerColor || '#F8FAFC';
+        // 3. White on Black — matte obsidian head with crisp white outline, stark white eye patches & dark pierced eyes
+        const headCol = '#09090D';
+        const patchCol = cfg.innerColor || '#FFFFFF';
+        const contourCol = cfg.ringColor || '#FFFFFF';
         const eyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : '#09090D';
-        const ringCol = cfg.ringColor || emblemFg;
-        const domes = buildSplitDomes(8.6);
+        const contourStyle = cfg.innerRingStyle === 'none' ? 'solid' : cfg.innerRingStyle;
         return (
           <>
-            {isTransparentEyes && renderEyeCutMaskDef()}
-            {!isTransparentBg && <circle cx="14" cy="14" r="11.35" fill={discBg} />}
-            {renderInnerRing(
-              cfg.innerRingStyle,
-              ringCol,
-              Math.max(1.45, cfg.innerRingWidth * 0.94) * ringBoost,
-              10.55
-            )}
+            {isTransparentEyes && <defs>{renderEyeCutMaskDef()}</defs>}
             <g mask={isTransparentEyes ? `url(#${eyeCutMaskId})` : undefined}>
-              <path d={domes.left} fill={emblemFg} />
-              <path d={domes.right} fill={emblemFg} />
+              <path d={DEADPOOL_HEAD_PATH} fill={headCol} />
+              <path d={patches.left} fill={patchCol} />
+              <path d={patches.right} fill={patchCol} />
             </g>
+            {renderHeadContour(
+              contourStyle,
+              contourCol,
+              Math.max(1.35, cfg.innerRingWidth * 0.92) * contourBoost
+            )}
             {!isTransparentEyes && (
               <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
                 <path d={eyes.left} fill={eyeCol} />
@@ -1459,77 +1486,40 @@ export const DeadpoolEmblemGroup: React.FC<{
       }
 
       case 'tactical_metallic': {
-        // 4. Tactical Metallic — chamfered octagon armor ring, brushed steel split plates, notched ticks
-        const metalId = `dp-metal-${uid}`;
-        const plateColTop = cfg.innerColor || '#F1F5F9';
-        const plateColMid = cfg.innerColor ? cfg.innerColor : '#94A3B8';
-        const plateColBot = '#475569';
-        const ringCol = cfg.ringColor || '#CBD5E1';
-        const eyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : '#FFFFFF';
-        const frameFill = isTransparentBg ? 'none' : cfg.customBgColor || '#0B1120';
-        const xL = (14 - gapHalf).toFixed(2);
-        const xR = (14 + gapHalf).toFixed(2);
+        // 4. Tactical Metallic — brushed steel-crimson armored head mask with metallic bevel & specular crown sheen
+        const headStart = cfg.outerColor || '#A61B29';
+        const headMid = cfg.outerColorMid || '#6E1420';
+        const headEnd = cfg.outerColorEnd || '#3B0A14';
+        const patchCol = cfg.innerColor || '#141720';
+        const contourCol = cfg.ringColor || '#CBD5E1';
+        const eyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : '#F8FAFC';
+        const gradDef = renderHeadGradientDef(headStart, headMid, headEnd);
+        const headFill = gradDef ? `url(#${headGradId})` : headStart;
+        const contourStyle = cfg.innerRingStyle === 'none' ? 'solid' : cfg.innerRingStyle;
         return (
           <>
             <defs>
-              <linearGradient id={metalId} x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor={plateColTop} />
-                <stop offset="52%" stopColor={plateColMid} stopOpacity="0.92" />
-                <stop offset="100%" stopColor={plateColBot} />
-              </linearGradient>
-              {isTransparentEyes && (
-                <mask id={eyeCutMaskId}>
-                  <rect x="0" y="0" width="28" height="28" fill="white" />
-                  <path d={eyes.left} fill="black" />
-                  <path d={eyes.right} fill="black" />
-                </mask>
-              )}
+              {gradDef}
+              {isTransparentEyes && renderEyeCutMaskDef()}
             </defs>
-            {/* Chamfered octagonal armor frame */}
-            <polygon
-              points="9.4,2.8 18.6,2.8 25.2,9.4 25.2,18.6 18.6,25.2 9.4,25.2 2.8,18.6 2.8,9.4"
-              fill={frameFill}
-              stroke={ringCol}
-              strokeWidth={
-                cfg.innerRingStyle === 'none'
-                  ? 0
-                  : Math.max(1.45, cfg.innerRingWidth * 0.92) * ringBoost
-              }
-              strokeDasharray={cfg.innerRingStyle === 'dashed' ? '3 2' : undefined}
-              strokeLinejoin="miter"
-            />
-            {/* Cardinal tactical rangefinder notches */}
-            {!compact && (
-              <>
-                <line x1="14" y1="2.2" x2="14" y2="4.9" stroke={ringCol} strokeWidth="1.35" />
-                <line x1="14" y1="23.1" x2="14" y2="25.8" stroke={ringCol} strokeWidth="1.35" />
-                <line x1="2.2" y1="14" x2="4.9" y2="14" stroke={ringCol} strokeWidth="1.35" />
-                <line x1="23.1" y1="14" x2="25.8" y2="14" stroke={ringCol} strokeWidth="1.35" />
-              </>
-            )}
-            {/* Faceted left & right metallic armor mask plates */}
             <g mask={isTransparentEyes ? `url(#${eyeCutMaskId})` : undefined}>
-              <polygon
-                points={`${xL},5.5 8.7,6.1 5.3,10.2 5.3,17.8 8.7,21.9 ${xL},22.5`}
-                fill={`url(#${metalId})`}
-                stroke="#0F172A"
-                strokeWidth={compact ? '0.65' : '0.45'}
-              />
-              <polygon
-                points={`${xR},5.5 19.3,6.1 22.7,10.2 22.7,17.8 19.3,21.9 ${xR},22.5`}
-                fill={`url(#${metalId})`}
-                stroke="#0F172A"
-                strokeWidth={compact ? '0.65' : '0.45'}
-              />
+              <path d={DEADPOOL_HEAD_PATH} fill={headFill} />
+              <path d={DEADPOOL_CROWN_HIGHLIGHT_PATH} fill="rgba(226,232,240,0.42)" />
+              <path d={patches.left} fill={patchCol} stroke="#090D18" strokeWidth="0.35" />
+              <path d={patches.right} fill={patchCol} stroke="#090D18" strokeWidth="0.35" />
             </g>
-            {/* High-contrast tactical dark eye socket halo + crisp visor eyes */}
+            {renderHeadContour(
+              contourStyle,
+              contourCol,
+              Math.max(1.35, cfg.innerRingWidth * 0.95) * contourBoost
+            )}
             {!isTransparentEyes && (
               <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
                 <path
                   d={eyes.left}
                   fill={eyeCol}
                   stroke="#090D18"
-                  strokeWidth={compact ? '1.35' : '1.05'}
+                  strokeWidth={compact ? '0.65' : '0.45'}
                   paintOrder="stroke"
                   strokeLinejoin="round"
                 />
@@ -1537,7 +1527,7 @@ export const DeadpoolEmblemGroup: React.FC<{
                   d={eyes.right}
                   fill={eyeCol}
                   stroke="#090D18"
-                  strokeWidth={compact ? '1.35' : '1.05'}
+                  strokeWidth={compact ? '0.65' : '0.45'}
                   paintOrder="stroke"
                   strokeLinejoin="round"
                 />
@@ -1548,20 +1538,21 @@ export const DeadpoolEmblemGroup: React.FC<{
       }
 
       case 'minimal_flat': {
-        // 5. Minimal Flat — clean flat geometric D-halves built for crisp small-size legibility
-        const flatFg = cfg.innerColor || maskFill || '#DC2626';
+        // 5. Minimal Flat — frameless pure flat vector Deadpool head mask optimized for small sizes
+        const headCol = cfg.outerColor || '#DC2626';
+        const patchCol = cfg.innerColor || maskFill || '#111116';
         const eyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : '#FFFFFF';
-        const domes = buildSplitDomes(10.2);
         return (
           <>
-            {isTransparentEyes && renderEyeCutMaskDef()}
+            {isTransparentEyes && <defs>{renderEyeCutMaskDef()}</defs>}
+            <g mask={isTransparentEyes ? `url(#${eyeCutMaskId})` : undefined}>
+              <path d={DEADPOOL_HEAD_PATH} fill={headCol} />
+              <path d={patches.left} fill={patchCol} />
+              <path d={patches.right} fill={patchCol} />
+            </g>
             {cfg.innerRingStyle !== 'none' &&
               cfg.innerRingStyle !== 'solid' &&
-              renderInnerRing(cfg.innerRingStyle, cfg.ringColor || flatFg, 1.15 * ringBoost, 11.4)}
-            <g mask={isTransparentEyes ? `url(#${eyeCutMaskId})` : undefined}>
-              <path d={domes.left} fill={flatFg} />
-              <path d={domes.right} fill={flatFg} />
-            </g>
+              renderHeadContour(cfg.innerRingStyle, cfg.ringColor || headCol, 0.9 * contourBoost)}
             {!isTransparentEyes && (
               <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
                 <path d={eyes.left} fill={eyeCol} />
@@ -1573,67 +1564,36 @@ export const DeadpoolEmblemGroup: React.FC<{
       }
 
       case 'crimson_dark': {
-        // 6. Crimson Dark — obsidian carbon base with faceted crimson armor panels & dynamic eye sockets
-        const crimsonId = `dp-crim-${uid}`;
-        const panelTop = cfg.innerColor || '#EF4444';
-        const panelBot = cfg.innerColor ? cfg.innerColor : '#991B1B';
-        const ringCol = cfg.ringColor || '#DC2626';
-        const eyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : '#FFFFFF';
-        const discBg = cfg.customBgColor || '#0A0609';
-        const xL = (14 - gapHalf).toFixed(2);
-        const xR = (14 + gapHalf).toFixed(2);
+        // 6. Crimson Dark — deep stealth blood-crimson head with obsidian eye masks & crimson edge rim
+        const headStart = cfg.outerColor || '#7A0A1B';
+        const headMid = cfg.outerColorMid || '#540612';
+        const headEnd = cfg.outerColorEnd || '#2E030A';
+        const patchCol = cfg.innerColor || '#050507';
+        const contourCol = cfg.ringColor || '#EF4444';
+        const eyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : '#FFF1F2';
+        const gradDef = renderHeadGradientDef(headStart, headMid, headEnd);
+        const headFill = gradDef ? `url(#${headGradId})` : headStart;
+        const contourStyle = cfg.innerRingStyle === 'none' ? 'solid' : cfg.innerRingStyle;
         return (
           <>
             <defs>
-              <linearGradient id={crimsonId} x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor={panelTop} />
-                <stop offset="100%" stopColor={panelBot} stopOpacity="0.88" />
-              </linearGradient>
-              {isTransparentEyes && (
-                <mask id={eyeCutMaskId}>
-                  <rect x="0" y="0" width="28" height="28" fill="white" />
-                  <path d={eyes.left} fill="black" />
-                  <path d={eyes.right} fill="black" />
-                </mask>
-              )}
+              {gradDef}
+              {isTransparentEyes && renderEyeCutMaskDef()}
             </defs>
-            {!isTransparentBg && <circle cx="14" cy="14" r="11.35" fill={discBg} />}
-            {renderInnerRing(
-              cfg.innerRingStyle,
-              ringCol,
-              Math.max(1.55, cfg.innerRingWidth) * ringBoost,
-              10.6
-            )}
-            {/* Aggressive swept visor halves */}
             <g mask={isTransparentEyes ? `url(#${eyeCutMaskId})` : undefined}>
-              <path
-                d={`M ${xL} 5.3 C 8.3 5.5 5.1 9.1 5.1 14 C 5.1 18.9 8.3 22.5 ${xL} 22.7 L ${(14 - gapHalf - 0.5).toFixed(2)} 14 Z`}
-                fill={`url(#${crimsonId})`}
-              />
-              <path
-                d={`M ${xR} 5.3 C 19.7 5.5 22.9 9.1 22.9 14 C 22.9 18.9 19.7 22.5 ${xR} 22.7 L ${(14 + gapHalf + 0.5).toFixed(2)} 14 Z`}
-                fill={`url(#${crimsonId})`}
-              />
+              <path d={DEADPOOL_HEAD_PATH} fill={headFill} />
+              <path d={patches.left} fill={patchCol} />
+              <path d={patches.right} fill={patchCol} />
             </g>
-            {/* Dynamic obsidian eye sockets — automatically track splitGap & every eyeStyle */}
+            {renderHeadContour(
+              contourStyle,
+              contourCol,
+              Math.max(1.3, cfg.innerRingWidth * 0.92) * contourBoost
+            )}
             {!isTransparentEyes && (
               <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
-                <path
-                  d={eyes.left}
-                  fill={eyeCol}
-                  stroke="#0A0609"
-                  strokeWidth={compact ? '2.05' : '1.85'}
-                  paintOrder="stroke"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d={eyes.right}
-                  fill={eyeCol}
-                  stroke="#0A0609"
-                  strokeWidth={compact ? '2.05' : '1.85'}
-                  paintOrder="stroke"
-                  strokeLinejoin="round"
-                />
+                <path d={eyes.left} fill={eyeCol} />
+                <path d={eyes.right} fill={eyeCol} />
               </g>
             )}
           </>
@@ -1641,20 +1601,19 @@ export const DeadpoolEmblemGroup: React.FC<{
       }
 
       case 'monochrome_inverted': {
-        // 7. Monochrome Inverted — bright circular plate with negative-space mask cutout & independent eye channel
+        // 7. Monochrome Inverted — true SVG <mask> negative-space stencil with transparent eye-patch cutouts
         const cutMaskId = `dp-inv-${uid}`;
-        const plateFill = cfg.innerColor || '#F4F4F8';
-        const cutoutBg = cfg.customBgColor || '#0D0D12';
-        const ringCol = cfg.ringColor || plateFill;
+        const plateFill = cfg.outerColor || '#E4E4E7';
+        const contourCol = cfg.ringColor || '#3F3F46';
         const customEyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : null;
-        const domes = buildSplitDomes(8.9);
         return (
           <>
             <defs>
               <mask id={cutMaskId}>
-                <circle cx="14" cy="14" r="10.9" fill="white" />
-                <path d={domes.left} fill="black" />
-                <path d={domes.right} fill="black" />
+                <rect x="0" y="0" width="28" height="28" fill="black" />
+                <path d={DEADPOOL_HEAD_PATH} fill="white" />
+                <path d={patches.left} fill="black" />
+                <path d={patches.right} fill="black" />
                 {!isTransparentEyes && !customEyeCol && (
                   <>
                     <path d={eyes.left} fill="white" />
@@ -1663,44 +1622,51 @@ export const DeadpoolEmblemGroup: React.FC<{
                 )}
               </mask>
             </defs>
-            {!isTransparentBg && <circle cx="14" cy="14" r="11.15" fill={cutoutBg} />}
-            <circle cx="14" cy="14" r="10.9" fill={plateFill} mask={`url(#${cutMaskId})`} />
+            <path d={DEADPOOL_HEAD_PATH} fill={plateFill} mask={`url(#${cutMaskId})`} />
+            {renderHeadContour(
+              cfg.innerRingStyle === 'none' ? 'solid' : cfg.innerRingStyle,
+              contourCol,
+              Math.max(0.75, cfg.innerRingWidth * 0.55) * contourBoost
+            )}
             {!isTransparentEyes && customEyeCol && (
               <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
                 <path d={eyes.left} fill={customEyeCol} />
                 <path d={eyes.right} fill={customEyeCol} />
               </g>
             )}
-            {cfg.innerRingStyle !== 'none' &&
-              renderInnerRing(
-                cfg.innerRingStyle,
-                ringCol,
-                Math.max(1.15, cfg.innerRingWidth * 0.78) * ringBoost,
-                11.1
-              )}
           </>
         );
       }
 
       case 'original':
       default: {
-        // 1. Original Red & Black — crisp iconic Deadpool emblem
-        // When user uses transparent background OR custom shell gradient/texture/bg, let shell surface shine through!
-        const baseRed = cfg.outerColor || '#C8102E';
-        const maskDark = cfg.innerColor || maskFill || '#0B0B0E';
-        const ringCol = cfg.ringColor || maskDark;
+        // 1. Original Red & Black — classic sculpted Deadpool head mask with sweeping black eye patches & sharp white eyes
+        const headStart = cfg.outerColor || '#D11432';
+        const headMid = cfg.outerColorMid;
+        const headEnd = cfg.outerColorEnd || (cfg.outerColor ? cfg.outerColor : '#9E0B22');
+        const patchCol = cfg.innerColor || maskFill || '#0B0B0F';
+        const contourCol = cfg.ringColor || '#4A0612';
         const eyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : '#FFFFFF';
-        const domes = buildSplitDomes(8.85);
-        const showSolidRedField = !isTransparentBg && !hasRichOuterSurface;
+        const gradDef = renderHeadGradientDef(headStart, headMid, headEnd);
+        const headFill = gradDef ? `url(#${headGradId})` : headStart;
         return (
           <>
-            {isTransparentEyes && renderEyeCutMaskDef()}
-            {showSolidRedField && <circle cx="14" cy="14" r="10.6" fill={baseRed} />}
-            {renderInnerRing(cfg.innerRingStyle, ringCol, cfg.innerRingWidth * ringBoost, 10.65)}
+            <defs>
+              {gradDef}
+              {isTransparentEyes && renderEyeCutMaskDef()}
+            </defs>
             <g mask={isTransparentEyes ? `url(#${eyeCutMaskId})` : undefined}>
-              <path d={domes.left} fill={maskDark} />
-              <path d={domes.right} fill={maskDark} />
+              <path d={DEADPOOL_HEAD_PATH} fill={headFill} />
+              <path d={DEADPOOL_CROWN_HIGHLIGHT_PATH} fill="rgba(255,255,255,0.20)" />
+              <path d={patches.left} fill={patchCol} />
+              <path d={patches.right} fill={patchCol} />
             </g>
+            {cfg.innerRingStyle !== 'none' &&
+              renderHeadContour(
+                cfg.innerRingStyle,
+                contourCol,
+                Math.max(0.65, cfg.innerRingWidth * 0.55) * contourBoost
+              )}
             {!isTransparentEyes && (
               <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
                 <path d={eyes.left} fill={eyeCol} />
@@ -1773,22 +1739,20 @@ export const DeadpoolMiniSwatch: React.FC<{
       deadpoolCustomBgColor: customBgColor,
       deadpoolSurfaceTexture: surfaceTexture,
       deadpoolGlossMode: glossMode,
-      deadpoolLogoPadding: 4,
+      deadpoolLogoPadding: 2,
     });
 
   const shellBg = resolveDeadpoolShellBackground(miniCfg);
   const bgFilter = buildDeadpoolShellFilter(miniCfg);
   const isTransparent = miniCfg.logoBg === 'transparent';
-  const borderCol = cfgOverride ? resolveDeadpoolShellBorderColor(miniCfg) : ring;
-  const svgSize = Math.round(sizePx * 0.78);
+  const svgSize = Math.round(sizePx * 0.84);
 
   return (
     <span
-      className="relative flex shrink-0 items-center justify-center overflow-hidden rounded-full shadow-xs"
+      className="relative flex shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/10 shadow-xs"
       style={{
         width: `${sizePx}px`,
         height: `${sizePx}px`,
-        border: `1.5px solid ${borderCol}`,
       }}
     >
       {!isTransparent && (
@@ -1804,6 +1768,7 @@ export const DeadpoolMiniSwatch: React.FC<{
       <DeadpoolShellOverlays cfg={miniCfg} />
       <svg
         viewBox="0 0 28 28"
+        preserveAspectRatio="xMidYMid meet"
         width={svgSize}
         height={svgSize}
         className="relative z-[4]"

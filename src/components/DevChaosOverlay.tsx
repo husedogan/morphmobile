@@ -14,6 +14,11 @@ import {
   subscribeDevChaos,
   updateDevChaos,
 } from '../engine/devChaosEngine';
+import {
+  DEADPOOL_HEAD_PATH,
+  buildDeadpoolMaskPatches,
+  buildEyePaths,
+} from './DeadpoolWheelVisual';
 
 interface Bouncer {
   x: number;
@@ -161,6 +166,13 @@ export const DevChaosOverlay: React.FC = () => {
     canvas.height = window.innerHeight;
 
     const count = Math.min(CHAOS_SAFE_LIMITS.maxSwarmCount, chaos.dvdSwarmCount);
+    const dpPatches = buildDeadpoolMaskPatches(1.55);
+    const dpEyes = buildEyePaths('classic', 0);
+    const headPath2D = typeof Path2D !== 'undefined' ? new Path2D(DEADPOOL_HEAD_PATH) : null;
+    const patchL2D = typeof Path2D !== 'undefined' ? new Path2D(dpPatches.left) : null;
+    const patchR2D = typeof Path2D !== 'undefined' ? new Path2D(dpPatches.right) : null;
+    const eyeL2D = typeof Path2D !== 'undefined' ? new Path2D(dpEyes.left) : null;
+    const eyeR2D = typeof Path2D !== 'undefined' ? new Path2D(dpEyes.right) : null;
     const items: Bouncer[] = Array.from({length: count}, (_, i) => ({
       x: 40 + ((i * 73) % Math.max(80, canvas.width - 80)),
       y: 40 + ((i * 59) % Math.max(80, canvas.height - 80)),
@@ -211,27 +223,22 @@ export const DevChaosOverlay: React.FC = () => {
         }
         ctx.save();
         ctx.translate(b.x, b.y);
-        ctx.beginPath();
-        ctx.arc(0, 0, b.size, 0, Math.PI * 2);
-        ctx.fillStyle = '#C8102E';
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(0, 0, b.size * 0.78, 0, Math.PI * 2);
-        ctx.fillStyle = '#09090D';
-        ctx.fill();
-        ctx.fillStyle = '#C8102E';
-        ctx.fillRect(-b.size * 0.14, -b.size * 0.82, b.size * 0.28, b.size * 1.64);
-        ctx.fillStyle = '#FFFFFF';
-        ctx.beginPath();
-        ctx.moveTo(-b.size * 0.56, -b.size * 0.12);
-        ctx.lineTo(-b.size * 0.22, b.size * 0.06);
-        ctx.quadraticCurveTo(-b.size * 0.42, b.size * 0.26, -b.size * 0.56, -b.size * 0.12);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(b.size * 0.56, -b.size * 0.12);
-        ctx.lineTo(b.size * 0.22, b.size * 0.06);
-        ctx.quadraticCurveTo(b.size * 0.42, b.size * 0.26, b.size * 0.56, -b.size * 0.12);
-        ctx.fill();
+        const sc = (b.size * 2) / 28;
+        ctx.scale(sc, sc);
+        ctx.translate(-14, -14);
+        if (headPath2D && patchL2D && patchR2D && eyeL2D && eyeR2D) {
+          ctx.fillStyle = '#C8102E';
+          ctx.fill(headPath2D);
+          ctx.lineWidth = 0.7;
+          ctx.strokeStyle = '#4A0612';
+          ctx.stroke(headPath2D);
+          ctx.fillStyle = '#0B0B0F';
+          ctx.fill(patchL2D);
+          ctx.fill(patchR2D);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fill(eyeL2D);
+          ctx.fill(eyeR2D);
+        }
         ctx.restore();
       }
       rafId = requestAnimationFrame(step);
