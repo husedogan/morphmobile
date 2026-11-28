@@ -734,7 +734,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-safe sm:p-5 backdrop-blur-sm"
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 px-safe sm:p-5 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
@@ -830,7 +830,7 @@ export const PdfAndArchiveProModal: React.FC<PdfAndArchiveProModalProps> = ({
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 pb-[calc(var(--morph-safe-bottom)+1rem)]">
           {/* ==================== TAB 1: VISUAL PDF PAGE ORGANIZER ==================== */}
           {tab === 'pdf_organize' && (
             <div className="space-y-3">

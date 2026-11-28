@@ -1379,7 +1379,7 @@ export const PdfCanvasViewer: React.FC<PdfCanvasViewerProps> = ({
               <X className="h-4.5 w-4.5" />
             </button>
           </div>
-          <div className="grid flex-1 grid-cols-3 gap-2.5 overflow-y-auto p-3 pb-[calc(var(--morph-safe-bottom)+1rem)] sm:grid-cols-4 md:grid-cols-5">
+          <div className="grid min-h-0 flex-1 grid-cols-3 gap-2.5 overflow-y-auto overscroll-contain p-3 pb-[calc(var(--morph-safe-bottom)+1rem)] sm:grid-cols-4 md:grid-cols-5">
             {allPages.slice(0, 60).map((p) => {
               const thumb = thumbs.find((t) => t.pageNum === p);
               const active = currentPage === p;

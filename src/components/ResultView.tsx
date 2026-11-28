@@ -362,10 +362,10 @@ export const ResultView: React.FC<ResultViewProps> = ({
           role="dialog"
           aria-modal="true"
           aria-label={previewItem.item.name}
-          className="fixed inset-0 z-50 flex flex-col bg-black/88 px-4 px-safe pt-[calc(var(--morph-safe-top)+0.75rem)] pb-[calc(var(--morph-safe-bottom)+1rem)] backdrop-blur-sm"
+          className="fixed inset-0 z-[80] flex flex-col bg-black/88 px-4 px-safe pt-[calc(var(--morph-safe-top)+0.75rem)] pb-[calc(var(--morph-safe-bottom)+1rem)] backdrop-blur-sm"
           onClick={closePreview}
         >
-          <div className="flex items-center justify-between gap-3 pb-3 text-white" onClick={(e) => e.stopPropagation()}>
+          <div className="flex shrink-0 items-center justify-between gap-3 pb-3 text-white" onClick={(e) => e.stopPropagation()}>
             <div className="min-w-0">
               <p className="truncate text-sm font-bold">{previewItem.item.name}</p>
               <p className="font-mono-num text-[11px] text-white/60">
@@ -392,7 +392,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
             </div>
           </div>
           <div
-            className="flex flex-1 items-center justify-center overflow-hidden"
+            className="flex min-h-0 flex-1 items-center justify-center overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {previewKind === 'image' ? (
@@ -423,7 +423,7 @@ export const ResultView: React.FC<ResultViewProps> = ({
                 <audio src={previewItem.url} controls autoPlay className="w-full" />
               </div>
             ) : (
-              <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/85 px-safe sm:p-4" onClick={closePreview}>
+              <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/85 px-safe sm:p-4" onClick={closePreview}>
                 <div
                   className="flex h-[100dvh] w-full max-w-4xl flex-col overflow-hidden bg-[var(--surface)] shadow-2xl sm:h-[92dvh] sm:rounded-3xl sm:border sm:border-[var(--line)]"
                   onClick={(e) => e.stopPropagation()}

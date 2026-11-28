@@ -1,5 +1,6 @@
 import React from 'react';
-import {Copy, Download, Film, FolderSync, Sparkles, Trash2, Upload} from 'lucide-react';
+import {createPortal} from 'react-dom';
+import {Copy, Download, Film, FolderSync, Sparkles, Trash2, Upload, X} from 'lucide-react';
 import {
   AspectRatioPreset,
   ProjectFps,
@@ -85,25 +86,25 @@ export const ProjectsModal: React.FC<ProjectsModalProps> = ({
   onDuplicateProject,
   onDeleteProject,
 }) => {
-  if (!open) return null;
+  if (!open || typeof document === 'undefined') return null;
   const tr = (t: string, e: string) => (isTr ? t : e);
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       onClick={onClose}
-      className="morph-studio-dark fixed inset-0 z-50 flex items-end justify-center bg-black/75 p-0 backdrop-blur-xs sm:items-center sm:p-4"
+      className="morph-studio-dark fixed inset-0 z-[90] flex items-end justify-center bg-black/75 p-0 backdrop-blur-xs sm:items-center sm:p-4"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[90dvh] w-full max-w-md flex-col rounded-t-3xl border border-[var(--line)] bg-[var(--surface)] px-4 pt-2 pb-[calc(var(--morph-safe-bottom)+1rem)] shadow-2xl sm:rounded-2xl sm:p-4"
+        className="flex max-h-[88dvh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl border border-[var(--line)] bg-[var(--surface)] px-4 pt-2 shadow-2xl sm:rounded-2xl sm:p-4"
       >
         <div
           aria-hidden="true"
           className="mx-auto mb-2.5 h-1 w-10 shrink-0 rounded-full bg-white/15 sm:hidden"
         />
-        <div className="mb-3 flex items-center justify-between gap-2 border-b border-[var(--line)] pb-2.5">
+        <div className="mb-3 flex shrink-0 items-center justify-between gap-2 border-b border-[var(--line)] pb-2.5">
           <div className="min-w-0">
             <h3 className="text-sm font-extrabold text-[var(--ink)]">
               {tr('Projeler, Şablonlar & .morph Paketleri', 'Projects, Templates & .morph Packages')}
@@ -118,13 +119,15 @@ export const ProjectsModal: React.FC<ProjectsModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[var(--ve-btn-size,36px)] shrink-0 rounded-xl border border-[var(--line)] bg-[var(--inset)] px-3 py-1.5 text-xs font-bold text-[var(--muted)] hover:text-[var(--ink)]"
+            title={tr('Kapat', 'Close')}
+            aria-label={tr('Kapat', 'Close')}
+            className="flex h-[var(--ve-btn-size,36px)] w-[var(--ve-btn-size,36px)] shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-[var(--inset)] text-[var(--muted)] hover:text-[var(--ink)]"
           >
-            {tr('Kapat', 'Close')}
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="morph-nle-scroll flex-1 space-y-3 overflow-y-auto pr-0.5">
+        <div className="morph-nle-scroll min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-0.5 pb-[calc(var(--morph-safe-bottom)+1rem)] sm:pb-1">
           {/* Portable .morph Package Export, Import & Relink Bar */}
           <div className="grid grid-cols-3 gap-1.5">
             <button
@@ -238,6 +241,7 @@ export const ProjectsModal: React.FC<ProjectsModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

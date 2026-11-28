@@ -51,9 +51,9 @@ export const JobOverlay: React.FC<JobOverlayProps> = ({job, lang, onCancel}) => 
       role="dialog"
       aria-modal="true"
       aria-label={job.title}
-      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/68 backdrop-blur-sm sm:items-center sm:p-6"
+      className="fixed inset-0 z-[98] flex items-end justify-center bg-black/68 backdrop-blur-sm sm:items-center sm:p-6"
     >
-      <div className="w-full max-w-sm rounded-t-3xl border-t border-[var(--line)] bg-[var(--surface)] px-5 pt-4 pb-[calc(var(--morph-safe-bottom)+1.5rem)] text-[var(--ink)] shadow-2xl sm:rounded-3xl sm:border sm:p-6">
+      <div className="max-h-[90dvh] w-full max-w-sm overflow-y-auto rounded-t-3xl border-t border-[var(--line)] bg-[var(--surface)] px-5 pt-4 pb-[calc(var(--morph-safe-bottom)+1.5rem)] text-[var(--ink)] shadow-2xl sm:rounded-3xl sm:border sm:p-6">
         <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-[var(--line)] sm:hidden" />
 
         <div className="flex items-start gap-3.5">

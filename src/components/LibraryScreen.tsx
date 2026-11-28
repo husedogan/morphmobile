@@ -860,7 +860,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
           role="dialog"
           aria-modal="true"
           aria-label={t('ConfirmClearLibrary', lang)}
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-safe backdrop-blur-sm sm:items-center sm:p-4"
+          className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 px-safe backdrop-blur-sm sm:items-center sm:p-4"
           onClick={() => setConfirmClear(false)}
         >
           <div
@@ -899,7 +899,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
           role="dialog"
           aria-modal="true"
           aria-label={previewItem.item.name}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 px-safe backdrop-blur-sm sm:p-4"
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/85 px-safe backdrop-blur-sm sm:p-4"
           onClick={closePreview}
         >
           <div
@@ -923,10 +923,10 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
           role="dialog"
           aria-modal="true"
           aria-label={previewItem.item.name}
-          className="fixed inset-0 z-50 flex flex-col bg-black/85 px-4 px-safe pt-[calc(var(--morph-safe-top)+0.75rem)] pb-[calc(var(--morph-safe-bottom)+1rem)] backdrop-blur-sm"
+          className="fixed inset-0 z-[80] flex flex-col bg-black/85 px-4 px-safe pt-[calc(var(--morph-safe-top)+0.75rem)] pb-[calc(var(--morph-safe-bottom)+1rem)] backdrop-blur-sm"
           onClick={closePreview}
         >
-          <div className="flex items-center justify-between pb-3 text-white" onClick={(e) => e.stopPropagation()}>
+          <div className="flex shrink-0 items-center justify-between pb-3 text-white" onClick={(e) => e.stopPropagation()}>
             <span className="truncate text-sm font-semibold">{previewItem.item.name}</span>
             <button
               type="button"
@@ -938,7 +938,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
             </button>
           </div>
           <div
-            className="flex flex-1 items-center justify-center overflow-hidden"
+            className="flex min-h-0 flex-1 items-center justify-center overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {previewKind === 'image' ? (

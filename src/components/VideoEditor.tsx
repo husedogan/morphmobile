@@ -8817,9 +8817,9 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
             <>
               <div
                 onClick={() => setIsInspectorOpen(false)}
-                className="fixed inset-0 z-[56] bg-black/45 backdrop-blur-[1px]"
+                className="fixed inset-0 z-[76] bg-black/45 backdrop-blur-[1px]"
               />
-              <div className="pb-safe fixed inset-x-0 bottom-0 z-[58] flex max-h-[60dvh] flex-col overflow-hidden rounded-t-2xl border-t border-white/[0.14] bg-[#0D0D10] shadow-[0_-16px_48px_rgba(0,0,0,0.85)]">
+              <div className="fixed inset-x-0 bottom-0 z-[78] flex max-h-[68dvh] flex-col overflow-hidden rounded-t-2xl border-t border-white/[0.14] bg-[#0D0D10] pb-[calc(var(--morph-safe-bottom)+0.35rem)] shadow-[0_-16px_48px_rgba(0,0,0,0.85)]">
                 {renderInspectorPanel()}
               </div>
             </>
@@ -9352,8 +9352,8 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
 
       {/* Safe Unsaved-Changes Exit Confirmation Dialog */}
       {showUnsavedExitDialog && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-2xl border border-white/[0.12] bg-[#141418] p-4 shadow-2xl">
+        <div className="fixed inset-0 z-[95] flex items-center justify-center overflow-y-auto bg-black/75 p-4 pb-[calc(var(--morph-safe-bottom)+1rem)] backdrop-blur-sm">
+          <div className="max-h-[90dvh] w-full max-w-sm overflow-y-auto rounded-2xl border border-white/[0.12] bg-[#141418] p-4 shadow-2xl">
             <h3 className="text-sm font-extrabold text-white">
               {tr('Kaydedilmemiş Değişiklikler Var', 'Unsaved Changes')}
             </h3>
@@ -9405,11 +9405,11 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
           aria-modal="true"
           aria-label={tr('Klavye Kısayolları', 'Keyboard Shortcuts')}
           onClick={() => setShowShortcutsModal(false)}
-          className="fixed inset-0 z-[72] hidden items-center justify-center bg-black/75 p-4 backdrop-blur-sm lg:flex"
+          className="fixed inset-0 z-[95] hidden items-center justify-center bg-black/75 p-4 backdrop-blur-sm lg:flex"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md rounded-2xl border border-white/[0.12] bg-[#141418] p-5 shadow-2xl"
+            className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl border border-white/[0.12] bg-[#141418] p-5 shadow-2xl"
           >
             <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
               <div>

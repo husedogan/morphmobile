@@ -240,7 +240,7 @@ export const WheelCustomizeModal: React.FC<WheelCustomizeModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/65 px-safe backdrop-blur-sm sm:items-center sm:p-5"
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/65 px-safe backdrop-blur-sm sm:items-center sm:p-5"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -278,7 +278,7 @@ export const WheelCustomizeModal: React.FC<WheelCustomizeModalProps> = ({
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-5 py-4">
           {/* 3 Display Modes */}
           <div>
             <p className="mb-2 text-xs font-semibold text-[var(--muted)]">

@@ -516,7 +516,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-label={fileName}
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 px-safe backdrop-blur-sm sm:p-4"
+        className="fixed inset-0 z-[80] flex items-center justify-center bg-black/85 px-safe backdrop-blur-sm sm:p-4"
         onClick={onClose}
       >
         <div
@@ -541,7 +541,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label={fileName}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 px-safe backdrop-blur-sm sm:items-center sm:p-4"
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/80 px-safe backdrop-blur-sm sm:items-center sm:p-4"
       onClick={onClose}
     >
       <div
@@ -678,10 +678,10 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
 
         {/* Main Content Body */}
         <div
-          className={`flex-1 ${
+          className={`min-h-0 flex-1 ${
             ext === 'pdf'
-              ? 'min-h-0 overflow-hidden p-2.5 pb-[calc(var(--morph-safe-bottom)+0.65rem)] sm:p-3 sm:pb-3'
-              : 'overflow-y-auto p-4 pb-[calc(var(--morph-safe-bottom)+1rem)] sm:pb-4'
+              ? 'overflow-hidden p-2.5 pb-[calc(var(--morph-safe-bottom)+0.65rem)] sm:p-3 sm:pb-3'
+              : 'overflow-y-auto overscroll-contain p-4 pb-[calc(var(--morph-safe-bottom)+1rem)] sm:pb-4'
           }`}
         >
           {ext === 'pdf' ? (

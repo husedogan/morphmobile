@@ -115,7 +115,7 @@ import {
 } from '../engine/nativeBridge';
 import {deleteNleProjectIdb, listNleProjectsIdb} from '../engine/projectStorage';
 import {PWAInstallButton} from './PWAInstallButton';
-import {DeadpoolPersonalStudio} from './DeadpoolPersonalStudio';
+import {GodModeShell} from './GodMode/GodModeShell';
 import {
   SettingsAccordionCard,
   SettingsDownloadsExtra,
@@ -1202,7 +1202,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 pb-28 pt-5 sm:px-6 lg:pb-12 lg:pt-8 [@media(max-height:500px)]:pb-10 [@media(max-height:500px)]:pt-3">
+    <div
+      className={`mx-auto w-full ${
+        category === 'personal' && personalMenuOpen && !expUnlocked ? 'max-w-7xl' : 'max-w-4xl'
+      } px-4 pb-28 pt-5 sm:px-6 lg:pb-12 lg:pt-8 [@media(max-height:500px)]:pb-10 [@media(max-height:500px)]:pt-3`}
+    >
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-2xl font-bold tracking-tight text-[var(--ink)] sm:text-3xl">
           {t('Settings', lang)}
@@ -4513,9 +4517,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         </div>
       )}
 
-      {/* EPHEMERAL PERSONAL MENU ("Sana Özel" / "Just For You"): unlocked ONLY via 070420 while Experimental is locked; vanishes upon leaving */}
+      {/* EPHEMERAL PERSONAL MENU ("Sana Özel" / "Just For You"): hosts MORPH // GOD MODE Command Center + preserved 100-feature Deadpool & Chaos Studio */}
       {category === 'personal' && personalMenuOpen && !expUnlocked && (
-        <DeadpoolPersonalStudio
+        <GodModeShell
           prefs={prefs}
           lang={lang}
           onChangePrefs={onChangePrefs}
@@ -4850,7 +4854,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             setExpPassInput('');
             setExpPassError(false);
           }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 px-safe backdrop-blur-md"
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4 px-safe backdrop-blur-md"
         >
           <div
             onClick={(e) => e.stopPropagation()}

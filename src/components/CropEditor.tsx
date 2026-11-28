@@ -231,7 +231,7 @@ export const CropEditor: React.FC<CropEditorProps> = ({
   const hPx = Math.max(4, (rect.bottom - rect.top) * bounds.height);
 
   return (
-    <div className="morph-bg fixed inset-0 z-40 flex flex-col px-safe text-[var(--ink)]">
+    <div className="morph-bg fixed inset-0 z-[60] flex flex-col overflow-hidden px-safe text-[var(--ink)]">
       {/* Compact Top Bar with Safe-Area Top Inset */}
       <header className="shrink-0 border-b border-[var(--line)] bg-[var(--paper)]/92 pt-safe backdrop-blur-md">
         <div className="flex h-14 items-center justify-between px-3 [@media(max-height:500px)]:h-11">
@@ -257,7 +257,7 @@ export const CropEditor: React.FC<CropEditorProps> = ({
       {/* Interactive Crop Canvas */}
       <div
         ref={containerRef}
-        className="relative m-3 flex-1 overflow-hidden rounded-2xl border border-[var(--line)] bg-black/40 touch-none select-none"
+        className="relative m-3 min-h-0 flex-1 overflow-hidden rounded-2xl border border-[var(--line)] bg-black/40 touch-none select-none"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}

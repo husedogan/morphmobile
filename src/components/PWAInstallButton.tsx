@@ -51,11 +51,11 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({lang, variant
 
       {showIOSGuide && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 pb-[calc(var(--morph-safe-bottom)+1rem)] backdrop-blur-sm sm:items-center sm:pb-4"
+          className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 p-4 pb-[calc(var(--morph-safe-bottom)+1rem)] backdrop-blur-sm sm:items-center sm:pb-4"
           onClick={() => setShowIOSGuide(false)}
         >
           <div
-            className="w-full max-w-sm rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-6 text-[var(--ink)] shadow-2xl"
+            className="max-h-[90dvh] w-full max-w-sm overflow-y-auto rounded-3xl border border-[var(--line)] bg-[var(--surface)] p-6 text-[var(--ink)] shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">

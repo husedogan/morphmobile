@@ -1,4 +1,5 @@
 import React from 'react';
+import {createPortal} from 'react-dom';
 import {
   ArrowUpDown,
   AudioLines,
@@ -106,24 +107,24 @@ export const ClipQuickActionPopup: React.FC<ClipQuickActionPopupProps> = ({
   onDeleteKeepGap,
   onRippleDelete,
 }) => {
-  if (!open || !clip) return null;
+  if (!open || !clip || typeof document === 'undefined') return null;
   const tr = (t: string, e: string) => (isTr ? t : e);
   const trackIdx = getClipTrackIndex(clip);
   const isV2 = trackIdx >= 1;
   const isPip = isClipPipOverlay(clip);
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       onClick={onClose}
-      className="morph-studio-dark fixed inset-0 z-[75] flex items-end justify-center bg-black/60 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
+      className="morph-studio-dark fixed inset-0 z-[90] flex items-end justify-center bg-black/65 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="morph-nle-scroll max-h-[90dvh] w-full max-w-sm overflow-y-auto rounded-t-3xl border border-white/[0.12] bg-[#121216] pb-[calc(var(--morph-safe-bottom)+0.5rem)] shadow-2xl sm:rounded-2xl sm:pb-0"
+        className="flex max-h-[88dvh] w-full max-w-sm flex-col overflow-hidden rounded-t-3xl border border-white/[0.12] bg-[#121216] shadow-2xl sm:rounded-2xl"
       >
-        <div className="flex flex-col border-b border-white/[0.08] bg-[#18181E] px-3.5 pt-2 pb-2.5 sm:py-2.5">
+        <div className="flex shrink-0 flex-col border-b border-white/[0.08] bg-[#18181E] px-3.5 pt-2 pb-2.5 sm:py-2.5">
           <div
             aria-hidden="true"
             className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/15 sm:hidden"
@@ -150,7 +151,7 @@ export const ClipQuickActionPopup: React.FC<ClipQuickActionPopupProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 p-3">
+        <div className="morph-nle-scroll grid min-h-0 flex-1 grid-cols-2 gap-2 overflow-y-auto overscroll-contain p-3 pb-[calc(var(--morph-safe-bottom)+0.75rem)] sm:pb-3">
           <button
             type="button"
             disabled={!canSplit}
@@ -273,7 +274,8 @@ export const ClipQuickActionPopup: React.FC<ClipQuickActionPopupProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
@@ -313,7 +315,7 @@ export const MediaLayerQuickPopup: React.FC<MediaLayerQuickPopupProps> = ({
   onOpenTransition,
   onDelete,
 }) => {
-  if (!open) return null;
+  if (!open || typeof document === 'undefined') return null;
   if (layerType === 'audio' && !audioClip) return null;
   if (layerType === 'text' && !textClip) return null;
 
@@ -326,18 +328,18 @@ export const MediaLayerQuickPopup: React.FC<MediaLayerQuickPopupProps> = ({
     ? Math.max(0.25, audioClip!.sourceEnd - audioClip!.sourceStart)
     : textClip!.durationSec;
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       onClick={onClose}
-      className="morph-studio-dark fixed inset-0 z-[75] flex items-end justify-center bg-black/60 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
+      className="morph-studio-dark fixed inset-0 z-[90] flex items-end justify-center bg-black/65 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="morph-nle-scroll max-h-[90dvh] w-full max-w-sm overflow-y-auto rounded-t-3xl border border-white/[0.12] bg-[#121216] pb-[calc(var(--morph-safe-bottom)+0.5rem)] shadow-2xl sm:rounded-2xl sm:pb-0"
+        className="flex max-h-[88dvh] w-full max-w-sm flex-col overflow-hidden rounded-t-3xl border border-white/[0.12] bg-[#121216] shadow-2xl sm:rounded-2xl"
       >
-        <div className="flex flex-col border-b border-white/[0.08] bg-[#18181E] px-3.5 pt-2 pb-2.5 sm:py-2.5">
+        <div className="flex shrink-0 flex-col border-b border-white/[0.08] bg-[#18181E] px-3.5 pt-2 pb-2.5 sm:py-2.5">
           <div
             aria-hidden="true"
             className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/15 sm:hidden"
@@ -370,7 +372,7 @@ export const MediaLayerQuickPopup: React.FC<MediaLayerQuickPopupProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 p-3">
+        <div className="morph-nle-scroll grid min-h-0 flex-1 grid-cols-2 gap-2 overflow-y-auto overscroll-contain p-3 pb-[calc(var(--morph-safe-bottom)+0.75rem)] sm:pb-3">
           <button
             type="button"
             disabled={!canSplit}
@@ -471,7 +473,8 @@ export const MediaLayerQuickPopup: React.FC<MediaLayerQuickPopupProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
@@ -564,18 +567,20 @@ export const TransitionPickerPopup: React.FC<TransitionPickerPopupProps> = ({
         ? tr('Metin Geçiş Efekti', 'Text Transition Effect')
         : tr('Video Kesim Geçiş Efekti', 'Video Cut Seam Transition');
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       onClick={onClose}
-      className="morph-studio-dark fixed inset-0 z-[75] flex items-end justify-center bg-black/60 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
+      className="morph-studio-dark fixed inset-0 z-[90] flex items-end justify-center bg-black/65 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="morph-nle-scroll max-h-[90dvh] w-full max-w-sm overflow-y-auto rounded-t-3xl border border-white/[0.12] bg-[#121216] pb-[calc(var(--morph-safe-bottom)+0.5rem)] shadow-2xl sm:rounded-2xl sm:pb-0"
+        className="flex max-h-[88dvh] w-full max-w-sm flex-col overflow-hidden rounded-t-3xl border border-white/[0.12] bg-[#121216] shadow-2xl sm:rounded-2xl"
       >
-        <div className="flex flex-col border-b border-white/[0.08] bg-[#18181E] px-3.5 pt-2 pb-2.5 sm:py-2.5">
+        <div className="flex shrink-0 flex-col border-b border-white/[0.08] bg-[#18181E] px-3.5 pt-2 pb-2.5 sm:py-2.5">
           <div
             aria-hidden="true"
             className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/15 sm:hidden"
@@ -599,7 +604,7 @@ export const TransitionPickerPopup: React.FC<TransitionPickerPopupProps> = ({
           </div>
         </div>
 
-        <div className="space-y-3 p-3.5">
+        <div className="morph-nle-scroll min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3.5 pb-[calc(var(--morph-safe-bottom)+0.85rem)] sm:pb-3.5">
           <div className="grid grid-cols-2 gap-2">
             {options.map((opt) => {
               const active = currentTransition === opt.id;
@@ -683,7 +688,8 @@ export const TransitionPickerPopup: React.FC<TransitionPickerPopupProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
@@ -717,25 +723,25 @@ export const ExportConfirmPopup: React.FC<ExportConfirmPopupProps> = ({
   onOpenSettings,
   onConfirmExport,
 }) => {
-  if (!open) return null;
+  if (!open || typeof document === 'undefined') return null;
   const tr = (t: string, e: string) => (isTr ? t : e);
   const exp = project.exportSettings;
   const wmActive = Boolean(project.watermark && project.watermark.mode !== 'none');
   const extAudioCount = project.audioClips.filter((a) => a.kind !== 'original' && !a.muted).length;
   const textCount = project.textClips.filter((t) => t.text.trim().length > 0).length;
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       onClick={onClose}
-      className="morph-studio-dark fixed inset-0 z-[78] flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+      className="morph-studio-dark fixed inset-0 z-[92] flex items-end justify-center bg-black/72 p-0 backdrop-blur-sm sm:items-center sm:p-4"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="morph-nle-scroll max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-white/[0.12] bg-[#121216] pb-[calc(var(--morph-safe-bottom)+0.5rem)] shadow-2xl sm:rounded-2xl sm:pb-0"
+        className="flex max-h-[88dvh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl border border-white/[0.12] bg-[#121216] shadow-2xl sm:rounded-2xl"
       >
-        <div className="flex flex-col border-b border-white/[0.08] bg-[#18181E] px-4 pt-2 pb-3 sm:py-3">
+        <div className="flex shrink-0 flex-col border-b border-white/[0.08] bg-[#18181E] px-4 pt-2 pb-3 sm:py-3">
           <div
             aria-hidden="true"
             className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/15 sm:hidden"
@@ -761,7 +767,7 @@ export const ExportConfirmPopup: React.FC<ExportConfirmPopupProps> = ({
           </div>
         </div>
 
-        <div className="space-y-3 p-4">
+        <div className="morph-nle-scroll min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4 pb-[calc(var(--morph-safe-bottom)+1rem)] sm:pb-4">
           <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/[0.07] bg-[#0A0A0D] p-3 text-xs">
             <div>
               <p className="text-[10px] font-medium text-white/45">{tr('Çözünürlük', 'Resolution')}</p>
@@ -855,6 +861,7 @@ export const ExportConfirmPopup: React.FC<ExportConfirmPopupProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

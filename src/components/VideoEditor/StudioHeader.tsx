@@ -111,7 +111,9 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
 
   return (
     <header
-      className={`pt-safe relative z-40 flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.07] bg-[#0B0B0E] ${
+      className={`pt-safe relative flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.07] bg-[#0B0B0E] ${
+        moreOpen ? 'z-[60]' : 'z-40'
+      } ${
         isCompactLandscape
           ? 'min-h-10 px-2 py-0.5'
           : 'min-h-11 px-1.5 py-1 sm:min-h-12 sm:px-3.5'
@@ -218,7 +220,7 @@ export const StudioHeader: React.FC<StudioHeaderProps> = ({
             </button>
 
             {moreOpen && (
-              <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-56 origin-top-right rounded-2xl border border-white/[0.12] bg-[#14141A]/98 p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.72)] backdrop-blur-xl">
+              <div className="morph-nle-scroll absolute right-0 top-[calc(100%+6px)] z-50 max-h-[calc(100dvh-64px)] w-56 origin-top-right overflow-y-auto rounded-2xl border border-white/[0.12] bg-[#14141A]/98 p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.72)] backdrop-blur-xl">
                 <button
                   type="button"
                   onClick={() => {

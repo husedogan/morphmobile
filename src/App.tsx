@@ -107,6 +107,7 @@ import {
 } from './data/models';
 import {applyThemeTokens} from './data/themes';
 import {DevPerfHud} from './components/DevPerfHud';
+import {DevChaosOverlay} from './components/DevChaosOverlay';
 import {computeBatchRenamedNames} from './engine/fileInspector';
 import {
   GithubUpdateInfo,
@@ -2521,6 +2522,8 @@ export default function App() {
         />
       )}
 
+      <DevChaosOverlay />
+
       {/* Compact 3-Zone Top Bar with Android/iOS Safe-Area Top & Horizontal Insets */}
       <header className="morph-app-header sticky top-0 z-30 border-b border-[var(--line)]/70 bg-[var(--paper)]/92 pt-safe px-safe backdrop-blur-md">
         <div className="mx-auto flex h-13 max-w-6xl items-center justify-between gap-4 px-4 sm:gap-8 sm:px-6 [@media(max-height:500px)]:h-11">
@@ -3162,7 +3165,7 @@ export default function App() {
           role="dialog"
           aria-modal="true"
           aria-label={t('ManageTools', lang)}
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-safe backdrop-blur-sm sm:items-center sm:p-4"
+          className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 px-safe backdrop-blur-sm sm:items-center sm:p-4"
           onClick={() => setShowManageTools(false)}
         >
           <div
@@ -3256,7 +3259,7 @@ export default function App() {
           role="dialog"
           aria-modal="true"
           aria-label={previewTarget.name}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 px-safe backdrop-blur-sm sm:p-4"
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/85 px-safe backdrop-blur-sm sm:p-4"
           onClick={closeSourcePreview}
         >
           <div
@@ -3291,7 +3294,7 @@ export default function App() {
           role="dialog"
           aria-modal="true"
           aria-label={previewTarget.name}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-[calc(var(--morph-safe-left)+0.75rem)] pr-[calc(var(--morph-safe-right)+0.75rem)] pt-[calc(var(--morph-safe-top)+0.75rem)] pb-[calc(var(--morph-safe-bottom)+0.75rem)] backdrop-blur-sm sm:p-4"
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 px-[calc(var(--morph-safe-left)+0.75rem)] pr-[calc(var(--morph-safe-right)+0.75rem)] pt-[calc(var(--morph-safe-top)+0.75rem)] pb-[calc(var(--morph-safe-bottom)+0.75rem)] backdrop-blur-sm sm:p-4"
           onClick={closeSourcePreview}
         >
           <div

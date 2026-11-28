@@ -120,7 +120,7 @@ export const MainWheelCustomizeModal: React.FC<MainWheelCustomizeModalProps> = (
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/65 px-safe backdrop-blur-sm sm:items-center sm:p-5"
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/65 px-safe backdrop-blur-sm sm:items-center sm:p-5"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -158,7 +158,7 @@ export const MainWheelCustomizeModal: React.FC<MainWheelCustomizeModalProps> = (
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4">
           {/* Master On / Off Toggle for Home Quick Wheel */}
           <button
             type="button"

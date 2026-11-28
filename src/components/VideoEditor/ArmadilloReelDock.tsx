@@ -611,6 +611,8 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
                 key={tab.id}
                 type="button"
                 disabled={!isFlat}
+                title={isTr ? tab.labelTr : tab.labelEn}
+                aria-label={isTr ? tab.labelTr : tab.labelEn}
                 onPointerEnter={(e) => {
                   if (e.pointerType !== 'touch' && isFlat) setHoveredDockTab(tab.id);
                 }}
@@ -651,23 +653,20 @@ export const ArmadilloReelDock: React.FC<ArmadilloReelDockProps> = ({
                     ? 'none'
                     : 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 160ms ease, background-color 150ms ease, border-color 150ms ease',
                 }}
-                className={`group absolute z-[2] flex flex-col items-center justify-center gap-1 border px-0.5 py-1 text-[9.5px] font-semibold min-[400px]:text-[10px] ${
+                className={`group absolute z-[2] flex items-center justify-center border px-0.5 py-1 ${
                   isFlat ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none'
                 } ${isTinted ? '' : 'text-white/70'}`}
               >
                 <Icon
-                  className="h-[15px] w-[15px] shrink-0 transition-transform group-active:scale-90 min-[400px]:h-[17px] min-[400px]:w-[17px]"
+                  className="h-[19px] w-[19px] shrink-0 transition-transform group-active:scale-90"
                   style={isTinted || u > 0.08 ? {color: tab.accent} : undefined}
                 />
-                <span
-                  style={{
-                    opacity: labelOpacity,
-                    color: isTinted ? tab.accent : undefined,
-                  }}
-                  className="max-w-full truncate leading-none"
-                >
-                  {isTr ? tab.labelTr : tab.labelEn}
-                </span>
+                {isHighlighted && isFlat && (
+                  <span
+                    style={{backgroundColor: tab.accent, opacity: labelOpacity}}
+                    className="absolute bottom-1 h-[2.5px] w-4 rounded-full"
+                  />
+                )}
                 {tab.id === 'watermark' && hasActiveWatermark && !isHighlighted && isFlat && (
                   <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#34D399]" />
                 )}

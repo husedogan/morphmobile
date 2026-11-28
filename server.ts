@@ -1,10 +1,12 @@
 import 'dotenv/config';
-import {GoogleGenAI, Type} from '@google/genai';
+import {GoogleGenAI, ThinkingLevel, Type} from '@google/genai';
+import crypto from 'crypto';
 import dns from 'dns/promises';
 import express from 'express';
 import fs from 'fs';
 import http from 'http';
 import net from 'net';
+import os from 'os';
 import path from 'path';
 import {Readable} from 'stream';
 import {fileURLToPath} from 'url';
@@ -976,6 +978,644 @@ async function startServer() {
     } catch (err) {
       const {status, detail} = formatGeminiRouteError(err);
       res.status(status).json({detail});
+    }
+  });
+
+  // =========================================================================
+  // MORPH // GOD MODE — Server-Side Owner Auth, Device Registry & Health API
+  // =========================================================================
+  const godModeSigningKey =
+    process.env.GODMODE_SESSION_SECRET?.trim() || crypto.randomBytes(32).toString('hex');
+  const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+
+  let claimedOwnerCredential: {salt: string; hashHex: string} | null = null;
+  let totalFailedAuthAttempts = 0;
+
+  interface ServerGodModeDevice {
+    deviceId: string;
+    label: string;
+    platform: string;
+    userAgentShort: string;
+    firstSeenAt: string;
+    lastSeenAt: string;
+    status: 'active' | 'revoked';
+  }
+
+  interface ServerGodModeSession {
+    sid: string;
+    deviceId: string;
+    issuedAt: number;
+    expiresAt: number;
+  }
+
+  interface ServerGodModeAudit {
+    id: string;
+    ts: string;
+    action: string;
+    outcome: 'success' | 'denied' | 'warning';
+    deviceId: string;
+    detail: string;
+  }
+
+  const godModeDevices = new Map<string, ServerGodModeDevice>();
+  const godModeSessions = new Map<string, ServerGodModeSession>();
+  const godModeAudits: ServerGodModeAudit[] = [];
+  const authFailureWindow = new Map<string, {count: number; resetAt: number}>();
+
+  const recordGodModeAudit = (
+    action: string,
+    outcome: 'success' | 'denied' | 'warning',
+    deviceId: string,
+    detail: string
+  ) => {
+    godModeAudits.unshift({
+      id: `aud_${Date.now().toString(36)}_${crypto.randomBytes(3).toString('hex')}`,
+      ts: new Date().toISOString(),
+      action,
+      outcome,
+      deviceId: deviceId || 'unknown',
+      detail,
+    });
+    if (godModeAudits.length > 100) godModeAudits.length = 100;
+  };
+
+  const getPasscodeSource = (): 'env' | 'claimed' | 'unclaimed' => {
+    if (process.env.GODMODE_OWNER_PASSCODE && process.env.GODMODE_OWNER_PASSCODE.trim().length > 0) {
+      return 'env';
+    }
+    if (claimedOwnerCredential) return 'claimed';
+    return 'unclaimed';
+  };
+
+  const verifyOwnerPasscodeValue = (candidate: string): boolean => {
+    const clean = candidate.trim();
+    if (!clean) return false;
+    const envCode = process.env.GODMODE_OWNER_PASSCODE?.trim();
+    if (envCode && envCode.length > 0) {
+      const a = crypto.createHash('sha256').update(clean).digest();
+      const b = crypto.createHash('sha256').update(envCode).digest();
+      return crypto.timingSafeEqual(a, b);
+    }
+    if (!claimedOwnerCredential) return false;
+    const derived = crypto.scryptSync(clean, claimedOwnerCredential.salt, 64);
+    const stored = Buffer.from(claimedOwnerCredential.hashHex, 'hex');
+    if (derived.length !== stored.length) return false;
+    return crypto.timingSafeEqual(derived, stored);
+  };
+
+  const signGodModeToken = (sid: string, deviceId: string, exp: number): string => {
+    const payload = Buffer.from(JSON.stringify({sid, deviceId, exp})).toString('base64url');
+    const sig = crypto
+      .createHmac('sha256', godModeSigningKey)
+      .update(payload)
+      .digest('base64url');
+    return `${payload}.${sig}`;
+  };
+
+  const verifyGodModeToken = (token: string): ServerGodModeSession | null => {
+    const parts = token.split('.');
+    if (parts.length !== 2) return null;
+    const [payload, sig] = parts;
+    const expectedSig = crypto
+      .createHmac('sha256', godModeSigningKey)
+      .update(payload)
+      .digest('base64url');
+    const a = Buffer.from(sig);
+    const b = Buffer.from(expectedSig);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+    try {
+      const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
+        sid?: string;
+        deviceId?: string;
+        exp?: number;
+      };
+      if (!parsed.sid || !parsed.deviceId || typeof parsed.exp !== 'number') return null;
+      if (Date.now() > parsed.exp) {
+        godModeSessions.delete(parsed.sid);
+        return null;
+      }
+      const session = godModeSessions.get(parsed.sid);
+      if (!session || session.deviceId !== parsed.deviceId) return null;
+      const dev = godModeDevices.get(session.deviceId);
+      if (dev && dev.status === 'revoked') {
+        godModeSessions.delete(session.sid);
+        return null;
+      }
+      return session;
+    } catch {
+      return null;
+    }
+  };
+
+  const sanitizeDeviceId = (raw: unknown): string => {
+    const s = typeof raw === 'string' ? raw.trim() : '';
+    return /^[a-z0-9_-]{6,48}$/i.test(s)
+      ? s
+      : `dev_${crypto.randomBytes(6).toString('hex')}`;
+  };
+
+  const upsertDevice = (
+    deviceId: string,
+    label: unknown,
+    platform: unknown,
+    userAgentShort: unknown
+  ): ServerGodModeDevice => {
+    const now = new Date().toISOString();
+    const existing = godModeDevices.get(deviceId);
+    const cleanLabel =
+      typeof label === 'string' && label.trim()
+        ? label.trim().slice(0, 60)
+        : existing?.label || 'Owner Device';
+    const cleanPlatform =
+      typeof platform === 'string' && platform.trim()
+        ? platform.trim().slice(0, 48)
+        : existing?.platform || 'Web';
+    const cleanUa =
+      typeof userAgentShort === 'string' && userAgentShort.trim()
+        ? userAgentShort.trim().slice(0, 80)
+        : existing?.userAgentShort || 'Browser';
+    const rec: ServerGodModeDevice = {
+      deviceId,
+      label: cleanLabel,
+      platform: cleanPlatform,
+      userAgentShort: cleanUa,
+      firstSeenAt: existing?.firstSeenAt || now,
+      lastSeenAt: now,
+      status: 'active',
+    };
+    godModeDevices.set(deviceId, rec);
+    return rec;
+  };
+
+  const issueOwnerSession = (deviceId: string) => {
+    const sid = crypto.randomBytes(18).toString('hex');
+    const now = Date.now();
+    const exp = now + SESSION_TTL_MS;
+    const session: ServerGodModeSession = {sid, deviceId, issuedAt: now, expiresAt: exp};
+    godModeSessions.set(sid, session);
+    return {
+      token: signGodModeToken(sid, deviceId, exp),
+      issuedAt: new Date(now).toISOString(),
+      expiresAt: new Date(exp).toISOString(),
+    };
+  };
+
+  const requireGodModeAuth = (
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction
+  ) => {
+    const header = req.headers.authorization || '';
+    const match = header.match(/^Bearer\s+(.+)$/i);
+    if (!match) {
+      res.status(401).json({detail: 'Sahip oturumu gerekli.'});
+      return;
+    }
+    const session = verifyGodModeToken(match[1].trim());
+    if (!session) {
+      res.status(401).json({detail: 'Oturum geçersiz veya süresi dolmuş.'});
+      return;
+    }
+    (req as express.Request & {godModeSession?: ServerGodModeSession}).godModeSession = session;
+    next();
+  };
+
+  const checkRateLimit = (ip: string): boolean => {
+    const now = Date.now();
+    const rec = authFailureWindow.get(ip);
+    if (!rec || now > rec.resetAt) return true;
+    return rec.count < 10;
+  };
+
+  const bumpFailure = (ip: string) => {
+    totalFailedAuthAttempts += 1;
+    const now = Date.now();
+    const rec = authFailureWindow.get(ip);
+    if (!rec || now > rec.resetAt) {
+      authFailureWindow.set(ip, {count: 1, resetAt: now + 5 * 60 * 1000});
+    } else {
+      rec.count += 1;
+    }
+  };
+
+  app.get('/api/godmode/auth/status', (_req, res) => {
+    res.json({
+      ok: true,
+      passcodeSource: getPasscodeSource(),
+    });
+  });
+
+  app.post('/api/godmode/auth/claim', express.json({limit: '16kb'}), (req, res) => {
+    if (getPasscodeSource() !== 'unclaimed') {
+      res.status(409).json({detail: 'Sahip parolası zaten tanımlı. Doğrulama ekranını kullanın.'});
+      return;
+    }
+    const passcode = typeof req.body?.passcode === 'string' ? req.body.passcode.trim() : '';
+    if (passcode.length < 6 || passcode.length > 128) {
+      res.status(400).json({detail: 'Sahip parolası en az 6 karakter olmalıdır.'});
+      return;
+    }
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hashHex = crypto.scryptSync(passcode, salt, 64).toString('hex');
+    claimedOwnerCredential = {salt, hashHex};
+
+    const deviceId = sanitizeDeviceId(req.body?.deviceId);
+    upsertDevice(deviceId, req.body?.label, req.body?.platform, req.body?.userAgentShort);
+    const issued = issueOwnerSession(deviceId);
+    recordGodModeAudit('owner_claim', 'success', deviceId, 'First-run owner credential claimed on server.');
+    res.status(200).json({ok: true, ...issued});
+  });
+
+  app.post('/api/godmode/auth/verify', express.json({limit: '16kb'}), (req, res) => {
+    const ip = req.ip || 'unknown';
+    if (!checkRateLimit(ip)) {
+      res.status(429).json({detail: 'Çok fazla başarısız deneme. 5 dakika sonra tekrar deneyin.'});
+      return;
+    }
+    const deviceId = sanitizeDeviceId(req.body?.deviceId);
+    const passcode = typeof req.body?.passcode === 'string' ? req.body.passcode : '';
+    if (getPasscodeSource() === 'unclaimed') {
+      res.status(409).json({detail: 'Önce ilk kurulum sahip parolası belirlenmelidir.'});
+      return;
+    }
+    if (!verifyOwnerPasscodeValue(passcode)) {
+      bumpFailure(ip);
+      recordGodModeAudit('owner_verify', 'denied', deviceId, 'Invalid owner passcode submitted.');
+      res.status(403).json({detail: 'Sahip parolası doğrulanamadı.'});
+      return;
+    }
+    upsertDevice(deviceId, req.body?.label, req.body?.platform, req.body?.userAgentShort);
+    const issued = issueOwnerSession(deviceId);
+    recordGodModeAudit('owner_verify', 'success', deviceId, 'Owner session verified and token issued.');
+    res.status(200).json({ok: true, ...issued});
+  });
+
+  app.get('/api/godmode/session', requireGodModeAuth, (req, res) => {
+    const session = (req as express.Request & {godModeSession: ServerGodModeSession}).godModeSession;
+    const devices = Array.from(godModeDevices.values()).map((d) => ({
+      ...d,
+      isCurrent: d.deviceId === session.deviceId,
+    }));
+    res.json({
+      ok: true,
+      currentDeviceId: session.deviceId,
+      issuedAt: new Date(session.issuedAt).toISOString(),
+      expiresAt: new Date(session.expiresAt).toISOString(),
+      failedAttempts: totalFailedAuthAttempts,
+      devices,
+      auditLogs: godModeAudits.slice(0, 50),
+    });
+  });
+
+  app.post('/api/godmode/devices/register', requireGodModeAuth, express.json({limit: '16kb'}), (req, res) => {
+    const session = (req as express.Request & {godModeSession: ServerGodModeSession}).godModeSession;
+    const deviceId = sanitizeDeviceId(req.body?.deviceId || session.deviceId);
+    upsertDevice(deviceId, req.body?.label, req.body?.platform, req.body?.userAgentShort);
+    recordGodModeAudit('device_register', 'success', deviceId, 'Verified device profile updated.');
+    const devices = Array.from(godModeDevices.values()).map((d) => ({
+      ...d,
+      isCurrent: d.deviceId === session.deviceId,
+    }));
+    res.json({ok: true, devices});
+  });
+
+  app.post('/api/godmode/devices/revoke', requireGodModeAuth, express.json({limit: '16kb'}), (req, res) => {
+    const session = (req as express.Request & {godModeSession: ServerGodModeSession}).godModeSession;
+    const targetId = typeof req.body?.deviceId === 'string' ? req.body.deviceId.trim() : '';
+    const passcode = typeof req.body?.passcode === 'string' ? req.body.passcode : '';
+    if (!verifyOwnerPasscodeValue(passcode)) {
+      recordGodModeAudit('device_revoke', 'denied', session.deviceId, `Re-auth failed revoking ${targetId}.`);
+      res.status(403).json({detail: 'Hassas işlem için sahip parolası doğrulanamadı.'});
+      return;
+    }
+    const dev = godModeDevices.get(targetId);
+    if (!dev) {
+      res.status(404).json({detail: 'Cihaz bulunamadı.'});
+      return;
+    }
+    dev.status = 'revoked';
+    for (const [sid, s] of godModeSessions.entries()) {
+      if (s.deviceId === targetId) godModeSessions.delete(sid);
+    }
+    const selfRevoked = targetId === session.deviceId;
+    recordGodModeAudit('device_revoke', 'warning', session.deviceId, `Revoked device ${targetId}.`);
+    res.json({ok: true, selfRevoked});
+  });
+
+  app.post('/api/godmode/auth/logout', requireGodModeAuth, (req, res) => {
+    const session = (req as express.Request & {godModeSession: ServerGodModeSession}).godModeSession;
+    godModeSessions.delete(session.sid);
+    recordGodModeAudit('session_logout', 'success', session.deviceId, 'Owner session terminated.');
+    res.json({ok: true});
+  });
+
+  app.get('/api/godmode/server-health', requireGodModeAuth, (_req, res) => {
+    const mem = process.memoryUsage();
+    res.json({
+      ok: true,
+      uptimeSec: Math.round(process.uptime()),
+      rssBytes: mem.rss,
+      heapUsedBytes: mem.heapUsed,
+      heapTotalBytes: mem.heapTotal,
+      nodeVersion: process.version,
+      platform: process.platform,
+      arch: process.arch,
+      cpuCount: os.cpus().length,
+      ffmpegCoreBundled: fs.existsSync(ffmpegCoreDir),
+      geminiConfigured: Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 0),
+      passcodeSource: getPasscodeSource(),
+    });
+  });
+
+  // =========================================================================
+  // MORPH // GOD MODE — Phase 3 AI Lab & Autonomous Agents + Phase 5 Network Probe
+  // =========================================================================
+  const GODMODE_ALLOWED_AI_MODELS = new Set(['gemini-4-hydrogen', 'gemini-3.1-flash-lite']);
+  const GODMODE_AGENT_PROMPTS: Record<string, string> = {
+    architect:
+      'You are the Morph System Architect Agent. Inspect the provided runtime telemetry, module layout, and constraints, then produce concrete architectural findings and high-leverage engineering actions.',
+    auditor:
+      'You are the Morph Code & Runtime Auditor Agent. Identify potential reliability bottlenecks, state leaks, error patterns, and defensive improvements based on the live runtime context.',
+    qa:
+      'You are the Morph QA & Verification Agent. Design targeted regression checks, mobile portrait/landscape edge cases, and diagnostic verifications for the reported system state.',
+    performance:
+      'You are the Morph Performance Optimization Agent. Analyze FPS, frame time, heap pressure, DOM node count, and storage footprint to recommend measurable speedups.',
+    media:
+      'You are the Morph Media & FFmpeg Agent. Evaluate FFmpeg WASM readiness, codec/container pipelines, mobile memory limits, and transcoding optimization opportunities.',
+    security:
+      'You are the Morph Security Hardening Agent. Review owner session posture, device verification, storage hygiene, and SSRF/API boundaries for actionable security hardening.',
+    automation:
+      'You are the Morph Workflow Automation Agent. Suggest repeatable diagnostic, backup, and runtime maintenance workflows tailored to the live metrics.',
+    self_evolution:
+      'You are the Morph Self-Evolution Proposal Engine. Generate a single strictly approval-gated engineering proposal (never auto-applied) with clear rationale, risk assessment, and concise diff outline.',
+  };
+
+  app.post('/api/godmode/ai/generate', requireGodModeAuth, express.json({limit: '256kb'}), async (req, res) => {
+    const session = (req as express.Request & {godModeSession: ServerGodModeSession}).godModeSession;
+    try {
+      const requestedModel =
+        typeof req.body?.model === 'string' ? req.body.model.trim() : 'gemini-4-hydrogen';
+      const model = GODMODE_ALLOWED_AI_MODELS.has(requestedModel)
+        ? requestedModel
+        : 'gemini-4-hydrogen';
+      const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt.trim() : '';
+      const systemInstruction =
+        typeof req.body?.systemInstruction === 'string'
+          ? req.body.systemInstruction.trim().slice(0, 4000)
+          : '';
+      const rawThinking =
+        typeof req.body?.thinkingLevel === 'string' ? req.body.thinkingLevel.toUpperCase() : '';
+
+      if (!prompt || prompt.length > 12000) {
+        res.status(400).json({detail: 'İstem 1 ile 12.000 karakter arasında olmalıdır.'});
+        return;
+      }
+
+      const ai = getGeminiClient();
+      const config: {
+        systemInstruction?: string;
+        thinkingConfig?: {thinkingLevel: ThinkingLevel};
+      } = {};
+      if (systemInstruction) {
+        config.systemInstruction = systemInstruction;
+      }
+      if (model === 'gemini-4-hydrogen') {
+        if (rawThinking === 'LOW') config.thinkingConfig = {thinkingLevel: ThinkingLevel.LOW};
+        else if (rawThinking === 'MEDIUM') config.thinkingConfig = {thinkingLevel: ThinkingLevel.MEDIUM};
+        else if (rawThinking === 'HIGH') config.thinkingConfig = {thinkingLevel: ThinkingLevel.HIGH};
+      }
+
+      const started = Date.now();
+      const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: Object.keys(config).length > 0 ? config : undefined,
+      });
+      const latencyMs = Date.now() - started;
+      const text = (response.text ?? '').trim();
+      const usageMeta = response.usageMetadata;
+
+      recordGodModeAudit(
+        'ai_generate',
+        'success',
+        session.deviceId,
+        `AI Lab ${model} completed in ${latencyMs}ms.`
+      );
+
+      res.status(200).json({
+        ok: true,
+        model,
+        text,
+        latencyMs,
+        usage: {
+          promptTokens: usageMeta?.promptTokenCount ?? 0,
+          candidatesTokens: usageMeta?.candidatesTokenCount ?? 0,
+          totalTokens: usageMeta?.totalTokenCount ?? 0,
+        },
+      });
+    } catch (err) {
+      recordGodModeAudit('ai_generate', 'warning', session.deviceId, 'AI Lab request failed.');
+      const {status, detail} = formatGeminiRouteError(err);
+      res.status(status).json({detail});
+    }
+  });
+
+  app.post('/api/godmode/ai/agent', requireGodModeAuth, express.json({limit: '256kb'}), async (req, res) => {
+    const session = (req as express.Request & {godModeSession: ServerGodModeSession}).godModeSession;
+    try {
+      const agentId = typeof req.body?.agentId === 'string' ? req.body.agentId.trim() : '';
+      const rolePrompt = GODMODE_AGENT_PROMPTS[agentId];
+      if (!rolePrompt) {
+        res.status(400).json({detail: 'Geçersiz ajan kimliği.'});
+        return;
+      }
+
+      const lang = req.body?.lang === 'en' ? 'en' : 'tr';
+      const focusPrompt =
+        typeof req.body?.focusPrompt === 'string' ? req.body.focusPrompt.trim().slice(0, 3000) : '';
+      const rawContext =
+        req.body?.runtimeContext && typeof req.body.runtimeContext === 'object'
+          ? JSON.stringify(req.body.runtimeContext).slice(0, 8000)
+          : '{}';
+
+      const ai = getGeminiClient();
+      const outputLang = lang === 'tr' ? 'Turkish (Türkçe)' : 'English';
+      const userContent = [
+        `Respond strictly in ${outputLang}. Keep every field concise, technical, and grounded ONLY in the live runtime context below.`,
+        focusPrompt ? `Owner focus request: ${focusPrompt}` : 'Perform a live operational inspection.',
+        `Live Morph Runtime Context JSON:\n${rawContext}`,
+      ].join('\n\n');
+
+      const started = Date.now();
+      const response = await ai.models.generateContent({
+        model: 'gemini-4-hydrogen',
+        contents: userContent,
+        config: {
+          systemInstruction: rolePrompt,
+          thinkingConfig: {thinkingLevel: ThinkingLevel.LOW},
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              summary: {type: Type.STRING},
+              riskLevel: {type: Type.STRING},
+              findings: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    title: {type: Type.STRING},
+                    severity: {type: Type.STRING},
+                    detail: {type: Type.STRING},
+                  },
+                  required: ['title', 'severity', 'detail'],
+                },
+              },
+              actions: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    title: {type: Type.STRING},
+                    impact: {type: Type.STRING},
+                    effort: {type: Type.STRING},
+                  },
+                  required: ['title', 'impact', 'effort'],
+                },
+              },
+              proposal: {
+                type: Type.OBJECT,
+                properties: {
+                  title: {type: Type.STRING},
+                  rationale: {type: Type.STRING},
+                  diffOutline: {type: Type.STRING},
+                },
+                required: ['title', 'rationale', 'diffOutline'],
+              },
+            },
+            required: ['summary', 'riskLevel', 'findings', 'actions'],
+          },
+        },
+      });
+      const latencyMs = Date.now() - started;
+      const report = JSON.parse((response.text ?? '{}').trim());
+      const usageMeta = response.usageMetadata;
+
+      recordGodModeAudit(
+        'ai_agent',
+        'success',
+        session.deviceId,
+        `Agent ${agentId} ran in ${latencyMs}ms.`
+      );
+
+      res.status(200).json({
+        ok: true,
+        agentId,
+        model: 'gemini-4-hydrogen',
+        latencyMs,
+        usage: {
+          promptTokens: usageMeta?.promptTokenCount ?? 0,
+          candidatesTokens: usageMeta?.candidatesTokenCount ?? 0,
+          totalTokens: usageMeta?.totalTokenCount ?? 0,
+        },
+        report,
+      });
+    } catch (err) {
+      recordGodModeAudit('ai_agent', 'warning', session.deviceId, 'Autonomous agent run failed.');
+      const {status, detail} = formatGeminiRouteError(err);
+      res.status(status).json({detail});
+    }
+  });
+
+  app.post('/api/godmode/network/probe', requireGodModeAuth, express.json({limit: '16kb'}), async (req, res) => {
+    const session = (req as express.Request & {godModeSession: ServerGodModeSession}).godModeSession;
+    const rawUrl = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
+    const method = req.body?.method === 'GET' ? 'GET' : 'HEAD';
+
+    if (!rawUrl || rawUrl.length > 512) {
+      res.status(400).json({detail: 'Geçerli bir HTTP/HTTPS hedef adresi girin.'});
+      return;
+    }
+
+    let urlObj: URL;
+    try {
+      urlObj = new URL(rawUrl);
+    } catch {
+      res.status(400).json({detail: 'URL biçimi geçersiz.'});
+      return;
+    }
+
+    try {
+      await assertSafeUrl(urlObj);
+    } catch {
+      recordGodModeAudit(
+        'network_probe',
+        'denied',
+        session.deviceId,
+        `Blocked private/unsafe probe target: ${urlObj.hostname}`
+      );
+      res.status(403).json({detail: 'Özel ağ, yerel veya engelli hedefe sunucu testi yapılamaz.'});
+      return;
+    }
+
+    let resolvedIp: string | null = null;
+    try {
+      const host = urlObj.hostname.replace(/^\[|\]$/g, '');
+      if (net.isIP(host)) {
+        resolvedIp = host;
+      } else {
+        const records = await dns.lookup(host, {all: true, verbatim: true});
+        resolvedIp = records[0]?.address ?? null;
+      }
+    } catch {
+      resolvedIp = null;
+    }
+
+    const started = Date.now();
+    try {
+      const probeRes = await fetch(urlObj.toString(), {
+        method,
+        redirect: 'manual',
+        headers: {'User-Agent': 'MorphGodModeProbe/1.0'},
+        signal: AbortSignal.timeout(5000),
+      });
+      const latencyMs = Date.now() - started;
+      recordGodModeAudit(
+        'network_probe',
+        'success',
+        session.deviceId,
+        `Probed ${urlObj.hostname} (${probeRes.status}, ${latencyMs}ms)`
+      );
+      res.status(200).json({
+        ok: true,
+        reachable: true,
+        url: urlObj.toString(),
+        method,
+        status: probeRes.status,
+        statusText: probeRes.statusText,
+        latencyMs,
+        resolvedIp,
+        contentType: probeRes.headers.get('content-type') || null,
+        serverHeader: probeRes.headers.get('server') || null,
+        cacheControl: probeRes.headers.get('cache-control') || null,
+        redirectedTo: probeRes.headers.get('location') || null,
+      });
+    } catch (err) {
+      const latencyMs = Date.now() - started;
+      res.status(200).json({
+        ok: true,
+        reachable: false,
+        url: urlObj.toString(),
+        method,
+        status: null,
+        statusText: err instanceof Error ? err.message : 'Unreachable',
+        latencyMs,
+        resolvedIp,
+        contentType: null,
+        serverHeader: null,
+        cacheControl: null,
+        redirectedTo: null,
+      });
     }
   });
 

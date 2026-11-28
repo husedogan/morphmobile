@@ -825,7 +825,7 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
               );
             })}
           </div>
-          <div className="no-scrollbar flex-1 overflow-y-auto p-3 pb-[calc(var(--morph-safe-bottom)+0.75rem)]">
+          <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 pb-[calc(var(--morph-safe-bottom)+0.75rem)]">
             {currentCat && (
               <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
                 {currentCat.items.map((item) => {
@@ -872,7 +872,7 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
       >
         <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-current opacity-20 sm:hidden" />
         {renderHeader()}
-        <div className="no-scrollbar flex-1 space-y-2 overflow-y-auto p-3 pb-[calc(var(--morph-safe-bottom)+0.75rem)]">
+        <div className="no-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain p-3 pb-[calc(var(--morph-safe-bottom)+0.75rem)]">
           {categories.map((cat) => {
             const CatIcon = cat.icon;
             const isOpen = expandedCatId === cat.id;
@@ -1354,7 +1354,7 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
         <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-current opacity-20 sm:hidden" />
         {renderHeader()}
 
-        <div className="no-scrollbar flex-1 overflow-y-auto p-3 pb-[calc(var(--morph-safe-bottom)+0.75rem)]">
+        <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 pb-[calc(var(--morph-safe-bottom)+0.75rem)]">
           <div
             ref={treeWrapRef}
             className={`relative grid items-stretch gap-0 ${
@@ -1613,7 +1613,7 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
           </div>
 
           {/* Right Nested Sub-Tools Detail Pane */}
-          <div className="no-scrollbar flex-1 overflow-y-auto p-3 pb-[calc(var(--morph-safe-bottom)+0.75rem)]">
+          <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 pb-[calc(var(--morph-safe-bottom)+0.75rem)]">
             {activeCat && (
               <>
                 <div className="mb-2 flex items-baseline justify-between gap-2">
@@ -1775,7 +1775,7 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
           )}
         </div>
 
-        <div className="no-scrollbar flex-1 overflow-y-auto p-3 pb-[calc(var(--morph-safe-bottom)+0.75rem)]">
+        <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 pb-[calc(var(--morph-safe-bottom)+0.75rem)]">
           {isSearching ? (
             flatSearchResults.length === 0 ? (
               <p className={`py-8 text-center text-xs font-medium ${mutedTxt}`}>
@@ -1975,7 +1975,7 @@ export const ExperimentalToolLauncher: React.FC<ExperimentalToolLauncherProps> =
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="fixed inset-0 z-[70] flex flex-col justify-end px-safe sm:justify-center sm:p-4"
+      className="fixed inset-0 z-[88] flex flex-col justify-end px-safe sm:justify-center sm:p-4"
     >
       {/* Dimmed Backdrop */}
       <button

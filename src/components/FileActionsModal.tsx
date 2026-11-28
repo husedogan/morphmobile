@@ -120,7 +120,7 @@ export const FileActionsModal: React.FC<FileActionsModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label={t('FileActionsTitle', lang)}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-safe backdrop-blur-sm sm:items-center sm:p-4"
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 px-safe backdrop-blur-sm sm:items-center sm:p-4"
       onClick={onClose}
     >
       <div
@@ -146,7 +146,7 @@ export const FileActionsModal: React.FC<FileActionsModalProps> = ({
           </button>
         </div>
 
-        <div className="space-y-5 overflow-y-auto p-5 pb-[calc(var(--morph-safe-bottom)+1.25rem)] sm:pb-5">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-5 pb-[calc(var(--morph-safe-bottom)+1.25rem)] sm:pb-5">
           {/* 1. Quick Actions */}
           <div>
             <p className="mb-2.5 text-xs font-semibold text-[var(--muted)]">{t('QuickActionsGroup', lang)}</p>

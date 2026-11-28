@@ -915,7 +915,7 @@ export const ToolFlow: React.FC<ToolFlowProps> = ({
   if (selectedTool === 'PDF_VIEWER' && files[0]?.kind === 'pdf') {
     const activePdf = files[0];
     return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-[var(--surface)] px-safe">
+      <div className="fixed inset-0 z-[75] flex flex-col overflow-hidden bg-[var(--surface)] px-safe">
         <PdfCanvasViewer
           file={activePdf.file}
           lang={lang}
