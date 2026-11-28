@@ -15,8 +15,8 @@ import {
   updateDevChaos,
 } from '../engine/devChaosEngine';
 import {
-  DEADPOOL_HEAD_PATH,
-  buildDeadpoolMaskPatches,
+  DEADPOOL_CIRCLE_OUTER_PATH,
+  buildDeadpoolSplitDomes,
   buildEyePaths,
 } from './DeadpoolWheelVisual';
 
@@ -166,11 +166,12 @@ export const DevChaosOverlay: React.FC = () => {
     canvas.height = window.innerHeight;
 
     const count = Math.min(CHAOS_SAFE_LIMITS.maxSwarmCount, chaos.dvdSwarmCount);
-    const dpPatches = buildDeadpoolMaskPatches(1.55);
+    const dpDomes = buildDeadpoolSplitDomes(1.65);
     const dpEyes = buildEyePaths('classic', 0);
-    const headPath2D = typeof Path2D !== 'undefined' ? new Path2D(DEADPOOL_HEAD_PATH) : null;
-    const patchL2D = typeof Path2D !== 'undefined' ? new Path2D(dpPatches.left) : null;
-    const patchR2D = typeof Path2D !== 'undefined' ? new Path2D(dpPatches.right) : null;
+    const outerPath2D =
+      typeof Path2D !== 'undefined' ? new Path2D(DEADPOOL_CIRCLE_OUTER_PATH) : null;
+    const domeL2D = typeof Path2D !== 'undefined' ? new Path2D(dpDomes.left) : null;
+    const domeR2D = typeof Path2D !== 'undefined' ? new Path2D(dpDomes.right) : null;
     const eyeL2D = typeof Path2D !== 'undefined' ? new Path2D(dpEyes.left) : null;
     const eyeR2D = typeof Path2D !== 'undefined' ? new Path2D(dpEyes.right) : null;
     const items: Bouncer[] = Array.from({length: count}, (_, i) => ({
@@ -226,15 +227,15 @@ export const DevChaosOverlay: React.FC = () => {
         const sc = (b.size * 2) / 28;
         ctx.scale(sc, sc);
         ctx.translate(-14, -14);
-        if (headPath2D && patchL2D && patchR2D && eyeL2D && eyeR2D) {
+        if (outerPath2D && domeL2D && domeR2D && eyeL2D && eyeR2D) {
           ctx.fillStyle = '#C8102E';
-          ctx.fill(headPath2D);
+          ctx.fill(outerPath2D);
           ctx.lineWidth = 0.7;
           ctx.strokeStyle = '#4A0612';
-          ctx.stroke(headPath2D);
+          ctx.stroke(outerPath2D);
           ctx.fillStyle = '#0B0B0F';
-          ctx.fill(patchL2D);
-          ctx.fill(patchR2D);
+          ctx.fill(domeL2D);
+          ctx.fill(domeR2D);
           ctx.fillStyle = '#FFFFFF';
           ctx.fill(eyeL2D);
           ctx.fill(eyeR2D);

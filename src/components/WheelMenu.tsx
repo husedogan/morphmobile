@@ -2047,7 +2047,7 @@ export const WheelFab: React.FC<{
         if (innerStyle === 'deadpool') {
           if (dpCfg.tapFx === 'bounce') setDpTapBounceKey((k) => k + 1);
           else if (dpCfg.tapFx === 'flash') setDpTapFlashKey((k) => k + 1);
-          else if (dpCfg.tapFx === 'spin_kick') setDpTapKickDeg((d) => (d + 180) % 360);
+          else if (dpCfg.tapFx === 'spin_kick') setDpTapKickDeg((d) => d + 360);
         }
         onClick();
       } else {
@@ -2150,10 +2150,9 @@ export const WheelFab: React.FC<{
   const shapeClipPath: string | undefined = getDeadpoolOuterShapeGeometry(iconStyle).clipPath;
 
   const dpShellScaleMul = isDeadpoolInner ? dpCfg.shellScale : 1;
-  const baseOuterRot =
-    (iconStyle === 'diamond' ? 45 : 0) +
-    (effectiveSpinEnabled ? idleOuterDeg : 0) +
-    (isDeadpoolInner ? dpTapKickDeg : 0);
+  const baseOuterSpinRot =
+    (iconStyle === 'diamond' ? 45 : 0) + (effectiveSpinEnabled ? idleOuterDeg : 0);
+  const baseOuterRot = baseOuterSpinRot + (isDeadpoolInner ? dpTapKickDeg : 0);
   const effectiveBtnScale =
     (phase === 'ash'
       ? ashBtnScale
@@ -2167,9 +2166,9 @@ export const WheelFab: React.FC<{
       ? `rotate(${baseOuterRot.toFixed(1)}deg) scale(${effectiveBtnScale.toFixed(3)})`
       : undefined;
 
-  // World-space inner rotation = burn spinDeg + idleInnerDeg; subtract outer shell rotation so inner & outer spin independently!
+  // World-space inner rotation = burn spinDeg + idleInnerDeg; subtract outer spin angle so tapKick spins together!
   const worldInnerDeg = (deadpoolOuterSpinOnly ? 0 : spinDeg) + (effectiveSpinEnabled ? idleInnerDeg : 0);
-  const localInnerDeg = worldInnerDeg - baseOuterRot;
+  const localInnerDeg = worldInnerDeg - baseOuterSpinRot;
 
   const dpBgImage = isDeadpoolInner ? resolveDeadpoolShellBackground(dpCfg) : undefined;
   const dpIsTransparentBg = isDeadpoolInner && dpCfg.logoBg === 'transparent';
@@ -2994,13 +2993,13 @@ export const WheelFab: React.FC<{
                     : 'h-6 w-12'
                   : isDeadpoolInner
                     ? iconStyle === 'star_prism'
-                      ? 'h-[33px] w-[33px]'
+                      ? 'h-[27px] w-[27px]'
                       : iconStyle === 'diamond'
-                        ? 'h-[36px] w-[36px]'
+                        ? 'h-[34px] w-[34px]'
                         : iconStyle === 'blade_hex'
-                          ? 'h-[39px] w-[39px]'
+                          ? 'h-[37px] w-[37px]'
                           : iconStyle === 'shield_crest'
-                            ? 'h-[40px] w-[40px] -translate-y-[0.5px]'
+                            ? 'h-[38px] w-[38px] -translate-y-[0.5px]'
                             : 'h-[44px] w-[44px]'
                     : 'h-7 w-7'
               }`}

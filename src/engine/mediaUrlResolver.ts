@@ -11,6 +11,13 @@ export interface HttpJsonFetcher {
   postJson?(url: string, body: unknown, headers?: Record<string, string>): Promise<{status: number; text: string}>;
 }
 
+declare const __MORPH_VERSION__: string | undefined;
+
+const MORPH_AGENT_VERSION =
+  typeof __MORPH_VERSION__ === 'string' && __MORPH_VERSION__.trim().length > 0
+    ? __MORPH_VERSION__
+    : '1.1.73';
+
 export const BROWSER_USER_AGENT =
   'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36';
 
@@ -300,7 +307,7 @@ export async function resolvePlatformMedia(
     try {
       const res = await http.fetchText(`https://api.fxtwitter.com/${tw.user}/status/${tw.id}`, {
         Accept: 'application/json',
-        'User-Agent': 'Morph/1.1.71',
+        'User-Agent': `Morph/${MORPH_AGENT_VERSION}`,
       });
       if (res.status >= 200 && res.status < 300) {
         const json = JSON.parse(res.text);

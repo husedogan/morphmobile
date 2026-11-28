@@ -13,7 +13,7 @@ export const PWA_WEB_URL = 'https://morphmobile.vercel.app';
 export const APP_VERSION: string =
   typeof __MORPH_VERSION__ === 'string' && __MORPH_VERSION__.trim().length > 0
     ? __MORPH_VERSION__
-    : '1.1.71';
+    : '1.1.73';
 
 export type VersionChannel = 'stable' | 'preview';
 
@@ -42,7 +42,17 @@ export function parseVersionTuple(raw: string): [number, number, number] {
   ];
 }
 
+function parsePrereleaseTokens(raw: string): string[] {
+  const cleaned = raw.replace(/^[^\d]*/, '').trim();
+  const dashIdx = cleaned.indexOf('-');
+  if (dashIdx === -1) return [];
+  const pre = cleaned.slice(dashIdx + 1).trim();
+  if (!pre) return [];
+  return pre.split('.').filter(Boolean);
+}
+
 export function getVersionChannel(version: string): VersionChannel {
+  if (/(alpha|beta|rc|preview)/i.test(version)) return 'preview';
   const [, , patch] = parseVersionTuple(version);
   return patch % 2 === 0 ? 'stable' : 'preview';
 }
@@ -52,6 +62,29 @@ export function compareVersions(a: string, b: string): number {
   const pb = parseVersionTuple(b);
   for (let i = 0; i < 3; i += 1) {
     if (pa[i] !== pb[i]) return pa[i] - pb[i];
+  }
+  const preA = parsePrereleaseTokens(a);
+  const preB = parsePrereleaseTokens(b);
+  if (preA.length === 0 && preB.length === 0) return 0;
+  if (preA.length === 0) return 1; // Stable release > prerelease of same patch
+  if (preB.length === 0) return -1;
+  const maxLen = Math.max(preA.length, preB.length);
+  for (let i = 0; i < maxLen; i += 1) {
+    const tokA = preA[i];
+    const tokB = preB[i];
+    if (tokA === undefined) return -1;
+    if (tokB === undefined) return 1;
+    const numA = /^\d+$/.test(tokA) ? Number(tokA) : null;
+    const numB = /^\d+$/.test(tokB) ? Number(tokB) : null;
+    if (numA !== null && numB !== null) {
+      if (numA !== numB) return numA - numB;
+    } else if (numA !== null) {
+      return -1;
+    } else if (numB !== null) {
+      return 1;
+    } else if (tokA !== tokB) {
+      return tokA.localeCompare(tokB);
+    }
   }
   return 0;
 }

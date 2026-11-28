@@ -70,6 +70,7 @@ import {
   buildDeadpoolBoxShadow,
   buildDeadpoolResetPatch,
   buildDeadpoolShellFilter,
+  buildDeadpoolVariantSelectPatch,
   buildEyePaths,
   computeDeadpoolAnimatedAngles,
   getBreathingAnimClass,
@@ -491,10 +492,11 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
 }) => {
   const isTr = lang === 'tr';
   const [backdrop, setBackdrop] = useState<StageBackdrop>('black');
-  const [stageSizePx, setStageSizePx] = useState<64 | 80 | 128>(80);
+  const stageSizePx = 72;
   const [tapBounceKey, setTapBounceKey] = useState(0);
   const [tapFlashKey, setTapFlashKey] = useState(0);
   const [tapKickDeg, setTapKickDeg] = useState(0);
+  const [isPreviewPressing, setIsPreviewPressing] = useState(false);
   const [simElapsedSec, setSimElapsedSec] = useState(0);
   const [undoStack, setUndoStack] = useState<Partial<Prefs>[]>([]);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
@@ -503,7 +505,9 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
   const lastUndoPushRef = useRef<number>(0);
 
   const dpCfg = useMemo(() => resolveDeadpoolConfig(prefs), [prefs]);
-  const activeShape: WheelIconStylePref = prefs.wheelIconStyle ?? 'wheel';
+  const rawShape: WheelIconStylePref = prefs.wheelIconStyle ?? 'wheel';
+  const activeShape: WheelIconStylePref =
+    rawShape === 'star_prism' || rawShape === 'pill_dock' ? 'wheel' : rawShape;
   const isDeadpoolActive = prefs.wheelInnerStyle === 'deadpool';
 
   const studioCategories: ReadonlyArray<{
@@ -520,12 +524,20 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
   ];
   const currentCategory = studioCategories.find((c) => c.id === activeCategory) ?? studioCategories[0];
 
-  // Smooth rAF preview loop only when motion or spin is active
+  // Smooth rAF preview loop when continuous/press spin or inner mask animation is active
+  const spinActiveNow =
+    dpCfg.outerSpinDir !== 'off' &&
+    (dpCfg.outerSpinTrigger === 'always' || isPreviewPressing);
   const needsLiveLoop =
-    dpCfg.outerSpinDir !== 'off' || dpCfg.maskMotion !== 'locked' || tapKickDeg !== 0;
+    spinActiveNow ||
+    dpCfg.maskMotion === 'counter_slow' ||
+    dpCfg.maskMotion === 'tilt_sway';
 
   useEffect(() => {
-    if (!needsLiveLoop) return;
+    if (!needsLiveLoop) {
+      setSimElapsedSec(0);
+      return;
+    }
     let rafId = 0;
     const start = performance.now();
     const tick = (now: number) => {
@@ -537,8 +549,13 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
   }, [needsLiveLoop]);
 
   const animAngles = useMemo(
-    () => computeDeadpoolAnimatedAngles(dpCfg, simElapsedSec),
-    [dpCfg, simElapsedSec]
+    () =>
+      computeDeadpoolAnimatedAngles(
+        dpCfg,
+        simElapsedSec,
+        dpCfg.outerSpinTrigger === 'press' && isPreviewPressing ? 1.45 : 1
+      ),
+    [dpCfg, simElapsedSec, isPreviewPressing]
   );
 
   const pushUndoSnapshot = (force = false) => {
@@ -719,7 +736,7 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
   const handleTapPreview = () => {
     if (dpCfg.tapFx === 'bounce') setTapBounceKey((k) => k + 1);
     else if (dpCfg.tapFx === 'flash') setTapFlashKey((k) => k + 1);
-    else if (dpCfg.tapFx === 'spin_kick') setTapKickDeg((d) => (d + 180) % 360);
+    else if (dpCfg.tapFx === 'spin_kick') setTapKickDeg((d) => d + 360);
   };
 
   const shapeGeom = getDeadpoolOuterShapeGeometry(activeShape, dpCfg.cornerRadius);
@@ -730,9 +747,10 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
   const previewShadow = buildDeadpoolBoxShadow(dpCfg, isPoly);
   const previewBgFilter = buildDeadpoolShellFilter(dpCfg);
   const previewRadius = isPoly ? undefined : shapeGeom.defaultBorderRadius;
-  const baseOuterRot = shapeGeom.baseRotationDeg + animAngles.outerDeltaDeg + tapKickDeg;
-  // Exact WheelFab rotation parity: world inner angle minus outer shell angle so 'locked' stays upright!
-  const localMaskRot = animAngles.innerDeltaDeg - baseOuterRot;
+  const outerSpinRot = shapeGeom.baseRotationDeg + animAngles.outerDeltaDeg;
+  const baseOuterRot = outerSpinRot + tapKickDeg;
+  // Keep tapKickDeg rotating the whole badge together while outerSpinRot drives locked/follow/counter behavior
+  const localMaskRot = animAngles.innerDeltaDeg - outerSpinRot;
   const borderCol =
     isTransparentBg && !dpCfg.ringColor ? 'transparent' : resolveDeadpoolShellBorderColor(dpCfg);
 
@@ -823,78 +841,6 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
     {id: 'metallic', labelTr: 'Metalik', labelEn: 'Metal'},
   ];
 
-  const renderPreviewBadge = (sizePx: number) => {
-    const isPill = shapeGeom.aspectRatio === 'pill';
-    const boxW = isPill ? Math.round(sizePx * 1.38) : sizePx;
-    const svgRatio =
-      activeShape === 'star_prism'
-        ? 0.56
-        : activeShape === 'diamond'
-          ? 0.64
-          : activeShape === 'blade_hex' || activeShape === 'shield_crest'
-            ? 0.7
-            : 0.78;
-    const svgDim = Math.round(sizePx * svgRatio);
-    return (
-      <div
-        className="relative flex shrink-0 items-center justify-center overflow-hidden"
-        style={{
-          width: boxW,
-          height: sizePx,
-          borderRadius: previewRadius,
-          clipPath: shapeClipPath,
-          border:
-            !isPoly && dpCfg.borderWidth > 0 && borderCol !== 'transparent'
-              ? `${Math.max(1, dpCfg.borderWidth * (sizePx / 72))}px ${dpCfg.borderStyle} ${borderCol}`
-              : undefined,
-          transform: shapeGeom.baseRotationDeg
-            ? `rotate(${shapeGeom.baseRotationDeg}deg)`
-            : undefined,
-        }}
-      >
-        {!isTransparentBg && (
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 z-0"
-            style={{
-              backgroundImage: previewBgImage,
-              filter: previewBgFilter,
-            }}
-          />
-        )}
-        <DeadpoolShellOverlays cfg={dpCfg} />
-        {isPoly && dpCfg.borderWidth > 0 && (
-          <DeadpoolPolygonBorder
-            shape={activeShape}
-            color={resolveDeadpoolShellBorderColor(dpCfg)}
-            width={Math.max(1, dpCfg.borderWidth)}
-            style={dpCfg.borderStyle}
-          />
-        )}
-        <svg
-          viewBox="0 0 28 28"
-          preserveAspectRatio="xMidYMid meet"
-          className="relative z-[4]"
-          style={{
-            width: svgDim,
-            height: svgDim,
-            transform: shapeGeom.baseRotationDeg
-              ? `rotate(${-shapeGeom.baseRotationDeg}deg)`
-              : undefined,
-          }}
-          fill="none"
-          aria-hidden="true"
-        >
-          <DeadpoolEmblemGroup
-            cfg={dpCfg}
-            maskFill={dpCfg.innerColor || '#0B0B0E'}
-            compact={sizePx <= 32}
-          />
-        </svg>
-      </div>
-    );
-  };
-
   return (
     <div className="space-y-4">
       <GmModuleHeader
@@ -941,14 +887,18 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
         }
       />
 
-      {/* LIVE SHOWCASE STAGE + 6-GROUND & 24/40/64/128px LEGIBILITY MATRIX */}
-      <section className="gm-card overflow-hidden">
+      {/* LIVE SHOWCASE STAGE + 6 TEST BACKDROPS */}
+      <section className="gm-card overflow-hidden !p-0">
         <div
-          className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2.5"
+          className="flex items-center justify-between gap-2 border-b px-2.5 py-2"
           style={{borderColor: 'var(--gm-border)'}}
         >
           {/* 6 Test Backdrops: Black, White, Dark Gray, Light Gray, Colored, Transparent Checkerboard */}
-          <div className="flex flex-wrap items-center gap-1" role="group" aria-label={isTr ? 'Test zemini' : 'Test surface'}>
+          <div
+            className="flex items-center gap-1 rounded-xl border border-white/10 bg-black/25 p-1"
+            role="group"
+            aria-label={isTr ? 'Test zemini' : 'Test surface'}
+          >
             {(
               [
                 {id: 'black', label: isTr ? 'Siyah' : 'Black', swatch: {background: '#050507'}},
@@ -982,37 +932,30 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
                   title={bg.label}
                   aria-label={bg.label}
                   aria-pressed={active}
-                  className={`flex min-h-[44px] items-center gap-1.5 rounded-xl border px-2 text-[11px] font-semibold transition-colors ${
-                    active ? 'gm-nav-icon-active border-transparent' : 'hover:bg-white/[0.05]'
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all md:h-8 md:w-auto md:gap-1.5 md:px-2 ${
+                    active
+                      ? 'bg-white/12 ring-2 ring-[#A855F7]'
+                      : 'opacity-75 hover:bg-white/[0.06] hover:opacity-100'
                   }`}
-                  style={
-                    active ? undefined : {borderColor: 'var(--gm-border)', color: 'var(--gm-muted)'}
-                  }
                 >
                   <span
                     className="h-4 w-4 shrink-0 rounded-full border border-white/30 shadow-inner"
                     style={bg.swatch}
                   />
-                  <span className="hidden md:inline">{bg.label}</span>
+                  <span className="hidden text-[11px] font-semibold md:inline" style={{color: 'var(--gm-ink)'}}>
+                    {bg.label}
+                  </span>
                 </button>
               );
             })}
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setStageSizePx((s) => (s === 80 ? 128 : s === 128 ? 64 : 80))}
-              className="gm-btn-ghost gm-mono flex min-h-[44px] items-center justify-center px-2.5 text-[11px] font-bold"
-              title={isTr ? 'Sahne boyutunu değiştir (64 / 80 / 128px)' : 'Cycle stage size (64 / 80 / 128px)'}
-            >
-              {stageSizePx}px
-            </button>
+          <div className="flex shrink-0 items-center gap-1">
             <button
               type="button"
               onClick={handleUndo}
               disabled={undoStack.length === 0}
-              className="gm-btn-ghost flex h-11 w-11 items-center justify-center disabled:opacity-35"
+              className="gm-btn-ghost flex h-9 w-9 items-center justify-center rounded-xl disabled:opacity-35"
               title={isTr ? 'Geri Al' : 'Undo'}
               aria-label={isTr ? 'Geri Al' : 'Undo'}
             >
@@ -1021,7 +964,7 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
             <button
               type="button"
               onClick={() => setConfirmResetOpen(true)}
-              className="gm-btn-ghost flex h-11 w-11 items-center justify-center text-rose-400"
+              className="gm-btn-ghost flex h-9 w-9 items-center justify-center rounded-xl text-rose-400"
               title={isTr ? 'Sıfırla' : 'Reset'}
               aria-label={isTr ? 'Sıfırla' : 'Reset'}
             >
@@ -1032,7 +975,7 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
 
         {/* Center Preview Stage */}
         <div
-          className="relative flex flex-col items-center justify-center gap-5 px-4 py-6"
+          className="relative flex flex-col items-center justify-center px-4 py-7"
           style={backdropStyle}
         >
           <div
@@ -1059,6 +1002,10 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
             <button
               type="button"
               onClick={handleTapPreview}
+              onPointerDown={() => setIsPreviewPressing(true)}
+              onPointerUp={() => setIsPreviewPressing(false)}
+              onPointerLeave={() => setIsPreviewPressing(false)}
+              onPointerCancel={() => setIsPreviewPressing(false)}
               aria-label={isTr ? 'Dokunma efektini test et' : 'Test tap effect'}
               className={`relative flex items-center justify-center focus-visible:outline-none ${getBreathingAnimClass(
                 dpCfg.breathingPulse
@@ -1066,7 +1013,9 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
             >
               <span
                 key={tapBounceKey > 0 ? `dp-prev-${tapBounceKey}` : 'dp-prev'}
-                className={`relative flex items-center justify-center overflow-hidden transition-transform duration-150 ${
+                className={`relative flex items-center justify-center overflow-hidden ${
+                  needsLiveLoop ? '' : 'transition-transform duration-300 ease-out'
+                } ${
                   dpCfg.glowPulse && dpCfg.glowIntensity > 0 ? 'morph-dp-glow-pulse' : ''
                 } ${tapBounceKey > 0 && dpCfg.tapFx === 'bounce' ? 'morph-dp-tap-bounce' : ''}`}
                 style={{
@@ -1111,22 +1060,22 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
                     style={{
                       width: Math.round(
                         stageSizePx *
-                          (activeShape === 'star_prism'
-                            ? 0.56
-                            : activeShape === 'diamond'
-                              ? 0.64
-                              : activeShape === 'blade_hex' || activeShape === 'shield_crest'
-                                ? 0.7
+                          (activeShape === 'diamond'
+                            ? 0.62
+                            : activeShape === 'blade_hex' || activeShape === 'shield_crest'
+                              ? 0.68
+                              : activeShape === 'octa_shield'
+                                ? 0.72
                                 : 0.78)
                       ),
                       height: Math.round(
                         stageSizePx *
-                          (activeShape === 'star_prism'
-                            ? 0.56
-                            : activeShape === 'diamond'
-                              ? 0.64
-                              : activeShape === 'blade_hex' || activeShape === 'shield_crest'
-                                ? 0.7
+                          (activeShape === 'diamond'
+                            ? 0.62
+                            : activeShape === 'blade_hex' || activeShape === 'shield_crest'
+                              ? 0.68
+                              : activeShape === 'octa_shield'
+                                ? 0.72
                                 : 0.78)
                       ),
                     }}
@@ -1136,33 +1085,6 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
                   </svg>
                 </span>
               </span>
-            </button>
-          </div>
-
-          {/* 4-Size Live Quality Check Strip: 24px, 40px, 64px, and toggleable 128px */}
-          <div className="flex flex-wrap items-end justify-center gap-4 text-[11px]">
-            <div className="flex flex-col items-center gap-1">
-              {renderPreviewBadge(24)}
-              <span className="gm-mono opacity-75">24px</span>
-            </div>
-            <div className="flex flex-col items-center gap-1">
-              {renderPreviewBadge(40)}
-              <span className="gm-mono opacity-75">40px</span>
-            </div>
-            <div className="flex flex-col items-center gap-1">
-              {renderPreviewBadge(64)}
-              <span className="gm-mono opacity-75">64px</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setStageSizePx(stageSizePx === 128 ? 80 : 128)}
-              className="flex min-h-[44px] flex-col items-center justify-end gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold transition-opacity hover:opacity-100"
-              style={{
-                opacity: stageSizePx === 128 ? 1 : 0.72,
-                border: stageSizePx === 128 ? '1px solid currentColor' : '1px dashed currentColor',
-              }}
-            >
-              <span className="gm-mono">{stageSizePx === 128 ? '128px ✓' : '128px'}</span>
             </button>
           </div>
         </div>
@@ -1222,8 +1144,8 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
 
         {activeCategory === 'basic' && (
           <div className="space-y-4">
-        {/* 7 Distinct Logo Variants — Visual Swatch Grid */}
-        <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+        {/* 7 Distinct Logo Variants — Single-Row Fit (Zero horizontal overflow) */}
+        <div className="grid grid-cols-7 gap-1">
           {DEADPOOL_LOGO_CATALOG.map((item) => {
             const active = dpCfg.logoVariant === item.id;
             const shortLabel = (isTr ? item.nameTr : item.nameEn).split(' ')[0];
@@ -1232,8 +1154,8 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
                 key={item.id}
                 type="button"
                 title={isTr ? item.nameTr : item.nameEn}
-                onClick={() => patchPrefs({deadpoolLogoVariant: item.id}, true)}
-                className="gm-inset flex min-h-[68px] flex-col items-center justify-center gap-1.5 p-2 text-center transition-all active:scale-95"
+                onClick={() => patchPrefs(buildDeadpoolVariantSelectPatch(item.id), true)}
+                className="gm-inset flex min-h-[54px] min-w-0 flex-col items-center justify-center gap-1 overflow-hidden px-0.5 py-1.5 text-center transition-all active:scale-95 sm:min-h-[64px] sm:gap-1.5 sm:p-2"
                 style={
                   active
                     ? {
@@ -1248,10 +1170,15 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
                   end={item.defaultBg}
                   mask={item.defaultMask}
                   eye={item.defaultEye}
-                  ring={item.defaultMask}
+                  ring={item.defaultRing}
                   variant={item.id}
+                  innerRingStyle={item.id === 'minimal_flat' ? 'none' : 'solid'}
+                  sizePx={24}
                 />
-                <span className="max-w-full truncate text-[10px] font-semibold" style={{color: 'var(--gm-ink)'}}>
+                <span
+                  className="w-full truncate text-center text-[8.5px] font-semibold leading-tight tracking-tight sm:text-[10px]"
+                  style={{color: 'var(--gm-ink)'}}
+                >
                   {shortLabel}
                 </span>
               </button>
@@ -1329,7 +1256,7 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
               <Layers className="h-3.5 w-3.5" style={{color: 'var(--gm-accent)'}} />
               <span>{isTr ? 'Arka Plan' : 'Background'}</span>
             </div>
-            <div className="grid grid-cols-5 gap-1.5">
+            <div className="grid grid-cols-5 gap-1">
               {bgModeOptions.map((opt) => {
                 const active = dpCfg.logoBg === opt.id && !dpCfg.customBgColor;
                 const swatchStyle: React.CSSProperties =
@@ -1354,7 +1281,7 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
                     type="button"
                     title={isTr ? opt.labelTr : opt.labelEn}
                     onClick={() => patchPrefs({deadpoolLogoBg: opt.id, deadpoolCustomBgColor: null}, true)}
-                    className={`flex min-h-[48px] flex-col items-center justify-center gap-1 rounded-xl border p-1 transition-all active:scale-95 ${
+                    className={`flex min-h-[48px] min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border px-0.5 py-1 transition-all active:scale-95 ${
                       active ? 'gm-nav-icon-active' : 'hover:bg-white/[0.04]'
                     }`}
                     style={
@@ -1364,10 +1291,10 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
                     }
                   >
                     <span
-                      className="h-5 w-5 rounded-full border border-white/25 shadow-inner"
+                      className="h-5 w-5 shrink-0 rounded-full border border-white/25 shadow-inner"
                       style={swatchStyle}
                     />
-                    <span className="max-w-full truncate text-[9.5px] font-semibold">
+                    <span className="w-full truncate text-center text-[9px] font-semibold sm:text-[9.5px]">
                       {isTr ? opt.labelTr : opt.labelEn}
                     </span>
                   </button>
@@ -1413,15 +1340,17 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
             <Shapes className="h-3.5 w-3.5" style={{color: 'var(--gm-accent)'}} />
             <span>{isTr ? 'Dış Kabuk Formu' : 'Outer Shell Shape'}</span>
           </div>
-          <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">
-            {WHEEL_OUTER_SHAPES.map((shape) => {
+          <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
+            {WHEEL_OUTER_SHAPES.filter(
+              (shape) => shape.id !== 'star_prism' && shape.id !== 'pill_dock'
+            ).map((shape) => {
               const active = activeShape === shape.id;
               return (
                 <button
                   key={shape.id}
                   type="button"
-                  onClick={() => patchPrefs({wheelIconStyle: shape.id}, true)}
-                  className={`flex min-h-[48px] flex-col items-center justify-center gap-1 rounded-xl border p-1.5 text-[10px] font-semibold transition-colors ${
+                  onClick={() => patchPrefs({wheelIconStyle: shape.id, expWheelShape: null}, true)}
+                  className={`flex min-h-[48px] min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border p-1 text-[9.5px] font-semibold transition-colors sm:p-1.5 sm:text-[10px] ${
                     active ? 'gm-nav-icon-active' : 'hover:bg-white/[0.04]'
                   }`}
                   style={
@@ -1429,7 +1358,7 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
                   }
                 >
                   {renderOuterShapeSvg(shape.id)}
-                  <span className="truncate">{isTr ? shape.titleTr : shape.titleEn}</span>
+                  <span className="w-full truncate text-center">{isTr ? shape.titleTr : shape.titleEn}</span>
                 </button>
               );
             })}
@@ -1854,13 +1783,13 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
               <Circle className="h-3.5 w-3.5" style={{color: 'var(--gm-accent)'}} />
               <span>{isTr ? 'İç Halka' : 'Inner Ring'}</span>
             </div>
-            <div className="grid grid-cols-5 gap-1.5">
+            <div className="grid grid-cols-5 gap-1">
               {innerRingOptions.map((opt) => (
                 <button
                   key={opt.id}
                   type="button"
                   onClick={() => patchPrefs({deadpoolInnerRingStyle: opt.id}, true)}
-                  className={`flex min-h-[50px] flex-col items-center justify-center gap-1 rounded-xl border p-1 text-[9.5px] font-semibold ${
+                  className={`flex min-h-[50px] min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border px-0.5 py-1 text-[9px] font-semibold sm:text-[9.5px] ${
                     dpCfg.innerRingStyle === opt.id
                       ? 'gm-nav-icon-active'
                       : 'hover:bg-white/[0.04]'
@@ -1872,7 +1801,7 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
                   }
                 >
                   {renderInnerRingIcon(opt.id)}
-                  <span className="truncate">{isTr ? opt.labelTr : opt.labelEn}</span>
+                  <span className="w-full truncate text-center">{isTr ? opt.labelTr : opt.labelEn}</span>
                 </button>
               ))}
             </div>
@@ -1955,7 +1884,17 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
                   <button
                     key={opt.id}
                     type="button"
-                    onClick={() => patchPrefs({deadpoolOuterSpinDir: opt.id}, true)}
+                    onClick={() =>
+                      patchPrefs(
+                        {
+                          deadpoolOuterSpinDir: opt.id,
+                          ...(opt.id !== 'off' && dpCfg.maskMotion === 'locked'
+                            ? {deadpoolMaskMotion: 'follow_outer'}
+                            : {}),
+                        },
+                        true
+                      )
+                    }
                     className={`flex min-h-[48px] flex-col items-center justify-center gap-1 rounded-xl border p-1 text-[10px] font-semibold ${
                       dpCfg.outerSpinDir === opt.id ? 'gm-nav-icon-active' : 'hover:bg-white/[0.04]'
                     }`}
@@ -2053,7 +1992,22 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
                   <button
                     key={opt.id}
                     type="button"
-                    onClick={() => patchPrefs({deadpoolMotionPattern: opt.id}, true)}
+                    onClick={() =>
+                      patchPrefs(
+                        {
+                          deadpoolMotionPattern: opt.id,
+                          ...(opt.id !== 'steady' && dpCfg.outerSpinDir === 'off'
+                            ? {
+                                deadpoolOuterSpinDir: 'cw',
+                                ...(dpCfg.maskMotion === 'locked'
+                                  ? {deadpoolMaskMotion: 'follow_outer'}
+                                  : {}),
+                              }
+                            : {}),
+                        },
+                        true
+                      )
+                    }
                     className={`flex min-h-[48px] flex-col items-center justify-center gap-1 rounded-xl border p-1 text-[10px] font-semibold ${
                       dpCfg.motionPattern === opt.id ? 'gm-nav-icon-active' : 'hover:bg-white/[0.04]'
                     }`}
@@ -2164,7 +2118,7 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
               <Sparkles className="h-3.5 w-3.5" style={{color: 'var(--gm-accent)'}} />
               <span>{isTr ? 'Dokunma' : 'Tap'}</span>
             </div>
-            <div className="grid grid-cols-5 gap-1.5">
+            <div className="grid grid-cols-5 gap-1">
               {(
                 [
                   {id: 'none', tr: 'Yok', en: 'Off', icon: Ban},
@@ -2185,7 +2139,7 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
                     key={opt.id}
                     type="button"
                     onClick={() => patchPrefs({deadpoolTapFx: opt.id}, true)}
-                    className={`flex min-h-[48px] flex-col items-center justify-center gap-1 rounded-xl border p-1 text-[9.5px] font-semibold ${
+                    className={`flex min-h-[48px] min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border px-0.5 py-1 text-[9px] font-semibold sm:text-[9.5px] ${
                       dpCfg.tapFx === opt.id ? 'gm-nav-icon-active' : 'hover:bg-white/[0.04]'
                     }`}
                     style={
@@ -2194,8 +2148,8 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
                         : {borderColor: 'var(--gm-border)', color: 'var(--gm-muted)'}
                     }
                   >
-                    <Icon className="h-4 w-4" />
-                    <span className="truncate">{isTr ? opt.tr : opt.en}</span>
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span className="w-full truncate text-center">{isTr ? opt.tr : opt.en}</span>
                   </button>
                 );
               })}
@@ -2263,13 +2217,13 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
             <Sun className="h-3.5 w-3.5" style={{color: '#F87171'}} />
             <span>{isTr ? 'Dış Hale' : 'Outer Halo'}</span>
           </div>
-          <div className="grid grid-cols-5 gap-1.5">
+          <div className="grid grid-cols-5 gap-1">
             {haloOptions.map((opt) => (
               <button
                 key={opt.id}
                 type="button"
                 onClick={() => patchPrefs({deadpoolOuterHaloRing: opt.id}, true)}
-                className={`flex min-h-[50px] flex-col items-center justify-center gap-1 rounded-xl border p-1 text-[9.5px] font-semibold ${
+                className={`flex min-h-[50px] min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border px-0.5 py-1 text-[9px] font-semibold sm:text-[9.5px] ${
                   dpCfg.outerHaloRing === opt.id ? 'gm-nav-icon-active' : 'hover:bg-white/[0.04]'
                 }`}
                 style={
@@ -2279,7 +2233,7 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
                 }
               >
                 {renderHaloIcon(opt.id)}
-                <span className="truncate">{isTr ? opt.labelTr : opt.labelEn}</span>
+                <span className="w-full truncate text-center">{isTr ? opt.labelTr : opt.labelEn}</span>
               </button>
             ))}
           </div>

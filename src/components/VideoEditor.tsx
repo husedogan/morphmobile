@@ -131,6 +131,7 @@ import {
   probeVideoAssetMetadata,
   registerMediaAssetBlob,
 } from '../engine/mediaLibraryEngine';
+import {FilmstripSourceDescriptor, clearFilmstripCache} from '../engine/filmstripEngine';
 import {
   cloneAudioClipBlob,
   detectAudioSilences,
@@ -1185,53 +1186,125 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
     return videoUrl;
   }, [isProxyEnabled, proxyUrl, relinkedVideoUrl, videoUrl]);
 
-  // Generate filmstrip thumbnails
+  // Build filmstrip source descriptors for V1 + V2–V5 clips (tracks primary, proxy, relink & secondary media assets)
+  const filmstripSources = useMemo(() => {
+    const map = new Map<string, FilmstripSourceDescriptor>();
+    if (primaryPreviewVideoSrc) {
+      map.set(PRIMARY_MEDIA_ID, {
+        mediaId: PRIMARY_MEDIA_ID,
+        url: primaryPreviewVideoSrc,
+        versionKey: `primary:${file.name}:${file.size}:${isProxyEnabled ? 'px' : relinkedVideoUrl ? 'relink' : 'orig'}:${videoMeta.w}x${videoMeta.h}:${Math.round((duration || 0) * 100)}`,
+        durationSec: Math.max(0.2, duration || 10),
+        width: videoMeta.w || 1280,
+        height: videoMeta.h || 720,
+      });
+    }
+    for (const asset of project.mediaAssets || []) {
+      if (!asset.id || asset.id === PRIMARY_MEDIA_ID) continue;
+      const url = getMediaAssetUrl(asset.id);
+      if (!url) continue;
+      map.set(asset.id, {
+        mediaId: asset.id,
+        url,
+        versionKey: `${asset.id}:${asset.name}:${asset.size}:${asset.width}x${asset.height}`,
+        durationSec: Math.max(0.2, asset.durationSec || 6),
+        width: asset.width || 1280,
+        height: asset.height || 720,
+      });
+    }
+    for (const clip of project.videoClips) {
+      const mid = getClipMediaId(clip);
+      if (!map.has(mid) && mid !== PRIMARY_MEDIA_ID) {
+        const fallbackUrl = getMediaAssetUrl(mid);
+        if (fallbackUrl) {
+          map.set(mid, {
+            mediaId: mid,
+            url: fallbackUrl,
+            versionKey: `${mid}:fallback`,
+            durationSec: Math.max(0.5, clip.sourceEnd || 6),
+            width: videoMeta.w || 1280,
+            height: videoMeta.h || 720,
+          });
+        }
+      }
+    }
+    return map;
+  }, [
+    primaryPreviewVideoSrc,
+    file.name,
+    file.size,
+    isProxyEnabled,
+    relinkedVideoUrl,
+    videoMeta.w,
+    videoMeta.h,
+    duration,
+    project.mediaAssets,
+    project.videoClips,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearFilmstripCache();
+    };
+  }, []);
+
+  // Generate lightweight overview thumbnails for Filter/LUT sample preview & Media Bin card
   useEffect(() => {
     if (!videoUrl) return;
     let cancelled = false;
     const extractFrames = async () => {
       const vid = document.createElement('video');
-      vid.src = videoUrl;
-      vid.muted = true;
-      vid.playsInline = true;
-      vid.preload = 'auto';
-      await new Promise<void>((resolve) => {
-        const done = () => resolve();
-        vid.addEventListener('loadeddata', done, {once: true});
-        vid.addEventListener('error', done, {once: true});
-        setTimeout(done, 2500);
-      });
-      if (cancelled || !Number.isFinite(vid.duration) || vid.duration <= 0) return;
-
-      const count = 10;
-      const canvas = document.createElement('canvas');
-      canvas.width = 160;
-      canvas.height = 90;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      const frames: string[] = [];
-      for (let i = 0; i < count; i++) {
-        if (cancelled) return;
-        const targetTime = Math.min(
-          vid.duration - 0.05,
-          Math.max(0.05, ((i + 0.35) / count) * vid.duration)
-        );
-        vid.currentTime = targetTime;
+      try {
+        vid.src = videoUrl;
+        vid.muted = true;
+        vid.playsInline = true;
+        vid.preload = 'auto';
         await new Promise<void>((resolve) => {
-          const onSeeked = () => resolve();
-          vid.addEventListener('seeked', onSeeked, {once: true});
-          setTimeout(onSeeked, 350);
+          const done = () => resolve();
+          vid.addEventListener('loadeddata', done, {once: true});
+          vid.addEventListener('error', done, {once: true});
+          setTimeout(done, 2500);
         });
-        ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
-        try {
-          frames.push(canvas.toDataURL('image/jpeg', 0.65));
-        } catch {
-          break;
+        if (cancelled || !Number.isFinite(vid.duration) || vid.duration <= 0) return;
+
+        const count = 10;
+        const canvas = document.createElement('canvas');
+        canvas.width = 160;
+        canvas.height = 90;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const frames: string[] = [];
+        for (let i = 0; i < count; i++) {
+          if (cancelled) return;
+          const targetTime = Math.min(
+            vid.duration - 0.05,
+            Math.max(0.05, ((i + 0.35) / count) * vid.duration)
+          );
+          vid.currentTime = targetTime;
+          await new Promise<void>((resolve) => {
+            const onSeeked = () => resolve();
+            vid.addEventListener('seeked', onSeeked, {once: true});
+            setTimeout(onSeeked, 350);
+          });
+          ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
+          try {
+            frames.push(canvas.toDataURL('image/jpeg', 0.65));
+          } catch {
+            break;
+          }
         }
-      }
-      if (!cancelled && frames.length > 0) {
-        setThumbnails(frames);
+        if (!cancelled && frames.length > 0) {
+          setThumbnails(frames);
+        }
+      } finally {
+        try {
+          vid.pause();
+          vid.removeAttribute('src');
+          vid.load();
+        } catch {
+          // Ignore decoder release issues
+        }
       }
     };
     void extractFrames();
@@ -8543,6 +8616,7 @@ export const VideoEditor: React.FC<VideoEditorProps> = ({
       selectedTextId={selectedTextId}
       selectedAudioId={selectedAudioId}
       thumbnails={thumbnails}
+      mediaSources={filmstripSources}
       waveformBars={waveformBars}
       waveformStatus={waveformStatus}
       isPortraitMode={isPortraitMode}

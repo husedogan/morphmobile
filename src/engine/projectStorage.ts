@@ -18,6 +18,7 @@ import {
   getMediaAssetBlob,
   registerMediaAssetBlob,
 } from './mediaLibraryEngine';
+import {APP_VERSION} from './githubUpdater';
 
 const IDB_NAME = 'morph_nle_studio_db';
 const IDB_VERSION = 1;
@@ -516,7 +517,7 @@ export async function exportMorphPackage(
   const manifest: MorphPackageManifest = {
     format: 'morph-nle-package',
     schemaVersion: 1,
-    appVersion: '1.1.71',
+    appVersion: APP_VERSION,
     exportedAt: Date.now(),
     projectName: cleanState.projectName,
     hasSourceVideo: includesVideo,

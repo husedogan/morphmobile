@@ -51,6 +51,14 @@ import {
   isClipPipOverlay,
 } from '../../engine/videoTimelineEngine';
 import {PRIMARY_MEDIA_ID} from '../../engine/mediaLibraryEngine';
+import {
+  FilmstripSourceDescriptor,
+  computeClipFilmstripPlan,
+  getCachedFilmstripFrame,
+  getNearestCachedFilmstripFrame,
+  requestFilmstripFrames,
+  subscribeFilmstripUpdates,
+} from '../../engine/filmstripEngine';
 import {StudioTooltipBtn} from './StudioTooltipBtn';
 
 /** Compact trim-left-at-playhead micro icon */
@@ -188,6 +196,7 @@ interface MultiTrackTimelineProps {
   selectedTextId: string | null;
   selectedAudioId: string | null;
   thumbnails: string[];
+  mediaSources?: Map<string, FilmstripSourceDescriptor>;
   waveformBars: number[];
   waveformStatus?: 'loading' | 'ready' | 'silent';
   isPortraitMode?: boolean;
@@ -260,6 +269,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
   selectedTextId,
   selectedAudioId,
   thumbnails,
+  mediaSources,
   waveformBars,
   waveformStatus = 'ready',
   isPortraitMode = false,
@@ -582,6 +592,144 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
     (project.mediaAssets || []).map((a) => [a.id, a.thumbnailDataUrl])
   );
   const assetNameMap = new Map((project.mediaAssets || []).map((a) => [a.id, a.name]));
+
+  // Live filmstrip track width measurement + decoded frame subscription
+  const [trackWidthPx, setTrackWidthPx] = useState<number>(360);
+  const [, setFilmstripRevision] = useState<number>(0);
+
+  useEffect(() => {
+    return subscribeFilmstripUpdates(() => {
+      setFilmstripRevision((rev) => rev + 1);
+    });
+  }, []);
+
+  useEffect(() => {
+    const el = timelineTrackRef.current;
+    if (!el) return;
+    const measure = () => {
+      const w = el.clientWidth;
+      if (w > 0) setTrackWidthPx(w);
+    };
+    measure();
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(measure);
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [timelineTrackRef, timelineZoom, isPortraitMode, isCompactLandscape]);
+
+  const v1LaneHeightPx = isCompactLandscape ? 36 : 52;
+  const pipLaneHeightPx = isCompactLandscape ? 26 : 38;
+
+  // Request clip-specific multi-frame filmstrip tiles responsive to trim, split, zoom & media source
+  useEffect(() => {
+    if (!mediaSources || mediaSources.size === 0) return;
+
+    const enqueueForClips = (clips: TimelineVideoClip[], laneHeightPx: number) => {
+      for (const clip of clips) {
+        const mediaId = getClipMediaId(clip);
+        const source = mediaSources.get(mediaId);
+        if (!source?.url) continue;
+
+        const dur = clipTimelineDuration(clip);
+        const leftPct = (clip.timelineStart / safeCanvasDur) * 100;
+        const widthPct = Math.max(5.5, (dur / safeCanvasDur) * 100);
+        const renderedWidthPct = Math.min(100 - Math.max(0, leftPct), widthPct);
+        const clipWidthPx = Math.max(24, (renderedWidthPct / 100) * trackWidthPx);
+
+        const slots = computeClipFilmstripPlan(clip, clipWidthPx, laneHeightPx, source);
+        const isSelected = selectedLayerType === 'video' && selectedClip?.id === clip.id;
+        requestFilmstripFrames(source, slots, isSelected ? 20 : 10);
+      }
+    };
+
+    enqueueForClips(v1Clips, v1LaneHeightPx);
+    enqueueForClips(allPipClips, pipLaneHeightPx);
+  }, [
+    v1Clips,
+    allPipClips,
+    mediaSources,
+    trackWidthPx,
+    safeCanvasDur,
+    v1LaneHeightPx,
+    pipLaneHeightPx,
+    selectedLayerType,
+    selectedClip?.id,
+  ]);
+
+  const renderVideoFilmstripCells = (
+    clip: TimelineVideoClip,
+    renderedWidthPct: number,
+    laneHeightPx: number,
+    isPip: boolean,
+    fallbackImgSrc?: string
+  ) => {
+    const mediaId = getClipMediaId(clip);
+    const source = mediaSources?.get(mediaId);
+    const clipWidthPx = Math.max(24, (renderedWidthPct / 100) * trackWidthPx);
+
+    if (source?.url) {
+      const slots = computeClipFilmstripPlan(clip, clipWidthPx, laneHeightPx, source);
+      return slots.map((slot) => {
+        const frameSrc =
+          getCachedFilmstripFrame(slot.cacheKey) ??
+          getNearestCachedFilmstripFrame(source.versionKey, slot.quantizedMs, 1500);
+        return (
+          <div
+            key={slot.slotIndex}
+            className="relative h-full min-w-0 flex-1 overflow-hidden border-r border-black/35 last:border-r-0"
+          >
+            {frameSrc ? (
+              <img
+                src={frameSrc}
+                alt=""
+                draggable={false}
+                className={`h-full w-full object-cover ${isPip ? 'opacity-75' : 'opacity-90'}`}
+              />
+            ) : fallbackImgSrc ? (
+              <img
+                src={fallbackImgSrc}
+                alt=""
+                draggable={false}
+                className="h-full w-full object-cover opacity-35 blur-[1px]"
+              />
+            ) : (
+              <div className="h-full w-full animate-pulse bg-white/[0.04]" />
+            )}
+          </div>
+        );
+      });
+    }
+
+    if (fallbackImgSrc) {
+      return (
+        <img
+          src={fallbackImgSrc}
+          alt=""
+          draggable={false}
+          className={`h-full w-full object-cover ${isPip ? 'opacity-55' : 'opacity-75'}`}
+        />
+      );
+    }
+
+    if (!isPip && thumbnails.length > 0) {
+      return thumbnails.map((src, i) => (
+        <img
+          key={i}
+          src={src}
+          alt=""
+          draggable={false}
+          className="h-full flex-1 object-cover opacity-80"
+        />
+      ));
+    }
+
+    return (
+      <div className="h-full w-full bg-gradient-to-r from-[#18181D] via-[#222229] to-[#18181D]" />
+    );
+  };
 
   const hasActiveLookOrFx =
     project.colorFilter !== 'orig' ||
@@ -1934,30 +2082,14 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                           : 'cursor-grab ring-1 ring-white/15 hover:ring-white/35'
                     }`}
                   >
-                    {/* Filmstrip Frames */}
-                    <div className="flex h-full w-full bg-[#141418]">
-                      {isSecondarySource && secThumb ? (
-                        Array.from({length: 4}).map((_, i) => (
-                          <img
-                            key={i}
-                            src={secThumb}
-                            alt=""
-                            draggable={false}
-                            className="h-full flex-1 object-cover opacity-85"
-                          />
-                        ))
-                      ) : thumbnails.length > 0 ? (
-                        thumbnails.map((src, i) => (
-                          <img
-                            key={i}
-                            src={src}
-                            alt=""
-                            draggable={false}
-                            className="h-full flex-1 object-cover opacity-85"
-                          />
-                        ))
-                      ) : (
-                        <div className="h-full w-full bg-gradient-to-r from-[#18181D] via-[#222229] to-[#18181D]" />
+                    {/* Filmstrip Frames (Real multi-frame [sourceStart..sourceEnd] tiles) */}
+                    <div className="flex h-full w-full overflow-hidden bg-[#141418]">
+                      {renderVideoFilmstripCells(
+                        clip,
+                        Math.min(100 - Math.max(0, leftPct), widthPct),
+                        v1LaneHeightPx,
+                        false,
+                        secThumb ?? thumbnails[0]
                       )}
                     </div>
 
@@ -2177,19 +2309,17 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                         }`}
                       >
                         <div
-                          className={`flex h-full w-full items-center ${
+                          className={`flex h-full w-full items-center overflow-hidden ${
                             isPip ? 'bg-[#2B1B46]' : 'bg-[#17171E]'
                           }`}
                         >
-                          {assetThumb && (
-                            <img
-                              src={assetThumb}
-                              alt=""
-                              draggable={false}
-                              className={`h-full w-full object-cover ${
-                                isPip ? 'opacity-55' : 'opacity-65'
-                              }`}
-                            />
+                          {renderVideoFilmstripCells(
+                            clip,
+                            Math.min(100 - Math.max(0, leftPct), widthPct),
+                            pipLaneHeightPx,
+                            true,
+                            assetThumb ??
+                              (getClipMediaId(clip) === PRIMARY_MEDIA_ID ? thumbnails[0] : undefined)
                           )}
                         </div>
                         <div

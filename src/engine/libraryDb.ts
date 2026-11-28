@@ -73,7 +73,7 @@ export const DEFAULT_PREFS: Prefs = {
   deadpoolInnerVignette: 0,
   deadpoolMotionPattern: 'steady',
   deadpoolBreathingPulse: 'off',
-  deadpoolMaskMotion: 'locked',
+  deadpoolMaskMotion: 'follow_outer',
   deadpoolTapFx: 'scale',
   deadpoolOuterHaloRing: 'none',
   deadpoolMaskDropShadow: 0,

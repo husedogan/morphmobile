@@ -1,22 +1,24 @@
 import React, {useId} from 'react';
 import {
-  DEADPOOL_HEAD_PATH,
-  buildDeadpoolMaskPatches,
+  DEADPOOL_CIRCLE_CX,
+  DEADPOOL_CIRCLE_CY,
+  DEADPOOL_CIRCLE_OUTER_R,
+  buildDeadpoolSplitDomes,
   buildEyePaths,
 } from '../DeadpoolWheelVisual';
 
 /**
- * Vector Deadpool HEAD MASK icon using the exact shared silhouette, sweeping mask patches,
- * and sharp angled eye geometry from DeadpoolWheelVisual.tsx with currentColor inheritance
- * and true transparent mask-patch cutouts so it remains iconic across dark, light, and colored surfaces.
+ * Vector classic circular Deadpool emblem icon using exact shared circular geometry from
+ * DeadpoolWheelVisual.tsx with currentColor inheritance and true SVG <mask> transparent
+ * split-dome cutouts so it stays crisp and recognizable on dark, light, and colored UI surfaces.
  */
 export const DeadpoolLogoIcon: React.FC<{
   className?: string;
   style?: React.CSSProperties;
 }> = ({className = 'h-4 w-4', style}) => {
   const uid = useId().replace(/:/g, '');
-  const maskId = `dp-icon-head-${uid}`;
-  const patches = buildDeadpoolMaskPatches(1.55);
+  const maskId = `dp-icon-circle-${uid}`;
+  const domes = buildDeadpoolSplitDomes(1.65);
   const eyes = buildEyePaths('classic', 0);
 
   return (
@@ -32,14 +34,25 @@ export const DeadpoolLogoIcon: React.FC<{
       <defs>
         <mask id={maskId}>
           <rect x="0" y="0" width="28" height="28" fill="black" />
-          <path d={DEADPOOL_HEAD_PATH} fill="white" />
-          <path d={patches.left} fill="black" />
-          <path d={patches.right} fill="black" />
+          <circle
+            cx={DEADPOOL_CIRCLE_CX}
+            cy={DEADPOOL_CIRCLE_CY}
+            r={DEADPOOL_CIRCLE_OUTER_R}
+            fill="white"
+          />
+          <path d={domes.left} fill="black" />
+          <path d={domes.right} fill="black" />
           <path d={eyes.left} fill="white" />
           <path d={eyes.right} fill="white" />
         </mask>
       </defs>
-      <path d={DEADPOOL_HEAD_PATH} fill="currentColor" mask={`url(#${maskId})`} />
+      <circle
+        cx={DEADPOOL_CIRCLE_CX}
+        cy={DEADPOOL_CIRCLE_CY}
+        r={DEADPOOL_CIRCLE_OUTER_R}
+        fill="currentColor"
+        mask={`url(#${maskId})`}
+      />
     </svg>
   );
 };

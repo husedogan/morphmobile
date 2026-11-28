@@ -126,7 +126,9 @@ import {
   resolveDeadpoolShellBackground,
   resolveDeadpoolShellBorderColor,
 } from './DeadpoolWheelVisual';
-import {GodModeShell} from './GodMode/GodModeShell';
+const GodModeShell = React.lazy(() =>
+  import('./GodMode/GodModeShell').then((mod) => ({default: mod.GodModeShell}))
+);
 import {
   SettingsAccordionCard,
   SettingsDownloadsExtra,
@@ -4627,12 +4629,23 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
       {/* EPHEMERAL PERSONAL MENU ("Sana Özel" / "Just For You"): hosts MORPH // GOD MODE Command Center + preserved 100-feature Deadpool & Chaos Studio */}
       {category === 'personal' && personalMenuOpen && !expUnlocked && (
-        <GodModeShell
-          prefs={prefs}
-          lang={lang}
-          onChangePrefs={onChangePrefs}
-          onShowToast={onShowToast}
-        />
+        <React.Suspense
+          fallback={
+            <div className="mt-4 flex min-h-[260px] flex-col items-center justify-center gap-3 rounded-3xl border border-[#8B5CF6]/25 bg-[#09090D] p-6 text-center">
+              <div className="h-7 w-7 animate-spin rounded-full border-2 border-[#8B5CF6]/30 border-t-[#A855F7]" />
+              <p className="text-xs font-semibold tracking-wide text-[#C4B5FD]">
+                {lang === 'tr' ? 'GOD MODE Konsolu yükleniyor…' : 'Loading GOD MODE Console…'}
+              </p>
+            </div>
+          }
+        >
+          <GodModeShell
+            prefs={prefs}
+            lang={lang}
+            onChangePrefs={onChangePrefs}
+            onShowToast={onShowToast}
+          />
+        </React.Suspense>
       )}
 
       {/* CATEGORY 5: SYSTEM (Updates, Storage & Cache, Permissions with 7-tap Experimental unlock, Developer) */}
