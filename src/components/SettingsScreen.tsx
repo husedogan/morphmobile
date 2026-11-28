@@ -116,6 +116,8 @@ import {
 import {deleteNleProjectIdb, listNleProjectsIdb} from '../engine/projectStorage';
 import {PWAInstallButton} from './PWAInstallButton';
 import {
+  DEADPOOL_CLASSIC_EMBLEM_PATH,
+  DEADPOOL_CLASSIC_SHARED_PATHS,
   DeadpoolEmblemGroup,
   DeadpoolPolygonBorder,
   DeadpoolShellOverlays,
@@ -1659,26 +1661,42 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   const dpFill = opts?.deadpoolFill || 'currentColor';
                   const dpRing = opts?.deadpoolRing || dpFill;
                   const dpEye = opts?.deadpoolEye ?? null;
-                  const lEye = 'M 6.45 11.2 L 11.4 14.8 C 9.35 16.55 5.45 14.15 6.45 11.2 Z';
-                  const rEye = 'M 21.55 11.2 L 16.6 14.8 C 18.65 16.55 22.55 14.15 21.55 11.2 Z';
+                  const hasSeparateRing =
+                    dpRing.trim().toUpperCase() !== dpFill.trim().toUpperCase();
+                  const hasSeparateEye =
+                    Boolean(dpEye) &&
+                    dpEye !== 'transparent' &&
+                    dpEye!.trim().toUpperCase() !== dpFill.trim().toUpperCase();
+
+                  if (hasSeparateRing) {
+                    return (
+                      <>
+                        <path
+                          d={DEADPOOL_CLASSIC_SHARED_PATHS.ringBridgePath}
+                          fill={dpRing}
+                          fillRule="evenodd"
+                        />
+                        <path
+                          d={DEADPOOL_CLASSIC_SHARED_PATHS.splitMaskCutEyesPath}
+                          fill={dpFill}
+                          fillRule="evenodd"
+                        />
+                        {hasSeparateEye && (
+                          <path d={DEADPOOL_CLASSIC_SHARED_PATHS.eyesPath} fill={dpEye!} />
+                        )}
+                      </>
+                    );
+                  }
+
                   return (
                     <>
-                      <circle cx="14" cy="14" r="10.7" stroke={dpRing} strokeWidth="1.95" />
                       <path
-                        d={`M 12.25 5.53 A 8.65 8.65 0 0 0 12.25 22.47 Z ${lEye}`}
+                        d={DEADPOOL_CLASSIC_EMBLEM_PATH}
                         fill={dpFill}
                         fillRule="evenodd"
                       />
-                      <path
-                        d={`M 15.75 5.53 A 8.65 8.65 0 0 1 15.75 22.47 Z ${rEye}`}
-                        fill={dpFill}
-                        fillRule="evenodd"
-                      />
-                      {dpEye && dpEye.trim().toUpperCase() !== dpFill.trim().toUpperCase() && (
-                        <>
-                          <path d={lEye} fill={dpEye} />
-                          <path d={rEye} fill={dpEye} />
-                        </>
+                      {hasSeparateEye && (
+                        <path d={DEADPOOL_CLASSIC_SHARED_PATHS.eyesPath} fill={dpEye!} />
                       )}
                     </>
                   );

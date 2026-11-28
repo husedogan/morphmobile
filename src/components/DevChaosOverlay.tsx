@@ -14,11 +14,7 @@ import {
   subscribeDevChaos,
   updateDevChaos,
 } from '../engine/devChaosEngine';
-import {
-  DEADPOOL_CIRCLE_OUTER_PATH,
-  buildDeadpoolSplitDomes,
-  buildEyePaths,
-} from './DeadpoolWheelVisual';
+import {DEADPOOL_CLASSIC_SHARED_PATHS} from './DeadpoolWheelVisual';
 
 interface Bouncer {
   x: number;
@@ -166,14 +162,14 @@ export const DevChaosOverlay: React.FC = () => {
     canvas.height = window.innerHeight;
 
     const count = Math.min(CHAOS_SAFE_LIMITS.maxSwarmCount, chaos.dvdSwarmCount);
-    const dpDomes = buildDeadpoolSplitDomes(1.65);
-    const dpEyes = buildEyePaths('classic', 0);
     const outerPath2D =
-      typeof Path2D !== 'undefined' ? new Path2D(DEADPOOL_CIRCLE_OUTER_PATH) : null;
-    const domeL2D = typeof Path2D !== 'undefined' ? new Path2D(dpDomes.left) : null;
-    const domeR2D = typeof Path2D !== 'undefined' ? new Path2D(dpDomes.right) : null;
-    const eyeL2D = typeof Path2D !== 'undefined' ? new Path2D(dpEyes.left) : null;
-    const eyeR2D = typeof Path2D !== 'undefined' ? new Path2D(dpEyes.right) : null;
+      typeof Path2D !== 'undefined' ? new Path2D(DEADPOOL_CLASSIC_SHARED_PATHS.outerCirclePath) : null;
+    const ringBridge2D =
+      typeof Path2D !== 'undefined' ? new Path2D(DEADPOOL_CLASSIC_SHARED_PATHS.ringBridgePath) : null;
+    const splitMask2D =
+      typeof Path2D !== 'undefined' ? new Path2D(DEADPOOL_CLASSIC_SHARED_PATHS.splitMaskPath) : null;
+    const eyes2D =
+      typeof Path2D !== 'undefined' ? new Path2D(DEADPOOL_CLASSIC_SHARED_PATHS.eyesPath) : null;
     const items: Bouncer[] = Array.from({length: count}, (_, i) => ({
       x: 40 + ((i * 73) % Math.max(80, canvas.width - 80)),
       y: 40 + ((i * 59) % Math.max(80, canvas.height - 80)),
@@ -227,18 +223,16 @@ export const DevChaosOverlay: React.FC = () => {
         const sc = (b.size * 2) / 28;
         ctx.scale(sc, sc);
         ctx.translate(-14, -14);
-        if (outerPath2D && domeL2D && domeR2D && eyeL2D && eyeR2D) {
+        if (outerPath2D && ringBridge2D && splitMask2D && eyes2D) {
+          ctx.fillStyle = '#0B0B0F';
+          ctx.fill(splitMask2D);
           ctx.fillStyle = '#C8102E';
-          ctx.fill(outerPath2D);
+          ctx.fill(ringBridge2D, 'evenodd');
           ctx.lineWidth = 0.7;
           ctx.strokeStyle = '#4A0612';
           ctx.stroke(outerPath2D);
-          ctx.fillStyle = '#0B0B0F';
-          ctx.fill(domeL2D);
-          ctx.fill(domeR2D);
           ctx.fillStyle = '#FFFFFF';
-          ctx.fill(eyeL2D);
-          ctx.fill(eyeR2D);
+          ctx.fill(eyes2D);
         }
         ctx.restore();
       }

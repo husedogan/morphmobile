@@ -1227,6 +1227,9 @@ export const DEADPOOL_CIRCLE_INNER_R = 9.35;
 export const DEADPOOL_CIRCLE_OUTER_PATH =
   'M 14 1.8 A 12.2 12.2 0 1 0 14 26.2 A 12.2 12.2 0 1 0 14 1.8 Z';
 
+export const DEADPOOL_CIRCLE_INNER_PATH =
+  'M 14 4.65 A 9.35 9.35 0 1 0 14 23.35 A 9.35 9.35 0 1 0 14 4.65 Z';
+
 export const DEADPOOL_CIRCLE_HIGHLIGHT_ARC =
   'M 6.4 7.0 A 10.2 10.2 0 0 1 21.6 7.0 A 11.4 11.4 0 0 0 6.4 7.0 Z';
 
@@ -1287,8 +1290,57 @@ export function buildEyePaths(style: DeadpoolEyeStyle, spreadOffset = 0): {left:
   }
 }
 
+export interface DeadpoolSharedPaths {
+  outerCirclePath: string;
+  domes: {left: string; right: string};
+  eyes: {left: string; right: string};
+  /** Compound evenodd path: outer circular ring + center vertical bridge */
+  ringBridgePath: string;
+  /** Compound path: both split D-domes */
+  splitMaskPath: string;
+  /** Compound evenodd path: split D-domes with eyes punched out */
+  splitMaskCutEyesPath: string;
+  /** Compound path: both angled Deadpool eyes */
+  eyesPath: string;
+  /** Single compound evenodd SVG path representing the full classic circular Deadpool emblem */
+  singleStencilPath: string;
+}
+
+export function buildDeadpoolSharedPaths(
+  eyeStyle: DeadpoolEyeStyle = 'classic',
+  gapHalf = 1.65,
+  spreadOffset = 0
+): DeadpoolSharedPaths {
+  const domes = buildDeadpoolSplitDomes(gapHalf);
+  const eyes = buildEyePaths(eyeStyle, spreadOffset);
+  const splitMaskPath = `${domes.left} ${domes.right}`;
+  const eyesPath = `${eyes.left} ${eyes.right}`;
+  return {
+    outerCirclePath: DEADPOOL_CIRCLE_OUTER_PATH,
+    domes,
+    eyes,
+    ringBridgePath: `${DEADPOOL_CIRCLE_OUTER_PATH} ${splitMaskPath}`,
+    splitMaskPath,
+    splitMaskCutEyesPath: `${splitMaskPath} ${eyesPath}`,
+    eyesPath,
+    singleStencilPath: `${DEADPOOL_CIRCLE_OUTER_PATH} ${splitMaskPath} ${eyesPath}`,
+  };
+}
+
+export const DEADPOOL_CLASSIC_SHARED_PATHS: DeadpoolSharedPaths = buildDeadpoolSharedPaths(
+  'classic',
+  1.65,
+  0
+);
+
 /**
- * Renders the circular perimeter contour around the Deadpool emblem.
+ * Single, shared SVG path (viewBox 0 0 28 28, fillRule="evenodd") representing the classic
+ * circular Deadpool emblem across GOD MODE, Settings, WheelMenu, and Chaos overlays.
+ */
+export const DEADPOOL_CLASSIC_EMBLEM_PATH = DEADPOOL_CLASSIC_SHARED_PATHS.singleStencilPath;
+
+/**
+ * Renders the circular perimeter contour around the Deadpool emblem using the shared outer/inner paths.
  */
 function renderEmblemRingContour(
   style: DeadpoolInnerRingStyle,
@@ -1299,10 +1351,8 @@ function renderEmblemRingContour(
   const sw = Math.max(0.45, Math.min(1.8, width * 0.65));
   if (style === 'dashed') {
     return (
-      <circle
-        cx={DEADPOOL_CIRCLE_CX}
-        cy={DEADPOOL_CIRCLE_CY}
-        r={DEADPOOL_CIRCLE_OUTER_R}
+      <path
+        d={DEADPOOL_CIRCLE_OUTER_PATH}
         fill="none"
         stroke={stroke}
         strokeWidth={sw}
@@ -1314,18 +1364,14 @@ function renderEmblemRingContour(
   if (style === 'double') {
     return (
       <>
-        <circle
-          cx={DEADPOOL_CIRCLE_CX}
-          cy={DEADPOOL_CIRCLE_CY}
-          r={DEADPOOL_CIRCLE_OUTER_R}
+        <path
+          d={DEADPOOL_CIRCLE_OUTER_PATH}
           fill="none"
           stroke={stroke}
           strokeWidth={Math.max(0.65, sw * 0.95)}
         />
-        <circle
-          cx={DEADPOOL_CIRCLE_CX}
-          cy={DEADPOOL_CIRCLE_CY}
-          r={DEADPOOL_CIRCLE_INNER_R}
+        <path
+          d={DEADPOOL_CIRCLE_INNER_PATH}
           fill="none"
           stroke={stroke}
           strokeWidth={Math.max(0.4, sw * 0.45)}
@@ -1337,10 +1383,8 @@ function renderEmblemRingContour(
   if (style === 'tech_ticks') {
     return (
       <>
-        <circle
-          cx={DEADPOOL_CIRCLE_CX}
-          cy={DEADPOOL_CIRCLE_CY}
-          r={DEADPOOL_CIRCLE_OUTER_R}
+        <path
+          d={DEADPOOL_CIRCLE_OUTER_PATH}
           fill="none"
           stroke={stroke}
           strokeWidth={Math.max(0.65, sw * 0.9)}
@@ -1353,10 +1397,8 @@ function renderEmblemRingContour(
     );
   }
   return (
-    <circle
-      cx={DEADPOOL_CIRCLE_CX}
-      cy={DEADPOOL_CIRCLE_CY}
-      r={DEADPOOL_CIRCLE_OUTER_R}
+    <path
+      d={DEADPOOL_CIRCLE_OUTER_PATH}
       fill="none"
       stroke={stroke}
       strokeWidth={sw}
@@ -1364,15 +1406,149 @@ function renderEmblemRingContour(
   );
 }
 
+interface DeadpoolVariantEmblemStyle {
+  outerStart: string;
+  outerMid: string | null;
+  outerEnd: string;
+  domeFill: string;
+  domeStroke?: string;
+  domeStrokeWidth?: number;
+  contourStroke: string;
+  contourStyle: DeadpoolInnerRingStyle;
+  contourWidth: number;
+  eyeFill: string | null;
+  eyeStroke?: string;
+  eyeStrokeWidth?: number;
+  highlightFill?: string;
+  invertedCutout: boolean;
+}
+
+function resolveDeadpoolVariantEmblemStyle(
+  variant: DeadpoolLogoVariant,
+  cfg: DeadpoolResolvedConfig,
+  maskFill: string,
+  compact: boolean
+): DeadpoolVariantEmblemStyle {
+  const isTransparentEyes = cfg.eyeColor === 'transparent';
+  const contourBoost = compact ? 1.15 : 1;
+
+  switch (variant) {
+    case 'pure_bw': {
+      const outer = cfg.outerColor || '#FFFFFF';
+      return {
+        outerStart: outer,
+        outerMid: cfg.outerColorMid,
+        outerEnd: cfg.outerColorEnd || outer,
+        domeFill: cfg.innerColor || '#050507',
+        contourStroke: cfg.ringColor || '#050507',
+        contourStyle: cfg.innerRingStyle === 'none' ? 'solid' : cfg.innerRingStyle,
+        contourWidth: Math.max(1.2, cfg.innerRingWidth * 0.85) * contourBoost,
+        eyeFill: isTransparentEyes ? null : cfg.eyeColor || '#FFFFFF',
+        invertedCutout: false,
+      };
+    }
+
+    case 'white_on_black': {
+      const outer = cfg.outerColor || '#09090D';
+      return {
+        outerStart: outer,
+        outerMid: cfg.outerColorMid,
+        outerEnd: cfg.outerColorEnd || outer,
+        domeFill: cfg.innerColor || '#FFFFFF',
+        contourStroke: cfg.ringColor || '#FFFFFF',
+        contourStyle: cfg.innerRingStyle === 'none' ? 'solid' : cfg.innerRingStyle,
+        contourWidth: Math.max(1.25, cfg.innerRingWidth * 0.92) * contourBoost,
+        eyeFill: isTransparentEyes ? null : cfg.eyeColor || '#09090D',
+        invertedCutout: false,
+      };
+    }
+
+    case 'tactical_metallic':
+      return {
+        outerStart: cfg.outerColor || '#A61B29',
+        outerMid: cfg.outerColorMid || '#6E1420',
+        outerEnd: cfg.outerColorEnd || '#3B0A14',
+        domeFill: cfg.innerColor || '#141720',
+        domeStroke: '#090D18',
+        domeStrokeWidth: 0.35,
+        contourStroke: cfg.ringColor || '#CBD5E1',
+        contourStyle: cfg.innerRingStyle === 'none' ? 'solid' : cfg.innerRingStyle,
+        contourWidth: Math.max(1.25, cfg.innerRingWidth * 0.92) * contourBoost,
+        eyeFill: isTransparentEyes ? null : cfg.eyeColor || '#F8FAFC',
+        eyeStroke: '#090D18',
+        eyeStrokeWidth: compact ? 0.6 : 0.45,
+        highlightFill: 'rgba(226,232,240,0.34)',
+        invertedCutout: false,
+      };
+
+    case 'minimal_flat': {
+      const outer = cfg.outerColor || '#DC2626';
+      return {
+        outerStart: outer,
+        outerMid: cfg.outerColorMid,
+        outerEnd: cfg.outerColorEnd || outer,
+        domeFill: cfg.innerColor || maskFill || '#111116',
+        contourStroke: cfg.ringColor || outer,
+        contourStyle:
+          cfg.innerRingStyle === 'none' || cfg.innerRingStyle === 'solid'
+            ? 'none'
+            : cfg.innerRingStyle,
+        contourWidth: 0.9 * contourBoost,
+        eyeFill: isTransparentEyes ? null : cfg.eyeColor || '#FFFFFF',
+        invertedCutout: false,
+      };
+    }
+
+    case 'crimson_dark':
+      return {
+        outerStart: cfg.outerColor || '#7A0A1B',
+        outerMid: cfg.outerColorMid || '#540612',
+        outerEnd: cfg.outerColorEnd || '#2E030A',
+        domeFill: cfg.innerColor || '#050507',
+        contourStroke: cfg.ringColor || '#EF4444',
+        contourStyle: cfg.innerRingStyle === 'none' ? 'solid' : cfg.innerRingStyle,
+        contourWidth: Math.max(1.2, cfg.innerRingWidth * 0.9) * contourBoost,
+        eyeFill: isTransparentEyes ? null : cfg.eyeColor || '#FFF1F2',
+        invertedCutout: false,
+      };
+
+    case 'monochrome_inverted': {
+      const outer = cfg.outerColor || '#E4E4E7';
+      return {
+        outerStart: outer,
+        outerMid: cfg.outerColorMid,
+        outerEnd: cfg.outerColorEnd || outer,
+        domeFill: 'transparent',
+        contourStroke: cfg.ringColor || '#3F3F46',
+        contourStyle: cfg.innerRingStyle === 'none' ? 'solid' : cfg.innerRingStyle,
+        contourWidth: Math.max(0.75, cfg.innerRingWidth * 0.55) * contourBoost,
+        eyeFill: isTransparentEyes ? null : cfg.eyeColor || null,
+        invertedCutout: true,
+      };
+    }
+
+    case 'original':
+    default: {
+      const outer = cfg.outerColor || '#D11432';
+      return {
+        outerStart: outer,
+        outerMid: cfg.outerColorMid,
+        outerEnd: cfg.outerColorEnd || (cfg.outerColor ? cfg.outerColor : '#9E0B22'),
+        domeFill: cfg.innerColor || maskFill || '#0B0B0F',
+        contourStroke: cfg.ringColor || '#4A0612',
+        contourStyle: cfg.innerRingStyle,
+        contourWidth: Math.max(0.65, cfg.innerRingWidth * 0.55) * contourBoost,
+        eyeFill: isTransparentEyes ? null : cfg.eyeColor || '#FFFFFF',
+        highlightFill: 'rgba(255,255,255,0.16)',
+        invertedCutout: false,
+      };
+    }
+  }
+}
+
 /**
- * Renders all 7 variants using the EXACT classic circular Deadpool emblem geometry (viewBox 0 0 28 28).
+ * Renders all 7 variants using ONE shared classic circular Deadpool SVG path geometry (viewBox 0 0 28 28).
  * Single source of truth used by WheelFab, Deadpool Studio, Settings previews, and Mini Swatches.
- * - Outer circular red ring + vertical center bridge
- * - Two symmetric circular split D-domes inside
- * - Iconic angled Deadpool eyes
- * - Independent color channels: outer ring/bridge (outerColor/Mid/End), split domes (innerColor),
- *   eyes (eyeColor), circular contour (ringColor), and outer shell background (logoBg/customBgColor)
- * - True SVG <mask> alpha cutouts when eyeColor === 'transparent' or variant === 'monochrome_inverted'
  */
 export const DeadpoolEmblemGroup: React.FC<{
   cfg: DeadpoolResolvedConfig;
@@ -1382,13 +1558,12 @@ export const DeadpoolEmblemGroup: React.FC<{
 }> = ({cfg, maskFill, variantOverride, compact = false}) => {
   const uid = useId().replace(/:/g, '');
   const variant = variantOverride ?? cfg.logoVariant;
-
   const isTransparentEyes = cfg.eyeColor === 'transparent';
 
   const gapHalf = cfg.splitGap === 'tight' ? 1.25 : cfg.splitGap === 'wide' ? 2.25 : 1.65;
   const eyeSpread = cfg.splitGap === 'wide' ? 0.28 : cfg.splitGap === 'tight' ? -0.22 : 0;
-  const domes = buildDeadpoolSplitDomes(gapHalf);
-  const eyes = buildEyePaths(cfg.eyeStyle, eyeSpread);
+  const paths = buildDeadpoolSharedPaths(cfg.eyeStyle, gapHalf, eyeSpread);
+  const vStyle = resolveDeadpoolVariantEmblemStyle(variant, cfg, maskFill, compact);
 
   // Respect logoPadding (0 - 24%) combined with maskScale
   const paddingScale = 1 - (cfg.logoPadding / 100) * 1.15;
@@ -1411,8 +1586,10 @@ export const DeadpoolEmblemGroup: React.FC<{
       ? `drop-shadow(0 0 ${(0.7 + (cfg.eyeGlowStrength / 100) * 2.1).toFixed(2)}px ${resolvedGlowEyeCol})`
       : undefined;
 
-  const eyeCutMaskId = `dp-eyecut-${uid}`;
   const ringGradId = `dp-ringgrad-${uid}`;
+  const hasGradient =
+    cfg.gradientType !== 'solid' &&
+    (vStyle.outerStart !== vStyle.outerEnd || Boolean(vStyle.outerMid));
 
   // Convert CSS gradient angle (deg) to SVG linearGradient vector coords
   const angleRad = ((cfg.gradientAngle - 90) * Math.PI) / 180;
@@ -1421,334 +1598,7 @@ export const DeadpoolEmblemGroup: React.FC<{
   const gx2 = (50 + Math.cos(angleRad) * 50).toFixed(1) + '%';
   const gy2 = (50 + Math.sin(angleRad) * 50).toFixed(1) + '%';
 
-  const renderOuterGradientDef = (start: string, mid: string | null, end: string) => {
-    if (cfg.gradientType === 'solid' || (start === end && !mid)) {
-      return null;
-    }
-    if (cfg.gradientType === 'radial') {
-      return (
-        <radialGradient id={ringGradId} cx="35%" cy="30%" r="72%">
-          <stop offset="0%" stopColor={start} />
-          {mid && <stop offset="52%" stopColor={mid} />}
-          <stop offset="100%" stopColor={end} />
-        </radialGradient>
-      );
-    }
-    return (
-      <linearGradient id={ringGradId} x1={gx1} y1={gy1} x2={gx2} y2={gy2}>
-        <stop offset="0%" stopColor={start} />
-        {mid && <stop offset="52%" stopColor={mid} />}
-        <stop offset="100%" stopColor={end} />
-      </linearGradient>
-    );
-  };
-
-  const renderEyeCutMaskDef = () => (
-    <mask id={eyeCutMaskId}>
-      <rect x="0" y="0" width="28" height="28" fill="white" />
-      <path d={eyes.left} fill="black" />
-      <path d={eyes.right} fill="black" />
-    </mask>
-  );
-
-  const renderVariantGeometry = () => {
-    const contourBoost = compact ? 1.15 : 1;
-
-    switch (variant) {
-      case 'pure_bw': {
-        // 2. Pure Black & White — white circular ring & vertical center bridge, pitch-black split domes & crisp white eyes
-        const outerCol = cfg.outerColor || '#FFFFFF';
-        const domeCol = cfg.innerColor || '#050507';
-        const contourCol = cfg.ringColor || '#050507';
-        const eyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : '#FFFFFF';
-        const contourStyle = cfg.innerRingStyle === 'none' ? 'solid' : cfg.innerRingStyle;
-        return (
-          <>
-            {isTransparentEyes && <defs>{renderEyeCutMaskDef()}</defs>}
-            <g mask={isTransparentEyes ? `url(#${eyeCutMaskId})` : undefined}>
-              <circle
-                cx={DEADPOOL_CIRCLE_CX}
-                cy={DEADPOOL_CIRCLE_CY}
-                r={DEADPOOL_CIRCLE_OUTER_R}
-                fill={outerCol}
-              />
-              <path d={domes.left} fill={domeCol} />
-              <path d={domes.right} fill={domeCol} />
-            </g>
-            {renderEmblemRingContour(
-              contourStyle,
-              contourCol,
-              Math.max(1.2, cfg.innerRingWidth * 0.85) * contourBoost
-            )}
-            {!isTransparentEyes && (
-              <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
-                <path d={eyes.left} fill={eyeCol} />
-                <path d={eyes.right} fill={eyeCol} />
-              </g>
-            )}
-          </>
-        );
-      }
-
-      case 'white_on_black': {
-        // 3. White on Black — matte obsidian ring & vertical bar, stark white split domes & dark pierced eyes
-        const outerCol = cfg.outerColor || '#09090D';
-        const domeCol = cfg.innerColor || '#FFFFFF';
-        const contourCol = cfg.ringColor || '#FFFFFF';
-        const eyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : '#09090D';
-        const contourStyle = cfg.innerRingStyle === 'none' ? 'solid' : cfg.innerRingStyle;
-        return (
-          <>
-            {isTransparentEyes && <defs>{renderEyeCutMaskDef()}</defs>}
-            <g mask={isTransparentEyes ? `url(#${eyeCutMaskId})` : undefined}>
-              <circle
-                cx={DEADPOOL_CIRCLE_CX}
-                cy={DEADPOOL_CIRCLE_CY}
-                r={DEADPOOL_CIRCLE_OUTER_R}
-                fill={outerCol}
-              />
-              <path d={domes.left} fill={domeCol} />
-              <path d={domes.right} fill={domeCol} />
-            </g>
-            {renderEmblemRingContour(
-              contourStyle,
-              contourCol,
-              Math.max(1.25, cfg.innerRingWidth * 0.92) * contourBoost
-            )}
-            {!isTransparentEyes && (
-              <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
-                <path d={eyes.left} fill={eyeCol} />
-                <path d={eyes.right} fill={eyeCol} />
-              </g>
-            )}
-          </>
-        );
-      }
-
-      case 'tactical_metallic': {
-        // 4. Tactical Metallic — brushed steel-crimson circular ring, gunmetal split domes & silver bevel contour
-        const ringStart = cfg.outerColor || '#A61B29';
-        const ringMid = cfg.outerColorMid || '#6E1420';
-        const ringEnd = cfg.outerColorEnd || '#3B0A14';
-        const domeCol = cfg.innerColor || '#141720';
-        const contourCol = cfg.ringColor || '#CBD5E1';
-        const eyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : '#F8FAFC';
-        const gradDef = renderOuterGradientDef(ringStart, ringMid, ringEnd);
-        const outerFill = gradDef ? `url(#${ringGradId})` : ringStart;
-        const contourStyle = cfg.innerRingStyle === 'none' ? 'solid' : cfg.innerRingStyle;
-        return (
-          <>
-            <defs>
-              {gradDef}
-              {isTransparentEyes && renderEyeCutMaskDef()}
-            </defs>
-            <g mask={isTransparentEyes ? `url(#${eyeCutMaskId})` : undefined}>
-              <circle
-                cx={DEADPOOL_CIRCLE_CX}
-                cy={DEADPOOL_CIRCLE_CY}
-                r={DEADPOOL_CIRCLE_OUTER_R}
-                fill={outerFill}
-              />
-              <path d={DEADPOOL_CIRCLE_HIGHLIGHT_ARC} fill="rgba(226,232,240,0.34)" />
-              <path d={domes.left} fill={domeCol} stroke="#090D18" strokeWidth="0.35" />
-              <path d={domes.right} fill={domeCol} stroke="#090D18" strokeWidth="0.35" />
-            </g>
-            {renderEmblemRingContour(
-              contourStyle,
-              contourCol,
-              Math.max(1.25, cfg.innerRingWidth * 0.92) * contourBoost
-            )}
-            {!isTransparentEyes && (
-              <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
-                <path
-                  d={eyes.left}
-                  fill={eyeCol}
-                  stroke="#090D18"
-                  strokeWidth={compact ? '0.6' : '0.45'}
-                  paintOrder="stroke"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d={eyes.right}
-                  fill={eyeCol}
-                  stroke="#090D18"
-                  strokeWidth={compact ? '0.6' : '0.45'}
-                  paintOrder="stroke"
-                  strokeLinejoin="round"
-                />
-              </g>
-            )}
-          </>
-        );
-      }
-
-      case 'minimal_flat': {
-        // 5. Minimal Flat — frameless pure flat vector circular emblem optimized for small sizes
-        const outerCol = cfg.outerColor || '#DC2626';
-        const domeCol = cfg.innerColor || maskFill || '#111116';
-        const eyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : '#FFFFFF';
-        return (
-          <>
-            {isTransparentEyes && <defs>{renderEyeCutMaskDef()}</defs>}
-            <g mask={isTransparentEyes ? `url(#${eyeCutMaskId})` : undefined}>
-              <circle
-                cx={DEADPOOL_CIRCLE_CX}
-                cy={DEADPOOL_CIRCLE_CY}
-                r={DEADPOOL_CIRCLE_OUTER_R}
-                fill={outerCol}
-              />
-              <path d={domes.left} fill={domeCol} />
-              <path d={domes.right} fill={domeCol} />
-            </g>
-            {cfg.innerRingStyle !== 'none' &&
-              cfg.innerRingStyle !== 'solid' &&
-              renderEmblemRingContour(cfg.innerRingStyle, cfg.ringColor || outerCol, 0.9 * contourBoost)}
-            {!isTransparentEyes && (
-              <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
-                <path d={eyes.left} fill={eyeCol} />
-                <path d={eyes.right} fill={eyeCol} />
-              </g>
-            )}
-          </>
-        );
-      }
-
-      case 'crimson_dark': {
-        // 6. Crimson Dark — deep stealth blood-crimson circular ring with obsidian domes & crimson rim
-        const ringStart = cfg.outerColor || '#7A0A1B';
-        const ringMid = cfg.outerColorMid || '#540612';
-        const ringEnd = cfg.outerColorEnd || '#2E030A';
-        const domeCol = cfg.innerColor || '#050507';
-        const contourCol = cfg.ringColor || '#EF4444';
-        const eyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : '#FFF1F2';
-        const gradDef = renderOuterGradientDef(ringStart, ringMid, ringEnd);
-        const outerFill = gradDef ? `url(#${ringGradId})` : ringStart;
-        const contourStyle = cfg.innerRingStyle === 'none' ? 'solid' : cfg.innerRingStyle;
-        return (
-          <>
-            <defs>
-              {gradDef}
-              {isTransparentEyes && renderEyeCutMaskDef()}
-            </defs>
-            <g mask={isTransparentEyes ? `url(#${eyeCutMaskId})` : undefined}>
-              <circle
-                cx={DEADPOOL_CIRCLE_CX}
-                cy={DEADPOOL_CIRCLE_CY}
-                r={DEADPOOL_CIRCLE_OUTER_R}
-                fill={outerFill}
-              />
-              <path d={domes.left} fill={domeCol} />
-              <path d={domes.right} fill={domeCol} />
-            </g>
-            {renderEmblemRingContour(
-              contourStyle,
-              contourCol,
-              Math.max(1.2, cfg.innerRingWidth * 0.9) * contourBoost
-            )}
-            {!isTransparentEyes && (
-              <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
-                <path d={eyes.left} fill={eyeCol} />
-                <path d={eyes.right} fill={eyeCol} />
-              </g>
-            )}
-          </>
-        );
-      }
-
-      case 'monochrome_inverted': {
-        // 7. Monochrome Inverted — true SVG <mask> negative-space circular stencil with transparent D-dome cutouts
-        const cutMaskId = `dp-inv-${uid}`;
-        const plateFill = cfg.outerColor || '#E4E4E7';
-        const contourCol = cfg.ringColor || '#3F3F46';
-        const customEyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : null;
-        return (
-          <>
-            <defs>
-              <mask id={cutMaskId}>
-                <rect x="0" y="0" width="28" height="28" fill="black" />
-                <circle
-                  cx={DEADPOOL_CIRCLE_CX}
-                  cy={DEADPOOL_CIRCLE_CY}
-                  r={DEADPOOL_CIRCLE_OUTER_R}
-                  fill="white"
-                />
-                <path d={domes.left} fill="black" />
-                <path d={domes.right} fill="black" />
-                {!isTransparentEyes && !customEyeCol && (
-                  <>
-                    <path d={eyes.left} fill="white" />
-                    <path d={eyes.right} fill="white" />
-                  </>
-                )}
-              </mask>
-            </defs>
-            <circle
-              cx={DEADPOOL_CIRCLE_CX}
-              cy={DEADPOOL_CIRCLE_CY}
-              r={DEADPOOL_CIRCLE_OUTER_R}
-              fill={plateFill}
-              mask={`url(#${cutMaskId})`}
-            />
-            {renderEmblemRingContour(
-              cfg.innerRingStyle === 'none' ? 'solid' : cfg.innerRingStyle,
-              contourCol,
-              Math.max(0.75, cfg.innerRingWidth * 0.55) * contourBoost
-            )}
-            {!isTransparentEyes && customEyeCol && (
-              <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
-                <path d={eyes.left} fill={customEyeCol} />
-                <path d={eyes.right} fill={customEyeCol} />
-              </g>
-            )}
-          </>
-        );
-      }
-
-      case 'original':
-      default: {
-        // 1. Original Red & Black — classic circular Deadpool emblem (red outer ring + center bridge, black D-halves, crisp white eyes)
-        const ringStart = cfg.outerColor || '#D11432';
-        const ringMid = cfg.outerColorMid;
-        const ringEnd = cfg.outerColorEnd || (cfg.outerColor ? cfg.outerColor : '#9E0B22');
-        const domeCol = cfg.innerColor || maskFill || '#0B0B0F';
-        const contourCol = cfg.ringColor || '#4A0612';
-        const eyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : '#FFFFFF';
-        const gradDef = renderOuterGradientDef(ringStart, ringMid, ringEnd);
-        const outerFill = gradDef ? `url(#${ringGradId})` : ringStart;
-        return (
-          <>
-            <defs>
-              {gradDef}
-              {isTransparentEyes && renderEyeCutMaskDef()}
-            </defs>
-            <g mask={isTransparentEyes ? `url(#${eyeCutMaskId})` : undefined}>
-              <circle
-                cx={DEADPOOL_CIRCLE_CX}
-                cy={DEADPOOL_CIRCLE_CY}
-                r={DEADPOOL_CIRCLE_OUTER_R}
-                fill={outerFill}
-              />
-              <path d={DEADPOOL_CIRCLE_HIGHLIGHT_ARC} fill="rgba(255,255,255,0.16)" />
-              <path d={domes.left} fill={domeCol} />
-              <path d={domes.right} fill={domeCol} />
-            </g>
-            {cfg.innerRingStyle !== 'none' &&
-              renderEmblemRingContour(
-                cfg.innerRingStyle,
-                contourCol,
-                Math.max(0.65, cfg.innerRingWidth * 0.55) * contourBoost
-              )}
-            {!isTransparentEyes && (
-              <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
-                <path d={eyes.left} fill={eyeCol} />
-                <path d={eyes.right} fill={eyeCol} />
-              </g>
-            )}
-          </>
-        );
-      }
-    }
-  };
+  const outerFill = hasGradient ? `url(#${ringGradId})` : vStyle.outerStart;
 
   return (
     <g
@@ -1756,7 +1606,71 @@ export const DeadpoolEmblemGroup: React.FC<{
       opacity={opacity}
       style={emblemFilter ? {filter: emblemFilter} : undefined}
     >
-      {renderVariantGeometry()}
+      {hasGradient && (
+        <defs>
+          {cfg.gradientType === 'radial' ? (
+            <radialGradient id={ringGradId} cx="35%" cy="30%" r="72%">
+              <stop offset="0%" stopColor={vStyle.outerStart} />
+              {vStyle.outerMid && <stop offset="52%" stopColor={vStyle.outerMid} />}
+              <stop offset="100%" stopColor={vStyle.outerEnd} />
+            </radialGradient>
+          ) : (
+            <linearGradient id={ringGradId} x1={gx1} y1={gy1} x2={gx2} y2={gy2}>
+              <stop offset="0%" stopColor={vStyle.outerStart} />
+              {vStyle.outerMid && <stop offset="52%" stopColor={vStyle.outerMid} />}
+              <stop offset="100%" stopColor={vStyle.outerEnd} />
+            </linearGradient>
+          )}
+        </defs>
+      )}
+
+      {vStyle.invertedCutout ? (
+        <>
+          <path
+            d={
+              !isTransparentEyes && !vStyle.eyeFill
+                ? paths.singleStencilPath
+                : paths.ringBridgePath
+            }
+            fill={outerFill}
+            fillRule="evenodd"
+          />
+          {!isTransparentEyes && vStyle.eyeFill && (
+            <path
+              d={paths.eyesPath}
+              fill={vStyle.eyeFill}
+              style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}
+            />
+          )}
+        </>
+      ) : (
+        <>
+          <path d={paths.ringBridgePath} fill={outerFill} fillRule="evenodd" />
+          {vStyle.highlightFill && (
+            <path d={DEADPOOL_CIRCLE_HIGHLIGHT_ARC} fill={vStyle.highlightFill} />
+          )}
+          <path
+            d={isTransparentEyes ? paths.splitMaskCutEyesPath : paths.splitMaskPath}
+            fill={vStyle.domeFill}
+            fillRule={isTransparentEyes ? 'evenodd' : undefined}
+            stroke={vStyle.domeStroke}
+            strokeWidth={vStyle.domeStrokeWidth}
+          />
+          {!isTransparentEyes && vStyle.eyeFill && (
+            <path
+              d={paths.eyesPath}
+              fill={vStyle.eyeFill}
+              stroke={vStyle.eyeStroke}
+              strokeWidth={vStyle.eyeStrokeWidth}
+              paintOrder={vStyle.eyeStroke ? 'stroke' : undefined}
+              strokeLinejoin={vStyle.eyeStroke ? 'round' : undefined}
+              style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}
+            />
+          )}
+        </>
+      )}
+
+      {renderEmblemRingContour(vStyle.contourStyle, vStyle.contourStroke, vStyle.contourWidth)}
     </g>
   );
 };

@@ -1,26 +1,14 @@
-import React, {useId} from 'react';
-import {
-  DEADPOOL_CIRCLE_CX,
-  DEADPOOL_CIRCLE_CY,
-  DEADPOOL_CIRCLE_OUTER_R,
-  buildDeadpoolSplitDomes,
-  buildEyePaths,
-} from '../DeadpoolWheelVisual';
+import React from 'react';
+import {DEADPOOL_CLASSIC_EMBLEM_PATH} from '../DeadpoolWheelVisual';
 
 /**
- * Vector classic circular Deadpool emblem icon using exact shared circular geometry from
- * DeadpoolWheelVisual.tsx with currentColor inheritance and true SVG <mask> transparent
- * split-dome cutouts so it stays crisp and recognizable on dark, light, and colored UI surfaces.
+ * Vector classic circular Deadpool emblem icon using the single, shared SVG compound path
+ * from DeadpoolWheelVisual.tsx with currentColor inheritance and evenodd cutouts.
  */
 export const DeadpoolLogoIcon: React.FC<{
   className?: string;
   style?: React.CSSProperties;
 }> = ({className = 'h-4 w-4', style}) => {
-  const uid = useId().replace(/:/g, '');
-  const maskId = `dp-icon-circle-${uid}`;
-  const domes = buildDeadpoolSplitDomes(1.65);
-  const eyes = buildEyePaths('classic', 0);
-
   return (
     <svg
       viewBox="0 0 28 28"
@@ -31,28 +19,7 @@ export const DeadpoolLogoIcon: React.FC<{
       style={style}
       aria-hidden="true"
     >
-      <defs>
-        <mask id={maskId}>
-          <rect x="0" y="0" width="28" height="28" fill="black" />
-          <circle
-            cx={DEADPOOL_CIRCLE_CX}
-            cy={DEADPOOL_CIRCLE_CY}
-            r={DEADPOOL_CIRCLE_OUTER_R}
-            fill="white"
-          />
-          <path d={domes.left} fill="black" />
-          <path d={domes.right} fill="black" />
-          <path d={eyes.left} fill="white" />
-          <path d={eyes.right} fill="white" />
-        </mask>
-      </defs>
-      <circle
-        cx={DEADPOOL_CIRCLE_CX}
-        cy={DEADPOOL_CIRCLE_CY}
-        r={DEADPOOL_CIRCLE_OUTER_R}
-        fill="currentColor"
-        mask={`url(#${maskId})`}
-      />
+      <path d={DEADPOOL_CLASSIC_EMBLEM_PATH} fill="currentColor" fillRule="evenodd" />
     </svg>
   );
 };
