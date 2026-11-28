@@ -3174,3 +3174,185 @@ async function runLocalFfmpegToolInternal(
 
   return batchOutputs;
 }
+
+export {terminateFFmpegInstance};
+
+export interface FfmpegRealCapabilities {
+  loaded: boolean;
+  versionLine: string;
+  encoders: string[];
+  decodersCount: number;
+  measuredAt: string;
+}
+
+export async function inspectRealFfmpegCapabilities(
+  signal?: AbortSignal
+): Promise<FfmpegRealCapabilities> {
+  if (signal?.aborted) throw new Error('Cancelled');
+  return enqueueFfmpegJob(async () => {
+    const ffmpeg = await getFFmpeg();
+    const logs: string[] = [];
+    const onLog = ({message}: {message: string}) => {
+      if (logs.length < 400) logs.push(message);
+    };
+    ffmpeg.on('log', onLog);
+    const onAbort = () => terminateFFmpegInstance();
+    signal?.addEventListener('abort', onAbort, {once: true});
+    try {
+      await ffmpeg.exec(['-version']);
+      const versionLine = logs.find((l) => /ffmpeg version/i.test(l)) || 'FFmpeg WASM Loaded';
+      logs.length = 0;
+      await ffmpeg.exec(['-encoders']);
+      const encList: string[] = [];
+      for (const line of logs) {
+        const m = line.match(/^\s*[VAS\.][F\.][S\.][X\.][B\.][D\.]\s+([a-z0-9_]+)/i);
+        if (m?.[1]) encList.push(m[1]);
+      }
+      logs.length = 0;
+      await ffmpeg.exec(['-decoders']);
+      let decodersCount = 0;
+      for (const line of logs) {
+        if (/^\s*[VAS\.][F\.][S\.][X\.][B\.][D\.]\s+[a-z0-9_]+/i.test(line)) {
+          decodersCount += 1;
+        }
+      }
+      return {
+        loaded: Boolean(ffmpeg.loaded),
+        versionLine: versionLine.trim(),
+        encoders: encList.slice(0, 60),
+        decodersCount,
+        measuredAt: new Date().toISOString(),
+      };
+    } finally {
+      ffmpeg.off('log', onLog);
+      signal?.removeEventListener('abort', onAbort);
+    }
+  });
+}
+
+export interface FfmpegBenchResult {
+  id: string;
+  preset: 'x264_ultrafast' | 'x264_veryfast' | 'audio_mp3_sine' | 'gif_testsrc';
+  ok: boolean;
+  durationMs: number;
+  outputBytes: number;
+  codecUsed: string;
+  cancelled?: boolean;
+  error?: string;
+  ts: string;
+}
+
+export async function runRealFfmpegBenchProbe(
+  preset: 'x264_ultrafast' | 'x264_veryfast' | 'audio_mp3_sine' | 'gif_testsrc',
+  onProgress?: (ratio: number) => void,
+  signal?: AbortSignal
+): Promise<FfmpegBenchResult> {
+  const id = `ff_${Date.now().toString(36)}`;
+  const started = performance.now();
+  if (signal?.aborted) {
+    return {
+      id,
+      preset,
+      ok: false,
+      durationMs: 0,
+      outputBytes: 0,
+      codecUsed: preset,
+      cancelled: true,
+      error: 'Cancelled',
+      ts: new Date().toISOString(),
+    };
+  }
+
+  return enqueueFfmpegJob(async () => {
+    const ffmpeg = await getFFmpeg();
+    const outName =
+      preset === 'audio_mp3_sine'
+        ? `bench_${id}.mp3`
+        : preset === 'gif_testsrc'
+          ? `bench_${id}.gif`
+          : `bench_${id}.mp4`;
+
+    const args =
+      preset === 'audio_mp3_sine'
+        ? ['-f', 'lavfi', '-i', 'sine=frequency=440:duration=1.2', '-c:a', 'libmp3lame', '-b:a', '128k', '-y', outName]
+        : preset === 'gif_testsrc'
+          ? ['-f', 'lavfi', '-i', 'testsrc=duration=0.8:size=240x180:rate=12', '-y', outName]
+          : preset === 'x264_veryfast'
+            ? [
+                '-f',
+                'lavfi',
+                '-i',
+                'testsrc=duration=1:size=320x240:rate=15',
+                '-c:v',
+                'libx264',
+                '-preset',
+                'veryfast',
+                '-crf',
+                '24',
+                '-pix_fmt',
+                'yuv420p',
+                '-y',
+                outName,
+              ]
+            : [
+                '-f',
+                'lavfi',
+                '-i',
+                'testsrc=duration=1:size=320x240:rate=15',
+                '-c:v',
+                'libx264',
+                '-preset',
+                'ultrafast',
+                '-crf',
+                '28',
+                '-pix_fmt',
+                'yuv420p',
+                '-y',
+                outName,
+              ];
+
+    const codecUsed =
+      preset === 'audio_mp3_sine' ? 'libmp3lame' : preset === 'gif_testsrc' ? 'gif' : 'libx264';
+
+    const progressHandler = ({progress}: {progress: number}) => {
+      if (Number.isFinite(progress)) onProgress?.(Math.min(1, Math.max(0, progress)));
+    };
+    const onAbort = () => terminateFFmpegInstance();
+    ffmpeg.on('progress', progressHandler);
+    signal?.addEventListener('abort', onAbort, {once: true});
+
+    try {
+      await ffmpeg.exec(args);
+      const outData = (await ffmpeg.readFile(outName)) as Uint8Array;
+      const durationMs = Math.round(performance.now() - started);
+      onProgress?.(1);
+      return {
+        id,
+        preset,
+        ok: true,
+        durationMs,
+        outputBytes: outData?.byteLength || 0,
+        codecUsed,
+        ts: new Date().toISOString(),
+      };
+    } catch (err) {
+      const cancelled = Boolean(signal?.aborted);
+      return {
+        id,
+        preset,
+        ok: false,
+        durationMs: Math.round(performance.now() - started),
+        outputBytes: 0,
+        codecUsed,
+        cancelled,
+        error: cancelled ? 'Cancelled' : err instanceof Error ? err.message : 'FFmpeg error',
+        ts: new Date().toISOString(),
+      };
+    } finally {
+      ffmpeg.off('progress', progressHandler);
+      signal?.removeEventListener('abort', onAbort);
+      await cleanupVfsFiles(ffmpeg, [outName]);
+    }
+  });
+}
+

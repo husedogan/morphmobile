@@ -1,14 +1,27 @@
-import React, {useMemo, useState} from 'react';
+import React, {useMemo, useRef, useState} from 'react';
 import {
   Activity,
+  ArrowLeftRight,
+  AudioWaveform,
   Box,
   ClipboardCopy,
+  Code2,
   Cpu,
+  Download,
   FileCode2,
   Globe,
+  Grid3X3,
+  Heart,
+  Scan,
   Search,
+  Sparkles,
   Terminal,
   Trash2,
+  Tv,
+  Upload,
+  Vibrate,
+  Volume2,
+  Waves,
 } from 'lucide-react';
 import {Prefs} from '../../data/models';
 import {APP_VERSION, getVersionChannel} from '../../engine/githubUpdater';
@@ -25,16 +38,24 @@ import {
   maskSensitiveObject,
 } from '../../engine/godModeTelemetry';
 import {ServerHealthSnapshot} from '../../engine/godModeSecurity';
+import {
+  GmOptionCard,
+  GmSectionHeader,
+  GmToggleTile,
+  playDevSynthTone,
+  triggerDevHaptic,
+} from './GodModeUiPrimitives';
 
 interface GodModeDevToolkitProps {
   lang: GodModeLang;
   prefs: Prefs;
   telemetry: RuntimeTelemetrySnapshot;
   serverHealth: ServerHealthSnapshot | null;
+  onChangePrefs: (updater: (prev: Prefs) => Prefs) => void;
   onShowToast?: (msg: string) => void;
 }
 
-type ToolkitTab = 'modules' | 'state' | 'logs' | 'network' | 'profiler' | 'build';
+type ToolkitTab = 'modules' | 'state' | 'inspectors' | 'logs' | 'network' | 'profiler' | 'build';
 
 interface ArchModuleNode {
   id: string;
@@ -70,18 +91,27 @@ const MORPH_MODULE_GRAPH: ReadonlyArray<ArchModuleNode> = [
     nameTr: 'MORPH // GOD MODE',
     nameEn: 'MORPH // GOD MODE',
     layer: 'UI',
-    dependsOn: ['godmode_themes', 'godmode_telemetry', 'godmode_security', 'deadpool_studio'],
+    dependsOn: ['godmode_themes', 'godmode_telemetry', 'godmode_security', 'deadpool_studio', 'chaos_lab'],
     roleTr: 'İzole temalı komuta merkezi ve canlı sistem gözlem ekranları.',
     roleEn: 'Isolated theme command center and live runtime inspectors.',
   },
   {
     id: 'deadpool_studio',
-    nameTr: 'Deadpool & Kaos (100)',
-    nameEn: 'Deadpool & Chaos (100)',
+    nameTr: 'Deadpool Çark Stüdyosu',
+    nameEn: 'Deadpool Wheel Studio',
     layer: 'UI',
-    dependsOn: ['chaos_engine', 'theme_tokens'],
-    roleTr: 'Çark özelleştirme, arayüz motoru ve kaos laboratuvarı.',
-    roleEn: 'Wheel customization, UI override engine and chaos lab.',
+    dependsOn: ['theme_tokens'],
+    roleTr: 'Çark kabuğu, logo varyantları, palet ve hareket stüdyosu.',
+    roleEn: 'Wheel shell, logo variants, color palette and motion studio.',
+  },
+  {
+    id: 'chaos_lab',
+    nameTr: 'Kaos & Stres Laboratuvarı',
+    nameEn: 'Chaos & Stress Lab',
+    layer: 'UI',
+    dependsOn: ['chaos_engine'],
+    roleTr: 'Ekran bükme, görsel bozulma ve stres testi motoru.',
+    roleEn: 'Screen warp, visual corruption and stress-test engine.',
   },
   {
     id: 'ffmpeg_ops',
@@ -135,6 +165,7 @@ export const GodModeDevToolkit: React.FC<GodModeDevToolkitProps> = ({
   prefs,
   telemetry,
   serverHealth,
+  onChangePrefs,
   onShowToast,
 }) => {
   const t = GOD_MODE_I18N[lang];
@@ -142,6 +173,43 @@ export const GodModeDevToolkit: React.FC<GodModeDevToolkitProps> = ({
   const [search, setSearch] = useState('');
   const [logFilter, setLogFilter] = useState<'all' | 'info' | 'warn' | 'error'>('all');
   const [selectedModuleId, setSelectedModuleId] = useState<string>('godmode_shell');
+  const [jsonEditorOpen, setJsonEditorOpen] = useState(false);
+  const [jsonDraft, setJsonDraft] = useState('');
+  const [jsonError, setJsonError] = useState<string | null>(null);
+  const jsonFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleExportPrefsFile = () => {
+    try {
+      const payload = JSON.stringify(prefs, null, 2);
+      const blob = new Blob([payload], {type: 'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `morph-dev-prefs-v${APP_VERSION}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      onShowToast?.(lang === 'tr' ? 'Ayar yedeği indirildi.' : 'Prefs backup exported.');
+    } catch {
+      onShowToast?.(lang === 'tr' ? 'Dışa aktarma başarısız.' : 'Export failed.');
+    }
+  };
+
+  const handleImportPrefsJson = (raw: string) => {
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        setJsonError(lang === 'tr' ? 'Geçerli JSON nesnesi değil.' : 'Not a valid JSON object.');
+        return;
+      }
+      setJsonError(null);
+      onChangePrefs((p) => ({...p, ...(parsed as Partial<Prefs>)}));
+      onShowToast?.(lang === 'tr' ? 'JSON ayarları uygulandı.' : 'JSON patch applied.');
+    } catch (err) {
+      setJsonError(err instanceof Error ? err.message : 'Invalid JSON');
+    }
+  };
 
   const maskedPrefs = useMemo(() => maskSensitiveObject(prefs) as Record<string, unknown>, [prefs]);
 
@@ -203,6 +271,7 @@ export const GodModeDevToolkit: React.FC<GodModeDevToolkitProps> = ({
   }> = [
     {id: 'modules', label: t.devToolkit.tabs.modules, icon: Box},
     {id: 'state', label: t.devToolkit.tabs.state, icon: FileCode2},
+    {id: 'inspectors', label: t.devToolkit.tabs.inspectors, icon: Scan},
     {
       id: 'logs',
       label: `${t.devToolkit.tabs.logs} (${telemetry.logs.length})`,
@@ -266,7 +335,7 @@ export const GodModeDevToolkit: React.FC<GodModeDevToolkitProps> = ({
       {/* 1. Module & Dependency Explorer */}
       {subTab === 'modules' && (
         <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-[1.2fr_1fr]">
-          <div className="gm-card overflow-hidden">
+          <div className="gm-card min-w-0 overflow-hidden">
             <div className="divide-y" style={{borderColor: 'var(--gm-border)'}}>
               {MORPH_MODULE_GRAPH.map((mod) => {
                 const active = mod.id === selectedModule.id;
@@ -275,13 +344,13 @@ export const GodModeDevToolkit: React.FC<GodModeDevToolkitProps> = ({
                     key={mod.id}
                     type="button"
                     onClick={() => setSelectedModuleId(mod.id)}
-                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors"
+                    className="flex w-full min-w-0 items-center justify-between gap-3 px-4 py-3 text-left transition-colors"
                     style={{
                       background: active ? 'var(--gm-accent-soft)' : 'transparent',
                       borderColor: 'var(--gm-border)',
                     }}
                   >
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="truncate text-xs font-semibold" style={{color: 'var(--gm-ink)'}}>
                         {lang === 'tr' ? mod.nameTr : mod.nameEn}
                       </div>
@@ -298,7 +367,7 @@ export const GodModeDevToolkit: React.FC<GodModeDevToolkitProps> = ({
             </div>
           </div>
 
-          <div className="gm-card p-4 space-y-3">
+          <div className="gm-card min-w-0 p-4 space-y-3">
             <div className="text-[11px] gm-mono" style={{color: 'var(--gm-accent)'}}>
               {selectedModule.layer} · {selectedModule.id}
             </div>
@@ -362,20 +431,104 @@ export const GodModeDevToolkit: React.FC<GodModeDevToolkitProps> = ({
                 style={{color: 'var(--gm-ink)'}}
               />
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                navigator.clipboard
-                  ?.writeText(JSON.stringify(maskedPrefs, null, 2))
-                  .catch(() => {});
-                onShowToast?.(t.devToolkit.copiedStateToast);
-              }}
-              className="gm-btn-ghost inline-flex min-h-[40px] items-center justify-center gap-1.5 px-3.5 text-xs font-semibold whitespace-nowrap"
-            >
-              <ClipboardCopy className="h-3.5 w-3.5" />
-              <span>{t.devToolkit.copyMaskedJson}</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!jsonEditorOpen) {
+                    setJsonDraft(JSON.stringify(prefs, null, 2));
+                    setJsonError(null);
+                  }
+                  setJsonEditorOpen((v) => !v);
+                }}
+                className={`inline-flex min-h-[40px] items-center justify-center gap-1.5 px-3 text-xs font-semibold whitespace-nowrap ${
+                  jsonEditorOpen ? 'gm-btn-primary' : 'gm-btn-ghost'
+                }`}
+              >
+                <Code2 className="h-3.5 w-3.5" />
+                <span>{lang === 'tr' ? 'JSON Düzenle' : 'Edit JSON'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard
+                    ?.writeText(JSON.stringify(maskedPrefs, null, 2))
+                    .catch(() => {});
+                  onShowToast?.(t.devToolkit.copiedStateToast);
+                }}
+                className="gm-btn-ghost inline-flex min-h-[40px] items-center justify-center gap-1.5 px-3 text-xs font-semibold whitespace-nowrap"
+              >
+                <ClipboardCopy className="h-3.5 w-3.5" />
+                <span>{t.devToolkit.copyMaskedJson}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleExportPrefsFile}
+                className="gm-btn-ghost inline-flex min-h-[40px] items-center justify-center gap-1.5 px-3 text-xs font-semibold whitespace-nowrap"
+              >
+                <Download className="h-3.5 w-3.5" />
+                <span>{lang === 'tr' ? 'Yedekle' : 'Export'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => jsonFileInputRef.current?.click()}
+                className="gm-btn-ghost inline-flex min-h-[40px] items-center justify-center gap-1.5 px-3 text-xs font-semibold whitespace-nowrap"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                <span>{lang === 'tr' ? 'İçe Aktar' : 'Import'}</span>
+              </button>
+            </div>
           </div>
+
+          <input
+            ref={jsonFileInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              file
+                .text()
+                .then((txt) => handleImportPrefsJson(txt))
+                .catch(() => {});
+              e.target.value = '';
+            }}
+          />
+
+          {jsonEditorOpen && (
+            <div className="gm-inset space-y-2 p-3">
+              <textarea
+                value={jsonDraft}
+                onChange={(e) => setJsonDraft(e.target.value)}
+                rows={8}
+                spellCheck={false}
+                className="gm-mono w-full resize-y rounded-lg border p-2.5 text-[11px] leading-relaxed focus:outline-none"
+                style={{
+                  background: 'var(--gm-surface)',
+                  color: 'var(--gm-ink)',
+                  borderColor: 'var(--gm-border)',
+                }}
+              />
+              {jsonError && <div className="text-[11px] font-semibold text-rose-400">{jsonError}</div>}
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setJsonEditorOpen(false)}
+                  className="gm-btn-ghost min-h-[36px] px-3 text-xs font-semibold"
+                >
+                  {lang === 'tr' ? 'Kapat' : 'Close'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleImportPrefsJson(jsonDraft)}
+                  className="gm-btn-primary min-h-[36px] px-4 text-xs font-semibold"
+                >
+                  {lang === 'tr' ? 'Canlı Uygula' : 'Apply Patch'}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="max-h-[400px] overflow-y-auto divide-y" style={{borderColor: 'var(--gm-border)'}}>
             {filteredPrefsEntries.map(([k, v]) => (
@@ -392,6 +545,134 @@ export const GodModeDevToolkit: React.FC<GodModeDevToolkitProps> = ({
                 </span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* 2B. Visual DOM Inspectors & Haptic/Audio Synth Bench */}
+      {subTab === 'inspectors' && (
+        <div className="space-y-3.5">
+          <div className="gm-card space-y-3 p-4">
+            <GmSectionHeader
+              icon={<Scan className="h-3.5 w-3.5" />}
+              title={
+                lang === 'tr'
+                  ? 'Görsel DOM & Viewport Denetçileri'
+                  : 'Visual DOM & Viewport Inspectors'
+              }
+            />
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <GmToggleTile
+                icon={<Activity className="h-4 w-4" />}
+                label={lang === 'tr' ? 'Canlı FPS / Bellek HUD' : 'Live FPS / Heap HUD'}
+                checked={Boolean(prefs.devPerfHud)}
+                onChange={(next) => onChangePrefs((p) => ({...p, devPerfHud: next}))}
+              />
+              <GmToggleTile
+                icon={<Box className="h-4 w-4" />}
+                label={lang === 'tr' ? 'DOM Çerçeve X-Ray' : 'DOM Wireframe X-Ray'}
+                checked={Boolean(prefs.devLayoutWireframe)}
+                onChange={(next) => onChangePrefs((p) => ({...p, devLayoutWireframe: next}))}
+              />
+              <GmToggleTile
+                icon={<Scan className="h-4 w-4" />}
+                label={lang === 'tr' ? 'Dokunma Alanı Denetçi' : 'Touch Hitbox Overlay'}
+                checked={Boolean(prefs.devTouchHitboxOverlay)}
+                onChange={(next) =>
+                  onChangePrefs((p) => ({...p, devTouchHitboxOverlay: next}))
+                }
+              />
+              <GmToggleTile
+                icon={<Grid3X3 className="h-4 w-4" />}
+                label={lang === 'tr' ? '8px Piksel Izgarası' : '8px Pixel Grid'}
+                checked={Boolean(prefs.devPixelGrid)}
+                onChange={(next) => onChangePrefs((p) => ({...p, devPixelGrid: next}))}
+              />
+              <GmToggleTile
+                icon={<Tv className="h-4 w-4" />}
+                label={lang === 'tr' ? 'CRT Tarama Çizgileri' : 'CRT Scanlines'}
+                checked={Boolean(prefs.devCrtScanlines)}
+                onChange={(next) => onChangePrefs((p) => ({...p, devCrtScanlines: next}))}
+              />
+              <GmToggleTile
+                icon={<ArrowLeftRight className="h-4 w-4" />}
+                label={lang === 'tr' ? 'RTL Arayüz Aynalama' : 'RTL Mirror Mode'}
+                checked={Boolean(prefs.devRtlMirror)}
+                onChange={(next) => onChangePrefs((p) => ({...p, devRtlMirror: next}))}
+              />
+            </div>
+          </div>
+
+          <div className="gm-card space-y-3 p-4">
+            <GmSectionHeader
+              icon={<Vibrate className="h-3.5 w-3.5" />}
+              title={
+                lang === 'tr' ? 'Titreşim & Ses Test Masası' : 'Haptic & Audio Synth Bench'
+              }
+            />
+            <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+              {(
+                [
+                  {
+                    label: 'Tick',
+                    icon: <Vibrate className="h-4 w-4" />,
+                    run: () => {
+                      const ok = triggerDevHaptic(18);
+                      onShowToast?.(ok ? 'Haptic: 18ms' : 'Haptic N/A');
+                    },
+                  },
+                  {
+                    label: '2x',
+                    icon: <Vibrate className="h-4 w-4" />,
+                    run: () => {
+                      const ok = triggerDevHaptic([24, 55, 24]);
+                      onShowToast?.(ok ? 'Haptic: Double' : 'Haptic N/A');
+                    },
+                  },
+                  {
+                    label: 'Beat',
+                    icon: <Heart className="h-4 w-4" />,
+                    run: () => {
+                      const ok = triggerDevHaptic([30, 60, 50, 180, 30, 60, 50]);
+                      onShowToast?.(ok ? 'Haptic: Beat' : 'Haptic N/A');
+                    },
+                  },
+                  {
+                    label: 'Pulse',
+                    icon: <Waves className="h-4 w-4" />,
+                    run: () => {
+                      const ok = triggerDevHaptic([12, 30, 20, 30, 35]);
+                      onShowToast?.(ok ? 'Haptic: Ramp' : 'Haptic N/A');
+                    },
+                  },
+                  {
+                    label: 'Click',
+                    icon: <Volume2 className="h-4 w-4" />,
+                    run: () => playDevSynthTone('click'),
+                  },
+                  {
+                    label: 'Chime',
+                    icon: <Sparkles className="h-4 w-4" />,
+                    run: () => playDevSynthTone('chime'),
+                  },
+                  {
+                    label: 'Sweep',
+                    icon: <AudioWaveform className="h-4 w-4" />,
+                    run: () => playDevSynthTone('sweep'),
+                  },
+                ] as const
+              ).map((btn) => (
+                <GmOptionCard
+                  key={btn.label}
+                  compact
+                  showCaption
+                  title={btn.label}
+                  active={false}
+                  onClick={btn.run}
+                  icon={btn.icon}
+                />
+              ))}
+            </div>
           </div>
         </div>
       )}

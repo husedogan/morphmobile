@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {Globe, Play, RefreshCw, ShieldAlert, ShieldCheck, Wifi} from 'lucide-react';
+import {Globe, Lock, Play, RefreshCw, ShieldAlert, ShieldCheck, Wifi} from 'lucide-react';
 import {GOD_MODE_I18N, GodModeLang, fmtGodShortTime} from '../../engine/godModeI18n';
 import {
   NetworkProbeResult,
@@ -64,7 +64,7 @@ export const GodModeNetworkLab: React.FC<GodModeNetworkLabProps> = ({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Globe className="h-4 w-4" style={{color: 'var(--gm-accent)'}} />
+          <Globe className="h-4 w-4 shrink-0" style={{color: 'var(--gm-accent)'}} />
           <h2 className="text-lg font-bold tracking-tight" style={{color: 'var(--gm-ink)'}}>
             {t.networkLab.title}
           </h2>
@@ -73,7 +73,7 @@ export const GodModeNetworkLab: React.FC<GodModeNetworkLabProps> = ({
           type="button"
           onClick={() => void handleOriginPing()}
           disabled={probing}
-          className="gm-btn-ghost inline-flex min-h-[38px] items-center gap-1.5 px-3 text-xs font-semibold"
+          className="gm-btn-ghost inline-flex min-h-[40px] items-center gap-1.5 px-3 text-xs font-semibold"
         >
           <Wifi className="h-3.5 w-3.5" />
           <span>{t.networkLab.originProbe}</span>
@@ -116,7 +116,7 @@ export const GodModeNetworkLab: React.FC<GodModeNetworkLabProps> = ({
         </div>
       </div>
 
-      {/* Server-Side SSRF-Protected Probe Form */}
+      {/* Server-Side SSRF-Protected DNS + TLS + HTTP Probe Form */}
       <div className="gm-card space-y-3 p-4">
         {!isVerified && (
           <div className="gm-inset flex flex-wrap items-center justify-between gap-2 p-2.5 text-xs text-amber-300">
@@ -127,7 +127,7 @@ export const GodModeNetworkLab: React.FC<GodModeNetworkLabProps> = ({
             <button
               type="button"
               onClick={() => onSelectModule('security_center')}
-              className="gm-btn-primary min-h-[30px] px-2.5 text-[11px] font-semibold"
+              className="gm-btn-primary min-h-[34px] px-2.5 text-[11px] font-semibold"
             >
               {t.networkLab.openSecurity}
             </button>
@@ -140,14 +140,14 @@ export const GodModeNetworkLab: React.FC<GodModeNetworkLabProps> = ({
             value={targetUrl}
             onChange={(e) => setTargetUrl(e.target.value)}
             placeholder={t.networkLab.targetPlaceholder}
-            className="gm-inset gm-mono min-h-[40px] flex-1 px-3 text-xs outline-none"
+            className="gm-inset gm-mono min-h-[42px] min-w-0 flex-1 px-3 text-xs outline-none"
             style={{color: 'var(--gm-ink)'}}
           />
           <button
             type="button"
             disabled={probing || !targetUrl.trim()}
             onClick={() => void handleServerProbe()}
-            className="gm-btn-primary inline-flex min-h-[40px] items-center gap-1.5 px-4 text-xs font-semibold disabled:opacity-50"
+            className="gm-btn-primary inline-flex min-h-[42px] items-center gap-1.5 px-4 text-xs font-semibold disabled:opacity-50"
           >
             {probing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
             <span>{probing ? t.networkLab.probing : t.networkLab.serverProbe}</span>
@@ -166,7 +166,7 @@ export const GodModeNetworkLab: React.FC<GodModeNetworkLabProps> = ({
                 setTargetUrl(preset);
                 if (isVerified) void handleServerProbe(preset);
               }}
-              className="gm-btn-ghost gm-mono min-h-[30px] px-2.5 text-[11px]"
+              className="gm-btn-ghost gm-mono min-h-[34px] px-2.5 text-[11px]"
             >
               {preset.replace(/^https?:\/\//, '')}
             </button>
@@ -185,7 +185,7 @@ export const GodModeNetworkLab: React.FC<GodModeNetworkLabProps> = ({
         )}
       </div>
 
-      {/* Results History */}
+      {/* Results History with DNS Records, TLS Inspection & Failure Classification */}
       <div className="gm-card space-y-2.5 p-4">
         <div className="text-xs font-bold uppercase tracking-wider" style={{color: 'var(--gm-muted)'}}>
           {t.networkLab.historyTitle}
@@ -195,29 +195,102 @@ export const GodModeNetworkLab: React.FC<GodModeNetworkLabProps> = ({
             {t.networkLab.emptyHistory}
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {results.map((r) => (
-              <div key={r.id} className="gm-inset flex flex-wrap items-center justify-between gap-2 p-3">
-                <div className="min-w-0 flex-1">
-                  <div className="gm-mono truncate text-xs font-semibold" style={{color: 'var(--gm-ink)'}}>
-                    {r.method} {r.url}
+              <div key={r.id} className="gm-inset space-y-2 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="gm-mono truncate text-xs font-semibold" style={{color: 'var(--gm-ink)'}}>
+                      {r.method} {r.url}
+                    </div>
+                    <div className="gm-mono mt-0.5 truncate text-[10px]" style={{color: 'var(--gm-muted)'}}>
+                      {t.networkLab.ipCol}: {r.resolvedIp ?? '—'}
+                      {typeof r.dnsMs === 'number' ? ` · DNS ${r.dnsMs}ms` : ''} · {fmtGodShortTime(r.ts, lang)}
+                    </div>
                   </div>
-                  <div className="gm-mono mt-0.5 text-[10px]" style={{color: 'var(--gm-muted)'}}>
-                    {t.networkLab.ipCol}: {r.resolvedIp ?? '—'} · {fmtGodShortTime(r.ts, lang)}
+                  <div className="flex shrink-0 items-center gap-2.5 gm-mono text-xs font-bold">
+                    {r.errorCategory && (
+                      <span className="rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] text-rose-300">
+                        {r.errorCategory}
+                      </span>
+                    )}
+                    <span
+                      className={
+                        r.reachable && r.status && r.status < 400
+                          ? 'text-emerald-400'
+                          : 'text-rose-400'
+                      }
+                    >
+                      {r.status ?? 'ERR'}
+                    </span>
+                    <span style={{color: 'var(--gm-accent)'}}>{r.latencyMs}ms</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 shrink-0 gm-mono text-xs font-bold">
-                  <span
-                    className={
-                      r.reachable && r.status && r.status < 400
-                        ? 'text-emerald-400'
-                        : 'text-rose-400'
-                    }
-                  >
-                    {r.status ?? 'ERR'}
-                  </span>
-                  <span style={{color: 'var(--gm-accent)'}}>{r.latencyMs}ms</span>
-                </div>
+
+                {/* DNS Records Inspector */}
+                {r.dnsRecords &&
+                  (r.dnsRecords.a.length > 0 ||
+                    r.dnsRecords.aaaa.length > 0 ||
+                    r.dnsRecords.cname.length > 0 ||
+                    r.dnsRecords.mx.length > 0) && (
+                    <div className="grid grid-cols-1 gap-1.5 border-t pt-2 gm-mono text-[10px] sm:grid-cols-2" style={{borderColor: 'var(--gm-border)'}}>
+                      <div className="font-bold uppercase tracking-wider sm:col-span-2" style={{color: 'var(--gm-muted)'}}>
+                        {t.networkLab.dnsTitle}
+                      </div>
+                      {r.dnsRecords.a.length > 0 && (
+                        <div className="break-all" style={{color: 'var(--gm-ink)'}}>
+                          <span style={{color: 'var(--gm-accent)'}}>A:</span> {r.dnsRecords.a.slice(0, 4).join(', ')}
+                        </div>
+                      )}
+                      {r.dnsRecords.aaaa.length > 0 && (
+                        <div className="break-all" style={{color: 'var(--gm-ink)'}}>
+                          <span style={{color: 'var(--gm-accent)'}}>AAAA:</span> {r.dnsRecords.aaaa.slice(0, 2).join(', ')}
+                        </div>
+                      )}
+                      {r.dnsRecords.cname.length > 0 && (
+                        <div className="break-all" style={{color: 'var(--gm-ink)'}}>
+                          <span style={{color: 'var(--gm-accent)'}}>CNAME:</span> {r.dnsRecords.cname.join(', ')}
+                        </div>
+                      )}
+                      {r.dnsRecords.mx.length > 0 && (
+                        <div className="break-all" style={{color: 'var(--gm-ink)'}}>
+                          <span style={{color: 'var(--gm-accent)'}}>MX:</span> {r.dnsRecords.mx.slice(0, 3).join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                {/* TLS Certificate Inspector */}
+                {r.tlsInfo && (
+                  <div className="grid grid-cols-2 gap-1.5 border-t pt-2 gm-mono text-[10px] sm:grid-cols-4" style={{borderColor: 'var(--gm-border)'}}>
+                    <div className="flex items-center gap-1 font-bold uppercase tracking-wider col-span-2 sm:col-span-4" style={{color: 'var(--gm-muted)'}}>
+                      <Lock className="h-3 w-3 text-emerald-400" />
+                      <span>
+                        {t.networkLab.tlsTitle} ({r.tlsInfo.tlsMs}ms)
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{color: 'var(--gm-muted)'}}>{t.networkLab.protocolLabel}: </span>
+                      <span style={{color: 'var(--gm-ink)'}}>{r.tlsInfo.protocol ?? '—'}</span>
+                    </div>
+                    <div className="truncate">
+                      <span style={{color: 'var(--gm-muted)'}}>{t.networkLab.cipherLabel}: </span>
+                      <span style={{color: 'var(--gm-ink)'}}>{r.tlsInfo.cipherName ?? '—'}</span>
+                    </div>
+                    <div className="truncate">
+                      <span style={{color: 'var(--gm-muted)'}}>{t.networkLab.issuerLabel}: </span>
+                      <span style={{color: 'var(--gm-ink)'}}>{r.tlsInfo.issuerO ?? r.tlsInfo.subjectCN ?? '—'}</span>
+                    </div>
+                    <div>
+                      <span style={{color: 'var(--gm-muted)'}}>{t.networkLab.expiryLabel}: </span>
+                      <span className={r.tlsInfo.authorized ? 'text-emerald-400' : 'text-rose-400'}>
+                        {r.tlsInfo.daysRemaining !== null
+                          ? `${r.tlsInfo.daysRemaining} ${t.networkLab.daysLeft}`
+                          : '—'}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

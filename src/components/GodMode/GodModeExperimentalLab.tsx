@@ -65,6 +65,8 @@ export const GodModeExperimentalLab: React.FC<GodModeExperimentalLabProps> = ({
     {key: 'autoFallbackEngine', labelTr: 'Otomatik Yedek Motor', labelEn: 'Auto Fallback Engine'},
   ];
 
+  const devCloudEnabled = prefs.devCloudEasterEggEnabled !== false;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2.5">
@@ -124,16 +126,21 @@ export const GodModeExperimentalLab: React.FC<GodModeExperimentalLabProps> = ({
                   type="button"
                   role="switch"
                   aria-checked={flag.value}
+                  aria-label={lang === 'tr' ? flag.labelTr : flag.labelEn}
                   onClick={() => toggleFlag(flag.key)}
-                  className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
-                    flag.value ? 'gm-btn-primary' : 'bg-white/10'
-                  }`}
+                  className="flex min-h-[44px] min-w-[52px] shrink-0 items-center justify-end"
                 >
                   <span
-                    className={`block h-5 w-5 rounded-full bg-white transition-transform ${
-                      flag.value ? 'translate-x-6' : 'translate-x-1'
+                    className={`relative block h-7 w-12 rounded-full transition-colors ${
+                      flag.value ? 'gm-btn-primary' : 'bg-white/10'
                     }`}
-                  />
+                  >
+                    <span
+                      className={`mt-1 block h-5 w-5 rounded-full bg-white transition-transform ${
+                        flag.value ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </span>
                 </button>
               </div>
             );
@@ -146,7 +153,7 @@ export const GodModeExperimentalLab: React.FC<GodModeExperimentalLabProps> = ({
         <div className="text-xs font-bold uppercase tracking-wider" style={{color: 'var(--gm-muted)'}}>
           {t.experimentalLab.morphPrefsTitle}
         </div>
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
           {morphPrefFlags.map((item) => {
             const active = Boolean(prefs[item.key]);
             return (
@@ -170,6 +177,28 @@ export const GodModeExperimentalLab: React.FC<GodModeExperimentalLabProps> = ({
               </button>
             );
           })}
+          <button
+            type="button"
+            onClick={() => {
+              const next = !devCloudEnabled;
+              onChangePrefs((prev) => ({...prev, devCloudEasterEggEnabled: next}));
+              onShowToast?.(
+                next
+                  ? lang === 'tr'
+                    ? 'H ♥ S bulutu açık.'
+                    : 'H ♥ S cloud on.'
+                  : lang === 'tr'
+                    ? 'H ♥ S bulutu kapalı.'
+                    : 'H ♥ S cloud off.'
+              );
+            }}
+            className={`flex min-h-[54px] flex-col items-start justify-between p-3 text-left transition-all ${
+              devCloudEnabled ? 'gm-nav-icon-active' : 'gm-inset'
+            }`}
+          >
+            <span className="text-xs font-semibold">H ♥ S</span>
+            <span className="gm-mono text-[10px] opacity-80">{devCloudEnabled ? 'ON' : 'OFF'}</span>
+          </button>
         </div>
       </div>
     </div>

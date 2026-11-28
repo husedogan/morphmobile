@@ -1,11 +1,13 @@
-import React, {useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {
   Activity,
   Cpu,
   Download,
   HardDrive,
+  Maximize,
   RefreshCw,
   Server,
+  Sun,
   Wifi,
 } from 'lucide-react';
 import {
@@ -40,6 +42,59 @@ export const GodModeSystemCore: React.FC<GodModeSystemCoreProps> = ({
 }) => {
   const t = GOD_MODE_I18N[lang];
   const [probing, setProbing] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(
+    () => typeof document !== 'undefined' && Boolean(document.fullscreenElement)
+  );
+  const [wakeLockActive, setWakeLockActive] = useState(false);
+  const wakeLockSentinelRef = useRef<{release: () => Promise<void>} | null>(null);
+
+  useEffect(() => {
+    const onFsChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFsChange);
+      wakeLockSentinelRef.current?.release().catch(() => {});
+      wakeLockSentinelRef.current = null;
+    };
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await document.documentElement.requestFullscreen();
+      }
+    } catch {
+      onShowToast?.(lang === 'tr' ? 'Tam ekran desteklenmiyor.' : 'Fullscreen unavailable.');
+    }
+  };
+
+  const toggleWakeLock = async (next: boolean) => {
+    try {
+      const navWithWake = navigator as Navigator & {
+        wakeLock?: {request: (type: 'screen') => Promise<{release: () => Promise<void>}>};
+      };
+      if (!navWithWake.wakeLock) {
+        onShowToast?.(lang === 'tr' ? 'Wake Lock desteklenmiyor.' : 'Wake Lock unavailable.');
+        return;
+      }
+      if (next) {
+        const sentinel = await navWithWake.wakeLock.request('screen');
+        wakeLockSentinelRef.current = sentinel;
+        setWakeLockActive(true);
+        onShowToast?.(lang === 'tr' ? 'Ekran uyanık tutuluyor.' : 'Screen Wake Lock active.');
+      } else {
+        await wakeLockSentinelRef.current?.release();
+        wakeLockSentinelRef.current = null;
+        setWakeLockActive(false);
+        onShowToast?.(lang === 'tr' ? 'Wake Lock kapatıldı.' : 'Wake Lock released.');
+      }
+    } catch {
+      setWakeLockActive(false);
+      onShowToast?.(lang === 'tr' ? 'Wake Lock açılamadı.' : 'Wake Lock denied.');
+    }
+  };
 
   const history = telemetry.history;
   const chartW = 560;
@@ -102,6 +157,28 @@ export const GodModeSystemCore: React.FC<GodModeSystemCoreProps> = ({
         </h2>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void toggleFullscreen()}
+            aria-pressed={isFullscreen}
+            className={`inline-flex min-h-[40px] items-center gap-1.5 px-3 text-xs font-semibold whitespace-nowrap ${
+              isFullscreen ? 'gm-nav-icon-active' : 'gm-btn-ghost'
+            }`}
+          >
+            <Maximize className="h-3.5 w-3.5" />
+            <span>{t.systemCore.fullscreen}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => void toggleWakeLock(!wakeLockActive)}
+            aria-pressed={wakeLockActive}
+            className={`inline-flex min-h-[40px] items-center gap-1.5 px-3 text-xs font-semibold whitespace-nowrap ${
+              wakeLockActive ? 'gm-nav-icon-active' : 'gm-btn-ghost'
+            }`}
+          >
+            <Sun className="h-3.5 w-3.5" />
+            <span>{t.systemCore.wakeLock}</span>
+          </button>
           <button
             type="button"
             onClick={() => void handlePingProbe()}
@@ -246,21 +323,21 @@ export const GodModeSystemCore: React.FC<GodModeSystemCoreProps> = ({
           </div>
 
           <div className="space-y-2.5 text-xs">
-            <div className="flex items-center justify-between gap-2">
-              <span style={{color: 'var(--gm-muted)'}}>{t.systemCore.cpuCores}</span>
-              <span className="gm-mono font-semibold" style={{color: 'var(--gm-ink)'}}>
+            <div className="flex items-center justify-between gap-2 min-w-0">
+              <span className="shrink-0" style={{color: 'var(--gm-muted)'}}>{t.systemCore.cpuCores}</span>
+              <span className="gm-mono min-w-0 text-right font-semibold break-words" style={{color: 'var(--gm-ink)'}}>
                 {telemetry.cpuCores !== null ? telemetry.cpuCores : t.systemCore.unsupported}
               </span>
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <span style={{color: 'var(--gm-muted)'}}>{t.systemCore.osCpuPct}</span>
-              <span className="gm-mono text-[11px]" style={{color: 'var(--gm-muted)'}}>
+            <div className="flex items-center justify-between gap-2 min-w-0">
+              <span className="shrink-0" style={{color: 'var(--gm-muted)'}}>{t.systemCore.osCpuPct}</span>
+              <span className="gm-mono min-w-0 text-right text-[11px] break-words" style={{color: 'var(--gm-muted)'}}>
                 {t.systemCore.browserSandboxNote}
               </span>
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <span style={{color: 'var(--gm-muted)'}}>{t.systemCore.deviceRam}</span>
-              <span className="gm-mono font-semibold" style={{color: 'var(--gm-ink)'}}>
+            <div className="flex items-center justify-between gap-2 min-w-0">
+              <span className="shrink-0" style={{color: 'var(--gm-muted)'}}>{t.systemCore.deviceRam}</span>
+              <span className="gm-mono min-w-0 text-right font-semibold break-words" style={{color: 'var(--gm-ink)'}}>
                 {telemetry.deviceMemoryGb !== null
                   ? `~${telemetry.deviceMemoryGb} GB`
                   : t.systemCore.notExposed}
@@ -284,16 +361,16 @@ export const GodModeSystemCore: React.FC<GodModeSystemCoreProps> = ({
           </div>
         </div>
 
-        <div className="gm-card p-4 space-y-3">
+        <div className="gm-card p-4 space-y-3 min-w-0">
           <div className="flex items-center gap-2 text-xs font-bold" style={{color: 'var(--gm-ink)'}}>
-            <HardDrive className="h-4 w-4" style={{color: 'var(--gm-accent-2)'}} />
+            <HardDrive className="h-4 w-4 shrink-0" style={{color: 'var(--gm-accent-2)'}} />
             <span>{t.systemCore.storageSubsystems}</span>
           </div>
 
           <div className="space-y-2.5 text-xs">
-            <div className="flex items-center justify-between gap-2">
-              <span style={{color: 'var(--gm-muted)'}}>{t.systemCore.storageQuota}</span>
-              <span className="gm-mono font-semibold" style={{color: 'var(--gm-ink)'}}>
+            <div className="flex items-center justify-between gap-2 min-w-0">
+              <span className="shrink-0" style={{color: 'var(--gm-muted)'}}>{t.systemCore.storageQuota}</span>
+              <span className="gm-mono min-w-0 text-right font-semibold break-words" style={{color: 'var(--gm-ink)'}}>
                 {telemetry.storageSupported
                   ? `${fmtGodBytes(telemetry.storageUsageBytes, lang)} / ${fmtGodBytes(telemetry.storageQuotaBytes, lang)}`
                   : t.systemCore.unsupported}
@@ -307,23 +384,23 @@ export const GodModeSystemCore: React.FC<GodModeSystemCoreProps> = ({
                 />
               </div>
             )}
-            <div className="flex items-center justify-between gap-2">
-              <span style={{color: 'var(--gm-muted)'}}>LocalStorage</span>
-              <span className="gm-mono font-semibold" style={{color: 'var(--gm-ink)'}}>
+            <div className="flex items-center justify-between gap-2 min-w-0">
+              <span className="shrink-0" style={{color: 'var(--gm-muted)'}}>LocalStorage</span>
+              <span className="gm-mono min-w-0 text-right font-semibold break-words" style={{color: 'var(--gm-ink)'}}>
                 {fmtGodNumber(telemetry.localStorageKeys, lang)} {t.systemCore.keys} ·{' '}
                 {fmtGodBytes(telemetry.localStorageBytes, lang)}
               </span>
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <span style={{color: 'var(--gm-muted)'}}>{t.systemCore.cacheSw}</span>
-              <span className="gm-mono font-semibold" style={{color: 'var(--gm-ink)'}}>
+            <div className="flex items-center justify-between gap-2 min-w-0">
+              <span className="shrink-0" style={{color: 'var(--gm-muted)'}}>{t.systemCore.cacheSw}</span>
+              <span className="gm-mono min-w-0 text-right font-semibold break-words" style={{color: 'var(--gm-ink)'}}>
                 {telemetry.cacheBuckets !== null ? `${telemetry.cacheBuckets}` : '—'} ·{' '}
                 {telemetry.serviceWorkerActive ? t.systemCore.swActive : t.systemCore.swIdle}
               </span>
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <span style={{color: 'var(--gm-muted)'}}>{t.systemCore.nativeBridge}</span>
-              <span className="gm-mono font-semibold" style={{color: 'var(--gm-ink)'}}>
+            <div className="flex items-center justify-between gap-2 min-w-0">
+              <span className="shrink-0" style={{color: 'var(--gm-muted)'}}>{t.systemCore.nativeBridge}</span>
+              <span className="gm-mono min-w-0 text-right font-semibold break-words" style={{color: 'var(--gm-ink)'}}>
                 {telemetry.nativeBridgeHealthy
                   ? t.systemCore.androidNativeActive
                   : `${telemetry.platform.toUpperCase()} ${t.systemCore.runtimeSuffix}`}

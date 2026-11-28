@@ -57,7 +57,8 @@ import {
   fetchServerHealth,
   getCurrentDeviceMeta,
 } from '../../engine/godModeSecurity';
-import {DeadpoolPersonalStudio} from '../DeadpoolPersonalStudio';
+import {GodModeDeadpoolStudio} from './GodModeDeadpoolStudio';
+import {GodModeChaosLab} from './GodModeChaosLab';
 import {GodModeDesignLab} from './GodModeDesignLab';
 import {GodModeSystemCore} from './GodModeSystemCore';
 import {GodModeDiagnostics} from './GodModeDiagnostics';
@@ -75,6 +76,7 @@ import {GodModeNetworkLab} from './GodModeNetworkLab';
 import {GodModeStorageLab} from './GodModeStorageLab';
 import {GodModeTimeMachine} from './GodModeTimeMachine';
 import {GodModeDigitalTwin} from './GodModeDigitalTwin';
+import {DeadpoolLogoIcon} from './DeadpoolLogoIcon';
 
 export type GodModeModuleId =
   | 'dashboard'
@@ -84,7 +86,8 @@ export type GodModeModuleId =
   | 'dev_toolkit'
   | 'security_center'
   | 'settings'
-  | 'deadpool_chaos'
+  | 'deadpool_studio'
+  | 'chaos_lab'
   | 'ai_lab'
   | 'autonomous_agents'
   | 'experimental_lab'
@@ -121,7 +124,8 @@ const GOD_MODE_MODULES: ReadonlyArray<ModuleNavDef> = [
   {id: 'storage_lab', icon: Database, group: 'labs'},
   {id: 'time_machine', icon: Clock, group: 'labs'},
   {id: 'digital_twin', icon: Layers, group: 'labs'},
-  {id: 'deadpool_chaos', icon: Flame, group: 'labs'},
+  {id: 'deadpool_studio', icon: DeadpoolLogoIcon, group: 'labs'},
+  {id: 'chaos_lab', icon: Flame, group: 'labs'},
 ];
 
 interface GodModeShellProps {
@@ -161,13 +165,22 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
   const [security, setSecurity] = useState<OwnerSecurityState>(() => ({
     mode: 'checking',
     passcodeSource: 'unclaimed',
+    ownerEmailRequired: false,
+    ownerEmailHint: null,
+    bootstrapTokenRequired: false,
     currentDeviceId: getCurrentDeviceMeta().deviceId,
     sessionIssuedAt: null,
     sessionExpiresAt: null,
+    activeKeyId: null,
+    retiredKeysCount: 0,
+    recoveryCodesRemaining: 0,
     failedAttempts: 0,
     devices: [],
+    activeSessions: [],
+    passkeys: [],
     auditLogs: [],
     serverHealth: null,
+    persistence: null,
     error: null,
   }));
 
@@ -179,19 +192,49 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
       setSecurity(buildOfflineSecurityState());
       return;
     }
+    if (!status.storeHealthy) {
+      setSecurity((prev) => ({
+        ...prev,
+        mode: 'store_locked',
+        passcodeSource: status.mode,
+        ownerEmailRequired: status.ownerEmailRequired,
+        ownerEmailHint: status.ownerEmailHint,
+        bootstrapTokenRequired: status.bootstrapTokenRequired,
+        activeKeyId: status.activeKeyId,
+        error: status.storeError || 'Store integrity check failed (fail-closed).',
+      }));
+      return;
+    }
     if (status.hasActiveToken) {
       const [sess, health] = await Promise.all([fetchGodModeSession(), fetchServerHealth()]);
+      if (sess.storeLocked) {
+        setSecurity((prev) => ({
+          ...prev,
+          mode: 'store_locked',
+          error: 'Store integrity check failed (fail-closed).',
+        }));
+        return;
+      }
       if (sess.ok) {
         setSecurity({
           mode: 'server_verified',
           passcodeSource: status.mode,
+          ownerEmailRequired: status.ownerEmailRequired,
+          ownerEmailHint: sess.ownerEmailHint ?? status.ownerEmailHint,
+          bootstrapTokenRequired: status.bootstrapTokenRequired,
           currentDeviceId: getCurrentDeviceMeta().deviceId,
           sessionIssuedAt: sess.issuedAt ?? null,
           sessionExpiresAt: sess.expiresAt ?? null,
+          activeKeyId: sess.activeKeyId ?? status.activeKeyId ?? null,
+          retiredKeysCount: sess.retiredKeysCount ?? 0,
+          recoveryCodesRemaining: sess.recoveryCodesRemaining ?? 0,
           failedAttempts: sess.failedAttempts ?? 0,
           devices: sess.devices ?? [],
+          activeSessions: sess.activeSessions ?? [],
+          passkeys: sess.passkeys ?? [],
           auditLogs: sess.auditLogs ?? [],
           serverHealth: health,
+          persistence: sess.persistence ?? null,
           error: null,
         });
         return;
@@ -201,7 +244,23 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
       ...prev,
       mode: status.mode === 'unclaimed' ? 'needs_claim' : 'needs_verify',
       passcodeSource: status.mode,
+      ownerEmailRequired: status.ownerEmailRequired,
+      ownerEmailHint: status.ownerEmailHint,
+      bootstrapTokenRequired: status.bootstrapTokenRequired,
+      activeKeyId: status.activeKeyId,
+      passkeys:
+        status.passkeyCount > 0 && prev.passkeys.length === 0
+          ? Array.from({length: status.passkeyCount}, (_, i) => ({
+              id: `pk_${i}`,
+              label: `Passkey ${i + 1}`,
+              deviceId: prev.currentDeviceId,
+              createdAt: '',
+            }))
+          : status.passkeyCount === 0
+            ? []
+            : prev.passkeys,
       serverHealth: null,
+      error: null,
     }));
   }, []);
 
@@ -211,7 +270,6 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
 
   const t = GOD_MODE_I18N[godLang];
   const effectiveTheme: GodModeThemeId = previewTheme ?? designState.activeTheme;
-  const effectiveThemeMeta = getGodModeThemeMeta(effectiveTheme);
 
   const brandUpper = getGodModeBrandUpper(brandMode);
 
@@ -274,11 +332,13 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
       ? t.shell.ownerVerified
       : security.mode === 'local_offline'
         ? t.shell.localVerified
-        : security.mode === 'needs_claim'
-          ? t.shell.claimOwner
-          : security.mode === 'needs_verify'
-            ? t.shell.verifySession
-            : t.shell.checking;
+        : security.mode === 'store_locked'
+          ? t.security.locked
+          : security.mode === 'needs_claim'
+            ? t.shell.claimOwner
+            : security.mode === 'needs_verify'
+              ? t.shell.verifySession
+              : t.shell.checking;
 
   const ownerStatusColor =
     security.mode === 'server_verified'
@@ -472,7 +532,7 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
             onClick={() => setMobileDrawerOpen(true)}
             aria-label={t.shell.allModules}
             title={t.shell.allModules}
-            className={`flex h-9 w-9 shrink-0 items-center justify-center transition-all sm:h-10 sm:w-10 lg:hidden ${
+            className={`flex h-11 w-11 shrink-0 items-center justify-center transition-all lg:hidden ${
               mobileDrawerOpen ? 'gm-nav-icon-active' : 'gm-btn-ghost'
             }`}
           >
@@ -497,8 +557,8 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
               </button>
             </div>
             <div className="gm-mono mt-0.5 truncate text-[10px] sm:text-[11px]" style={{color: 'var(--gm-muted)'}}>
-              v{APP_VERSION} · {effectiveThemeMeta.name}
-              {previewTheme ? ` [${t.shell.previewTag}]` : ''}
+              v{APP_VERSION}
+              {previewTheme ? ` · ${t.shell.previewTag}` : ''}
             </div>
           </div>
         </div>
@@ -510,7 +570,7 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
             onClick={() => selectModule('design_lab')}
             title={t.modules.design_lab.label}
             aria-label={t.modules.design_lab.label}
-            className={`flex h-9 w-9 items-center justify-center transition-all sm:h-10 sm:w-10 ${
+            className={`flex h-11 w-11 items-center justify-center transition-all ${
               activeModule === 'design_lab' ? 'gm-nav-icon-active' : 'gm-btn-ghost'
             }`}
           >
@@ -521,7 +581,7 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
             onClick={() => selectModule('security_center')}
             title={t.modules.security_center.label}
             aria-label={t.modules.security_center.label}
-            className={`flex h-9 w-9 items-center justify-center transition-all sm:h-10 sm:w-10 ${
+            className={`flex h-11 w-11 items-center justify-center transition-all ${
               activeModule === 'security_center' ? 'gm-nav-icon-active' : 'gm-btn-ghost'
             }`}
           >
@@ -532,7 +592,7 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
             onClick={() => selectModule('settings')}
             title={t.modules.settings.label}
             aria-label={t.modules.settings.label}
-            className={`flex h-9 w-9 items-center justify-center transition-all sm:h-10 sm:w-10 ${
+            className={`flex h-11 w-11 items-center justify-center transition-all ${
               activeModule === 'settings' ? 'gm-nav-icon-active' : 'gm-btn-ghost'
             }`}
           >
@@ -596,6 +656,7 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
           {activeModule === 'dashboard' && (
             <GodModeOverviewBento
               lang={godLang}
+              activeTheme={effectiveTheme}
               telemetry={telemetry}
               security={security}
               onSelectModule={selectModule}
@@ -605,13 +666,16 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
           {activeModule === 'design_lab' && (
             <GodModeDesignLab
               lang={godLang}
+              prefs={prefs}
               designState={designState}
               previewTheme={previewTheme}
               telemetry={telemetry}
+              onChangePrefs={onChangePrefs}
               onPreviewTheme={setPreviewTheme}
               onApplyTheme={handleApplyTheme}
               onRestorePrevious={handleRestorePreviousTheme}
               onResetDefault={handleResetDefaultTheme}
+              onShowToast={onShowToast}
             />
           )}
 
@@ -635,6 +699,7 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
               prefs={prefs}
               telemetry={telemetry}
               serverHealth={security.serverHealth}
+              onChangePrefs={onChangePrefs}
               onShowToast={onShowToast}
             />
           )}
@@ -663,18 +728,17 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
             />
           )}
 
-          {activeModule === 'deadpool_chaos' && (
-            <div className="space-y-3">
-              <h2 className="text-lg font-bold tracking-tight" style={{color: 'var(--gm-ink)'}}>
-                {t.shell.deadpoolTitle}
-              </h2>
-              <DeadpoolPersonalStudio
-                prefs={prefs}
-                lang={godLang}
-                onChangePrefs={onChangePrefs}
-                onShowToast={onShowToast}
-              />
-            </div>
+          {activeModule === 'deadpool_studio' && (
+            <GodModeDeadpoolStudio
+              prefs={prefs}
+              lang={godLang}
+              onChangePrefs={onChangePrefs}
+              onShowToast={onShowToast}
+            />
+          )}
+
+          {activeModule === 'chaos_lab' && (
+            <GodModeChaosLab lang={godLang} onShowToast={onShowToast} />
           )}
 
           {activeModule === 'ai_lab' && (
@@ -750,14 +814,20 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
             <GodModeTimeMachine
               lang={godLang}
               activeTheme={designState.activeTheme}
+              brandMode={brandMode}
               onApplyTheme={handleApplyTheme}
               onChangeLang={handleChangeGodLang}
+              onChangeBrandMode={handleChangeBrandMode}
               onShowToast={onShowToast}
             />
           )}
 
           {activeModule === 'digital_twin' && (
-            <GodModeDigitalTwin lang={godLang} onSelectModule={selectModule} />
+            <GodModeDigitalTwin
+              lang={godLang}
+              telemetry={telemetry}
+              onSelectModule={selectModule}
+            />
           )}
         </main>
       </div>
@@ -771,7 +841,7 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
         >
           <div
             data-god-theme={effectiveTheme}
-            className="morph-godmode-root flex max-h-[82vh] w-full max-w-md flex-col overflow-hidden rounded-3xl border shadow-2xl"
+            className="morph-godmode-root gm-modal-safe flex w-full max-w-md flex-col overflow-hidden rounded-3xl border shadow-2xl"
             style={{background: 'var(--gm-bg-elevated)', borderColor: 'var(--gm-border-strong)'}}
             onClick={(e) => e.stopPropagation()}
           >
@@ -789,7 +859,7 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
                 type="button"
                 onClick={() => setMobileDrawerOpen(false)}
                 aria-label={t.shell.close}
-                className="gm-btn-ghost flex h-9 w-9 items-center justify-center"
+                className="gm-btn-ghost flex h-10 w-10 items-center justify-center"
               >
                 <X className="h-4 w-4" />
               </button>

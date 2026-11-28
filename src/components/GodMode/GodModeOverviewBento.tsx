@@ -20,10 +20,13 @@ import {
 } from '../../engine/godModeI18n';
 import {RuntimeTelemetrySnapshot} from '../../engine/godModeTelemetry';
 import {OwnerSecurityState} from '../../engine/godModeSecurity';
+import {GodModeThemeId} from '../../engine/godModeThemes';
+import {DeadpoolLogoIcon} from './DeadpoolLogoIcon';
 import type {GodModeModuleId} from './GodModeShell';
 
 interface GodModeOverviewBentoProps {
   lang: GodModeLang;
+  activeTheme: GodModeThemeId;
   telemetry: RuntimeTelemetrySnapshot;
   security: OwnerSecurityState;
   onSelectModule: (id: GodModeModuleId) => void;
@@ -50,6 +53,7 @@ function buildSmoothPath(points: ReadonlyArray<{x: number; y: number}>): string 
 
 export const GodModeOverviewBento: React.FC<GodModeOverviewBentoProps> = ({
   lang,
+  activeTheme,
   telemetry,
   security,
   onSelectModule,
@@ -310,7 +314,7 @@ export const GodModeOverviewBento: React.FC<GodModeOverviewBentoProps> = ({
     label: string;
     metric: string;
     pct: number;
-    icon: React.FC<{className?: string}>;
+    icon: React.FC<{className?: string; style?: React.CSSProperties}>;
   }> = [
     {
       id: 'system_core',
@@ -344,9 +348,16 @@ export const GodModeOverviewBento: React.FC<GodModeOverviewBentoProps> = ({
       icon: ShieldCheck,
     },
     {
-      id: 'deadpool_chaos',
-      label: t.modules.deadpool_chaos.label,
-      metric: '100',
+      id: 'deadpool_studio',
+      label: t.modules.deadpool_studio.label,
+      metric: '77',
+      pct: 100,
+      icon: DeadpoolLogoIcon,
+    },
+    {
+      id: 'chaos_lab',
+      label: t.modules.chaos_lab.label,
+      metric: '23',
       pct: 100,
       icon: Flame,
     },
@@ -408,11 +419,460 @@ export const GodModeOverviewBento: React.FC<GodModeOverviewBentoProps> = ({
     {id: 'dev_toolkit', label: t.overview.topoLabels.state, x: 226, y: 52},
     {id: 'security_center', label: t.overview.topoLabels.auth, x: 96, y: 106, accent: true},
     {id: 'design_lab', label: t.overview.topoLabels.themes, x: 184, y: 102},
-    {id: 'deadpool_chaos', label: t.overview.topoLabels.chaos, x: 250, y: 110},
+    {id: 'chaos_lab', label: t.overview.topoLabels.chaos, x: 250, y: 110},
   ];
 
+  // Straight-segment polyline helper for Minimal / Terminal / Cyber HUD layouts
+  const polyPoints = useMemo(() => {
+    return mainChart.p1.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  }, [mainChart.p1]);
+
+  if (activeTheme === 'cyber') {
+    return (
+      <div className="space-y-3.5 min-w-0 max-w-full">
+        {/* CYBER HUD: Top Asymmetric Split Telemetry Bar */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1.4fr_1fr]">
+          <button
+            type="button"
+            onClick={() => onSelectModule('system_core')}
+            className="gm-card-featured flex items-center justify-between gap-3 p-4 text-left"
+          >
+            <div className="min-w-0">
+              <div className="gm-mono text-[10px] font-bold tracking-wider" style={{color: 'var(--gm-accent)'}}>
+                [HUD::FPS_STREAM]
+              </div>
+              <div className="gm-mono mt-1 text-2xl font-bold leading-none" style={{color: 'var(--gm-ink)'}}>
+                {telemetry.fps > 0 ? telemetry.fps : '—'}{' '}
+                <span className="text-xs font-normal" style={{color: 'var(--gm-muted)'}}>
+                  FPS · {telemetry.frameMs > 0 ? `${telemetry.frameMs}ms` : '—'}
+                </span>
+              </div>
+            </div>
+            <svg viewBox="0 0 160 48" className="h-12 w-28 sm:w-36 shrink-0 overflow-visible">
+              {kpiFpsPath && (
+                <path d={kpiFpsPath} fill="none" stroke="var(--gm-accent)" strokeWidth="2.2" strokeLinecap="square" />
+              )}
+            </svg>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onSelectModule('security_center')}
+            className="gm-card flex items-center justify-between gap-3 p-4 text-left"
+          >
+            <div className="min-w-0">
+              <div className="gm-mono text-[10px] font-bold tracking-wider" style={{color: 'var(--gm-accent-2)'}}>
+                [STABILITY_ARC]
+              </div>
+              <div className="gm-mono mt-1 text-2xl font-bold" style={{color: 'var(--gm-ink)'}}>
+                {stabilityScore}
+                <span className="ml-1 text-xs font-normal" style={{color: 'var(--gm-muted)'}}>
+                  /100
+                </span>
+              </div>
+            </div>
+            <div className="relative flex h-14 w-14 shrink-0 items-center justify-center">
+              <svg viewBox="0 0 100 100" className="h-full w-full">
+                <circle cx="50" cy="52" r={arcRadius} fill="none" stroke="var(--gm-border)" strokeWidth="8" strokeDasharray={`${arcMax.toFixed(1)} ${arcCirc.toFixed(1)}`} transform="rotate(135 50 52)" />
+                <circle cx="50" cy="52" r={arcRadius} fill="none" stroke="var(--gm-accent)" strokeWidth="8" strokeDasharray={`${arcFill.toFixed(1)} ${arcCirc.toFixed(1)}`} transform="rotate(135 50 52)" />
+              </svg>
+            </div>
+          </button>
+        </div>
+
+        {/* CYBER HUD: Asymmetric 2-Column Command Panels */}
+        <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-[1.35fr_1fr]">
+          <div className="space-y-3.5 min-w-0">
+            <div className="gm-card p-4">
+              <div className="flex items-center justify-between gap-2 pb-2">
+                <span className="gm-mono text-xs font-bold" style={{color: 'var(--gm-accent)'}}>
+                  [NODE_PERF_WAVE] · {t.overview.telemetryTitle}
+                </span>
+                <div className="flex gap-1">
+                  {(['fps', 'memory'] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setChartMode(m)}
+                      className={`min-h-[32px] px-2.5 gm-mono text-[10px] font-bold ${chartMode === m ? 'gm-btn-primary' : 'gm-btn-ghost'}`}
+                    >
+                      {m.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <svg viewBox={`0 0 ${mainChart.W} ${mainChart.H + 16}`} className="h-[155px] w-full overflow-visible">
+                {mainChart.area1 && <path d={mainChart.area1} fill="var(--gm-accent)" opacity="0.14" />}
+                {mainChart.line1 && <path d={mainChart.line1} fill="none" stroke="var(--gm-accent)" strokeWidth="2.2" />}
+                {mainChart.line2 && <path d={mainChart.line2} fill="none" stroke="var(--gm-accent-2)" strokeWidth="1.6" strokeDasharray="4 3" />}
+              </svg>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <button type="button" onClick={() => onSelectModule('system_core')} className="gm-inset min-h-[70px] p-3 text-left">
+                <div className="gm-mono text-[10px]" style={{color: 'var(--gm-muted)'}}>{memoryStat.label}</div>
+                <div className="gm-mono mt-1 text-base font-bold" style={{color: 'var(--gm-ink)'}}>{memoryStat.valueText}</div>
+              </button>
+              <button type="button" onClick={() => onSelectModule('diagnostics')} className="gm-inset min-h-[70px] p-3 text-left">
+                <div className="gm-mono text-[10px]" style={{color: 'var(--gm-muted)'}}>{t.overview.domNodes}</div>
+                <div className="gm-mono mt-1 text-base font-bold" style={{color: 'var(--gm-accent)'}}>{fmtGodNumber(telemetry.domNodes, lang)}</div>
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-3.5 min-w-0">
+            <div className="gm-card p-4 space-y-2.5">
+              <div className="gm-mono text-xs font-bold" style={{color: 'var(--gm-ink)'}}>
+                [SUBSYSTEM_STATUS]
+              </div>
+              {quickModules.map((m) => {
+                const Icon = m.icon;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => onSelectModule(m.id)}
+                    className="gm-inset flex min-h-[42px] w-full items-center justify-between gap-2 px-3 py-2 text-left hover:border-[var(--gm-border-strong)]"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <Icon className="h-4 w-4 shrink-0" style={{color: 'var(--gm-accent)'}} />
+                      <span className="truncate text-xs font-semibold" style={{color: 'var(--gm-ink)'}}>{m.label}</span>
+                    </span>
+                    <span className="gm-mono shrink-0 text-[10px]" style={{color: 'var(--gm-accent-2)'}}>{m.metric}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="gm-card p-4 space-y-2">
+              <div className="gm-mono text-xs font-bold" style={{color: 'var(--gm-muted)'}}>
+                [PROVIDERS & LOGS]
+              </div>
+              {providerRows.map((row) => (
+                <button key={row.id} type="button" onClick={() => onSelectModule(row.target)} className="flex min-h-[34px] w-full items-center justify-between text-xs">
+                  <span style={{color: 'var(--gm-ink)'}}>{row.label}</span>
+                  <span className={`gm-mono ${row.ok ? 'text-emerald-400' : 'text-amber-400'}`}>{row.status}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (activeTheme === 'minimal') {
+    return (
+      <div className="space-y-4 min-w-0 max-w-full">
+        {/* MINIMAL: Flat Swiss 4-Column Hairline Strip */}
+        <div
+          className="grid grid-cols-2 divide-x divide-y border md:grid-cols-4 md:divide-y-0"
+          style={{background: 'var(--gm-surface)', borderColor: 'var(--gm-border)'}}
+        >
+          {[
+            {label: t.overview.frameRate, val: telemetry.fps > 0 ? `${telemetry.fps} FPS` : '—', target: 'system_core' as GodModeModuleId},
+            {label: memoryStat.label, val: memoryStat.valueText, target: 'system_core' as GodModeModuleId},
+            {label: t.overview.domNodes, val: fmtGodNumber(telemetry.domNodes, lang), target: 'diagnostics' as GodModeModuleId},
+            {label: t.overview.stability, val: `${stabilityScore}/100`, target: 'security_center' as GodModeModuleId},
+          ].map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              onClick={() => onSelectModule(item.target)}
+              className="flex min-h-[74px] flex-col justify-between p-3.5 text-left transition-colors hover:bg-white/[0.03]"
+              style={{borderColor: 'var(--gm-border)'}}
+            >
+              <span className="text-[11px] font-medium" style={{color: 'var(--gm-muted)'}}>{item.label}</span>
+              <span className="gm-mono mt-2 text-lg font-bold tracking-tight" style={{color: 'var(--gm-ink)'}}>{item.val}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* MINIMAL: Full-Width Sharp Polyline Telemetry Chart */}
+        <div className="gm-card p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2.5" style={{borderColor: 'var(--gm-border)'}}>
+            <span className="text-xs font-bold uppercase tracking-wider" style={{color: 'var(--gm-ink)'}}>
+              {t.overview.telemetryTitle}
+            </span>
+            <div className="flex items-center gap-1">
+              {(['fps', 'memory'] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setChartMode(m)}
+                  className={`min-h-[34px] px-3 text-xs font-semibold border ${chartMode === m ? 'gm-btn-primary' : 'gm-btn-ghost'}`}
+                >
+                  {m === 'fps' ? t.overview.fpsMode : t.overview.loadMode}
+                </button>
+              ))}
+            </div>
+          </div>
+          <svg viewBox={`0 0 ${mainChart.W} ${mainChart.H + 14}`} className="mt-3 h-[150px] w-full overflow-visible">
+            {polyPoints && (
+              <polyline fill="none" stroke="var(--gm-ink)" strokeWidth="1.6" points={polyPoints} />
+            )}
+          </svg>
+        </div>
+
+        {/* MINIMAL: Dense Operational Ledger & Event Table */}
+        <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-2">
+          <div className="gm-card overflow-hidden">
+            <div className="border-b px-4 py-2.5 text-xs font-bold" style={{borderColor: 'var(--gm-border)', color: 'var(--gm-ink)'}}>
+              {t.overview.activeModules} · {t.overview.liveCount(19)}
+            </div>
+            <div className="divide-y" style={{borderColor: 'var(--gm-border)'}}>
+              {quickModules.map((m) => {
+                const Icon = m.icon;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => onSelectModule(m.id)}
+                    className="flex min-h-[44px] w-full items-center justify-between gap-2 px-4 py-2 text-left hover:bg-white/[0.03]"
+                    style={{borderColor: 'var(--gm-border)'}}
+                  >
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      <Icon className="h-4 w-4 shrink-0" style={{color: 'var(--gm-muted)'}} />
+                      <span className="truncate text-xs font-medium" style={{color: 'var(--gm-ink)'}}>{m.label}</span>
+                    </span>
+                    <span className="gm-mono text-xs" style={{color: 'var(--gm-muted)'}}>{m.metric}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="gm-card overflow-hidden">
+            <div className="border-b px-4 py-2.5 text-xs font-bold" style={{borderColor: 'var(--gm-border)', color: 'var(--gm-ink)'}}>
+              {t.overview.providersTitle} & {t.overview.recentEvents}
+            </div>
+            <div className="divide-y" style={{borderColor: 'var(--gm-border)'}}>
+              {providerRows.map((row) => (
+                <button
+                  key={row.id}
+                  type="button"
+                  onClick={() => onSelectModule(row.target)}
+                  className="flex min-h-[44px] w-full items-center justify-between gap-2 px-4 py-2 text-left hover:bg-white/[0.03]"
+                  style={{borderColor: 'var(--gm-border)'}}
+                >
+                  <span className="text-xs font-medium" style={{color: 'var(--gm-ink)'}}>{row.label}</span>
+                  <span className="gm-mono text-xs" style={{color: row.ok ? '#34d399' : '#fbbf24'}}>{row.status}</span>
+                </button>
+              ))}
+              {telemetry.logs.slice(0, 2).map((ev) => (
+                <div key={ev.id} className="flex items-center justify-between gap-2 px-4 py-2 text-[11px]" style={{borderColor: 'var(--gm-border)'}}>
+                  <span className="truncate" style={{color: 'var(--gm-muted)'}}>{ev.message}</span>
+                  <span className="gm-mono shrink-0 text-[10px]" style={{color: 'var(--gm-muted)'}}>{fmtGodShortTime(ev.ts, lang)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (activeTheme === 'holographic') {
+    return (
+      <div className="space-y-4 min-w-0 max-w-full">
+        {/* HOLOGRAPHIC DECK: Top Hero Glass Stage with Embedded Stability & Donut */}
+        <div className="gm-card-featured p-4 sm:p-5">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_0.9fr] lg:items-center">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wider" style={{color: 'var(--gm-accent-2)'}}>
+                    {t.designLab.layoutModes.holographic}
+                  </div>
+                  <div className="gm-mono mt-1 text-2xl sm:text-3xl font-bold" style={{color: 'var(--gm-ink)'}}>
+                    {telemetry.fps > 0 ? `${telemetry.fps} FPS` : '—'}
+                    <span className="ml-2 text-xs font-normal" style={{color: 'var(--gm-muted)'}}>
+                      · {memoryStat.valueText}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex gap-1">
+                  {(['fps', 'memory'] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setChartMode(m)}
+                      className={`min-h-[36px] px-3 text-xs font-semibold ${chartMode === m ? 'gm-btn-primary' : 'gm-btn-ghost'}`}
+                    >
+                      {m === 'fps' ? t.overview.fpsMode : t.overview.loadMode}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <svg viewBox={`0 0 ${mainChart.W} ${mainChart.H + 10}`} className="mt-3 h-[145px] w-full overflow-visible">
+                {mainChart.area1 && <path d={mainChart.area1} fill="var(--gm-accent)" opacity="0.24" />}
+                {mainChart.line1 && <path d={mainChart.line1} fill="none" stroke="var(--gm-accent-2)" strokeWidth="2.4" />}
+              </svg>
+            </div>
+
+            <div className="gm-inset flex flex-col items-center justify-center p-4">
+              <svg viewBox="0 0 116 116" className="h-[116px] w-[116px] -rotate-90">
+                {donutSegments.map((seg) => (
+                  <circle key={seg.id} cx="58" cy="58" r={seg.r} fill="none" stroke={seg.color} strokeWidth="14" strokeDasharray={seg.dashArray} strokeDashoffset={seg.dashOffset} />
+                ))}
+              </svg>
+              <div className="gm-mono mt-2 text-xs font-bold" style={{color: 'var(--gm-ink)'}}>
+                {t.overview.stability}: {stabilityScore}%
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* HOLOGRAPHIC DECK: 3-Card Translucent Metric Row */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {providerRows.map((row) => {
+            const Icon = row.icon;
+            return (
+              <button key={row.id} type="button" onClick={() => onSelectModule(row.target)} className="gm-card flex min-h-[76px] items-center justify-between gap-2 p-4 text-left hover:border-[var(--gm-border-strong)]">
+                <div className="min-w-0">
+                  <div className="text-xs font-bold" style={{color: 'var(--gm-ink)'}}>{row.label}</div>
+                  <div className={`gm-mono mt-1 text-xs font-semibold ${row.ok ? 'text-emerald-400' : 'text-amber-400'}`}>{row.status}</div>
+                </div>
+                <Icon className="h-5 w-5 shrink-0" style={{color: 'var(--gm-accent-2)'}} />
+              </button>
+            );
+          })}
+        </div>
+
+        {/* HOLOGRAPHIC DECK: Constellation + Quick Modules */}
+        <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
+          <div className="gm-card p-4 space-y-2">
+            <div className="text-xs font-bold" style={{color: 'var(--gm-ink)'}}>{t.overview.activeModules}</div>
+            {quickModules.map((m) => {
+              const Icon = m.icon;
+              return (
+                <button key={m.id} type="button" onClick={() => onSelectModule(m.id)} className="gm-inset flex min-h-[42px] w-full items-center justify-between gap-2 px-3 py-2 text-left">
+                  <span className="flex items-center gap-2 truncate text-xs font-semibold" style={{color: 'var(--gm-ink)'}}>
+                    <Icon className="h-4 w-4 shrink-0" style={{color: 'var(--gm-accent)'}} />
+                    <span className="truncate">{m.label}</span>
+                  </span>
+                  <span className="gm-mono text-[11px]" style={{color: 'var(--gm-accent-2)'}}>{m.metric}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="gm-card p-4">
+            <div className="text-xs font-bold" style={{color: 'var(--gm-ink)'}}>{t.overview.topologyTitle}</div>
+            <svg viewBox="0 0 296 144" className="mt-2 h-[170px] w-full">
+              {[[0,1],[1,2],[0,3],[3,4],[1,4],[2,5],[4,5]].map(([a,b], idx) => (
+                <line key={idx} x1={topoNodes[a].x} y1={topoNodes[a].y} x2={topoNodes[b].x} y2={topoNodes[b].y} stroke="var(--gm-border-strong)" strokeWidth="1.2" strokeDasharray="3 3" />
+              ))}
+              {topoNodes.map((node) => (
+                <g key={node.id} className="cursor-pointer" onClick={() => onSelectModule(node.id)}>
+                  <circle cx={node.x} cy={node.y} r="7" fill={node.accent ? 'var(--gm-accent)' : 'var(--gm-accent-2)'} />
+                  <text x={node.x} y={node.y + 18} textAnchor="middle" fontSize="9.5" fill="var(--gm-muted)" className="gm-mono">{node.label}</text>
+                </g>
+              ))}
+            </svg>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (activeTheme === 'terminal') {
+    return (
+      <div className="space-y-3.5 gm-mono min-w-0 max-w-full">
+        {/* COMMAND TERMINAL TUI: Bracket Console Header */}
+        <div className="gm-card p-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span className="font-bold" style={{color: 'var(--gm-accent)'}}>
+              [MORPH::SYS_TELEMETRY] · {telemetry.platform.toUpperCase()}
+            </span>
+            <span style={{color: 'var(--gm-muted)'}}>
+              STABILITY={stabilityScore}/100 · ERR={errorCount}
+            </span>
+          </div>
+
+          {/* METRICS DUMP */}
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 text-[11px]">
+            <div className="gm-inset p-2.5">
+              <div style={{color: 'var(--gm-muted)'}}>FPS_RATE</div>
+              <div className="mt-1 text-sm font-bold" style={{color: 'var(--gm-accent)'}}>{telemetry.fps || '—'}</div>
+            </div>
+            <div className="gm-inset p-2.5">
+              <div style={{color: 'var(--gm-muted)'}}>FRAME_MS</div>
+              <div className="mt-1 text-sm font-bold" style={{color: 'var(--gm-ink)'}}>{telemetry.frameMs || '—'}ms</div>
+            </div>
+            <div className="gm-inset p-2.5">
+              <div style={{color: 'var(--gm-muted)'}}>MEM_LOAD</div>
+              <div className="mt-1 text-sm font-bold" style={{color: 'var(--gm-ink)'}}>{memoryStat.valueText}</div>
+            </div>
+            <div className="gm-inset p-2.5">
+              <div style={{color: 'var(--gm-muted)'}}>DOM_NODES</div>
+              <div className="mt-1 text-sm font-bold" style={{color: 'var(--gm-ink)'}}>{fmtGodNumber(telemetry.domNodes, lang)}</div>
+            </div>
+          </div>
+
+          {/* ASCII SPARK STREAM */}
+          <div className="gm-inset mt-3 p-3">
+            <div className="flex items-center justify-between text-[10px]" style={{color: 'var(--gm-muted)'}}>
+              <span>[ASCII_SPARK_STREAM]</span>
+              <span>{t.overview.frameBuckets}</span>
+            </div>
+            <div className="mt-2 flex h-12 items-end gap-1">
+              {samples.slice(-14).map((s, i) => {
+                const h = Math.max(12, Math.min(100, Math.round((s.fps / 65) * 100)));
+                return (
+                  <div key={`${s.ts}-${i}`} className="flex-1 rounded-none" style={{height: `${h}%`, background: 'var(--gm-accent)'}} />
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* PROCESS TABLE + AUDIT TAIL */}
+        <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-2 text-[11px]">
+          <div className="gm-card p-3.5 space-y-1.5">
+            <div className="font-bold" style={{color: 'var(--gm-accent)'}}>[PROCESS_TABLE]</div>
+            {quickModules.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => onSelectModule(m.id)}
+                className="flex min-h-[38px] w-full items-center justify-between border-b py-1 text-left hover:bg-white/[0.04]"
+                style={{borderColor: 'var(--gm-border)'}}
+              >
+                <span className="truncate" style={{color: 'var(--gm-ink)'}}>&gt; {m.label}</span>
+                <span className="shrink-0" style={{color: 'var(--gm-accent)'}}>[{m.metric}]</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="gm-card p-3.5 space-y-1.5">
+            <div className="font-bold" style={{color: 'var(--gm-accent)'}}>[AUDIT_TAIL]</div>
+            {providerRows.map((row) => (
+              <button
+                key={row.id}
+                type="button"
+                onClick={() => onSelectModule(row.target)}
+                className="flex min-h-[34px] w-full items-center justify-between border-b py-1 text-left"
+                style={{borderColor: 'var(--gm-border)'}}
+              >
+                <span style={{color: 'var(--gm-ink)'}}>{row.label}</span>
+                <span style={{color: row.ok ? 'var(--gm-accent)' : '#fbbf24'}}>{row.status}</span>
+              </button>
+            ))}
+            {telemetry.logs.slice(0, 3).map((ev) => (
+              <div key={ev.id} className="flex items-center justify-between gap-2 pt-1 text-[10px]">
+                <span className="truncate" style={{color: 'var(--gm-muted)'}}>{ev.message}</span>
+                <span className="shrink-0" style={{color: 'var(--gm-muted)'}}>{fmtGodShortTime(ev.ts, lang)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-3.5">
+    <div className="space-y-3.5 min-w-0 max-w-full">
       {/* ==================== ROW 1: 4 BENTO KPI CARDS (2x2 Portrait Phone First) ==================== */}
       <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 xl:grid-cols-4">
         {/* Card 1: FPS Wave + Mini Equalizer Bars */}
@@ -887,7 +1347,7 @@ export const GodModeOverviewBento: React.FC<GodModeOverviewBentoProps> = ({
               {t.overview.activeModules}
             </h3>
             <span className="gm-mono text-[11px]" style={{color: 'var(--gm-muted)'}}>
-              {t.overview.liveCount(18)}
+              {t.overview.liveCount(19)}
             </span>
           </div>
 

@@ -2074,8 +2074,9 @@ export const WheelFab: React.FC<{
   const dpOuterStart = dpCfg.outerColor || dpCfg.outerColorEnd || 'var(--accent)';
   const dpOuterEnd = dpCfg.outerColorEnd || dpCfg.outerColor || 'var(--accent-end)';
   const dpGradAngle = dpCfg.gradientAngle;
-  const dpBaseInnerTone =
-    isDeadpoolInner && dpCfg.innerColor ? dpCfg.innerColor : 'var(--accent-ink)';
+  const dpBaseInnerTone = isDeadpoolInner
+    ? dpCfg.innerColor || '#0B0B0E'
+    : 'var(--accent-ink)';
 
   const charLevel = Math.max(0, Math.min(1, (burnLevel - 0.42) / 0.58));
   const flameFade = Math.max(0, 1 - charLevel * 1.25);
@@ -2895,7 +2896,12 @@ export const WheelFab: React.FC<{
             key={dpTapFlashKey}
             aria-hidden="true"
             className="morph-dp-tap-flash pointer-events-none absolute left-1/2 top-1/2 z-0 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-2"
-            style={{borderColor: dpCfg.eyeColor || dpCfg.outerColor || '#FFFFFF'}}
+            style={{
+              borderColor:
+                dpCfg.eyeColor && dpCfg.eyeColor !== 'transparent'
+                  ? dpCfg.eyeColor
+                  : dpCfg.outerColor || '#FFFFFF',
+            }}
           />
         )}
         {/* Shape-contoured glowing heat aura + perimeter flames rotated in lockstep with outer shell */}
@@ -2978,10 +2984,24 @@ export const WheelFab: React.FC<{
             )}
             <svg
               className={`pointer-events-none relative z-10 ${
-                iconStyle === 'pill_dock' ? 'h-6 w-12' : 'h-7 w-7'
+                iconStyle === 'pill_dock'
+                  ? isDeadpoolInner
+                    ? 'h-7 w-[54px]'
+                    : 'h-6 w-12'
+                  : isDeadpoolInner
+                    ? iconStyle === 'star_prism'
+                      ? 'h-[27px] w-[27px]'
+                      : iconStyle === 'diamond'
+                        ? 'h-7 w-7'
+                        : iconStyle === 'blade_hex'
+                          ? 'h-[30px] w-[30px]'
+                          : iconStyle === 'shield_crest'
+                            ? 'h-[30px] w-[30px] -translate-y-[0.5px]'
+                            : 'h-8 w-8'
+                    : 'h-7 w-7'
               }`}
-            viewBox={iconStyle === 'pill_dock' ? '0 0 48 24' : '0 0 28 28'}
-            fill="none"
+              viewBox={iconStyle === 'pill_dock' ? '0 0 48 24' : '0 0 28 28'}
+              fill="none"
             style={{
               transform:
                 iconStyle === 'pill_dock'
@@ -3149,7 +3169,16 @@ export const WheelFab: React.FC<{
                       </>
                     );
                   case 'deadpool':
-                    return <DeadpoolEmblemGroup cfg={dpCfg} maskFill={wheelTone} />;
+                    return (
+                      <DeadpoolEmblemGroup
+                        cfg={
+                          iconStyle === 'star_prism' && dpCfg.maskScale > 1.08
+                            ? {...dpCfg, maskScale: 1.08}
+                            : dpCfg
+                        }
+                        maskFill={wheelTone}
+                      />
+                    );
                   case 'minimal_dot':
                   default:
                     return (
@@ -3162,22 +3191,24 @@ export const WheelFab: React.FC<{
               };
 
               if (iconStyle === 'pill_dock') {
+                const pillCenterX = innerStyle === 'deadpool' ? 13 : 14;
+                const pillScale = innerStyle === 'deadpool' ? 0.84 : 0.72;
                 return (
                   <>
-                    <g transform={`rotate(${(effectiveSpinEnabled ? localInnerDeg : spinDeg).toFixed(1)} 14 12)`}>
+                    <g transform={`rotate(${(effectiveSpinEnabled ? localInnerDeg : spinDeg).toFixed(1)} ${pillCenterX} 12)`}>
                       {innerStyle === 'auto' ? (
                         <>
                           <circle cx="14" cy="12" r="6.8" stroke={wheelTone} strokeWidth="2" strokeDasharray="7 3.5" strokeLinecap="round" />
                           <circle cx="14" cy="12" r="2.2" fill={wheelTone} />
                         </>
                       ) : (
-                        <g transform="translate(14 12) scale(0.72) translate(-14 -14)">
+                        <g transform={`translate(${pillCenterX} 12) scale(${pillScale}) translate(-14 -14)`}>
                           {renderCustomCore(innerStyle)}
                         </g>
                       )}
                     </g>
-                    <rect x="26" y="7.5" width="14" height="2.4" rx="1.2" fill={wheelTone} fillOpacity="0.92" />
-                    <rect x="26" y="12.2" width="10" height="2.4" rx="1.2" fill={wheelTone} fillOpacity="0.65" />
+                    <rect x={innerStyle === 'deadpool' ? '26.5' : '26'} y="7.5" width={innerStyle === 'deadpool' ? '13.5' : '14'} height="2.4" rx="1.2" fill={wheelTone} fillOpacity="0.92" />
+                    <rect x={innerStyle === 'deadpool' ? '26.5' : '26'} y="12.2" width={innerStyle === 'deadpool' ? '9.5' : '10'} height="2.4" rx="1.2" fill={wheelTone} fillOpacity="0.65" />
                     <circle cx="39" cy="13.4" r="1.5" fill={wheelTone} />
                   </>
                 );

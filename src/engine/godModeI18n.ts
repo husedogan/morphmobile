@@ -96,7 +96,8 @@ export interface GodModeDictionary {
     dev_toolkit: {label: string; short: string; summary: string};
     security_center: {label: string; short: string; summary: string};
     settings: {label: string; short: string; summary: string};
-    deadpool_chaos: {label: string; short: string; summary: string};
+    deadpool_studio: {label: string; short: string; summary: string};
+    chaos_lab: {label: string; short: string; summary: string};
     ai_lab: {label: string; short: string; summary: string};
     autonomous_agents: {label: string; short: string; summary: string};
     experimental_lab: {label: string; short: string; summary: string};
@@ -127,7 +128,8 @@ export interface GodModeDictionary {
     plannedNote: string;
     openLiveModule: string;
     backToDashboard: string;
-    deadpoolTitle: string;
+    deadpoolStudioTitle: string;
+    chaosLabTitle: string;
     designAppliedToast: (name: string) => string;
     langChangedToast: (langName: string) => string;
     brandChangedToast: (brandName: string) => string;
@@ -200,6 +202,17 @@ export interface GodModeDictionary {
     coreFilter: string;
     liveFpsStream: string;
     unsupported: string;
+    layoutModes: {
+      obsidian: string;
+      cyber: string;
+      minimal: string;
+      holographic: string;
+      terminal: string;
+    };
+    tabs: {
+      panelThemes: string;
+      morphUi: string;
+    };
   };
   systemCore: {
     title: string;
@@ -245,6 +258,8 @@ export interface GodModeDictionary {
     noKey: string;
     bundled: string;
     cdn: string;
+    fullscreen: string;
+    wakeLock: string;
   };
   diagnostics: {
     title: string;
@@ -268,6 +283,7 @@ export interface GodModeDictionary {
     tabs: {
       modules: string;
       state: string;
+      inspectors: string;
       logs: string;
       network: string;
       profiler: string;
@@ -363,6 +379,44 @@ export interface GodModeDictionary {
     toastSelfRevoked: string;
     toastRevoked: string;
     toastSignedOut: string;
+    ownerEmailLabel: string;
+    ownerEmailPlaceholder: string;
+    bootstrapTokenLabel: string;
+    recoveryCodesTitle: string;
+    recoveryHint: string;
+    recoveryCodesAck: string;
+    openRecoverBtn: string;
+    recoverTitle: string;
+    recoveryCodeLabel: string;
+    newPasscodeLabel: string;
+    recoverSubmitBtn: string;
+    regenRecoveryBtn: string;
+    passkeyTitle: string;
+    enrollPasskeyBtn: string;
+    loginPasskeyBtn: string;
+    passkeysCount: string;
+    deviceCryptoTitle: string;
+    verifyDeviceCryptoBtn: string;
+    cryptoVerifiedBadge: string;
+    cryptoPendingBadge: string;
+    androidKeystoreNote: string;
+    rotateKeyBtn: string;
+    activeKeyLabel: string;
+    sessionsTitle: string;
+    revokeSessionBtn: string;
+    revokeOtherSessionsBtn: string;
+    persistenceTitle: string;
+    ephemeralWarning: string;
+    durableOk: string;
+    storeLockedTitle: string;
+    errInvalidEmail: string;
+    errMinPasscode8: string;
+    toastDeviceCryptoOk: string;
+    toastPasskeyAdded: string;
+    toastKeyRotated: string;
+    toastRecovered: string;
+    toastSessionRevoked: string;
+    toastRegenCodes: string;
   };
   settings: {
     title: string;
@@ -413,6 +467,23 @@ export interface GodModeDictionary {
     totalTokens: string;
     latency: string;
     quickPrompts: ReadonlyArray<{label: string; prompt: string}>;
+    healthTestBtn: string;
+    providerOnline: string;
+    providerOffline: string;
+    cancelBtn: string;
+    timeoutLabel: string;
+    temperatureLabel: string;
+    maxTokensLabel: string;
+    mimeLabel: string;
+    presetsLabel: string;
+    saveVersionBtn: string;
+    versionsLabel: string;
+    exportVersionsBtn: string;
+    importVersionsBtn: string;
+    budgetTitle: string;
+    budgetRemaining: string;
+    budgetCapLabel: string;
+    budgetExceeded: string;
   };
   agents: {
     title: string;
@@ -439,6 +510,21 @@ export interface GodModeDictionary {
     roles: Record<
       'architect' | 'auditor' | 'qa' | 'performance' | 'media' | 'security' | 'automation',
       {name: string; scope: string}
+    >;
+    customAgentsTab: string;
+    createCustomBtn: string;
+    customNameLabel: string;
+    customPromptLabel: string;
+    toolScopesLabel: string;
+    retryPolicyLabel: string;
+    delegateBtn: string;
+    delegatedFromLabel: string;
+    exportReportBtn: string;
+    cancelBtn: string;
+    attemptsLabel: string;
+    scopes: Record<
+      'telemetry_read' | 'diagnostics_read' | 'storage_read' | 'network_read' | 'media_read',
+      string
     >;
   };
   experimentalLab: {
@@ -481,6 +567,22 @@ export interface GodModeDictionary {
     avgFrameMs: string;
     throughput: string;
     benchDone: string;
+    inspectEngineBtn: string;
+    inspectingEngine: string;
+    terminateEngineBtn: string;
+    realBenchTitle: string;
+    runRealBenchBtn: string;
+    cancelBenchBtn: string;
+    presetX264Ultra: string;
+    presetX264Veryfast: string;
+    presetAudioMp3: string;
+    presetGifTest: string;
+    encodersFound: string;
+    decodersFound: string;
+    historyTitle: string;
+    noHistory: string;
+    outputSize: string;
+    durationLabel: string;
   };
   terminal: {
     title: string;
@@ -503,10 +605,29 @@ export interface GodModeDictionary {
     lastRun: string;
     never: string;
     stepLabels: Record<
-      'telemetry_check' | 'diagnostics_run' | 'storage_audit' | 'api_ping' | 'create_snapshot' | 'ai_summary',
+      | 'telemetry_check'
+      | 'diagnostics_run'
+      | 'storage_audit'
+      | 'api_ping'
+      | 'create_snapshot'
+      | 'ai_summary'
+      | 'media_bench'
+      | 'json_export',
       string
     >;
     doneToast: (name: string) => string;
+    triggerLabel: string;
+    conditionLabel: string;
+    triggers: Record<'manual' | 'on_open' | 'interval_30s', string>;
+    conditions: Record<
+      'always' | 'if_fps_lt_45' | 'if_heap_gt_80mb' | 'if_offline' | 'if_storage_gt_50kb',
+      string
+    >;
+    retryLabel: string;
+    cancelRunBtn: string;
+    historyTab: string;
+    flowCanvasTab: string;
+    noHistory: string;
   };
   networkLab: {
     title: string;
@@ -527,6 +648,14 @@ export interface GodModeDictionary {
     ipCol: string;
     authNeeded: string;
     openSecurity: string;
+    dnsTitle: string;
+    tlsTitle: string;
+    issuerLabel: string;
+    protocolLabel: string;
+    cipherLabel: string;
+    expiryLabel: string;
+    daysLeft: string;
+    errorCategoryLabel: string;
   };
   storageLab: {
     title: string;
@@ -547,6 +676,19 @@ export interface GodModeDictionary {
     clearCache: string;
     cacheCleared: string;
     entriesSuffix: string;
+    importBackupBtn: string;
+    confirmTitle: string;
+    confirmDeleteMsg: (key: string) => string;
+    confirmClearMsg: (name: string) => string;
+    confirmRestoreMsg: (count: number) => string;
+    checksumValid: string;
+    checksumInvalid: string;
+    inspectIdbBtn: string;
+    storesCount: string;
+    recordsCount: string;
+    urlsTitle: string;
+    flushTempBtn: string;
+    hardReloadBtn: string;
   };
   timeMachine: {
     title: string;
@@ -565,6 +707,11 @@ export interface GodModeDictionary {
     langKey: string;
     overridesKey: string;
     workflowsKey: string;
+    shaLabel: string;
+    brandModeKey: string;
+    restoreHistoryTitle: string;
+    noRestoreHistory: string;
+    confirmRestoreMsg: (label: string) => string;
   };
   digitalTwin: {
     title: string;
@@ -582,6 +729,13 @@ export interface GodModeDictionary {
     avgLatency: string;
     simulatedFrames: string;
     isolatedNote: string;
+    liveMeasuredBadge: string;
+    simulatedBadge: string;
+    baselineCompareTitle: string;
+    profilesTitle: string;
+    saveProfileBtn: string;
+    profileNamePlaceholder: string;
+    applyProfileBtn: string;
   };
 }
 
@@ -595,7 +749,8 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       dev_toolkit: {label: 'Geliştirici Araçları', short: 'Araçlar', summary: 'Modül grafiği, maskeli state, log, ağ ve profilleyici.'},
       security_center: {label: 'Güvenlik Merkezi', short: 'Güvenlik', summary: 'Sahip doğrulama, cihaz yönetimi ve denetim günlüğü.'},
       settings: {label: 'Ayarlar', short: 'Ayarlar', summary: 'Bağımsız GOD MODE dili, tasarım ve görünüm tercihleri.'},
-      deadpool_chaos: {label: 'Deadpool & Kaos', short: 'Deadpool', summary: '100 özellikli çark, arayüz motoru ve kaos laboratuvarı.'},
+      deadpool_studio: {label: 'Deadpool Stüdyosu', short: 'Deadpool', summary: 'Çark kabuğu, logo varyantları, palet ve hareket stüdyosu.'},
+      chaos_lab: {label: 'Kaos Laboratuvarı', short: 'Kaos', summary: 'Ekran bükme, görsel bozulma ve stres testi motoru.'},
       ai_lab: {label: 'Yapay Zekâ Laboratuvarı', short: 'YZ Lab', summary: 'Model yönetimi, canlı Gemini istem stüdyosu ve token izleyici.'},
       autonomous_agents: {label: 'Otonom Ajanlar', short: 'Ajanlar', summary: '7 uzman ajan ve onay kapılı sistem geliştirme önerileri.'},
       experimental_lab: {label: 'Deneysel Laboratuvar', short: 'Deneysel', summary: 'Özellik bayrakları, geçersiz kılma ve tek tıkla geri alma.'},
@@ -626,7 +781,8 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       plannedNote: 'Sahte buton eklenmedi. Bu modül sıradaki fazda gerçek motorlarla aktif edilecek.',
       openLiveModule: 'Canlı Modüle Git',
       backToDashboard: 'Ana Ekrana Dön',
-      deadpoolTitle: 'Deadpool & Kaos (100)',
+      deadpoolStudioTitle: 'Deadpool Çark Stüdyosu',
+      chaosLabTitle: 'Kaos & Stres Laboratuvarı',
       designAppliedToast: (name) => `Tasarım uygulandı: ${name}`,
       langChangedToast: (langName) => `Panel dili: ${langName}`,
       brandChangedToast: (brandName) => `Panel başlığı: ${brandName}`,
@@ -699,6 +855,17 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       coreFilter: 'Çekirdek',
       liveFpsStream: 'Canlı FPS Akışı',
       unsupported: 'Destek yok',
+      layoutModes: {
+        obsidian: 'Bento Kontrol Odası',
+        cyber: 'Taktik HUD Izgarası',
+        minimal: 'Veri Tablosu Düzeni',
+        holographic: 'Katmanlı Cam Sahne',
+        terminal: 'Saf Konsol TUI',
+      },
+      tabs: {
+        panelThemes: 'Panel Temaları',
+        morphUi: 'Morph Arayüz Motoru',
+      },
     },
     systemCore: {
       title: 'Sistem Merkezi',
@@ -744,6 +911,8 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       noKey: 'Anahtar Yok',
       bundled: 'Yerel',
       cdn: 'CDN',
+      fullscreen: 'Tam Ekran',
+      wakeLock: 'Ekran Uyanık',
     },
     diagnostics: {
       title: 'Tanılama',
@@ -766,7 +935,8 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       title: 'Geliştirici Araçları',
       tabs: {
         modules: 'Modüller',
-        state: 'Durum',
+        state: 'Durum & JSON',
+        inspectors: 'Denetçiler & Ses',
         logs: 'Kayıtlar',
         network: 'Ağ',
         profiler: 'Profil',
@@ -862,6 +1032,44 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       toastSelfRevoked: 'Mevcut cihaz iptal edildi, oturum kapatıldı.',
       toastRevoked: 'Cihaz iptal edildi.',
       toastSignedOut: 'Sunucu oturumu kapatıldı.',
+      ownerEmailLabel: 'Sahip E-postası',
+      ownerEmailPlaceholder: 'sahip@ornek.com',
+      bootstrapTokenLabel: 'Kurulum Anahtarı (Opsiyonel)',
+      recoveryCodesTitle: 'Tek Kullanımlık Kurtarma Kodları',
+      recoveryHint: 'Bu kodları güvenli bir yerde saklayın. Her kod parolayı sıfırlamak için yalnızca bir kez kullanılabilir.',
+      recoveryCodesAck: 'Kopyaladım / Kapat',
+      openRecoverBtn: 'Kurtarma Kodu ile Sıfırla',
+      recoverTitle: 'Kurtarma Kodu ile Hesap Kurtarma',
+      recoveryCodeLabel: 'Kurtarma Kodu',
+      newPasscodeLabel: 'Yeni Sahip Parolası (min 8)',
+      recoverSubmitBtn: 'Parolayı Sıfırla & Oturum Aç',
+      regenRecoveryBtn: 'Kurtarma Kodlarını Yenile',
+      passkeyTitle: 'WebAuthn Passkey',
+      enrollPasskeyBtn: 'Bu Cihaza Passkey Ekle',
+      loginPasskeyBtn: 'Passkey ile Giriş Yap',
+      passkeysCount: 'Kayıtlı Passkey',
+      deviceCryptoTitle: 'Cihaz Kriptografik Kimliği',
+      verifyDeviceCryptoBtn: 'ECDSA P-256 Doğrula',
+      cryptoVerifiedBadge: 'KRİPTO ONAYLI',
+      cryptoPendingBadge: 'DOĞRULAMA BEKLİYOR',
+      androidKeystoreNote: 'Tarayıcıda IndexedDB dışı aktarılamaz P-256 anahtarı aktiftir; yerel AndroidKeyStore köprüsü APK derlemesi gerektirir.',
+      rotateKeyBtn: 'İmza Anahtarını Döndür',
+      activeKeyLabel: 'Aktif Anahtar',
+      sessionsTitle: 'Aktif Sunucu Oturumları',
+      revokeSessionBtn: 'Oturumu Sonlandır',
+      revokeOtherSessionsBtn: 'Diğer Oturumları Kapat',
+      persistenceTitle: 'Kalıcı Depolama',
+      ephemeralWarning: 'Geçici kapsayıcı dosya sistemi tespit edildi: kalıcılık için GODMODE_STORE_PATH diskine bağlayın.',
+      durableOk: 'Atomik JSON deposu aktif ve sağlıklı.',
+      storeLockedTitle: 'Depo Bütünlük Kilidi (Fail-Closed)',
+      errInvalidEmail: 'Geçerli bir sahip e-posta adresi girin.',
+      errMinPasscode8: 'Sahip parolası en az 8 karakter olmalıdır.',
+      toastDeviceCryptoOk: 'Cihaz ECDSA P-256 imza testi doğrulandı.',
+      toastPasskeyAdded: 'WebAuthn Passkey başarıyla eklendi.',
+      toastKeyRotated: 'İmza anahtarı döndürüldü ve diğer oturumlar kapatıldı.',
+      toastRecovered: 'Hesap kurtarıldı, parola ve imza anahtarı yenilendi.',
+      toastSessionRevoked: 'Seçilen oturum iptal edildi.',
+      toastRegenCodes: '8 adet yeni kurtarma kodu üretildi.',
     },
     settings: {
       title: 'Ayarlar',
@@ -916,6 +1124,23 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
         {label: 'Performans Kontrol Listesi', prompt: 'React + Vite mobil WebView uygulaması için 60 FPS koruyan en kritik 5 optimizasyonu kısa yaz.'},
         {label: 'Güvenlik Özeti', prompt: 'Express API proxy rotaları için SSRF ve oturum güvenliğinde en kritik 5 kontrolü özetle.'},
       ],
+      healthTestBtn: 'Bağlantıyı Test Et',
+      providerOnline: 'Sağlayıcı Erişilebilir',
+      providerOffline: 'Anahtar Yok / Erişilemez',
+      cancelBtn: 'İptal Et',
+      timeoutLabel: 'Zaman Aşımı',
+      temperatureLabel: 'Sıcaklık',
+      maxTokensLabel: 'Maks. Token',
+      mimeLabel: 'Çıktı Biçimi',
+      presetsLabel: 'Yapılandırma Şablonu',
+      saveVersionBtn: 'Sürüm Kaydet',
+      versionsLabel: 'İstem Sürümleri',
+      exportVersionsBtn: 'JSON Dışa Aktar',
+      importVersionsBtn: 'JSON İçe Aktar',
+      budgetTitle: 'Token Bütçesi',
+      budgetRemaining: 'Kalan',
+      budgetCapLabel: 'Üst Sınır',
+      budgetExceeded: 'Oturum token bütçesi sınırı aşıldı. Ayarlardan limiti artırın.',
     },
     agents: {
       title: 'Otonom Ajanlar',
@@ -947,6 +1172,24 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
         media: {name: 'Medya & FFmpeg', scope: 'WASM bellek ve kodek optimizasyonu'},
         security: {name: 'Güvenlik Ajanı', scope: 'Oturum, cihaz ve API koruması'},
         automation: {name: 'Otomasyon Ajanı', scope: 'Tekrarlanabilir bakım akışları'},
+      },
+      customAgentsTab: 'Özel Ajanlar',
+      createCustomBtn: 'Özel Ajan Ekle',
+      customNameLabel: 'Ajan Adı',
+      customPromptLabel: 'Sistem Rolü',
+      toolScopesLabel: 'Yetkili Araç Kapsamları',
+      retryPolicyLabel: 'Yeniden Deneme',
+      delegateBtn: 'Başka Ajana Devret',
+      delegatedFromLabel: 'Devreden',
+      exportReportBtn: 'Rapor İndir (JSON)',
+      cancelBtn: 'Durdur',
+      attemptsLabel: 'Deneme',
+      scopes: {
+        telemetry_read: 'Telemetri Okuma',
+        diagnostics_read: 'Tanılama Okuma',
+        storage_read: 'Depolama Okuma',
+        network_read: 'Ağ Okuma',
+        media_read: 'Medya Okuma',
       },
     },
     experimentalLab: {
@@ -989,6 +1232,22 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       avgFrameMs: 'Ort. Kare Süresi',
       throughput: 'Tahmini Hız',
       benchDone: 'Medya kıyaslaması tamamlandı.',
+      inspectEngineBtn: 'FFmpeg Çekirdeğini Denetle',
+      inspectingEngine: 'Kodekler Okunuyor...',
+      terminateEngineBtn: 'Motoru Sonlandır',
+      realBenchTitle: 'Gerçek FFmpeg WASM Kodlama Testi',
+      runRealBenchBtn: 'Gerçek FFmpeg Kodla',
+      cancelBenchBtn: 'İptal Et',
+      presetX264Ultra: 'H.264 Ultrafast (320x240)',
+      presetX264Veryfast: 'H.264 Veryfast (320x240)',
+      presetAudioMp3: 'Sinüs Ses -> MP3 (libmp3lame)',
+      presetGifTest: 'Test Deseni -> GIF',
+      encodersFound: 'Aktif Kodlayıcılar',
+      decodersFound: 'Çözücü Sayısı',
+      historyTitle: 'İşlem Geçmişi',
+      noHistory: 'Henüz gerçek FFmpeg veya canvas işi çalıştırılmadı.',
+      outputSize: 'Çıktı Boyutu',
+      durationLabel: 'Süre',
     },
     terminal: {
       title: 'Terminal',
@@ -1017,8 +1276,29 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
         api_ping: 'API Gecikme Ölçümü',
         create_snapshot: 'Zaman Makinesi Yedeği',
         ai_summary: 'AI Durum Özeti',
+        media_bench: 'Gerçek FFmpeg Testi',
+        json_export: 'Raporu JSON İndir',
       },
       doneToast: (name) => `Otomasyon tamamlandı: ${name}`,
+      triggerLabel: 'Tetikleyici',
+      conditionLabel: 'Koşul Kapısı',
+      triggers: {
+        manual: 'Manuel',
+        on_open: 'Açılışta Otomatik',
+        interval_30s: 'Her 30 Saniye',
+      },
+      conditions: {
+        always: 'Her Zaman Çalıştır',
+        if_fps_lt_45: 'Yalnızca FPS < 45 ise',
+        if_heap_gt_80mb: 'Yalnızca Bellek > 80 MB ise',
+        if_offline: 'Yalnızca Çevrimdışı ise',
+        if_storage_gt_50kb: 'Yalnızca Depo > 50 KB ise',
+      },
+      retryLabel: 'Tekrar',
+      cancelRunBtn: 'Akışı Durdur',
+      historyTab: 'Çalışma Geçmişi',
+      flowCanvasTab: 'Görsel Akış',
+      noHistory: 'Henüz otomasyon çalışma kaydı yok.',
     },
     networkLab: {
       title: 'Ağ Laboratuvarı',
@@ -1031,7 +1311,7 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       connectionType: 'Ağ Türü',
       downlink: 'Hız Tahmini',
       rtt: 'Tarayıcı RTT',
-      ssrfNote: 'SSRF Koruması Aktif: Yerel/özel IP ve metadata adresleri sunucu tarafından engellenir.',
+      ssrfNote: 'SSRF Koruması Aktif: Yerel/özel IP ve metadata adresleri DNS ve TLS öncesi engellenir.',
       historyTitle: 'Test Sonuçları',
       emptyHistory: 'Henüz ağ testi çalıştırılmadı.',
       statusCol: 'Durum',
@@ -1039,12 +1319,20 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       ipCol: 'Çözümlenen IP',
       authNeeded: 'Harici sunucu testi için Güvenlik Merkezinde oturumu doğrulayın.',
       openSecurity: 'Güvenlik',
+      dnsTitle: 'DNS Kayıtları',
+      tlsTitle: 'TLS Sertifikası',
+      issuerLabel: 'Sağlayıcı',
+      protocolLabel: 'Protokol',
+      cipherLabel: 'Şifre',
+      expiryLabel: 'Geçerlilik',
+      daysLeft: 'gün',
+      errorCategoryLabel: 'Hata Sınıfı',
     },
     storageLab: {
       title: 'Depolama',
       refresh: 'Yenile',
-      exportBackup: 'Yedek İndir',
-      exportedToast: 'LocalStorage yedeği indirildi.',
+      exportBackup: 'SHA-256 Yedek İndir',
+      exportedToast: 'SHA-256 doğrulamalı yedek indirildi.',
       localTab: 'LocalStorage',
       idbTab: 'IndexedDB',
       cacheTab: 'Önbellek',
@@ -1059,6 +1347,19 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       clearCache: 'Temizle',
       cacheCleared: 'Önbellek temizlendi.',
       entriesSuffix: 'öğe',
+      importBackupBtn: 'Yedek Yükle',
+      confirmTitle: 'İşlem Onayı Gerekli',
+      confirmDeleteMsg: (key) => `"${key}" anahtarını kalıcı olarak silmek istiyor musunuz?`,
+      confirmClearMsg: (name) => `"${name}" önbellek havuzunu temizlemek istiyor musunuz?`,
+      confirmRestoreMsg: (count) => `SHA-256 doğrulandı. ${count} anahtar mevcut ayarların üzerine geri yüklensin mi?`,
+      checksumValid: 'SHA-256 Doğrulandı',
+      checksumInvalid: 'Yedek bütünlüğü veya biçimi geçersiz.',
+      inspectIdbBtn: 'Tabloları İncele',
+      storesCount: 'Depo',
+      recordsCount: 'kayıt',
+      urlsTitle: 'Önbellek URL Listesi',
+      flushTempBtn: 'Geçici Anahtarları Temizle',
+      hardReloadBtn: 'SW Sert Yenileme',
     },
     timeMachine: {
       title: 'Zaman Makinesi',
@@ -1077,13 +1378,18 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       langKey: 'Dil',
       overridesKey: 'Bayrak Değişikliği',
       workflowsKey: 'Otomasyon Akışı',
+      shaLabel: 'SHA-256 Özeti',
+      brandModeKey: 'Panel Başlığı',
+      restoreHistoryTitle: 'Geri Yükleme Geçmişi',
+      noRestoreHistory: 'Henüz geri yükleme yapılmadı.',
+      confirmRestoreMsg: (label) => `"${label}" anlık görüntüsüne geri dönülsün mü?`,
     },
     digitalTwin: {
       title: 'Dijital İkiz',
       resetBtn: 'Sıfırla',
       runSimBtn: 'Simülasyonu Çalıştır',
       runningSim: 'Simüle Ediliyor...',
-      openChaosBtn: 'Deadpool & Kaos (23 Araç)',
+      openChaosBtn: 'Kaos Laboratuvarı (23 Araç)',
       latencyLabel: 'Yapay Gecikme',
       errorRateLabel: 'Hata Enjeksiyon Oranı',
       frameStressLabel: 'Kare Bütçesi Yükü',
@@ -1094,6 +1400,13 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       avgLatency: 'Ort. Gecikme',
       simulatedFrames: 'Tahmini FPS',
       isolatedNote: 'İzole kum havuzu: Normal Morph ağ trafiğini veya window.fetch yapısını değiştirmez.',
+      liveMeasuredBadge: 'CANLI ÖLÇÜM',
+      simulatedBadge: 'SİMÜLASYON',
+      baselineCompareTitle: 'Canlı Gerçeklik vs. İkiz Projeksiyonu',
+      profilesTitle: 'Hata Profilleri',
+      saveProfileBtn: 'Profil Kaydet',
+      profileNamePlaceholder: 'Profil adı...',
+      applyProfileBtn: 'Yükle',
     },
   },
   en: {
@@ -1105,7 +1418,8 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       dev_toolkit: {label: 'Developer Tools', short: 'Tools', summary: 'Module graph, masked state, logs, network and profiler.'},
       security_center: {label: 'Security Center', short: 'Security', summary: 'Owner verification, device registry and audit log.'},
       settings: {label: 'Settings', short: 'Settings', summary: 'Independent GOD MODE language, design and layout.'},
-      deadpool_chaos: {label: 'Deadpool & Chaos', short: 'Deadpool', summary: '100-feature wheel, UI engine and chaos lab.'},
+      deadpool_studio: {label: 'Deadpool Studio', short: 'Deadpool', summary: 'Wheel shell, logo variants, palette and motion studio.'},
+      chaos_lab: {label: 'Chaos Lab', short: 'Chaos', summary: 'Screen warp, visual corruption and stress-test engine.'},
       ai_lab: {label: 'AI Lab', short: 'AI Lab', summary: 'Model registry, live Gemini prompt studio and token inspector.'},
       autonomous_agents: {label: 'Autonomous Agents', short: 'Agents', summary: '7 specialized agents and approval-gated self-evolution.'},
       experimental_lab: {label: 'Experimental Lab', short: 'Exp Lab', summary: 'Feature flags, overrides and one-click rollback.'},
@@ -1136,7 +1450,8 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       plannedNote: 'No fake stubs mounted. This module unlocks with live engines in its next phase.',
       openLiveModule: 'Open Live Module',
       backToDashboard: 'Back to Dashboard',
-      deadpoolTitle: 'Deadpool & Chaos (100)',
+      deadpoolStudioTitle: 'Deadpool Wheel Studio',
+      chaosLabTitle: 'Chaos & Stress Lab',
       designAppliedToast: (name) => `Design applied: ${name}`,
       langChangedToast: (langName) => `Panel language: ${langName}`,
       brandChangedToast: (brandName) => `Header title: ${brandName}`,
@@ -1209,6 +1524,17 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       coreFilter: 'Core',
       liveFpsStream: 'Live FPS Stream',
       unsupported: 'N/A',
+      layoutModes: {
+        obsidian: 'Bento Control Room',
+        cyber: 'Tactical HUD Grid',
+        minimal: 'Editorial Data Ledger',
+        holographic: 'Layered Glass Deck',
+        terminal: 'Raw Console TUI',
+      },
+      tabs: {
+        panelThemes: 'Panel Themes',
+        morphUi: 'Morph UI Engine',
+      },
     },
     systemCore: {
       title: 'System Core',
@@ -1254,6 +1580,8 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       noKey: 'No Key',
       bundled: 'Bundled',
       cdn: 'CDN',
+      fullscreen: 'Fullscreen',
+      wakeLock: 'Wake Lock',
     },
     diagnostics: {
       title: 'Diagnostics',
@@ -1276,7 +1604,8 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       title: 'Developer Tools',
       tabs: {
         modules: 'Modules',
-        state: 'State',
+        state: 'State & JSON',
+        inspectors: 'Inspectors & Audio',
         logs: 'Logs',
         network: 'Network',
         profiler: 'Profiler',
@@ -1372,6 +1701,44 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       toastSelfRevoked: 'Current device revoked; session terminated.',
       toastRevoked: 'Device revoked.',
       toastSignedOut: 'Server session closed.',
+      ownerEmailLabel: 'Owner Email',
+      ownerEmailPlaceholder: 'owner@example.com',
+      bootstrapTokenLabel: 'Bootstrap Token (Optional)',
+      recoveryCodesTitle: 'Single-Use Recovery Codes',
+      recoveryHint: 'Store these codes safely offline. Each code works once to recover passcode access.',
+      recoveryCodesAck: 'Copied / Dismiss',
+      openRecoverBtn: 'Recover with Recovery Code',
+      recoverTitle: 'Owner Account Recovery',
+      recoveryCodeLabel: 'Recovery Code',
+      newPasscodeLabel: 'New Passcode (min 8)',
+      recoverSubmitBtn: 'Reset Passcode & Sign In',
+      regenRecoveryBtn: 'Regenerate Recovery Codes',
+      passkeyTitle: 'WebAuthn Passkey',
+      enrollPasskeyBtn: 'Enroll Passkey on Device',
+      loginPasskeyBtn: 'Sign In with Passkey',
+      passkeysCount: 'Enrolled Passkeys',
+      deviceCryptoTitle: 'Cryptographic Device Identity',
+      verifyDeviceCryptoBtn: 'Verify ECDSA P-256',
+      cryptoVerifiedBadge: 'CRYPTO VERIFIED',
+      cryptoPendingBadge: 'CHALLENGE PENDING',
+      androidKeystoreNote: 'Browser uses non-extractable IndexedDB P-256 keys; native AndroidKeyStore requires Capacitor plugin build.',
+      rotateKeyBtn: 'Rotate Signing Key',
+      activeKeyLabel: 'Active Key',
+      sessionsTitle: 'Active Server Sessions',
+      revokeSessionBtn: 'Revoke Session',
+      revokeOtherSessionsBtn: 'Revoke All Other Sessions',
+      persistenceTitle: 'Durable Persistence',
+      ephemeralWarning: 'Ephemeral container filesystem detected: mount a persistent volume at GODMODE_STORE_PATH.',
+      durableOk: 'Atomic JSON store is active and healthy.',
+      storeLockedTitle: 'Store Integrity Lock (Fail-Closed)',
+      errInvalidEmail: 'Enter a valid owner email address.',
+      errMinPasscode8: 'Passcode must be at least 8 characters.',
+      toastDeviceCryptoOk: 'Device ECDSA P-256 challenge signature verified.',
+      toastPasskeyAdded: 'WebAuthn Passkey enrolled.',
+      toastKeyRotated: 'Signing key rotated and prior sessions invalidated.',
+      toastRecovered: 'Account recovered; passcode and signing key rotated.',
+      toastSessionRevoked: 'Selected session revoked.',
+      toastRegenCodes: 'Generated 8 fresh recovery codes.',
     },
     settings: {
       title: 'Settings',
@@ -1426,6 +1793,23 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
         {label: '60 FPS Checklist', prompt: 'List the 5 highest-impact optimizations to keep a React + Vite mobile WebView locked at 60 FPS.'},
         {label: 'API Security Audit', prompt: 'Summarize the top 5 SSRF and session security checks for an Express API proxy.'},
       ],
+      healthTestBtn: 'Test Connection',
+      providerOnline: 'Provider Reachable',
+      providerOffline: 'Key Missing / Unreachable',
+      cancelBtn: 'Cancel',
+      timeoutLabel: 'Timeout',
+      temperatureLabel: 'Temperature',
+      maxTokensLabel: 'Max Tokens',
+      mimeLabel: 'Response MIME',
+      presetsLabel: 'Config Preset',
+      saveVersionBtn: 'Save Version',
+      versionsLabel: 'Prompt Versions',
+      exportVersionsBtn: 'Export JSON',
+      importVersionsBtn: 'Import JSON',
+      budgetTitle: 'Token Budget',
+      budgetRemaining: 'Remaining',
+      budgetCapLabel: 'Budget Cap',
+      budgetExceeded: 'Session token budget cap reached. Increase cap in controls.',
     },
     agents: {
       title: 'Autonomous Agents',
@@ -1457,6 +1841,24 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
         media: {name: 'Media & FFmpeg', scope: 'WASM memory & codec tuning'},
         security: {name: 'Security Agent', scope: 'Auth, devices & API posture'},
         automation: {name: 'Automation Agent', scope: 'Repeatable maintenance flows'},
+      },
+      customAgentsTab: 'Custom Agents',
+      createCustomBtn: 'Add Custom Agent',
+      customNameLabel: 'Agent Name',
+      customPromptLabel: 'System Role',
+      toolScopesLabel: 'Authorized Tool Scopes',
+      retryPolicyLabel: 'Retry Policy',
+      delegateBtn: 'Delegate to Agent',
+      delegatedFromLabel: 'Delegated from',
+      exportReportBtn: 'Export Report (JSON)',
+      cancelBtn: 'Abort',
+      attemptsLabel: 'Attempt',
+      scopes: {
+        telemetry_read: 'Telemetry Read',
+        diagnostics_read: 'Diagnostics Read',
+        storage_read: 'Storage Read',
+        network_read: 'Network Read',
+        media_read: 'Media Read',
       },
     },
     experimentalLab: {
@@ -1499,6 +1901,22 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       avgFrameMs: 'Avg Frame Time',
       throughput: 'Est. Throughput',
       benchDone: 'Media benchmark completed.',
+      inspectEngineBtn: 'Inspect FFmpeg Core',
+      inspectingEngine: 'Inspecting Codecs...',
+      terminateEngineBtn: 'Terminate Instance',
+      realBenchTitle: 'Real FFmpeg WASM Encode Benchmark',
+      runRealBenchBtn: 'Run Real FFmpeg Encode',
+      cancelBenchBtn: 'Cancel Job',
+      presetX264Ultra: 'H.264 Ultrafast (320x240)',
+      presetX264Veryfast: 'H.264 Veryfast (320x240)',
+      presetAudioMp3: 'Sine Audio -> MP3 (libmp3lame)',
+      presetGifTest: 'Testsrc -> Animated GIF',
+      encodersFound: 'Real Encoders',
+      decodersFound: 'Decoders Count',
+      historyTitle: 'Job History',
+      noHistory: 'No FFmpeg or canvas jobs run yet.',
+      outputSize: 'Output Size',
+      durationLabel: 'Duration',
     },
     terminal: {
       title: 'Terminal',
@@ -1527,8 +1945,29 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
         api_ping: 'API Latency Probe',
         create_snapshot: 'Time Machine Snapshot',
         ai_summary: 'AI Health Summary',
+        media_bench: 'Real FFmpeg Encode Probe',
+        json_export: 'Export Run JSON',
       },
       doneToast: (name) => `Workflow completed: ${name}`,
+      triggerLabel: 'Trigger',
+      conditionLabel: 'Condition Gate',
+      triggers: {
+        manual: 'Manual',
+        on_open: 'Auto on Open',
+        interval_30s: 'Every 30s Interval',
+      },
+      conditions: {
+        always: 'Always Run',
+        if_fps_lt_45: 'Only if FPS < 45',
+        if_heap_gt_80mb: 'Only if Heap > 80 MB',
+        if_offline: 'Only if Offline',
+        if_storage_gt_50kb: 'Only if Storage > 50 KB',
+      },
+      retryLabel: 'Retries',
+      cancelRunBtn: 'Abort Run',
+      historyTab: 'Execution History',
+      flowCanvasTab: 'Visual Graph',
+      noHistory: 'No workflow runs logged yet.',
     },
     networkLab: {
       title: 'Network Lab',
@@ -1541,7 +1980,7 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       connectionType: 'Link Type',
       downlink: 'Est. Downlink',
       rtt: 'Browser RTT',
-      ssrfNote: 'SSRF Defense Active: Private, loopback, and metadata IPs are blocked server-side.',
+      ssrfNote: 'SSRF Defense Active: Private, loopback, and metadata IPs are blocked before DNS & TLS.',
       historyTitle: 'Probe Results',
       emptyHistory: 'No network probes executed yet.',
       statusCol: 'Status',
@@ -1549,12 +1988,20 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       ipCol: 'Resolved IP',
       authNeeded: 'Verify your owner session in Security Center for server-side probes.',
       openSecurity: 'Security',
+      dnsTitle: 'DNS Records',
+      tlsTitle: 'TLS Certificate',
+      issuerLabel: 'Issuer',
+      protocolLabel: 'Protocol',
+      cipherLabel: 'Cipher',
+      expiryLabel: 'Expires',
+      daysLeft: 'days',
+      errorCategoryLabel: 'Error Class',
     },
     storageLab: {
       title: 'Storage',
       refresh: 'Refresh',
-      exportBackup: 'Export Backup',
-      exportedToast: 'LocalStorage backup downloaded.',
+      exportBackup: 'SHA-256 Backup',
+      exportedToast: 'SHA-256 checksummed backup downloaded.',
       localTab: 'LocalStorage',
       idbTab: 'IndexedDB',
       cacheTab: 'Cache Storage',
@@ -1569,6 +2016,19 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       clearCache: 'Clear',
       cacheCleared: 'Cache cleared.',
       entriesSuffix: 'items',
+      importBackupBtn: 'Restore Backup',
+      confirmTitle: 'Confirmation Required',
+      confirmDeleteMsg: (key) => `Permanently delete storage key "${key}"?`,
+      confirmClearMsg: (name) => `Clear all cached entries in "${name}"?`,
+      confirmRestoreMsg: (count) => `SHA-256 verified. Restore ${count} keys over current settings?`,
+      checksumValid: 'SHA-256 Validated',
+      checksumInvalid: 'Backup integrity checksum mismatch or invalid format.',
+      inspectIdbBtn: 'Inspect Stores',
+      storesCount: 'Stores',
+      recordsCount: 'records',
+      urlsTitle: 'Cached URLs',
+      flushTempBtn: 'Flush Temp Keys',
+      hardReloadBtn: 'Hard SW Reload',
     },
     timeMachine: {
       title: 'Time Machine',
@@ -1587,13 +2047,18 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       langKey: 'Language',
       overridesKey: 'Flag Overrides',
       workflowsKey: 'Workflows',
+      shaLabel: 'SHA-256 Digest',
+      brandModeKey: 'Header Brand',
+      restoreHistoryTitle: 'Restore History',
+      noRestoreHistory: 'No snapshot restores recorded yet.',
+      confirmRestoreMsg: (label) => `Restore configuration from "${label}"?`,
     },
     digitalTwin: {
       title: 'Digital Twin',
       resetBtn: 'Reset',
       runSimBtn: 'Run Simulation',
       runningSim: 'Simulating...',
-      openChaosBtn: 'Deadpool & Chaos (23 Tools)',
+      openChaosBtn: 'Chaos Lab (23 Tools)',
       latencyLabel: 'Simulated Latency',
       errorRateLabel: 'Fault Injection Rate',
       frameStressLabel: 'Frame Budget Stress',
@@ -1604,6 +2069,13 @@ export const GOD_MODE_I18N: Record<GodModeLang, GodModeDictionary> = {
       avgLatency: 'Avg Latency',
       simulatedFrames: 'Projected FPS',
       isolatedNote: 'Isolated sandbox: Never mutates normal Morph traffic or window.fetch.',
+      liveMeasuredBadge: 'LIVE MEASURED',
+      simulatedBadge: 'SIMULATED',
+      baselineCompareTitle: 'Live Measured vs. Twin Projection',
+      profilesTitle: 'Fault Profiles',
+      saveProfileBtn: 'Save Profile',
+      profileNamePlaceholder: 'Profile name...',
+      applyProfileBtn: 'Load',
     },
   },
 };

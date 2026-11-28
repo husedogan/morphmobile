@@ -1628,10 +1628,39 @@ html[data-chaos-nuke="on"] #root article:not([data-chaos-safe="true"]):hover {
   box-shadow: none;
 }
 
+.morph-godmode-root {
+  overflow-x: clip;
+}
+
+.morph-godmode-root[data-god-theme="cyber"] .gm-card,
+.morph-godmode-root[data-god-theme="cyber"] .gm-card-featured {
+  background-image: linear-gradient(135deg, rgba(6, 182, 212, 0.06) 0%, transparent 40%, rgba(168, 85, 247, 0.05) 100%);
+  box-shadow: inset 0 0 0 1px rgba(6, 182, 212, 0.16), 0 0 22px rgba(6, 182, 212, 0.09);
+}
+
+.morph-godmode-root[data-god-theme="minimal"] .gm-card,
+.morph-godmode-root[data-god-theme="minimal"] .gm-inset {
+  box-shadow: none !important;
+  background-image: none !important;
+}
+
 .morph-godmode-root[data-god-theme="holographic"] .gm-card,
 .morph-godmode-root[data-god-theme="holographic"] .gm-card-featured {
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
+}
+
+.morph-godmode-root[data-god-theme="terminal"] .gm-card,
+.morph-godmode-root[data-god-theme="terminal"] .gm-card-featured {
+  border-style: solid;
+  border-color: rgba(34, 197, 94, 0.34);
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(34, 197, 94, 0.025) 0px,
+    rgba(34, 197, 94, 0.025) 1px,
+    transparent 1px,
+    transparent 4px
+  );
 }
 
 .gm-inset {
@@ -1661,6 +1690,16 @@ html[data-chaos-nuke="on"] #root article:not([data-chaos-safe="true"]):hover {
 .gm-mono {
   font-family: var(--gm-font-mono);
   font-variant-numeric: tabular-nums;
+}
+
+.gm-modal-safe {
+  max-height: 85dvh;
+  overflow-y: auto;
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+.gm-pb-safe {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
 
 .morph-godmode-root button:focus-visible,

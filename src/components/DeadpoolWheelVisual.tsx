@@ -83,9 +83,9 @@ export const DEADPOOL_SIGNATURE_PRESETS: readonly DeadpoolEditionPreset[] = [
     labelEn: 'Theme',
     previewOuter: null,
     previewEnd: null,
-    previewMask: null,
-    previewEye: null,
-    previewRing: null,
+    previewMask: '#0B0B0E',
+    previewEye: '#FFFFFF',
+    previewRing: '#0B0B0E',
     previewAngle: 135,
     patch: {
       deadpoolOuterColor: null,
@@ -113,20 +113,20 @@ export const DEADPOOL_SIGNATURE_PRESETS: readonly DeadpoolEditionPreset[] = [
     id: 'classic',
     labelTr: 'Klasik',
     labelEn: 'Classic',
-    previewOuter: '#C8102E',
-    previewEnd: '#18181B',
+    previewOuter: '#DC2626',
+    previewEnd: '#7F1D1D',
     previewMask: '#0B0B0E',
     previewEye: '#FFFFFF',
-    previewRing: '#F87171',
+    previewRing: '#0B0B0E',
     previewAngle: 135,
     patch: {
-      deadpoolOuterColor: '#C8102E',
+      deadpoolOuterColor: '#DC2626',
       deadpoolOuterColorMid: null,
-      deadpoolOuterColorEnd: '#18181B',
+      deadpoolOuterColorEnd: '#7F1D1D',
       deadpoolGradientType: 'linear',
       deadpoolInnerColor: '#0B0B0E',
       deadpoolEyeColor: '#FFFFFF',
-      deadpoolRingColor: '#F87171',
+      deadpoolRingColor: '#0B0B0E',
       deadpoolGradientAngle: 135,
       deadpoolGlowIntensity: 34,
       deadpoolGlowColor: '#DC2626',
@@ -894,8 +894,12 @@ export const DeadpoolMiniSwatch: React.FC<{
   angle?: number;
 }> = ({outer, end, mask, eye, ring, angle = 135}) => {
   const maskCol = mask || '#0B0B0E';
-  const eyeCol = eye || '#FFFFFF';
-  const ringCol = ring || 'rgba(255,255,255,0.45)';
+  const ringCol = ring || maskCol;
+  const borderCol = ring || 'rgba(255,255,255,0.38)';
+  const isTransparentEye = eye?.trim().toLowerCase() === 'transparent';
+  const eyeCol = isTransparentEye ? null : eye || '#FFFFFF';
+  const showEyeFill =
+    Boolean(eyeCol) && eyeCol!.trim().toUpperCase() !== maskCol.trim().toUpperCase();
   return (
     <span
       className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border shadow-xs"
@@ -904,23 +908,27 @@ export const DeadpoolMiniSwatch: React.FC<{
           outer && end
             ? `linear-gradient(${angle}deg, ${outer}, ${end})`
             : 'linear-gradient(135deg, var(--accent), var(--accent-end))',
-        borderColor: ringCol,
+        borderColor: borderCol,
       }}
     >
       <svg viewBox="0 0 28 28" fill="none" className="h-6 w-6">
-        <circle cx="14" cy="14" r="10.4" stroke={ringCol} strokeWidth="2.0" />
+        <circle cx="14" cy="14" r="10.7" stroke={ringCol} strokeWidth="1.95" />
         <path
-          d="M 12.1 5.0 A 9.2 9.2 0 0 0 12.1 23.0 Z M 6.3 11.8 L 11.4 15.0 Q 9.1 16.8 7.0 15.2 Z"
+          d="M 12.25 5.53 A 8.65 8.65 0 0 0 12.25 22.47 Z M 6.2 11.5 L 11.4 14.9 Q 9.0 16.9 6.8 15.2 Z"
           fill={maskCol}
           fillRule="evenodd"
         />
         <path
-          d="M 15.9 5.0 A 9.2 9.2 0 0 1 15.9 23.0 Z M 21.7 11.8 L 16.6 15.0 Q 18.9 16.8 21.0 15.2 Z"
+          d="M 15.75 5.53 A 8.65 8.65 0 0 1 15.75 22.47 Z M 21.8 11.5 L 16.6 14.9 Q 19.0 16.9 21.2 15.2 Z"
           fill={maskCol}
           fillRule="evenodd"
         />
-        <path d="M 6.3 11.8 L 11.4 15.0 Q 9.1 16.8 7.0 15.2 Z" fill={eyeCol} />
-        <path d="M 21.7 11.8 L 16.6 15.0 Q 18.9 16.8 21.0 15.2 Z" fill={eyeCol} />
+        {showEyeFill && (
+          <>
+            <path d="M 6.2 11.5 L 11.4 14.9 Q 9.0 16.9 6.8 15.2 Z" fill={eyeCol!} />
+            <path d="M 21.8 11.5 L 16.6 14.9 Q 19.0 16.9 21.2 15.2 Z" fill={eyeCol!} />
+          </>
+        )}
       </svg>
     </span>
   );
@@ -933,7 +941,8 @@ export const DeadpoolEmblemGroup: React.FC<{
   variantOverride?: DeadpoolLogoVariant;
 }> = ({cfg, maskFill, extraRotateDeg = 0, variantOverride}) => {
   const ringTone = cfg.ringColor || maskFill;
-  const explicitEyeColor = cfg.eyeColor;
+  const isTransparentEye = cfg.eyeColor?.trim().toLowerCase() === 'transparent';
+  const explicitEyeColor = isTransparentEye ? null : cfg.eyeColor || '#FFFFFF';
   const rawVariant = variantOverride ?? cfg.logoVariant ?? 'classic';
   const variant: DeadpoolLogoVariant = (
     ['classic', 'hourglass', 'vinyl_bold', 'mask_stencil', 'decal_thin', 'inverted_vinyl'] as const
@@ -959,35 +968,41 @@ export const DeadpoolEmblemGroup: React.FC<{
       : undefined;
 
   // Mathematically concentric authentic Deadpool logo geometry centered at (14, 14)
-  // 1. classic — Iconic Marvel red/black vertical split + bold diagonal-brow curved-belly eyes
-  const classicLeftEye = 'M 6.3 11.8 L 11.4 15.0 Q 9.1 16.8 7.0 15.2 Z';
-  const classicRightEye = 'M 21.7 11.8 L 16.6 15.0 Q 18.9 16.8 21.0 15.2 Z';
+  // 1. classic — Iconic vertical split + bold diagonal-brow curved-belly transparent eyes
+  const classicLeftEye = 'M 6.2 11.5 L 11.4 14.9 Q 9.0 16.9 6.8 15.2 Z';
+  const classicRightEye = 'M 21.8 11.5 L 16.6 14.9 Q 19.0 16.9 21.2 15.2 Z';
 
   // 2. hourglass — Iconic curved hourglass Deadpool mask patches + large curved almond eyes
-  const hourglassLeftEye = 'M 5.9 12.2 C 8.4 12.0 10.8 12.9 12.2 14.6 C 10.5 16.3 7.7 15.9 5.9 12.2 Z';
-  const hourglassRightEye = 'M 22.1 12.2 C 19.6 12.0 17.2 12.9 15.8 14.6 C 17.5 16.3 20.3 15.9 22.1 12.2 Z';
+  const hourglassLeftEye = 'M 6.2 11.9 C 8.5 11.8 10.6 12.8 12.0 14.5 C 10.3 16.2 7.7 15.8 6.2 11.9 Z';
+  const hourglassRightEye = 'M 21.8 11.9 C 19.5 11.8 17.4 12.8 16.0 14.5 C 17.7 16.2 20.3 15.8 21.8 11.9 Z';
 
   // 3. vinyl_bold — Bold outer ring with clear breathing gap + vertical-split vinyl decal
   const vinylLeftEye = 'M 7.0 12.0 L 11.5 14.9 Q 9.5 16.4 7.7 15.1 Z';
   const vinylRightEye = 'M 21.0 12.0 L 16.5 14.9 Q 18.5 16.4 20.3 15.1 Z';
 
   // 4. mask_stencil — Marvel one-color hourglass vinyl decal with sharp expressive eyes
-  const stencilLeftEye = 'M 5.8 12.3 L 12.1 14.7 Q 9.5 16.2 6.8 14.6 Z';
-  const stencilRightEye = 'M 22.2 12.3 L 15.9 14.7 Q 18.5 16.2 21.2 14.6 Z';
+  const stencilLeftEye = 'M 6.0 12.1 L 12.1 14.6 Q 9.5 16.2 6.8 14.6 Z';
+  const stencilRightEye = 'M 22.0 12.1 L 15.9 14.6 Q 18.5 16.2 21.2 14.6 Z';
 
   // 5. decal_thin — Thin crisp outer ring + generous vertical-split halves
   const decalLeftEye = 'M 6.5 12.0 L 11.5 15.0 Q 9.3 16.7 7.2 15.3 Z';
   const decalRightEye = 'M 21.5 12.0 L 16.5 15.0 Q 18.7 16.7 20.8 15.3 Z';
 
-  // Contrast-safe inverted vinyl colors (never white-on-white)
+  // Inverted vinyl: light mask halves; keep eyes transparent when explicitEyeColor is null
   const maskNorm = maskFill.trim().toUpperCase();
   const isLightMask =
     maskNorm === '#FFFFFF' ||
     maskNorm === '#FFF' ||
     maskNorm === 'WHITE' ||
     maskNorm === 'CURRENTCOLOR';
-  const invertedHalvesFill = explicitEyeColor || '#FFFFFF';
-  const invertedEyeFill = isLightMask ? '#0B0B0E' : maskFill;
+  const invertedHalvesFill = isLightMask ? '#0B0B0E' : '#FFFFFF';
+  const invertedEyeFill =
+    isTransparentEye ||
+    !cfg.eyeColor ||
+    cfg.eyeColor.trim().toUpperCase() === '#FFFFFF' ||
+    cfg.eyeColor.trim().toUpperCase() === '#FFF'
+      ? null
+      : cfg.eyeColor;
 
   const renderStandardHalves = (
     leftHalfPath: string,
@@ -1027,15 +1042,15 @@ export const DeadpoolEmblemGroup: React.FC<{
     >
       {variant === 'hourglass' &&
         renderStandardHalves(
-          'M 10.6 5.45 A 9.2 9.2 0 0 0 11.0 22.70 C 12.2 19.3 13.15 16.6 13.15 14.0 C 13.15 11.4 12.1 8.5 10.6 5.45 Z',
-          'M 17.4 5.45 A 9.2 9.2 0 0 1 17.0 22.70 C 15.8 19.3 14.85 16.6 14.85 14.0 C 14.85 11.4 15.9 8.5 17.4 5.45 Z',
+          'M 10.6 6.05 A 8.65 8.65 0 0 0 10.6 21.95 C 12.1 18.8 13.05 16.4 13.05 14.0 C 13.05 11.6 12.1 9.2 10.6 6.05 Z',
+          'M 17.4 6.05 A 8.65 8.65 0 0 1 17.4 21.95 C 15.9 18.8 14.95 16.4 14.95 14.0 C 14.95 11.6 15.9 9.2 17.4 6.05 Z',
           hourglassLeftEye,
           hourglassRightEye,
           maskFill,
           explicitEyeColor,
-          10.5,
+          10.7,
           ringTone,
-          Math.max(2.2, cfg.innerRingWidth)
+          Math.max(1.95, cfg.innerRingWidth)
         )}
 
       {variant === 'vinyl_bold' &&
@@ -1048,20 +1063,20 @@ export const DeadpoolEmblemGroup: React.FC<{
           explicitEyeColor,
           11.0,
           ringTone,
-          Math.max(2.2, cfg.innerRingWidth)
+          Math.max(2.15, cfg.innerRingWidth)
         )}
 
       {variant === 'mask_stencil' &&
         renderStandardHalves(
-          'M 10.4 4.99 A 9.7 9.7 0 0 0 10.7 23.12 C 12.2 19.4 13.15 16.7 13.15 14.0 C 13.15 11.3 12.0 8.2 10.4 4.99 Z',
-          'M 17.6 4.99 A 9.7 9.7 0 0 1 17.3 23.12 C 15.8 19.4 14.85 16.7 14.85 14.0 C 14.85 11.3 16.0 8.2 17.6 4.99 Z',
+          'M 10.4 5.32 A 9.4 9.4 0 0 0 10.4 22.68 C 12.0 19.1 13.05 16.6 13.05 14.0 C 13.05 11.4 12.0 8.9 10.4 5.32 Z',
+          'M 17.6 5.32 A 9.4 9.4 0 0 1 17.6 22.68 C 16.0 19.1 14.95 16.6 14.95 14.0 C 14.95 11.4 16.0 8.9 17.6 5.32 Z',
           stencilLeftEye,
           stencilRightEye,
           maskFill,
           explicitEyeColor,
           11.0,
           ringTone,
-          1.15
+          1.2
         )}
 
       {variant === 'decal_thin' &&
@@ -1074,7 +1089,7 @@ export const DeadpoolEmblemGroup: React.FC<{
           explicitEyeColor,
           11.0,
           ringTone,
-          1.15
+          1.2
         )}
 
       {variant === 'inverted_vinyl' &&
@@ -1085,22 +1100,22 @@ export const DeadpoolEmblemGroup: React.FC<{
           classicRightEye,
           invertedHalvesFill,
           invertedEyeFill,
-          11.0,
+          10.8,
           invertedHalvesFill,
-          1.75
+          1.85
         )}
 
       {variant === 'classic' &&
         renderStandardHalves(
-          'M 12.1 5.0 A 9.2 9.2 0 0 0 12.1 23.0 Z',
-          'M 15.9 5.0 A 9.2 9.2 0 0 1 15.9 23.0 Z',
+          'M 12.25 5.53 A 8.65 8.65 0 0 0 12.25 22.47 Z',
+          'M 15.75 5.53 A 8.65 8.65 0 0 1 15.75 22.47 Z',
           classicLeftEye,
           classicRightEye,
           maskFill,
           explicitEyeColor,
-          10.5,
+          10.7,
           ringTone,
-          Math.max(2.2, cfg.innerRingWidth)
+          Math.max(1.95, cfg.innerRingWidth)
         )}
     </g>
   );

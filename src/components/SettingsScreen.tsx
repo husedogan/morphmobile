@@ -1521,7 +1521,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
             const activeInnerMeta = WHEEL_INNER_STYLES.find((m) => m.id === effectiveInner);
             const wheelEnabled = prefs.showQuickWheel !== false;
 
-            const renderInnerSvg = (coreId: WheelInnerStylePref) => {
+            const renderInnerSvg = (
+              coreId: WheelInnerStylePref,
+              opts?: {deadpoolFill?: string; deadpoolRing?: string; deadpoolEye?: string | null}
+            ) => {
               switch (coreId) {
                 case 'auto':
                   return (
@@ -1639,22 +1642,34 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                       />
                     </>
                   );
-                case 'deadpool':
+                case 'deadpool': {
+                  const dpFill = opts?.deadpoolFill || 'currentColor';
+                  const dpRing = opts?.deadpoolRing || dpFill;
+                  const dpEye = opts?.deadpoolEye ?? null;
+                  const lEye = 'M 6.2 11.5 L 11.4 14.9 Q 9.0 16.9 6.8 15.2 Z';
+                  const rEye = 'M 21.8 11.5 L 16.6 14.9 Q 19.0 16.9 21.2 15.2 Z';
                   return (
                     <>
-                      <circle cx="14" cy="14" r="10.1" stroke="currentColor" strokeWidth="1.6" />
+                      <circle cx="14" cy="14" r="10.7" stroke={dpRing} strokeWidth="1.95" />
                       <path
-                        d="M 12.4 5.7 A 8.4 8.4 0 0 0 12.4 22.3 Z M 6.9 11.7 L 11.2 14.7 L 10.6 16.1 L 7.9 15.2 Z"
-                        fill="currentColor"
+                        d={`M 12.25 5.53 A 8.65 8.65 0 0 0 12.25 22.47 Z ${lEye}`}
+                        fill={dpFill}
                         fillRule="evenodd"
                       />
                       <path
-                        d="M 15.6 5.7 A 8.4 8.4 0 0 1 15.6 22.3 Z M 21.1 11.7 L 16.8 14.7 L 17.4 16.1 L 20.1 15.2 Z"
-                        fill="currentColor"
+                        d={`M 15.75 5.53 A 8.65 8.65 0 0 1 15.75 22.47 Z ${rEye}`}
+                        fill={dpFill}
                         fillRule="evenodd"
                       />
+                      {dpEye && dpEye.trim().toUpperCase() !== dpFill.trim().toUpperCase() && (
+                        <>
+                          <path d={lEye} fill={dpEye} />
+                          <path d={rEye} fill={dpEye} />
+                        </>
+                      )}
                     </>
                   );
+                }
                 case 'minimal_dot':
                 default:
                   return (
@@ -1714,20 +1729,46 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                         <svg
                           viewBox={activeOuterId === 'pill_dock' ? '0 0 48 24' : '0 0 28 28'}
                           fill="none"
-                          className={activeOuterId === 'pill_dock' ? 'h-5 w-9' : 'h-5 w-5'}
+                          className={
+                            activeOuterId === 'pill_dock'
+                              ? 'h-5 w-10'
+                              : effectivePreviewCore === 'deadpool'
+                                ? 'h-6 w-6'
+                                : 'h-5 w-5'
+                          }
                           style={activeOuterId === 'diamond' ? {transform: 'rotate(-45deg)'} : undefined}
                         >
-                          {activeOuterId === 'pill_dock' ? (
-                            <>
-                              <g transform="translate(14 12) scale(0.68) translate(-14 -14)">
-                                {renderInnerSvg(effectivePreviewCore)}
-                              </g>
-                              <rect x="26" y="7.5" width="13" height="2.4" rx="1.2" fill="currentColor" fillOpacity="0.92" />
-                              <rect x="26" y="12.2" width="9.5" height="2.4" rx="1.2" fill="currentColor" fillOpacity="0.65" />
-                            </>
-                          ) : (
-                            renderInnerSvg(effectivePreviewCore)
-                          )}
+                          {(() => {
+                            const dpBadgeOpts =
+                              effectivePreviewCore === 'deadpool'
+                                ? {
+                                    deadpoolFill: prefs.deadpoolInnerColor || '#0B0B0E',
+                                    deadpoolRing: prefs.deadpoolRingColor || prefs.deadpoolInnerColor || '#0B0B0E',
+                                    deadpoolEye:
+                                      prefs.deadpoolEyeColor?.trim().toLowerCase() === 'transparent'
+                                        ? null
+                                        : prefs.deadpoolEyeColor || '#FFFFFF',
+                                  }
+                                : undefined;
+                            const dpPillTone =
+                              effectivePreviewCore === 'deadpool'
+                                ? prefs.deadpoolInnerColor || '#0B0B0E'
+                                : 'currentColor';
+                            if (activeOuterId === 'pill_dock') {
+                              const cx = effectivePreviewCore === 'deadpool' ? 13 : 14;
+                              const sc = effectivePreviewCore === 'deadpool' ? 0.84 : 0.68;
+                              return (
+                                <>
+                                  <g transform={`translate(${cx} 12) scale(${sc}) translate(-14 -14)`}>
+                                    {renderInnerSvg(effectivePreviewCore, dpBadgeOpts)}
+                                  </g>
+                                  <rect x={effectivePreviewCore === 'deadpool' ? '26.5' : '26'} y="7.5" width="13" height="2.4" rx="1.2" fill={dpPillTone} fillOpacity="0.92" />
+                                  <rect x={effectivePreviewCore === 'deadpool' ? '26.5' : '26'} y="12.2" width="9.5" height="2.4" rx="1.2" fill={dpPillTone} fillOpacity="0.65" />
+                                </>
+                              );
+                            }
+                            return renderInnerSvg(effectivePreviewCore, dpBadgeOpts);
+                          })()}
                         </svg>
                       </span>
                     </div>
