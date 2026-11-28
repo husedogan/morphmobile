@@ -116,8 +116,18 @@ export const DevPerfHud: React.FC<DevPerfHudProps> = ({onClose}) => {
     let rafId = 0;
     let frames = 0;
     let windowStart = performance.now();
+    let lastDomScanTs = 0;
+    let cachedDomNodes =
+      typeof document !== 'undefined' ? document.getElementsByTagName('*').length : 0;
 
     const sample = (now: number) => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        frames = 0;
+        windowStart = now;
+        rafId = window.requestAnimationFrame(sample);
+        return;
+      }
+
       frames += 1;
       const elapsed = now - windowStart;
       if (elapsed >= 500) {
@@ -126,7 +136,11 @@ export const DevPerfHud: React.FC<DevPerfHudProps> = ({onClose}) => {
           const frameMs = Number((elapsed / Math.max(1, frames)).toFixed(1));
           const heap = readJsHeap();
           const net = readNetworkInfo();
-          const domNodes = document.getElementsByTagName('*').length;
+          if (now - lastDomScanTs >= 2000) {
+            cachedDomNodes = document.getElementsByTagName('*').length;
+            lastDomScanTs = now;
+          }
+          const domNodes = cachedDomNodes;
 
           setMetrics({
             fps,
@@ -248,18 +262,18 @@ export const DevPerfHud: React.FC<DevPerfHudProps> = ({onClose}) => {
             data-chaos-safe="true"
             onClick={() => setExpanded((v) => !v)}
             aria-label={expanded ? 'Daralt' : 'Detayları göster'}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-white/10"
+            className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-white/10"
           >
-            {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
           <button
             type="button"
             data-chaos-safe="true"
             onClick={onClose}
             aria-label="HUD Kapat"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+            className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
           >
-            <X className="h-3.5 w-3.5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -335,9 +349,9 @@ export const DevPerfHud: React.FC<DevPerfHudProps> = ({onClose}) => {
               type="button"
               data-chaos-safe="true"
               onClick={() => setSampling((v) => !v)}
-              className="flex min-h-[36px] flex-1 items-center justify-center gap-1 rounded-xl border border-white/15 bg-white/[0.05] px-2 text-[10px] font-bold text-slate-200 hover:bg-white/10"
+              className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl border border-white/15 bg-white/[0.05] px-2.5 text-[11px] font-bold text-slate-200 hover:bg-white/10"
             >
-              {sampling ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+              {sampling ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
               <span>{sampling ? 'Duraklat' : 'Devam'}</span>
             </button>
             <button
@@ -345,17 +359,17 @@ export const DevPerfHud: React.FC<DevPerfHudProps> = ({onClose}) => {
               data-chaos-safe="true"
               onClick={() => setHistory([])}
               aria-label="Geçmişi temizle"
-              className="flex min-h-[36px] w-9 items-center justify-center rounded-xl border border-white/15 bg-white/[0.05] text-slate-300 hover:bg-white/10"
+              className="flex min-h-[44px] w-11 items-center justify-center rounded-xl border border-white/15 bg-white/[0.05] text-slate-300 hover:bg-white/10"
             >
-              <RotateCcw className="h-3 w-3" />
+              <RotateCcw className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
               data-chaos-safe="true"
               onClick={handleExportJson}
-              className="flex min-h-[36px] flex-1 items-center justify-center gap-1 rounded-xl bg-violet-600 px-2 text-[10px] font-bold text-white hover:bg-violet-500"
+              className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-violet-600 px-2.5 text-[11px] font-bold text-white hover:bg-violet-500"
             >
-              <Download className="h-3 w-3" />
+              <Download className="h-3.5 w-3.5" />
               <span>JSON</span>
             </button>
           </div>

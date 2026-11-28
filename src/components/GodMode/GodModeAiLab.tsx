@@ -1,4 +1,4 @@
-import React, {useMemo, useRef, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   Activity,
   BookmarkPlus,
@@ -27,10 +27,12 @@ import {
   AiHistoryEntry,
   CustomModelPreset,
   GOD_MODE_AI_MODELS,
+  GOD_MODE_FLAGS_EVENT,
   GodModeAiModelId,
   GodModeThinkingLevel,
   PromptVersionEntry,
   checkAiProviderHealth,
+  isGodModeFlagEnabled,
   loadAiBudget,
   loadAiHistory,
   loadAiPresets,
@@ -67,7 +69,18 @@ export const GodModeAiLab: React.FC<GodModeAiLabProps> = ({
   const [thinking, setThinking] = useState<GodModeThinkingLevel>('LOW');
   const [temperature, setTemperature] = useState<number>(0.4);
   const [maxOutputTokens, setMaxOutputTokens] = useState<number>(2048);
-  const [responseMimeType, setResponseMimeType] = useState<'text/plain' | 'application/json'>('text/plain');
+  const [responseMimeType, setResponseMimeType] = useState<'text/plain' | 'application/json'>(() =>
+    isGodModeFlagEnabled('gm_ai_structured_json') ? 'application/json' : 'text/plain'
+  );
+  useEffect(() => {
+    const syncFlag = () => {
+      setResponseMimeType(
+        isGodModeFlagEnabled('gm_ai_structured_json') ? 'application/json' : 'text/plain'
+      );
+    };
+    window.addEventListener(GOD_MODE_FLAGS_EVENT, syncFlag);
+    return () => window.removeEventListener(GOD_MODE_FLAGS_EVENT, syncFlag);
+  }, []);
   const [timeoutMs, setTimeoutMs] = useState<number>(25000);
   const [systemInstruction, setSystemInstruction] = useState('');
   const [prompt, setPrompt] = useState('');

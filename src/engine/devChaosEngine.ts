@@ -324,9 +324,12 @@ let lifecycleGuardsInstalled = false;
 
 // Original text backups for clean restoration after Zalgo / Mocking text corruption
 const originalTextMap = new WeakMap<Text, string>();
+const lastScrambledMap = new WeakMap<Text, string>();
 const mutatedTextNodes = new Set<Text>();
 // Nuked elements tracker for clean restoration
 const nukedElements = new Set<HTMLElement>();
+// Shared AudioContext reused across Chaos synth triggers (closed cleanly on reset)
+let sharedChaosAudioCtx: AudioContext | null = null;
 // Color-bombed style tag & bloat container
 const COLOR_BOMB_STYLE_ID = 'morph-chaos-color-bomb';
 const DOM_BLOAT_ID = 'morph-chaos-dom-bloat';
@@ -545,10 +548,19 @@ function installLifecycleSafetyGuards(): void {
 
 function restoreScrambledText(): void {
   mutatedTextNodes.forEach((node) => {
+    if (!node.isConnected) {
+      originalTextMap.delete(node);
+      lastScrambledMap.delete(node);
+      return;
+    }
     const orig = originalTextMap.get(node);
-    if (orig !== undefined && node.nodeValue !== orig) {
+    const expectedScrambled = lastScrambledMap.get(node);
+    // Only restore if React has not already replaced the text node with newer state
+    if (orig !== undefined && node.nodeValue === expectedScrambled && node.nodeValue !== orig) {
       node.nodeValue = orig;
     }
+    originalTextMap.delete(node);
+    lastScrambledMap.delete(node);
   });
   mutatedTextNodes.clear();
 }
@@ -557,14 +569,16 @@ function applyTextScramble(mode: ChaosTextMode): void {
   if (typeof document === 'undefined') return;
   restoreScrambledText();
   if (mode === 'off') return;
-  const root = document.getElementById('root');
-  if (!root) return;
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const target =
+    document.querySelector('[data-chaos-canvas="true"]') ?? document.getElementById('root');
+  if (!target) return;
+  const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT);
   let node = walker.nextNode() as Text | null;
   let limit = 0;
   while (node && limit < 900) {
     const parent = node.parentElement;
     if (
+      node.isConnected &&
       parent &&
       !parent.closest('[data-chaos-safe="true"]') &&
       !parent.closest('.morph-godmode-root') &&
@@ -575,11 +589,10 @@ function applyTextScramble(mode: ChaosTextMode): void {
     ) {
       const val = node.nodeValue ?? '';
       if (val.trim().length > 0) {
-        if (!originalTextMap.has(node)) {
-          originalTextMap.set(node, val);
-        }
-        const orig = originalTextMap.get(node) ?? val;
-        node.nodeValue = mode === 'zalgo' ? toZalgo(orig) : toMocking(orig);
+        originalTextMap.set(node, val);
+        const scrambled = mode === 'zalgo' ? toZalgo(val) : toMocking(val);
+        node.nodeValue = scrambled;
+        lastScrambledMap.set(node, scrambled);
         mutatedTextNodes.add(node);
         limit++;
       }
@@ -608,16 +621,16 @@ function applyColorBomb(enabled: boolean): void {
   const pick = (i: number) => palette[Math.floor((Math.random() * 100 + i) % palette.length)];
   const safeExcl = ':not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *)';
   const css = `
-    #root button${safeExcl} {
+    [data-chaos-canvas="true"] button${safeExcl} {
       background: linear-gradient(135deg, ${pick(1)}, ${pick(2)}) !important;
       color: #050507 !important;
       border-color: ${pick(3)} !important;
     }
-    #root section${safeExcl}, #root article${safeExcl} {
+    [data-chaos-canvas="true"] section${safeExcl}, [data-chaos-canvas="true"] article${safeExcl} {
       background-color: ${pick(4)}24 !important;
       border-color: ${pick(5)} !important;
     }
-    #root h1${safeExcl}, #root h2${safeExcl}, #root h3${safeExcl} {
+    [data-chaos-canvas="true"] h1${safeExcl}, [data-chaos-canvas="true"] h2${safeExcl}, [data-chaos-canvas="true"] h3${safeExcl} {
       text-shadow: 1px 1px 0 ${pick(6)}, -1px -1px 0 ${pick(7)} !important;
     }
   `;
@@ -894,6 +907,11 @@ export function resetAllChaos(reason: string | null = null): void {
     watchdogTimer = null;
   }
 
+  if (sharedChaosAudioCtx && sharedChaosAudioCtx.state !== 'closed') {
+    void sharedChaosAudioCtx.close().catch(() => {});
+    sharedChaosAudioCtx = null;
+  }
+
   currentState = {
     ...DEFAULT_DEV_CHAOS_STATE,
     clickToNukeScope: currentState.clickToNukeScope,
@@ -903,7 +921,7 @@ export function resetAllChaos(reason: string | null = null): void {
   notify();
 }
 
-/** Chaos Web Audio Synth */
+/** Chaos Web Audio Synth (reuses a single bounded AudioContext) */
 export function playChaosAudio(kind: 'glitch' | 'siren' | 'laser'): void {
   if (typeof window === 'undefined') return;
   try {
@@ -911,7 +929,13 @@ export function playChaosAudio(kind: 'glitch' | 'siren' | 'laser'): void {
       window.AudioContext ||
       (window as unknown as {webkitAudioContext: typeof AudioContext}).webkitAudioContext;
     if (!AudioCtx) return;
-    const ctx = new AudioCtx();
+    if (!sharedChaosAudioCtx || sharedChaosAudioCtx.state === 'closed') {
+      sharedChaosAudioCtx = new AudioCtx();
+    }
+    const ctx = sharedChaosAudioCtx;
+    if (ctx.state === 'suspended') {
+      void ctx.resume().catch(() => {});
+    }
     const now = ctx.currentTime;
     const gain = ctx.createGain();
     gain.connect(ctx.destination);
@@ -925,6 +949,10 @@ export function playChaosAudio(kind: 'glitch' | 'siren' | 'laser'): void {
       }
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
       osc.connect(gain);
+      osc.onended = () => {
+        osc.disconnect();
+        gain.disconnect();
+      };
       osc.start(now);
       osc.stop(now + 0.38);
     } else if (kind === 'siren') {
@@ -937,6 +965,10 @@ export function playChaosAudio(kind: 'glitch' | 'siren' | 'laser'): void {
       osc.frequency.linearRampToValueAtTime(1120, now + 0.72);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.78);
       osc.connect(gain);
+      osc.onended = () => {
+        osc.disconnect();
+        gain.disconnect();
+      };
       osc.start(now);
       osc.stop(now + 0.8);
     } else {
@@ -947,12 +979,13 @@ export function playChaosAudio(kind: 'glitch' | 'siren' | 'laser'): void {
       osc.frequency.exponentialRampToValueAtTime(85, now + 0.32);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
       osc.connect(gain);
+      osc.onended = () => {
+        osc.disconnect();
+        gain.disconnect();
+      };
       osc.start(now);
       osc.stop(now + 0.36);
     }
-    window.setTimeout(() => {
-      void ctx.close().catch(() => {});
-    }, 950);
   } catch {
     // Ignore autoplay restrictions
   }

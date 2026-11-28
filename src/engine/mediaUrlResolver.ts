@@ -61,11 +61,19 @@ export function extractYouTubeId(rawUrl: string): string | null {
   try {
     const u = new URL(rawUrl);
     const host = u.hostname.toLowerCase().replace(/^(?:www|m|music)\./, '');
-    if (host === 'youtu.be') return u.pathname.slice(1).split('/')[0] || null;
-    if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
-      if (u.searchParams.get('v')) return u.searchParams.get('v');
-      const m = u.pathname.match(/\/(?:shorts|embed|live|v)\/([^/?#]+)/);
-      if (m?.[1]) return m[1];
+    let candidate: string | null = null;
+    if (host === 'youtu.be') {
+      candidate = u.pathname.slice(1).split('/')[0] || null;
+    } else if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
+      if (u.searchParams.get('v')) {
+        candidate = u.searchParams.get('v');
+      } else {
+        const m = u.pathname.match(/\/(?:shorts|embed|live|v)\/([^/?#]+)/);
+        if (m?.[1]) candidate = m[1];
+      }
+    }
+    if (candidate && /^[A-Za-z0-9_-]{6,20}$/.test(candidate)) {
+      return candidate;
     }
   } catch {
     return null;

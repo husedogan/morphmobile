@@ -27,10 +27,105 @@ const isProd = process.env.NODE_ENV === 'production';
 
 async function startServer() {
   const app = express();
+  app.disable('x-powered-by');
+  app.set('trust proxy', 1);
   const httpServer = http.createServer(app);
   // Disable Node's default 5-minute requestTimeout so 2-hour video streams never get terminated mid-download
   httpServer.requestTimeout = 0;
   httpServer.headersTimeout = 120_000;
+
+  // Baseline security headers (omitting X-Frame-Options so embedded preview frames keep working)
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), geolocation=(), payment=()');
+    next();
+  });
+
+  // Protect mutating /api/* routes against cross-site request forgery while allowing same-origin & Capacitor Android origins
+  const isTrustedApiOrigin = (req: express.Request): boolean => {
+    const origin = req.headers.origin;
+    if (!origin) return true;
+    try {
+      const originUrl = new URL(origin);
+      const originHost = originUrl.host.toLowerCase();
+      if (
+        origin === 'capacitor://localhost' ||
+        origin === 'https://localhost' ||
+        origin === 'http://localhost' ||
+        originUrl.hostname === 'localhost' ||
+        originUrl.hostname === '127.0.0.1'
+      ) {
+        return true;
+      }
+      const forwardedHost = String(req.headers['x-forwarded-host'] || '')
+        .split(',')[0]
+        .trim()
+        .toLowerCase();
+      const hostHeader = String(req.headers.host || '').trim().toLowerCase();
+      if (forwardedHost && originHost === forwardedHost) return true;
+      if (hostHeader && originHost === hostHeader) return true;
+      const configuredAppUrl = process.env.APP_URL?.trim();
+      if (configuredAppUrl) {
+        try {
+          if (new URL(configuredAppUrl).host.toLowerCase() === originHost) return true;
+        } catch {
+          // Ignore malformed APP_URL
+        }
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  };
+
+  app.use('/api', (req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS') {
+      if (!isTrustedApiOrigin(req)) {
+        res.status(403).json({detail: 'Yetkisiz kaynak (Origin) isteği reddedildi.'});
+        return;
+      }
+    }
+    next();
+  });
+
+  // Lightweight bounded sliding-window rate limiter per IP for public / AI / proxy routes
+  const createApiRateLimiter = (
+    bucketName: string,
+    maxRequests: number,
+    windowMs: number
+  ): express.RequestHandler => {
+    const store = new Map<string, {count: number; resetAt: number}>();
+    return (req, res, next) => {
+      const now = Date.now();
+      if (store.size > 2000) {
+        for (const [k, v] of store.entries()) {
+          if (now > v.resetAt) store.delete(k);
+        }
+      }
+      const key = `${bucketName}:${req.ip || 'unknown'}`;
+      const existing = store.get(key);
+      if (!existing || now > existing.resetAt) {
+        store.set(key, {count: 1, resetAt: now + windowMs});
+        next();
+        return;
+      }
+      if (existing.count >= maxRequests) {
+        const retrySec = Math.max(1, Math.ceil((existing.resetAt - now) / 1000));
+        res.setHeader('Retry-After', String(retrySec));
+        res.status(429).json({
+          detail: `Çok fazla istek gönderildi. Lütfen ${retrySec} saniye sonra tekrar deneyin.`,
+        });
+        return;
+      }
+      existing.count += 1;
+      next();
+    };
+  };
+
+  const proxyApiLimiter = createApiRateLimiter('proxy', 45, 60_000);
+  const rangeApiLimiter = createApiRateLimiter('range', 240, 60_000);
+  const aiCaptionLimiter = createApiRateLimiter('captions', 20, 5 * 60_000);
 
   app.get('/api/ping', (_req, res) => {
     res.json({ok: true});
@@ -43,15 +138,24 @@ async function startServer() {
 
   const isPrivateIp = (ip: string): boolean => {
     const clean = ip.toLowerCase().replace(/^::ffff:/, '');
-    if (clean === '::1' || clean === '::' || clean.startsWith('fc') || clean.startsWith('fd') || clean.startsWith('fe80:')) {
+    if (
+      clean === '::1' ||
+      clean === '::' ||
+      clean.startsWith('fc') ||
+      clean.startsWith('fd') ||
+      /^fe[89ab]/.test(clean) ||
+      clean.startsWith('ff')
+    ) {
       return true;
     }
     const ipv4 = clean.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
     if (ipv4) {
-      const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
-      if (a === 10 || a === 127 || a === 0) return true;
+      const [a, b, c] = [Number(ipv4[1]), Number(ipv4[2]), Number(ipv4[3])];
+      if (a === 10 || a === 127 || a === 0 || a >= 224) return true;
       if (a === 172 && b >= 16 && b <= 31) return true;
       if (a === 192 && b === 168) return true;
+      if (a === 192 && b === 0 && c === 0) return true;
+      if (a === 198 && (b === 18 || b === 19)) return true;
       if (a === 169 && b === 254) return true;
       if (a === 100 && b >= 64 && b <= 127) return true;
     }
@@ -159,8 +263,34 @@ async function startServer() {
     },
   };
 
+  function pipeWebStreamToResponse(
+    webBody: ReadableStream<Uint8Array> | null,
+    res: express.Response
+  ): void {
+    if (!webBody) {
+      if (!res.writableEnded) res.end();
+      return;
+    }
+    const nodeStream = Readable.fromWeb(
+      webBody as unknown as import('stream/web').ReadableStream
+    );
+    nodeStream.on('error', () => {
+      if (!res.writableEnded) {
+        try {
+          res.end();
+        } catch {
+          // ignore closed socket
+        }
+      }
+    });
+    res.on('close', () => {
+      if (!nodeStream.destroyed) nodeStream.destroy();
+    });
+    nodeStream.pipe(res);
+  }
+
   // Built-in social, cloud & direct media link downloader (no external Python server required)
-  app.post('/api/download-link', express.json({limit: '32kb'}), async (req, res) => {
+  app.post('/api/download-link', proxyApiLimiter, express.json({limit: '32kb'}), async (req, res) => {
     req.setTimeout(0);
     res.setTimeout(0);
     const streamAbort = new AbortController();
@@ -183,15 +313,18 @@ async function startServer() {
     }
 
     const normalizedUrl = parsed.toString();
-    const ytId = extractYouTubeId(normalizedUrl);
+    const rawYtId = extractYouTubeId(normalizedUrl);
+    const ytId = rawYtId && /^[A-Za-z0-9_-]{6,20}$/.test(rawYtId) ? rawYtId : null;
     if (mode === 'thumbnail' && ytId) {
       const maxRes = `https://i.ytimg.com/vi/${ytId}/maxresdefault.jpg`;
       const hqRes = `https://i.ytimg.com/vi/${ytId}/hqdefault.jpg`;
-      const imgRes = await fetch(maxRes).then((r) => (r.ok ? r : fetch(hqRes)));
+      const imgRes = await safeFetch(maxRes, {signal: streamAbort.signal}).then((r) =>
+        r.ok ? r : safeFetch(hqRes, {signal: streamAbort.signal})
+      );
       if (imgRes.ok && imgRes.body) {
         res.setHeader('Content-Type', imgRes.headers.get('content-type') || 'image/jpeg');
         res.setHeader('X-Morph-Filename', `youtube-${ytId}-cover.jpg`);
-        Readable.fromWeb(imgRes.body as unknown as import('stream/web').ReadableStream).pipe(res);
+        pipeWebStreamToResponse(imgRes.body, res);
         return;
       }
     }
@@ -265,7 +398,7 @@ async function startServer() {
         res.setHeader('Content-Type', mCt);
         if (mLen) res.setHeader('Content-Length', mLen);
         res.setHeader('X-Morph-Filename', encodeURIComponent(urlName));
-        Readable.fromWeb(mediaRes.body as unknown as import('stream/web').ReadableStream).pipe(res);
+        pipeWebStreamToResponse(mediaRes.body, res);
         return;
       }
 
@@ -284,17 +417,24 @@ async function startServer() {
         res.end();
         return;
       }
-      Readable.fromWeb(upstream.body as unknown as import('stream/web').ReadableStream).pipe(res);
+      pipeWebStreamToResponse(upstream.body, res);
     } catch (error) {
       if (streamAbort.signal.aborted) return;
       if (!res.headersSent) {
-        res.status(502).json({detail: error instanceof Error ? error.message : 'Bağlantı indirilemedi.'});
+        const msg = error instanceof Error ? error.message : '';
+        const safeDetail =
+          msg === 'Blocked URL' || msg === 'Blocked resolved IP'
+            ? 'Engellenen veya geçersiz bağlantı adresi.'
+            : msg === 'Too many redirects'
+              ? 'Çok fazla yönlendirme nedeniyle bağlantı açılamadı.'
+              : 'Bağlantı indirilemedi.';
+        res.status(502).json({detail: safeDetail});
       }
     }
   });
 
   // Probe remote file for HTTP Range support, total size, ETag & filename (for parallel chunked accelerator)
-  app.post('/api/probe-link', express.json({limit: '16kb'}), async (req, res) => {
+  app.post('/api/probe-link', proxyApiLimiter, express.json({limit: '16kb'}), async (req, res) => {
     const rawUrl = String(req.body?.url || '').trim();
     const extraHeaders =
       req.body?.headers && typeof req.body.headers === 'object'
@@ -400,7 +540,7 @@ async function startServer() {
   });
 
   // SSRF-safe single HTTP Range chunk proxy (max 16 MB per chunk) for parallel chunked accelerator
-  app.post('/api/download-range', express.json({limit: '16kb'}), async (req, res) => {
+  app.post('/api/download-range', rangeApiLimiter, express.json({limit: '16kb'}), async (req, res) => {
     const rawUrl = String(req.body?.url || '').trim();
     const start = Number(req.body?.start);
     const end = Number(req.body?.end);
@@ -465,7 +605,7 @@ async function startServer() {
         res.end();
         return;
       }
-      Readable.fromWeb(upstream.body as unknown as import('stream/web').ReadableStream).pipe(res);
+      pipeWebStreamToResponse(upstream.body, res);
     } catch (error) {
       if (abort.signal.aborted) return;
       if (!res.headersSent) {
@@ -475,7 +615,7 @@ async function startServer() {
   });
 
   // Safe proxy for user-configured Cobalt API instances (v10 POST / and v7 POST /api/json)
-  app.post('/api/cobalt-proxy', express.json({limit: '32kb'}), async (req, res) => {
+  app.post('/api/cobalt-proxy', proxyApiLimiter, express.json({limit: '32kb'}), async (req, res) => {
     const rawCobalt = String(req.body?.cobaltUrl || '').trim();
     const apiKey = String(req.body?.apiKey || '').trim();
     const v10Payload = req.body?.v10Payload;
@@ -544,7 +684,7 @@ async function startServer() {
   });
 
   // Safe proxy for user's optional external Morph Python server (avoids browser CORS / Mixed Content)
-  app.all('/api/morph-proxy', async (req, res) => {
+  app.all('/api/morph-proxy', proxyApiLimiter, async (req, res) => {
     req.setTimeout(0);
     res.setTimeout(0);
     const targetRaw = req.header('x-morph-target-url')?.trim();
@@ -554,42 +694,32 @@ async function startServer() {
       return;
     }
 
-    let baseUrl: URL;
-    try {
-      const normalized = /^https?:\/\//i.test(targetRaw) ? targetRaw : `http://${targetRaw}`;
-      baseUrl = new URL(normalized);
-      if (baseUrl.protocol !== 'http:' && baseUrl.protocol !== 'https:') {
-        res.status(400).json({detail: 'Invalid server protocol.'});
-        return;
-      }
-      const hostLower = baseUrl.hostname.toLowerCase();
-      const effectivePort = Number(baseUrl.port || (baseUrl.protocol === 'https:' ? 443 : 80));
-      if (
-        hostLower === '169.254.169.254' ||
-        hostLower === 'metadata.google.internal' ||
-        hostLower.endsWith('.internal') ||
-        hostLower.startsWith('169.254.') ||
-        ((hostLower === 'localhost' ||
-          hostLower === '127.0.0.1' ||
-          hostLower === '0.0.0.0' ||
-          hostLower === '::1') &&
-          effectivePort === PORT)
-      ) {
-        res.status(400).json({detail: 'Blocked proxy target.'});
-        return;
-      }
-    } catch {
-      res.status(400).json({detail: 'Invalid server URL.'});
+    const baseUrl = parseExternalHttpUrl(targetRaw, false);
+    if (!baseUrl) {
+      res.status(400).json({detail: 'Invalid or blocked server URL.'});
       return;
     }
 
     const cleanPath = apiPath.startsWith('/') ? apiPath : `/${apiPath}`;
-    if (!cleanPath.startsWith('/api/')) {
+    let targetUrlObj: URL;
+    try {
+      targetUrlObj = new URL(cleanPath, baseUrl.origin);
+    } catch {
+      res.status(400).json({detail: 'Invalid Morph API path.'});
+      return;
+    }
+    if (targetUrlObj.origin !== baseUrl.origin || !targetUrlObj.pathname.startsWith('/api/')) {
       res.status(400).json({detail: 'Invalid Morph API path.'});
       return;
     }
 
-    const targetUrl = new URL(cleanPath, baseUrl.origin).toString();
+    try {
+      await assertSafeUrl(targetUrlObj);
+    } catch {
+      res.status(403).json({detail: 'Blocked private or unsafe proxy target.'});
+      return;
+    }
+
     const headers: Record<string, string> = {};
     const token = req.header('x-morph-token');
     if (token) headers['X-Morph-Token'] = token;
@@ -613,7 +743,8 @@ async function startServer() {
         init.duplex = 'half';
       }
 
-      const upstream = await fetch(targetUrl, init);
+      // Disallow cross-host / unsafe redirect hops; enforce assertSafeUrl on every hop
+      const upstream = await safeFetch(targetUrlObj.toString(), init, hasBody ? 0 : 2);
       res.status(upstream.status);
       const upstreamCt = upstream.headers.get('content-type');
       if (upstreamCt) res.setHeader('Content-Type', upstreamCt);
@@ -627,12 +758,10 @@ async function startServer() {
         return;
       }
 
-      const nodeStream = Readable.fromWeb(upstream.body as unknown as import('stream/web').ReadableStream);
-      nodeStream.pipe(res);
-    } catch (error) {
+      pipeWebStreamToResponse(upstream.body, res);
+    } catch {
       if (!res.headersSent) {
-        const message = error instanceof Error ? error.message : 'Server unreachable.';
-        res.status(502).json({detail: message});
+        res.status(502).json({detail: 'External Morph server unreachable.'});
       }
     }
   });
@@ -864,10 +993,20 @@ async function startServer() {
           'Ücretsiz API kullanım kotası geçici olarak doldu. Biraz bekleyip tekrar deneyebilir veya Ayarlar > Secrets panelinden faturalandırmalı bir anahtar seçebilirsiniz.',
       };
     }
-    return {status: 502, detail: rawMsg};
+    if (lower.includes('gemini_api_key')) {
+      return {
+        status: 503,
+        detail:
+          'GEMINI_API_KEY yapılandırılmamış. Lütfen Ayarlar > Secrets panelinden API anahtarınızı kontrol edin.',
+      };
+    }
+    return {
+      status: 502,
+      detail: 'Yapay zekâ servisi şu an yanıt veremiyor. Lütfen kısa süre sonra tekrar deneyin.',
+    };
   };
 
-  app.post('/api/captions/transcribe', express.json({limit: '25mb'}), async (req, res) => {
+  app.post('/api/captions/transcribe', aiCaptionLimiter, express.json({limit: '25mb'}), async (req, res) => {
     try {
       const audioBase64 = typeof req.body?.audioBase64 === 'string' ? req.body.audioBase64.trim() : '';
       const mimeType = typeof req.body?.mimeType === 'string' ? req.body.mimeType.trim() : 'audio/wav';
@@ -928,7 +1067,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/captions/translate', express.json({limit: '2mb'}), async (req, res) => {
+  app.post('/api/captions/translate', aiCaptionLimiter, express.json({limit: '2mb'}), async (req, res) => {
     try {
       const rawSegments = Array.isArray(req.body?.segments) ? req.body.segments : [];
       const targetLanguage =
@@ -1505,7 +1644,7 @@ async function startServer() {
     res.json({
       ok: storeHealthy,
       storeHealthy,
-      storeError,
+      storeError: storeHealthy ? null : 'Store unavailable',
       passcodeSource: getPasscodeSource(),
       ownerProvisioned: Boolean(effectiveEmail || getPasscodeSource() !== 'unclaimed'),
       ownerEmailRequired: Boolean(effectiveEmail),

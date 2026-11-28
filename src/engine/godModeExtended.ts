@@ -624,6 +624,20 @@ export const DEFAULT_GOD_MODE_FLAGS: ReadonlyArray<Omit<GodModeFeatureFlag, 'val
   },
 ];
 
+export const GOD_MODE_FLAGS_EVENT = 'morph:gm-flags-changed';
+
+export function isGodModeFlagEnabled(key: string): boolean {
+  const flags = loadGodModeFlags();
+  const found = flags.find((f) => f.key === key);
+  return found ? found.value : false;
+}
+
+function notifyGodModeFlagsChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(GOD_MODE_FLAGS_EVENT));
+  }
+}
+
 export function loadGodModeFlags(): GodModeFeatureFlag[] {
   let overrides: Record<string, boolean> = {};
   try {
@@ -653,6 +667,7 @@ export function saveGodModeFlags(flags: GodModeFeatureFlag[]): void {
   } catch {
     // Ignore
   }
+  notifyGodModeFlagsChanged();
 }
 
 export function resetGodModeFlags(): GodModeFeatureFlag[] {
@@ -661,6 +676,7 @@ export function resetGodModeFlags(): GodModeFeatureFlag[] {
   } catch {
     // Ignore
   }
+  notifyGodModeFlagsChanged();
   return DEFAULT_GOD_MODE_FLAGS.map((def) => ({...def, value: def.defaultValue}));
 }
 

@@ -846,10 +846,10 @@ export const GodModeDesignLab: React.FC<GodModeDesignLabProps> = ({
                 <button
                   type="button"
                   onClick={refreshLiveTokens}
-                  className="gm-btn-ghost flex h-8 w-8 items-center justify-center"
+                  className="gm-btn-ghost flex h-11 w-11 items-center justify-center"
                   aria-label={lang === 'tr' ? 'Yenile' : 'Refresh'}
                 >
-                  <RefreshCcw className="h-3.5 w-3.5" />
+                  <RefreshCcw className="h-4 w-4" />
                 </button>
               }
             />

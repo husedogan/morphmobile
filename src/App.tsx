@@ -2471,7 +2471,7 @@ export default function App() {
   };
 
   return (
-    <div className="morph-bg min-h-screen text-[var(--ink)]">
+    <div className="morph-bg min-h-[100dvh] text-[var(--ink)]">
       {/* Hidden inputs for WheelMenu */}
       <input
         ref={wheelDocInputRef}
@@ -2524,6 +2524,7 @@ export default function App() {
 
       <DevChaosOverlay />
 
+      <div data-chaos-canvas="true">
       {/* Compact 3-Zone Top Bar with Android/iOS Safe-Area Top & Horizontal Insets */}
       <header className="morph-app-header sticky top-0 z-30 border-b border-[var(--line)]/70 bg-[var(--paper)]/92 pt-safe px-safe backdrop-blur-md">
         <div className="mx-auto flex h-13 max-w-6xl items-center justify-between gap-4 px-4 sm:gap-8 sm:px-6 [@media(max-height:500px)]:h-11">
@@ -2904,6 +2905,7 @@ export default function App() {
           </>
         )}
       </main>
+      </div>
 
       {/* Draggable Corner-Snapping Radial Wheel Menu FAB — hidden cleanly in Simple Mode or when any overlay/sheet is open */}
       {(() => {

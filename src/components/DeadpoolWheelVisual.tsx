@@ -63,7 +63,10 @@ export interface DeadpoolResolvedConfig {
   colorBoost: number;
   logoPadding: number;
   logoBg: DeadpoolLogoBgMode;
+  customBgColor: string | null;
   logoContrast: number;
+  logoOffsetX: number;
+  logoOffsetY: number;
 }
 
 export interface DeadpoolLogoCatalogItem {
@@ -651,7 +654,10 @@ export function resolveDeadpoolConfig(p: Partial<Prefs>): DeadpoolResolvedConfig
       p.deadpoolLogoBg && validBgModes.includes(p.deadpoolLogoBg)
         ? p.deadpoolLogoBg
         : 'auto',
+    customBgColor: p.deadpoolCustomBgColor ? normalizeHexColor(p.deadpoolCustomBgColor) : null,
     logoContrast: clamp(p.deadpoolLogoContrast, 75, 150, 100),
+    logoOffsetX: clamp(p.deadpoolLogoOffsetX, -4, 4, 0),
+    logoOffsetY: clamp(p.deadpoolLogoOffsetY, -4, 4, 0),
   };
 }
 
@@ -664,9 +670,88 @@ export function isPolygonOuterShape(shape: WheelIconStylePref): boolean {
   );
 }
 
+export interface DeadpoolOuterShapeGeometry {
+  clipPath?: string;
+  polygonPoints?: string;
+  baseRotationDeg: number;
+  defaultBorderRadius: string;
+  aspectRatio?: 'pill' | 'square';
+}
+
+/**
+ * Single source of truth for WheelFab / Studio / Settings outer shell geometry.
+ * Star Prism uses a balanced 5-point star polygon (10 vertices).
+ */
+export function getDeadpoolOuterShapeGeometry(
+  shape: WheelIconStylePref,
+  cornerRadiusOverride: number | null = null
+): DeadpoolOuterShapeGeometry {
+  const customRadius = cornerRadiusOverride !== null ? `${cornerRadiusOverride}%` : null;
+  switch (shape) {
+    case 'octa_shield':
+      return {
+        clipPath: 'polygon(29% 2%, 71% 2%, 98% 29%, 98% 71%, 71% 98%, 29% 98%, 2% 71%, 2% 29%)',
+        polygonPoints: '29,2 71,2 98,29 98,71 71,98 29,98 2,71 2,29',
+        baseRotationDeg: 0,
+        defaultBorderRadius: '0%',
+      };
+    case 'blade_hex':
+      return {
+        clipPath: 'polygon(25% 4%, 75% 4%, 99% 50%, 75% 96%, 25% 96%, 1% 50%)',
+        polygonPoints: '25,4 75,4 99,50 75,96 25,96 1,50',
+        baseRotationDeg: 0,
+        defaultBorderRadius: '0%',
+      };
+    case 'star_prism':
+      return {
+        clipPath:
+          'polygon(50% 2%, 63% 35%, 98% 38%, 71% 60%, 79% 95%, 50% 75%, 21% 95%, 29% 60%, 2% 38%, 37% 35%)',
+        polygonPoints: '50,2 63,35 98,38 71,60 79,95 50,75 21,95 29,60 2,38 37,35',
+        baseRotationDeg: 0,
+        defaultBorderRadius: '0%',
+      };
+    case 'shield_crest':
+      return {
+        clipPath: 'polygon(50% 2%, 95% 26%, 88% 78%, 50% 99%, 12% 78%, 5% 26%)',
+        polygonPoints: '50,2 95,26 88,78 50,99 12,78 5,26',
+        baseRotationDeg: 0,
+        defaultBorderRadius: '0%',
+      };
+    case 'diamond':
+      return {
+        baseRotationDeg: 45,
+        defaultBorderRadius: customRadius ?? '24%',
+      };
+    case 'squircle':
+      return {
+        baseRotationDeg: 0,
+        defaultBorderRadius: customRadius ?? '30%',
+      };
+    case 'hex':
+      return {
+        baseRotationDeg: 0,
+        defaultBorderRadius: customRadius ?? '22%',
+      };
+    case 'pill_dock':
+      return {
+        baseRotationDeg: 0,
+        defaultBorderRadius: customRadius ?? '9999px',
+        aspectRatio: 'pill',
+      };
+    default:
+      return {
+        baseRotationDeg: 0,
+        defaultBorderRadius: customRadius ?? '50%',
+      };
+  }
+}
+
 export function buildDeadpoolBackgroundImage(cfg: DeadpoolResolvedConfig): string | undefined {
   if (cfg.logoBg === 'transparent') {
     return 'none';
+  }
+  if (cfg.customBgColor) {
+    return `linear-gradient(0deg, ${cfg.customBgColor}, ${cfg.customBgColor})`;
   }
   if (cfg.logoBg === 'dark') {
     return 'linear-gradient(145deg, #16161C 0%, #09090D 100%)';
@@ -701,8 +786,7 @@ export function buildDeadpoolBackgroundImage(cfg: DeadpoolResolvedConfig): strin
 
 /**
  * Returns the definitive shell backgroundImage for Deadpool Mode across WheelFab,
- * Deadpool Studio, and Settings previews so they render identically (never falling back
- * to the generic Morph pink-cyan accent gradient).
+ * Deadpool Studio, Settings previews, and Mini Swatches so they render identically.
  */
 export function resolveDeadpoolShellBackground(cfg: DeadpoolResolvedConfig): string {
   const custom = buildDeadpoolBackgroundImage(cfg);
@@ -726,11 +810,44 @@ export function resolveDeadpoolShellBackground(cfg: DeadpoolResolvedConfig): str
   }
 }
 
+/**
+ * Background-only saturation filter — applied strictly to the isolated shell background
+ * layer so adjusting background/shell saturation NEVER distorts the emblem's SVG colors.
+ */
 export function buildDeadpoolShellFilter(cfg: DeadpoolResolvedConfig): string | undefined {
+  if (cfg.colorBoost !== 100) {
+    return `saturate(${cfg.colorBoost}%)`;
+  }
+  return undefined;
+}
+
+/**
+ * Emblem-only contrast filter — applied strictly to the SVG logo group when requested,
+ * completely independent from shell background saturation.
+ */
+export function buildDeadpoolEmblemFilter(cfg: DeadpoolResolvedConfig): string | undefined {
   const parts: string[] = [];
-  if (cfg.colorBoost !== 100) parts.push(`saturate(${cfg.colorBoost}%)`);
-  if (cfg.logoContrast !== 100) parts.push(`contrast(${cfg.logoContrast}%)`);
+  if (cfg.logoContrast !== 100) {
+    parts.push(`contrast(${cfg.logoContrast}%)`);
+  }
+  if (cfg.maskDropShadow > 0) {
+    const blur = (0.5 + (cfg.maskDropShadow / 100) * 2.2).toFixed(2);
+    const alpha = (0.28 + (cfg.maskDropShadow / 100) * 0.52).toFixed(2);
+    parts.push(`drop-shadow(0px 1px ${blur}px rgba(0,0,0,${alpha}))`);
+  }
   return parts.length > 0 ? parts.join(' ') : undefined;
+}
+
+/**
+ * Resolves the shell outer border color consistently across WheelFab, Studio, and Settings.
+ */
+export function resolveDeadpoolShellBorderColor(cfg: DeadpoolResolvedConfig): string {
+  if (cfg.ringColor) return cfg.ringColor;
+  if (cfg.logoBg === 'transparent') return 'rgba(255,255,255,0.22)';
+  if (cfg.logoVariant === 'pure_bw' && !cfg.customBgColor && cfg.logoBg === 'auto') {
+    return 'rgba(9,9,11,0.22)';
+  }
+  return 'rgba(255,255,255,0.24)';
 }
 
 export function buildDeadpoolBoxShadow(
@@ -814,11 +931,11 @@ export function computeDeadpoolAnimatedAngles(
 export function getBreathingAnimClass(mode: DeadpoolBreathingPulse): string {
   switch (mode) {
     case 'soft':
-      return 'morph-dp-breath-soft';
+      return 'morph-dp-anim-soft';
     case 'heartbeat':
-      return 'morph-dp-breath-heartbeat';
+      return 'morph-dp-anim-heartbeat';
     case 'float':
-      return 'morph-dp-breath-float';
+      return 'morph-dp-anim-float';
     case 'off':
     default:
       return '';
@@ -959,14 +1076,8 @@ export const DeadpoolPolygonBorder: React.FC<{
   style: DeadpoolBorderStyle;
 }> = ({shape, color, width, style}) => {
   if (!isPolygonOuterShape(shape) || width <= 0.1) return null;
-  const points =
-    shape === 'octa_shield'
-      ? '29,2 71,2 98,29 98,71 71,98 29,98 2,71 2,29'
-      : shape === 'blade_hex'
-        ? '25,4 75,4 99,50 75,96 25,96 1,50'
-        : shape === 'star_prism'
-          ? '50,2 69,31 98,50 69,69 50,98 31,69 2,50 31,31'
-          : '50,2 95,26 88,78 50,99 12,78 5,26';
+  const geom = getDeadpoolOuterShapeGeometry(shape);
+  const points = geom.polygonPoints ?? '50,2 95,26 88,78 50,99 12,78 5,26';
   const dash = style === 'dashed' ? '7 4' : style === 'dotted' ? '2 4' : undefined;
   const sw = Math.max(1.5, width * 1.9);
 
@@ -1210,17 +1321,32 @@ function renderInnerRing(
 
 /**
  * Renders 7 genuinely distinct geometric Deadpool logo variants inside a 28×28 viewBox.
- * All vector geometry is 100% original inline SVG (no unverified external assets).
+ * Single source of truth used by WheelFab, Deadpool Studio, Settings previews, and Mini Swatches.
+ * - Independent color channels: outer shell, inner mask, eyes, ring, and custom/transparent background
+ * - True alpha cutouts when eyeColor === 'transparent' or logoBg === 'transparent'
+ * - Small-size legibility optimization via optional `compact` prop (e.g. 24px / 32px swatches)
  */
 export const DeadpoolEmblemGroup: React.FC<{
   cfg: DeadpoolResolvedConfig;
   maskFill: string;
   variantOverride?: DeadpoolLogoVariant;
-}> = ({cfg, maskFill, variantOverride}) => {
+  compact?: boolean;
+}> = ({cfg, maskFill, variantOverride, compact = false}) => {
   const uid = useId().replace(/:/g, '');
   const variant = variantOverride ?? cfg.logoVariant;
 
-  const isCustomColorActive = Boolean(cfg.innerColor || cfg.eyeColor || cfg.ringColor);
+  const isTransparentBg = cfg.logoBg === 'transparent';
+  const isTransparentEyes = cfg.eyeColor === 'transparent';
+  const hasRichOuterSurface = Boolean(
+    cfg.outerColorMid ||
+      (cfg.outerColor && cfg.outerColorEnd && cfg.outerColorEnd !== cfg.outerColor) ||
+      cfg.gradientType === 'radial' ||
+      cfg.gradientType === 'conic' ||
+      cfg.surfaceTexture !== 'none' ||
+      cfg.customBgColor ||
+      cfg.logoBg !== 'auto'
+  );
+
   const gapHalf = cfg.splitGap === 'tight' ? 1.15 : cfg.splitGap === 'wide' ? 2.15 : 1.6;
   const eyeSpread = cfg.splitGap === 'wide' ? 0.35 : cfg.splitGap === 'tight' ? -0.25 : 0;
   const eyes = buildEyePaths(cfg.eyeStyle, eyeSpread);
@@ -1229,20 +1355,19 @@ export const DeadpoolEmblemGroup: React.FC<{
   const paddingScale = 1 - (cfg.logoPadding / 100) * 1.15;
   const totalScale = Math.max(0.55, Math.min(1.3, cfg.maskScale * paddingScale));
   const opacity = cfg.maskOpacity / 100;
+  const offsetX = cfg.logoOffsetX;
+  const offsetY = cfg.logoOffsetY;
 
-  const filterParts: string[] = [];
-  if (cfg.maskDropShadow > 0) {
-    const blur = (0.5 + (cfg.maskDropShadow / 100) * 2.2).toFixed(2);
-    const alpha = (0.28 + (cfg.maskDropShadow / 100) * 0.52).toFixed(2);
-    filterParts.push(`drop-shadow(0px 1px ${blur}px rgba(0,0,0,${alpha}))`);
-  }
+  const emblemFilter = buildDeadpoolEmblemFilter(cfg);
 
   const eyeGlowFilter =
-    cfg.eyeGlow
+    cfg.eyeGlow && !isTransparentEyes
       ? `drop-shadow(0 0 ${(0.7 + (cfg.eyeGlowStrength / 100) * 2.1).toFixed(2)}px ${
           cfg.eyeColor && cfg.eyeColor !== 'transparent' ? cfg.eyeColor : '#FFFFFF'
         })`
       : undefined;
+
+  const eyeCutMaskId = `dp-eyecut-${uid}`;
 
   // Split half-circle D-paths using gapHalf
   const buildSplitDomes = (r: number) => {
@@ -1257,49 +1382,78 @@ export const DeadpoolEmblemGroup: React.FC<{
     };
   };
 
+  const renderEyeCutMaskDef = () => (
+    <defs>
+      <mask id={eyeCutMaskId}>
+        <rect x="0" y="0" width="28" height="28" fill="white" />
+        <path d={eyes.left} fill="black" />
+        <path d={eyes.right} fill="black" />
+      </mask>
+    </defs>
+  );
+
   const renderVariantGeometry = () => {
+    const ringBoost = compact ? 1.14 : 1;
+
     switch (variant) {
       case 'pure_bw': {
-        // 2. Pure Black & White — sharp high-contrast graphic stencil on bright field
+        // 2. Pure Black & White — sharp high-contrast graphic stencil
         const fg = cfg.innerColor || '#09090B';
-        const bg = '#FFFFFF';
+        const discBg = cfg.customBgColor || '#FFFFFF';
         const ringCol = cfg.ringColor || fg;
-        const eyeCol = cfg.eyeColor && cfg.eyeColor !== 'transparent' ? cfg.eyeColor : bg;
+        const eyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : '#FFFFFF';
         const domes = buildSplitDomes(8.85);
         return (
           <>
-            <circle cx="14" cy="14" r="10.9" fill={bg} />
-            {renderInnerRing(cfg.innerRingStyle, ringCol, Math.max(1.8, cfg.innerRingWidth), 10.65)}
-            <path d={domes.left} fill={fg} />
-            <path d={domes.right} fill={fg} />
-            <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
-              <path d={eyes.left} fill={eyeCol} />
-              <path d={eyes.right} fill={eyeCol} />
+            {isTransparentEyes && renderEyeCutMaskDef()}
+            {!isTransparentBg && <circle cx="14" cy="14" r="10.9" fill={discBg} />}
+            {renderInnerRing(
+              cfg.innerRingStyle,
+              ringCol,
+              Math.max(1.8, cfg.innerRingWidth) * ringBoost,
+              10.65
+            )}
+            <g mask={isTransparentEyes ? `url(#${eyeCutMaskId})` : undefined}>
+              <path d={domes.left} fill={fg} />
+              <path d={domes.right} fill={fg} />
             </g>
+            {!isTransparentEyes && (
+              <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
+                <path d={eyes.left} fill={eyeCol} />
+                <path d={eyes.right} fill={eyeCol} />
+              </g>
+            )}
           </>
         );
       }
 
       case 'white_on_black': {
         // 3. White Emblem on Black — dark solid disc with stark white split emblem & dark pierced eyes
-        const discBg = '#09090D';
-        const emblemFg = cfg.innerColor && isCustomColorActive ? cfg.innerColor : '#F8FAFC';
-        const eyeCol =
-          cfg.eyeColor && cfg.eyeColor !== 'transparent' && isCustomColorActive
-            ? cfg.eyeColor
-            : discBg;
-        const ringCol = cfg.ringColor && isCustomColorActive ? cfg.ringColor : emblemFg;
+        const discBg = cfg.customBgColor || '#09090D';
+        const emblemFg = cfg.innerColor || '#F8FAFC';
+        const eyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : '#09090D';
+        const ringCol = cfg.ringColor || emblemFg;
         const domes = buildSplitDomes(8.6);
         return (
           <>
-            <circle cx="14" cy="14" r="11.4" fill={discBg} />
-            {renderInnerRing(cfg.innerRingStyle, ringCol, Math.max(1.4, cfg.innerRingWidth * 0.92), 10.55)}
-            <path d={domes.left} fill={emblemFg} />
-            <path d={domes.right} fill={emblemFg} />
-            <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
-              <path d={eyes.left} fill={eyeCol} />
-              <path d={eyes.right} fill={eyeCol} />
+            {isTransparentEyes && renderEyeCutMaskDef()}
+            {!isTransparentBg && <circle cx="14" cy="14" r="11.35" fill={discBg} />}
+            {renderInnerRing(
+              cfg.innerRingStyle,
+              ringCol,
+              Math.max(1.45, cfg.innerRingWidth * 0.94) * ringBoost,
+              10.55
+            )}
+            <g mask={isTransparentEyes ? `url(#${eyeCutMaskId})` : undefined}>
+              <path d={domes.left} fill={emblemFg} />
+              <path d={domes.right} fill={emblemFg} />
             </g>
+            {!isTransparentEyes && (
+              <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
+                <path d={eyes.left} fill={eyeCol} />
+                <path d={eyes.right} fill={eyeCol} />
+              </g>
+            )}
           </>
         );
       }
@@ -1307,10 +1461,12 @@ export const DeadpoolEmblemGroup: React.FC<{
       case 'tactical_metallic': {
         // 4. Tactical Metallic — chamfered octagon armor ring, brushed steel split plates, notched ticks
         const metalId = `dp-metal-${uid}`;
-        const plateColTop = cfg.innerColor && isCustomColorActive ? cfg.innerColor : '#E2E8F0';
+        const plateColTop = cfg.innerColor || '#F1F5F9';
+        const plateColMid = cfg.innerColor ? cfg.innerColor : '#94A3B8';
         const plateColBot = '#475569';
-        const ringCol = cfg.ringColor && isCustomColorActive ? cfg.ringColor : '#94A3B8';
-        const eyeCol = cfg.eyeColor && cfg.eyeColor !== 'transparent' ? cfg.eyeColor : '#FFFFFF';
+        const ringCol = cfg.ringColor || '#CBD5E1';
+        const eyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : '#FFFFFF';
+        const frameFill = isTransparentBg ? 'none' : cfg.customBgColor || '#0B1120';
         const xL = (14 - gapHalf).toFixed(2);
         const xR = (14 + gapHalf).toFixed(2);
         return (
@@ -1318,68 +1474,112 @@ export const DeadpoolEmblemGroup: React.FC<{
             <defs>
               <linearGradient id={metalId} x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" stopColor={plateColTop} />
-                <stop offset="52%" stopColor="#94A3B8" />
+                <stop offset="52%" stopColor={plateColMid} stopOpacity="0.92" />
                 <stop offset="100%" stopColor={plateColBot} />
               </linearGradient>
+              {isTransparentEyes && (
+                <mask id={eyeCutMaskId}>
+                  <rect x="0" y="0" width="28" height="28" fill="white" />
+                  <path d={eyes.left} fill="black" />
+                  <path d={eyes.right} fill="black" />
+                </mask>
+              )}
             </defs>
             {/* Chamfered octagonal armor frame */}
             <polygon
               points="9.4,2.8 18.6,2.8 25.2,9.4 25.2,18.6 18.6,25.2 9.4,25.2 2.8,18.6 2.8,9.4"
-              fill="#0B1120"
+              fill={frameFill}
               stroke={ringCol}
-              strokeWidth={cfg.innerRingStyle === 'none' ? 0 : Math.max(1.3, cfg.innerRingWidth * 0.88)}
+              strokeWidth={
+                cfg.innerRingStyle === 'none'
+                  ? 0
+                  : Math.max(1.45, cfg.innerRingWidth * 0.92) * ringBoost
+              }
               strokeDasharray={cfg.innerRingStyle === 'dashed' ? '3 2' : undefined}
               strokeLinejoin="miter"
             />
             {/* Cardinal tactical rangefinder notches */}
-            <line x1="14" y1="2.2" x2="14" y2="4.9" stroke={ringCol} strokeWidth="1.25" />
-            <line x1="14" y1="23.1" x2="14" y2="25.8" stroke={ringCol} strokeWidth="1.25" />
-            <line x1="2.2" y1="14" x2="4.9" y2="14" stroke={ringCol} strokeWidth="1.25" />
-            <line x1="23.1" y1="14" x2="25.8" y2="14" stroke={ringCol} strokeWidth="1.25" />
+            {!compact && (
+              <>
+                <line x1="14" y1="2.2" x2="14" y2="4.9" stroke={ringCol} strokeWidth="1.35" />
+                <line x1="14" y1="23.1" x2="14" y2="25.8" stroke={ringCol} strokeWidth="1.35" />
+                <line x1="2.2" y1="14" x2="4.9" y2="14" stroke={ringCol} strokeWidth="1.35" />
+                <line x1="23.1" y1="14" x2="25.8" y2="14" stroke={ringCol} strokeWidth="1.35" />
+              </>
+            )}
             {/* Faceted left & right metallic armor mask plates */}
-            <polygon
-              points={`${xL},5.6 8.8,6.2 5.4,10.2 5.4,17.8 8.8,21.8 ${xL},22.4`}
-              fill={`url(#${metalId})`}
-            />
-            <polygon
-              points={`${xR},5.6 19.2,6.2 22.6,10.2 22.6,17.8 19.2,21.8 ${xR},22.4`}
-              fill={`url(#${metalId})`}
-            />
-            {/* Dark eye socket cutouts + crisp visor eyes */}
-            <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
-              <path d={eyes.left} fill={eyeCol} stroke="#0B1120" strokeWidth="0.65" />
-              <path d={eyes.right} fill={eyeCol} stroke="#0B1120" strokeWidth="0.65" />
+            <g mask={isTransparentEyes ? `url(#${eyeCutMaskId})` : undefined}>
+              <polygon
+                points={`${xL},5.5 8.7,6.1 5.3,10.2 5.3,17.8 8.7,21.9 ${xL},22.5`}
+                fill={`url(#${metalId})`}
+                stroke="#0F172A"
+                strokeWidth={compact ? '0.65' : '0.45'}
+              />
+              <polygon
+                points={`${xR},5.5 19.3,6.1 22.7,10.2 22.7,17.8 19.3,21.9 ${xR},22.5`}
+                fill={`url(#${metalId})`}
+                stroke="#0F172A"
+                strokeWidth={compact ? '0.65' : '0.45'}
+              />
             </g>
+            {/* High-contrast tactical dark eye socket halo + crisp visor eyes */}
+            {!isTransparentEyes && (
+              <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
+                <path
+                  d={eyes.left}
+                  fill={eyeCol}
+                  stroke="#090D18"
+                  strokeWidth={compact ? '1.35' : '1.05'}
+                  paintOrder="stroke"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d={eyes.right}
+                  fill={eyeCol}
+                  stroke="#090D18"
+                  strokeWidth={compact ? '1.35' : '1.05'}
+                  paintOrder="stroke"
+                  strokeLinejoin="round"
+                />
+              </g>
+            )}
           </>
         );
       }
 
       case 'minimal_flat': {
-        // 5. Minimal Flat — zero outer ring, clean flat geometric D-halves, built for ultra-small legibility
+        // 5. Minimal Flat — clean flat geometric D-halves built for crisp small-size legibility
         const flatFg = cfg.innerColor || maskFill || '#DC2626';
-        const eyeCol = cfg.eyeColor && cfg.eyeColor !== 'transparent' ? cfg.eyeColor : '#FFFFFF';
+        const eyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : '#FFFFFF';
         const domes = buildSplitDomes(10.2);
         return (
           <>
-            {cfg.innerRingStyle !== 'none' && cfg.innerRingStyle !== 'solid' &&
-              renderInnerRing(cfg.innerRingStyle, cfg.ringColor || flatFg, 1.1, 11.4)}
-            <path d={domes.left} fill={flatFg} />
-            <path d={domes.right} fill={flatFg} />
-            <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
-              <path d={eyes.left} fill={eyeCol} />
-              <path d={eyes.right} fill={eyeCol} />
+            {isTransparentEyes && renderEyeCutMaskDef()}
+            {cfg.innerRingStyle !== 'none' &&
+              cfg.innerRingStyle !== 'solid' &&
+              renderInnerRing(cfg.innerRingStyle, cfg.ringColor || flatFg, 1.15 * ringBoost, 11.4)}
+            <g mask={isTransparentEyes ? `url(#${eyeCutMaskId})` : undefined}>
+              <path d={domes.left} fill={flatFg} />
+              <path d={domes.right} fill={flatFg} />
             </g>
+            {!isTransparentEyes && (
+              <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
+                <path d={eyes.left} fill={eyeCol} />
+                <path d={eyes.right} fill={eyeCol} />
+              </g>
+            )}
           </>
         );
       }
 
       case 'crimson_dark': {
-        // 6. Crimson Dark — obsidian carbon base with deep faceted blood-crimson mask panels & sharp ridge
+        // 6. Crimson Dark — obsidian carbon base with faceted crimson armor panels & dynamic eye sockets
         const crimsonId = `dp-crim-${uid}`;
-        const panelTop = cfg.innerColor && isCustomColorActive ? cfg.innerColor : '#DC2626';
-        const panelBot = '#7F1D1D';
-        const ringCol = cfg.ringColor && isCustomColorActive ? cfg.ringColor : '#991B1B';
-        const eyeCol = cfg.eyeColor && cfg.eyeColor !== 'transparent' ? cfg.eyeColor : '#FEF2F2';
+        const panelTop = cfg.innerColor || '#EF4444';
+        const panelBot = cfg.innerColor ? cfg.innerColor : '#991B1B';
+        const ringCol = cfg.ringColor || '#DC2626';
+        const eyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : '#FFFFFF';
+        const discBg = cfg.customBgColor || '#0A0609';
         const xL = (14 - gapHalf).toFixed(2);
         const xR = (14 + gapHalf).toFixed(2);
         return (
@@ -1387,43 +1587,66 @@ export const DeadpoolEmblemGroup: React.FC<{
             <defs>
               <linearGradient id={crimsonId} x1="0%" y1="0%" x2="0%" y2="100%">
                 <stop offset="0%" stopColor={panelTop} />
-                <stop offset="100%" stopColor={panelBot} />
+                <stop offset="100%" stopColor={panelBot} stopOpacity="0.88" />
               </linearGradient>
+              {isTransparentEyes && (
+                <mask id={eyeCutMaskId}>
+                  <rect x="0" y="0" width="28" height="28" fill="white" />
+                  <path d={eyes.left} fill="black" />
+                  <path d={eyes.right} fill="black" />
+                </mask>
+              )}
             </defs>
-            <circle cx="14" cy="14" r="11.3" fill="#0A0609" />
-            {renderInnerRing(cfg.innerRingStyle, ringCol, Math.max(1.5, cfg.innerRingWidth), 10.6)}
+            {!isTransparentBg && <circle cx="14" cy="14" r="11.35" fill={discBg} />}
+            {renderInnerRing(
+              cfg.innerRingStyle,
+              ringCol,
+              Math.max(1.55, cfg.innerRingWidth) * ringBoost,
+              10.6
+            )}
             {/* Aggressive swept visor halves */}
-            <path
-              d={`M ${xL} 5.4 C 8.4 5.6 5.2 9.2 5.2 14 C 5.2 18.8 8.4 22.4 ${xL} 22.6 L ${(14 - gapHalf - 0.5).toFixed(2)} 14 Z`}
-              fill={`url(#${crimsonId})`}
-            />
-            <path
-              d={`M ${xR} 5.4 C 19.6 5.6 22.8 9.2 22.8 14 C 22.8 18.8 19.6 22.4 ${xR} 22.6 L ${(14 + gapHalf + 0.5).toFixed(2)} 14 Z`}
-              fill={`url(#${crimsonId})`}
-            />
-            {/* Black eye sockets around bright eyes */}
-            <path
-              d="M 5.8 9.9 L 12.2 14.6 L 10.0 17.4 C 7.0 17.2 4.8 14.2 5.8 9.9 Z"
-              fill="#0A0609"
-            />
-            <path
-              d="M 22.2 9.9 L 15.8 14.6 L 18.0 17.4 C 21.0 17.2 23.2 14.2 22.2 9.9 Z"
-              fill="#0A0609"
-            />
-            <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
-              <path d={eyes.left} fill={eyeCol} />
-              <path d={eyes.right} fill={eyeCol} />
+            <g mask={isTransparentEyes ? `url(#${eyeCutMaskId})` : undefined}>
+              <path
+                d={`M ${xL} 5.3 C 8.3 5.5 5.1 9.1 5.1 14 C 5.1 18.9 8.3 22.5 ${xL} 22.7 L ${(14 - gapHalf - 0.5).toFixed(2)} 14 Z`}
+                fill={`url(#${crimsonId})`}
+              />
+              <path
+                d={`M ${xR} 5.3 C 19.7 5.5 22.9 9.1 22.9 14 C 22.9 18.9 19.7 22.5 ${xR} 22.7 L ${(14 + gapHalf + 0.5).toFixed(2)} 14 Z`}
+                fill={`url(#${crimsonId})`}
+              />
             </g>
+            {/* Dynamic obsidian eye sockets — automatically track splitGap & every eyeStyle */}
+            {!isTransparentEyes && (
+              <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
+                <path
+                  d={eyes.left}
+                  fill={eyeCol}
+                  stroke="#0A0609"
+                  strokeWidth={compact ? '2.05' : '1.85'}
+                  paintOrder="stroke"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d={eyes.right}
+                  fill={eyeCol}
+                  stroke="#0A0609"
+                  strokeWidth={compact ? '2.05' : '1.85'}
+                  paintOrder="stroke"
+                  strokeLinejoin="round"
+                />
+              </g>
+            )}
           </>
         );
       }
 
       case 'monochrome_inverted': {
-        // 7. Monochrome Inverted — solid bright circular plate with negative-space dark mask cutout
+        // 7. Monochrome Inverted — bright circular plate with negative-space mask cutout & independent eye channel
         const cutMaskId = `dp-inv-${uid}`;
-        const plateFill = cfg.innerColor && isCustomColorActive ? cfg.innerColor : '#F4F4F8';
-        const cutoutBg = '#0D0D12';
-        const ringCol = cfg.ringColor && isCustomColorActive ? cfg.ringColor : plateFill;
+        const plateFill = cfg.innerColor || '#F4F4F8';
+        const cutoutBg = cfg.customBgColor || '#0D0D12';
+        const ringCol = cfg.ringColor || plateFill;
+        const customEyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : null;
         const domes = buildSplitDomes(8.9);
         return (
           <>
@@ -1432,38 +1655,58 @@ export const DeadpoolEmblemGroup: React.FC<{
                 <circle cx="14" cy="14" r="10.9" fill="white" />
                 <path d={domes.left} fill="black" />
                 <path d={domes.right} fill="black" />
-                <path d={eyes.left} fill="white" />
-                <path d={eyes.right} fill="white" />
+                {!isTransparentEyes && !customEyeCol && (
+                  <>
+                    <path d={eyes.left} fill="white" />
+                    <path d={eyes.right} fill="white" />
+                  </>
+                )}
               </mask>
             </defs>
-            <circle cx="14" cy="14" r="11.1" fill={cutoutBg} />
+            {!isTransparentBg && <circle cx="14" cy="14" r="11.15" fill={cutoutBg} />}
             <circle cx="14" cy="14" r="10.9" fill={plateFill} mask={`url(#${cutMaskId})`} />
+            {!isTransparentEyes && customEyeCol && (
+              <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
+                <path d={eyes.left} fill={customEyeCol} />
+                <path d={eyes.right} fill={customEyeCol} />
+              </g>
+            )}
             {cfg.innerRingStyle !== 'none' &&
-              renderInnerRing(cfg.innerRingStyle, ringCol, Math.max(1.1, cfg.innerRingWidth * 0.72), 11.1)}
+              renderInnerRing(
+                cfg.innerRingStyle,
+                ringCol,
+                Math.max(1.15, cfg.innerRingWidth * 0.78) * ringBoost,
+                11.1
+              )}
           </>
         );
       }
 
       case 'original':
       default: {
-        // 1. Original Red & Black — crisp iconic Deadpool emblem (default)
+        // 1. Original Red & Black — crisp iconic Deadpool emblem
+        // When user uses transparent background OR custom shell gradient/texture/bg, let shell surface shine through!
         const baseRed = cfg.outerColor || '#C8102E';
         const maskDark = cfg.innerColor || maskFill || '#0B0B0E';
         const ringCol = cfg.ringColor || maskDark;
-        const eyeCol =
-          cfg.eyeColor && cfg.eyeColor !== 'transparent' ? cfg.eyeColor : '#FFFFFF';
+        const eyeCol = cfg.eyeColor && !isTransparentEyes ? cfg.eyeColor : '#FFFFFF';
         const domes = buildSplitDomes(8.85);
+        const showSolidRedField = !isTransparentBg && !hasRichOuterSurface;
         return (
           <>
-            {/* Crisp red inner field so emblem stays unmistakably red/black even on custom backgrounds */}
-            <circle cx="14" cy="14" r="10.6" fill={baseRed} />
-            {renderInnerRing(cfg.innerRingStyle, ringCol, cfg.innerRingWidth, 10.65)}
-            <path d={domes.left} fill={maskDark} />
-            <path d={domes.right} fill={maskDark} />
-            <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
-              <path d={eyes.left} fill={eyeCol} />
-              <path d={eyes.right} fill={eyeCol} />
+            {isTransparentEyes && renderEyeCutMaskDef()}
+            {showSolidRedField && <circle cx="14" cy="14" r="10.6" fill={baseRed} />}
+            {renderInnerRing(cfg.innerRingStyle, ringCol, cfg.innerRingWidth * ringBoost, 10.65)}
+            <g mask={isTransparentEyes ? `url(#${eyeCutMaskId})` : undefined}>
+              <path d={domes.left} fill={maskDark} />
+              <path d={domes.right} fill={maskDark} />
             </g>
+            {!isTransparentEyes && (
+              <g style={eyeGlowFilter ? {filter: eyeGlowFilter} : undefined}>
+                <path d={eyes.left} fill={eyeCol} />
+                <path d={eyes.right} fill={eyeCol} />
+              </g>
+            )}
           </>
         );
       }
@@ -1472,9 +1715,9 @@ export const DeadpoolEmblemGroup: React.FC<{
 
   return (
     <g
-      transform={`translate(14 14) rotate(${cfg.maskTilt}) scale(${totalScale.toFixed(3)}) translate(-14 -14)`}
+      transform={`translate(${(14 + offsetX).toFixed(2)} ${(14 + offsetY).toFixed(2)}) rotate(${cfg.maskTilt}) scale(${totalScale.toFixed(3)}) translate(-14 -14)`}
       opacity={opacity}
-      style={filterParts.length > 0 ? {filter: filterParts.join(' ')} : undefined}
+      style={emblemFilter ? {filter: emblemFilter} : undefined}
     >
       {renderVariantGeometry()}
     </g>
@@ -1489,27 +1732,90 @@ export const DeadpoolMiniSwatch: React.FC<{
   ring: string;
   angle?: number;
   variant?: DeadpoolLogoVariant;
-}> = ({outer, end, mask, eye, ring, angle = 135, variant = 'original'}) => {
-  const miniCfg = resolveDeadpoolConfig({
-    deadpoolOuterColor: outer,
-    deadpoolOuterColorEnd: end,
-    deadpoolInnerColor: mask,
-    deadpoolEyeColor: eye,
-    deadpoolRingColor: ring,
-    deadpoolLogoVariant: variant,
-    deadpoolLogoPadding: 4,
-  });
+  mid?: string | null;
+  gradientType?: DeadpoolGradientType;
+  logoBg?: DeadpoolLogoBgMode;
+  customBgColor?: string | null;
+  surfaceTexture?: DeadpoolSurfaceTexture;
+  glossMode?: DeadpoolGlossMode;
+  sizePx?: number;
+  cfgOverride?: DeadpoolResolvedConfig;
+}> = ({
+  outer,
+  end,
+  mask,
+  eye,
+  ring,
+  angle = 135,
+  variant = 'original',
+  mid = null,
+  gradientType = 'linear',
+  logoBg = 'auto',
+  customBgColor = null,
+  surfaceTexture = 'none',
+  glossMode = 'none',
+  sizePx = 32,
+  cfgOverride,
+}) => {
+  const miniCfg =
+    cfgOverride ??
+    resolveDeadpoolConfig({
+      deadpoolOuterColor: outer,
+      deadpoolOuterColorMid: mid,
+      deadpoolOuterColorEnd: end,
+      deadpoolGradientType: gradientType,
+      deadpoolGradientAngle: angle,
+      deadpoolInnerColor: mask,
+      deadpoolEyeColor: eye,
+      deadpoolRingColor: ring,
+      deadpoolLogoVariant: variant,
+      deadpoolLogoBg: logoBg,
+      deadpoolCustomBgColor: customBgColor,
+      deadpoolSurfaceTexture: surfaceTexture,
+      deadpoolGlossMode: glossMode,
+      deadpoolLogoPadding: 4,
+    });
+
+  const shellBg = resolveDeadpoolShellBackground(miniCfg);
+  const bgFilter = buildDeadpoolShellFilter(miniCfg);
+  const isTransparent = miniCfg.logoBg === 'transparent';
+  const borderCol = cfgOverride ? resolveDeadpoolShellBorderColor(miniCfg) : ring;
+  const svgSize = Math.round(sizePx * 0.78);
 
   return (
     <span
-      className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow-xs"
+      className="relative flex shrink-0 items-center justify-center overflow-hidden rounded-full shadow-xs"
       style={{
-        backgroundImage: `linear-gradient(${angle}deg, ${outer} 0%, ${end} 100%)`,
-        border: `1.5px solid ${ring}`,
+        width: `${sizePx}px`,
+        height: `${sizePx}px`,
+        border: `1.5px solid ${borderCol}`,
       }}
     >
-      <svg viewBox="0 0 28 28" className="h-6 w-6" fill="none" aria-hidden="true">
-        <DeadpoolEmblemGroup cfg={miniCfg} maskFill={mask} variantOverride={variant} />
+      {!isTransparent && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-0"
+          style={{
+            backgroundImage: shellBg,
+            filter: bgFilter,
+          }}
+        />
+      )}
+      <DeadpoolShellOverlays cfg={miniCfg} />
+      <svg
+        viewBox="0 0 28 28"
+        width={svgSize}
+        height={svgSize}
+        className="relative z-[4]"
+        fill="none"
+        aria-hidden="true"
+      >
+        <DeadpoolEmblemGroup
+          cfg={miniCfg}
+          maskFill={mask}
+          variantOverride={variant}
+          compact={sizePx <= 36}
+        />
       </svg>
     </span>
   );
@@ -1559,6 +1865,9 @@ export function buildDeadpoolResetPatch(): Partial<Prefs> {
     deadpoolColorBoost: 100,
     deadpoolLogoPadding: 6,
     deadpoolLogoBg: 'auto',
+    deadpoolCustomBgColor: null,
     deadpoolLogoContrast: 100,
+    deadpoolLogoOffsetX: 0,
+    deadpoolLogoOffsetY: 0,
   };
 }

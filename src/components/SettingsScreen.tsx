@@ -117,8 +117,14 @@ import {deleteNleProjectIdb, listNleProjectsIdb} from '../engine/projectStorage'
 import {PWAInstallButton} from './PWAInstallButton';
 import {
   DeadpoolEmblemGroup,
+  DeadpoolPolygonBorder,
+  DeadpoolShellOverlays,
+  buildDeadpoolBoxShadow,
+  buildDeadpoolShellFilter,
+  getDeadpoolOuterShapeGeometry,
   resolveDeadpoolConfig,
   resolveDeadpoolShellBackground,
+  resolveDeadpoolShellBorderColor,
 } from './DeadpoolWheelVisual';
 import {GodModeShell} from './GodMode/GodModeShell';
 import {
@@ -1686,6 +1692,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
               }
             };
 
+            const previewShapeGeom = getDeadpoolOuterShapeGeometry(activeOuterId);
             const previewBadgeStyle: React.CSSProperties =
               activeOuterId === 'diamond'
                 ? {transform: 'rotate(45deg) scale(0.84)', borderRadius: '10px'}
@@ -1693,15 +1700,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   ? {borderRadius: '12px'}
                   : activeOuterId === 'pill_dock'
                     ? {width: '50px', height: '32px', borderRadius: '999px'}
-                    : activeOuterId === 'octa_shield'
-                      ? {clipPath: 'polygon(29% 2%, 71% 2%, 98% 29%, 98% 71%, 71% 98%, 29% 98%, 2% 71%, 2% 29%)', borderRadius: 0}
-                      : activeOuterId === 'blade_hex'
-                        ? {clipPath: 'polygon(25% 4%, 75% 4%, 99% 50%, 75% 96%, 25% 96%, 1% 50%)', borderRadius: 0}
-                        : activeOuterId === 'star_prism'
-                          ? {clipPath: 'polygon(50% 2%, 69% 31%, 98% 50%, 69% 69%, 50% 98%, 31% 69%, 2% 50%, 31% 31%)', borderRadius: 0}
-                          : activeOuterId === 'shield_crest'
-                            ? {clipPath: 'polygon(50% 2%, 95% 26%, 88% 78%, 50% 99%, 12% 78%, 5% 26%)', borderRadius: 0}
-                            : {borderRadius: '999px'};
+                    : previewShapeGeom.clipPath
+                      ? {clipPath: previewShapeGeom.clipPath, borderRadius: 0}
+                      : {borderRadius: '999px'};
 
             const effectivePreviewCore: WheelInnerStylePref =
               effectiveInner !== 'auto'
@@ -1730,26 +1731,60 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                         const dpPreviewCfg = isDpBadge ? resolveDeadpoolConfig(prefs) : null;
                         const dpPreviewBg = dpPreviewCfg ? resolveDeadpoolShellBackground(dpPreviewCfg) : undefined;
                         const dpTransparent = Boolean(dpPreviewCfg && dpPreviewCfg.logoBg === 'transparent');
+                        const dpHasClip = Boolean(previewShapeGeom.clipPath);
+                        const dpShadow = dpPreviewCfg ? buildDeadpoolBoxShadow(dpPreviewCfg, dpHasClip) : undefined;
+                        const dpBorderCol = dpPreviewCfg ? resolveDeadpoolShellBorderColor(dpPreviewCfg) : undefined;
                         return (
                           <span
                             style={{
                               ...previewBadgeStyle,
-                              ...(isDpBadge && dpPreviewBg
+                              ...(isDpBadge && dpPreviewCfg
                                 ? {
-                                    backgroundImage: dpPreviewBg,
-                                    backgroundColor: dpTransparent ? 'transparent' : undefined,
-                                    boxShadow: dpTransparent ? 'none' : undefined,
+                                    backgroundColor: 'transparent',
+                                    boxShadow: dpShadow ?? (dpTransparent ? 'none' : undefined),
+                                    ...(!dpHasClip
+                                      ? {
+                                          borderColor:
+                                            dpTransparent && !dpPreviewCfg.ringColor
+                                              ? 'transparent'
+                                              : dpBorderCol,
+                                          borderWidth: `${Math.min(2, dpPreviewCfg.borderWidth)}px`,
+                                          borderStyle: dpPreviewCfg.borderStyle,
+                                        }
+                                      : {borderWidth: 0, borderStyle: 'none'}),
+                                    ...(!dpHasClip && dpPreviewCfg.cornerRadius !== null
+                                      ? {borderRadius: `${dpPreviewCfg.cornerRadius}%`}
+                                      : {}),
                                   }
                                 : {}),
                             }}
-                            className={`${isDpBadge ? '' : 'morph-accent-btn '}flex h-10 w-10 items-center justify-center ${
+                            className={`${isDpBadge ? '' : 'morph-accent-btn '}relative flex h-10 w-10 items-center justify-center overflow-hidden ${
                               dpTransparent ? '' : 'shadow-sm'
                             } transition-all ${wheelEnabled ? 'opacity-100' : 'opacity-40 grayscale'}`}
                           >
+                            {isDpBadge && dpPreviewCfg && !dpTransparent && dpPreviewBg && (
+                              <span
+                                aria-hidden="true"
+                                className="pointer-events-none absolute inset-0 z-0"
+                                style={{
+                                  backgroundImage: dpPreviewBg,
+                                  filter: buildDeadpoolShellFilter(dpPreviewCfg),
+                                }}
+                              />
+                            )}
+                            {isDpBadge && dpPreviewCfg && <DeadpoolShellOverlays cfg={dpPreviewCfg} />}
+                            {isDpBadge && dpPreviewCfg && dpHasClip && (
+                              <DeadpoolPolygonBorder
+                                shape={activeOuterId}
+                                color={dpBorderCol ?? 'rgba(255,255,255,0.24)'}
+                                width={Math.min(2, dpPreviewCfg.borderWidth)}
+                                style={dpPreviewCfg.borderStyle}
+                              />
+                            )}
                             <svg
                               viewBox={activeOuterId === 'pill_dock' ? '0 0 48 24' : '0 0 28 28'}
                               fill="none"
-                              className={
+                              className={`relative z-[4] ${
                                 activeOuterId === 'pill_dock'
                                   ? 'h-5 w-10'
                                   : isDpBadge
@@ -1757,7 +1792,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                                       ? 'h-[22px] w-[22px]'
                                       : 'h-8 w-8'
                                     : 'h-5 w-5'
-                              }
+                              }`}
                               style={activeOuterId === 'diamond' ? {transform: 'rotate(-45deg)'} : undefined}
                             >
                               {(() => {

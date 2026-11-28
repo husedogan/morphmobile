@@ -105,19 +105,29 @@ export const DevChaosOverlay: React.FC = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    const fontSize = 14;
+    let drops: number[] = [];
+
     const resize = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
+      const cols = Math.max(10, Math.floor(canvas.width / fontSize));
+      if (drops.length < cols) {
+        for (let i = drops.length; i < cols; i++) {
+          drops.push(Math.floor(Math.random() * -40));
+        }
+      } else if (drops.length > cols) {
+        drops = drops.slice(0, cols);
+      }
     };
     resize();
     window.addEventListener('resize', resize);
+    window.addEventListener('orientationchange', resize);
 
-    const fontSize = 14;
-    const cols = Math.max(10, Math.floor(canvas.width / fontSize));
-    const drops = Array.from({length: cols}, () => Math.floor(Math.random() * -40));
     const glyphs = '01MORPHDEADPOOLX97#$%&@';
 
     const timer = window.setInterval(() => {
+      if (document.hidden) return;
       ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.font = `bold ${fontSize}px monospace`;
@@ -135,6 +145,7 @@ export const DevChaosOverlay: React.FC = () => {
     return () => {
       window.clearInterval(timer);
       window.removeEventListener('resize', resize);
+      window.removeEventListener('orientationchange', resize);
     };
   }, [chaos.matrixRain]);
 
@@ -146,12 +157,8 @@ export const DevChaosOverlay: React.FC = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-    resize();
-    window.addEventListener('resize', resize);
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
 
     const count = Math.min(CHAOS_SAFE_LIMITS.maxSwarmCount, chaos.dvdSwarmCount);
     const items: Bouncer[] = Array.from({length: count}, (_, i) => ({
@@ -163,18 +170,43 @@ export const DevChaosOverlay: React.FC = () => {
       size: 20 + (i % 3) * 5,
     }));
 
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      for (const b of items) {
+        b.x = Math.max(b.size + 4, Math.min(Math.max(b.size + 4, canvas.width - b.size - 4), b.x));
+        b.y = Math.max(b.size + 4, Math.min(Math.max(b.size + 4, canvas.height - b.size - 4), b.y));
+      }
+    };
+    window.addEventListener('resize', resize);
+    window.addEventListener('orientationchange', resize);
+
     let rafId = 0;
     const step = () => {
+      if (document.hidden) {
+        rafId = requestAnimationFrame(step);
+        return;
+      }
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       for (const b of items) {
         b.x += b.vx;
         b.y += b.vy;
-        if (b.x - b.size < 0 || b.x + b.size > canvas.width) {
-          b.vx *= -1;
+        if (b.x - b.size < 0) {
+          b.x = b.size;
+          b.vx = Math.abs(b.vx);
+          b.hue = (b.hue + 65) % 360;
+        } else if (b.x + b.size > canvas.width) {
+          b.x = Math.max(b.size, canvas.width - b.size);
+          b.vx = -Math.abs(b.vx);
           b.hue = (b.hue + 65) % 360;
         }
-        if (b.y - b.size < 0 || b.y + b.size > canvas.height) {
-          b.vy *= -1;
+        if (b.y - b.size < 0) {
+          b.y = b.size;
+          b.vy = Math.abs(b.vy);
+          b.hue = (b.hue + 65) % 360;
+        } else if (b.y + b.size > canvas.height) {
+          b.y = Math.max(b.size, canvas.height - b.size);
+          b.vy = -Math.abs(b.vy);
           b.hue = (b.hue + 65) % 360;
         }
         ctx.save();
@@ -208,6 +240,7 @@ export const DevChaosOverlay: React.FC = () => {
     return () => {
       cancelAnimationFrame(rafId);
       window.removeEventListener('resize', resize);
+      window.removeEventListener('orientationchange', resize);
     };
   }, [chaos.dvdSwarmCount]);
 

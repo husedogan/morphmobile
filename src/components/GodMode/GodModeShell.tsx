@@ -54,6 +54,7 @@ import {
   pushGodModeLog,
   subscribeGodModeTelemetry,
 } from '../../engine/godModeTelemetry';
+import {GOD_MODE_FLAGS_EVENT, isGodModeFlagEnabled} from '../../engine/godModeExtended';
 import {
   OwnerSecurityState,
   buildOfflineSecurityState,
@@ -187,9 +188,16 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
   );
   const [previewTheme, setPreviewTheme] = useState<GodModeThemeId | null>(null);
 
-  // Real runtime telemetry subscription
+  // Real runtime telemetry subscription — ONLY active on modules that actually render live telemetry,
+  // eliminating unnecessary 1 Hz re-renders inside Deadpool Studio, Chaos Lab, Storage, Settings, etc.
   const [telemetry, setTelemetry] = useState<RuntimeTelemetrySnapshot>(() =>
     getTelemetrySnapshot()
+  );
+  const [compactDensity, setCompactDensity] = useState<boolean>(() =>
+    isGodModeFlagEnabled('gm_compact_mobile_cards')
+  );
+  const [gpuHintEnabled, setGpuHintEnabled] = useState<boolean>(() =>
+    isGodModeFlagEnabled('gm_hardware_accel_hint')
   );
 
   // Owner security state
@@ -215,7 +223,33 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
     error: null,
   }));
 
-  useEffect(() => subscribeGodModeTelemetry(setTelemetry), []);
+  const activeModuleUsesTelemetry =
+    activeModule === 'dashboard' ||
+    activeModule === 'system_core' ||
+    activeModule === 'performance_lab' ||
+    activeModule === 'logs_events' ||
+    activeModule === 'network_lab' ||
+    activeModule === 'dev_toolkit' ||
+    activeModule === 'design_lab' ||
+    activeModule === 'autonomous_agents' ||
+    activeModule === 'terminal' ||
+    activeModule === 'automation_studio' ||
+    activeModule === 'digital_twin';
+
+  useEffect(() => {
+    if (!activeModuleUsesTelemetry) return;
+    setTelemetry(getTelemetrySnapshot());
+    return subscribeGodModeTelemetry(setTelemetry);
+  }, [activeModuleUsesTelemetry]);
+
+  useEffect(() => {
+    const syncFlags = () => {
+      setCompactDensity(isGodModeFlagEnabled('gm_compact_mobile_cards'));
+      setGpuHintEnabled(isGodModeFlagEnabled('gm_hardware_accel_hint'));
+    };
+    window.addEventListener(GOD_MODE_FLAGS_EVENT, syncFlags);
+    return () => window.removeEventListener(GOD_MODE_FLAGS_EVENT, syncFlags);
+  }, []);
 
   const refreshSecurity = useCallback(async () => {
     const status = await checkGodModeAuthStatus();
@@ -385,6 +419,9 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
   const selectModule = (id: GodModeModuleId) => {
     setActiveModule(id);
     setMobileDrawerOpen(false);
+    if (isGodModeFlagEnabled('gm_verbose_audit_trace')) {
+      pushGodModeLog('info', 'audit_trace', `Switched GOD MODE module -> ${id}`);
+    }
   };
 
   const renderDesktopSlimDock = () => (
@@ -489,7 +526,7 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
         >
           {t.shell.activeSection}
         </div>
-        <div className="grid grid-cols-4 gap-1.5">
+        <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
           {coreModules.map((mod) => {
             const Icon = mod.icon;
             const active = activeModule === mod.id;
@@ -500,13 +537,13 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
                 type="button"
                 onClick={() => selectModule(mod.id)}
                 title={modCopy.label}
-                className={`flex min-h-[52px] flex-col items-center justify-center gap-1 px-1 py-1.5 text-center transition-all ${
+                className={`flex min-h-[54px] flex-col items-center justify-center gap-1 px-1.5 py-2 text-center transition-all ${
                   active ? 'gm-nav-icon-active' : 'gm-inset hover:border-[var(--gm-border-strong)]'
                 }`}
                 style={active ? undefined : {color: 'var(--gm-ink)'}}
               >
-                <Icon className="h-[17px] w-[17px] shrink-0" />
-                <span className="w-full truncate text-[9.5px] font-semibold leading-tight">
+                <Icon className="h-[18px] w-[18px] shrink-0" />
+                <span className="w-full truncate text-[11px] font-semibold leading-tight">
                   {modCopy.short}
                 </span>
               </button>
@@ -522,7 +559,7 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
         >
           {t.shell.roadmapSection}
         </div>
-        <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-5">
+        <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
           {labModules.map((mod) => {
             const Icon = mod.icon;
             const active = activeModule === mod.id;
@@ -533,13 +570,13 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
                 type="button"
                 onClick={() => selectModule(mod.id)}
                 title={modCopy.label}
-                className={`flex min-h-[52px] flex-col items-center justify-center gap-1 px-1 py-1.5 text-center transition-all ${
+                className={`flex min-h-[54px] flex-col items-center justify-center gap-1 px-1.5 py-2 text-center transition-all ${
                   active ? 'gm-nav-icon-active' : 'gm-inset hover:border-[var(--gm-border-strong)]'
                 }`}
                 style={active ? undefined : {color: 'var(--gm-ink)'}}
               >
-                <Icon className="h-[16px] w-[16px] shrink-0" />
-                <span className="w-full truncate text-[9.5px] font-medium leading-tight">
+                <Icon className="h-[17px] w-[17px] shrink-0" />
+                <span className="w-full truncate text-[11px] font-medium leading-tight">
                   {modCopy.short}
                 </span>
               </button>
@@ -553,6 +590,8 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
   return (
     <div
       data-god-theme={effectiveTheme}
+      data-gm-density={compactDensity ? 'compact' : 'comfortable'}
+      data-gm-gpu={gpuHintEnabled ? 'on' : 'off'}
       data-chaos-safe="true"
       className="morph-godmode-root mt-4 overflow-hidden rounded-3xl border shadow-2xl transition-colors"
       style={{borderColor: 'var(--gm-border-strong)'}}
@@ -696,20 +735,24 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
               <div
                 className="mb-3.5 flex items-center gap-2.5 border-b pb-2.5"
                 style={{borderColor: 'var(--gm-border)'}}
-                title={activeModuleMeta.summary}
               >
                 <span
-                  className="gm-inset flex h-8 w-8 shrink-0 items-center justify-center"
+                  className="gm-inset flex h-9 w-9 shrink-0 items-center justify-center"
                   style={{color: 'var(--gm-accent)'}}
                 >
                   <HeaderIcon className="h-4 w-4" />
                 </span>
-                <h2
-                  className="truncate text-sm font-bold tracking-tight sm:text-base"
-                  style={{color: 'var(--gm-ink)'}}
-                >
-                  {activeModuleMeta.label}
-                </h2>
+                <div className="min-w-0 flex-1">
+                  <h2
+                    className="truncate text-sm font-bold tracking-tight sm:text-base"
+                    style={{color: 'var(--gm-ink)'}}
+                  >
+                    {activeModuleMeta.label}
+                  </h2>
+                  <p className="truncate text-[11px]" style={{color: 'var(--gm-muted)'}}>
+                    {activeModuleMeta.summary}
+                  </p>
+                </div>
               </div>
             );
           })()}
@@ -971,14 +1014,14 @@ export const GodModeShell: React.FC<GodModeShellProps> = ({
                 type="button"
                 onClick={() => setMobileDrawerOpen(false)}
                 aria-label={t.shell.close}
-                className="gm-btn-ghost flex h-9 w-9 items-center justify-center"
+                className="gm-btn-ghost flex h-11 w-11 items-center justify-center"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
             <div
               className="min-h-0 flex-1 overflow-y-auto px-3 pt-2.5"
-              style={{paddingBottom: 'max(0.85rem, env(safe-area-inset-bottom))'}}
+              style={{paddingBottom: 'max(0.85rem, var(--morph-safe-bottom, env(safe-area-inset-bottom)))'}}
             >
               {renderModuleGridLauncher()}
             </div>

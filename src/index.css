@@ -1261,9 +1261,12 @@ html[data-dev-tracking="on"] body {
   letter-spacing: var(--dev-letter-spacing, 0em);
 }
 
-html[data-dev-filter="on"] #root,
-html[data-chaos-filter="on"] #root {
-  filter: var(--dev-root-filter, brightness(1)) var(--dev-chaos-filter, brightness(1));
+html[data-dev-filter="on"] #root {
+  filter: var(--dev-root-filter, brightness(1));
+}
+
+html[data-chaos-filter="on"] [data-chaos-canvas="true"] {
+  filter: var(--dev-chaos-filter, brightness(1));
 }
 
 html[data-dev-pixel-grid="on"]::before {
@@ -1353,82 +1356,110 @@ html[data-dev-crt="on"]::after {
   75% { transform: translate3d(14px, 14px, 0) rotate(5deg); }
 }
 
-html[data-chaos-transform="on"] #root {
+html[data-chaos-transform="on"] [data-chaos-canvas="true"] {
   transform: var(--dev-chaos-transform);
   transform-origin: center center;
   transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-html[data-chaos-wobble="mild"] #root {
+html[data-chaos-wobble="mild"] [data-chaos-canvas="true"] {
   animation: morph-chaos-wobble-mild 2.2s ease-in-out infinite;
   transform-origin: center center;
 }
 
-html[data-chaos-wobble="drunk"] #root {
+html[data-chaos-wobble="drunk"] [data-chaos-canvas="true"] {
   animation: morph-chaos-wobble-drunk 2.6s ease-in-out infinite;
   transform-origin: center center;
 }
 
-html[data-chaos-wobble="quake"] #root {
+html[data-chaos-wobble="quake"] [data-chaos-canvas="true"] {
   animation: morph-chaos-wobble-quake 140ms linear infinite;
   transform-origin: center center;
 }
 
-html[data-chaos-rainbow="on"] #root {
+html[data-chaos-rainbow="on"] [data-chaos-canvas="true"] {
   animation: morph-chaos-rainbow 1.5s linear infinite;
 }
 
-html[data-chaos-wobble="mild"][data-chaos-rainbow="on"] #root {
-  animation: morph-chaos-wobble-mild 2.2s ease-in-out infinite, morph-chaos-rainbow 1.5s linear infinite;
-}
-
-html[data-chaos-wobble="drunk"][data-chaos-rainbow="on"] #root {
-  animation: morph-chaos-wobble-drunk 2.6s ease-in-out infinite, morph-chaos-rainbow 1.5s linear infinite;
-}
-
-html[data-chaos-wobble="quake"][data-chaos-rainbow="on"] #root {
-  animation: morph-chaos-wobble-quake 140ms linear infinite, morph-chaos-rainbow 1.5s linear infinite;
-}
-
-html[data-chaos-gravity="on"] #root section:not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *),
-html[data-chaos-gravity="on"] #root article:not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *),
-html[data-chaos-gravity="on"] #root button:not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *) {
-  transition: transform 420ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-html[data-chaos-gravity="on"] #root section:nth-child(odd):not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *),
-html[data-chaos-gravity="on"] #root article:nth-child(odd):not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *) {
-  transform: rotate(-3.2deg) translateY(10px);
-}
-
-html[data-chaos-gravity="on"] #root section:nth-child(even):not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *),
-html[data-chaos-gravity="on"] #root article:nth-child(even):not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *) {
-  transform: rotate(3.6deg) translateY(14px);
-}
-
-html[data-chaos-gravity="on"] #root button:nth-child(3n+1):not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *) {
-  transform: rotate(-7deg) translateY(6px);
-}
-
-html[data-chaos-gravity="on"] #root button:nth-child(3n+2):not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *) {
-  transform: rotate(8deg) translateY(9px);
-}
-
-html[data-chaos-gravity="on"] #root button:nth-child(3n):not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *) {
-  transform: rotate(-5deg) translateY(4px);
-}
-
-html[data-chaos-glitch="on"] #root {
+html[data-chaos-glitch="on"] [data-chaos-canvas="true"] {
   animation: morph-chaos-glitch-flicker 0.9s steps(2, end) infinite;
 }
 
-html[data-chaos-glitch="on"] #root button:not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *),
-html[data-chaos-glitch="on"] #root section:not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *) {
+html[data-chaos-wobble="mild"][data-chaos-rainbow="on"] [data-chaos-canvas="true"] {
+  animation: morph-chaos-wobble-mild 2.2s ease-in-out infinite, morph-chaos-rainbow 1.5s linear infinite;
+}
+
+html[data-chaos-wobble="drunk"][data-chaos-rainbow="on"] [data-chaos-canvas="true"] {
+  animation: morph-chaos-wobble-drunk 2.6s ease-in-out infinite, morph-chaos-rainbow 1.5s linear infinite;
+}
+
+html[data-chaos-wobble="quake"][data-chaos-rainbow="on"] [data-chaos-canvas="true"] {
+  animation: morph-chaos-wobble-quake 140ms linear infinite, morph-chaos-rainbow 1.5s linear infinite;
+}
+
+html[data-chaos-wobble="mild"][data-chaos-glitch="on"] [data-chaos-canvas="true"] {
+  animation: morph-chaos-wobble-mild 2.2s ease-in-out infinite, morph-chaos-glitch-flicker 0.9s steps(2, end) infinite;
+}
+
+html[data-chaos-wobble="drunk"][data-chaos-glitch="on"] [data-chaos-canvas="true"] {
+  animation: morph-chaos-wobble-drunk 2.6s ease-in-out infinite, morph-chaos-glitch-flicker 0.9s steps(2, end) infinite;
+}
+
+html[data-chaos-wobble="quake"][data-chaos-glitch="on"] [data-chaos-canvas="true"] {
+  animation: morph-chaos-wobble-quake 140ms linear infinite, morph-chaos-glitch-flicker 0.9s steps(2, end) infinite;
+}
+
+html[data-chaos-rainbow="on"][data-chaos-glitch="on"] [data-chaos-canvas="true"] {
+  animation: morph-chaos-rainbow 1.5s linear infinite, morph-chaos-glitch-flicker 0.9s steps(2, end) infinite;
+}
+
+html[data-chaos-wobble="mild"][data-chaos-rainbow="on"][data-chaos-glitch="on"] [data-chaos-canvas="true"] {
+  animation: morph-chaos-wobble-mild 2.2s ease-in-out infinite, morph-chaos-rainbow 1.5s linear infinite, morph-chaos-glitch-flicker 0.9s steps(2, end) infinite;
+}
+
+html[data-chaos-wobble="drunk"][data-chaos-rainbow="on"][data-chaos-glitch="on"] [data-chaos-canvas="true"] {
+  animation: morph-chaos-wobble-drunk 2.6s ease-in-out infinite, morph-chaos-rainbow 1.5s linear infinite, morph-chaos-glitch-flicker 0.9s steps(2, end) infinite;
+}
+
+html[data-chaos-wobble="quake"][data-chaos-rainbow="on"][data-chaos-glitch="on"] [data-chaos-canvas="true"] {
+  animation: morph-chaos-wobble-quake 140ms linear infinite, morph-chaos-rainbow 1.5s linear infinite, morph-chaos-glitch-flicker 0.9s steps(2, end) infinite;
+}
+
+html[data-chaos-gravity="on"] [data-chaos-canvas="true"] section:not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *),
+html[data-chaos-gravity="on"] [data-chaos-canvas="true"] article:not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *),
+html[data-chaos-gravity="on"] [data-chaos-canvas="true"] button:not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *) {
+  transition: transform 420ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+html[data-chaos-gravity="on"] [data-chaos-canvas="true"] section:nth-child(odd):not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *),
+html[data-chaos-gravity="on"] [data-chaos-canvas="true"] article:nth-child(odd):not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *) {
+  transform: rotate(-3.2deg) translateY(10px);
+}
+
+html[data-chaos-gravity="on"] [data-chaos-canvas="true"] section:nth-child(even):not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *),
+html[data-chaos-gravity="on"] [data-chaos-canvas="true"] article:nth-child(even):not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *) {
+  transform: rotate(3.6deg) translateY(14px);
+}
+
+html[data-chaos-gravity="on"] [data-chaos-canvas="true"] button:nth-child(3n+1):not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *) {
+  transform: rotate(-7deg) translateY(6px);
+}
+
+html[data-chaos-gravity="on"] [data-chaos-canvas="true"] button:nth-child(3n+2):not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *) {
+  transform: rotate(8deg) translateY(9px);
+}
+
+html[data-chaos-gravity="on"] [data-chaos-canvas="true"] button:nth-child(3n):not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *) {
+  transform: rotate(-5deg) translateY(4px);
+}
+
+html[data-chaos-glitch="on"] [data-chaos-canvas="true"] button:not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *),
+html[data-chaos-glitch="on"] [data-chaos-canvas="true"] section:not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *) {
   box-shadow: -2px 0 0 rgba(255, 0, 85, 0.65), 2px 0 0 rgba(0, 240, 255, 0.65) !important;
 }
 
-html[data-chaos-runaway="on"] #root button:not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *):hover,
-html[data-chaos-runaway="on"] #root button:not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *):active {
+html[data-chaos-runaway="on"] [data-chaos-canvas="true"] button:not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *):hover,
+html[data-chaos-runaway="on"] [data-chaos-canvas="true"] button:not([data-chaos-safe="true"]):not([data-chaos-safe="true"] *):active {
   animation: morph-chaos-runaway-jitter 360ms ease-in-out infinite !important;
 }
 
@@ -1686,14 +1717,28 @@ html[data-chaos-nuke="on"] #root [data-chaos-nuke-target="true"]:hover {
   font-variant-numeric: tabular-nums;
 }
 
+.morph-godmode-root[data-god-theme="obsidian"] {
+  --gm-dp-red: #dc2626;
+  --gm-dp-black: #0a0a0e;
+}
+
+.morph-godmode-root[data-gm-density="compact"] .gm-card {
+  padding: 0.75rem;
+}
+
+.morph-godmode-root[data-gm-gpu="on"] .gm-card-featured {
+  will-change: transform;
+  transform: translateZ(0);
+}
+
 .gm-modal-safe {
   max-height: 85dvh;
   overflow-y: auto;
-  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  padding-bottom: max(1rem, var(--morph-safe-bottom, env(safe-area-inset-bottom)));
 }
 
 .gm-pb-safe {
-  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  padding-bottom: max(0.75rem, var(--morph-safe-bottom, env(safe-area-inset-bottom)));
 }
 
 .morph-godmode-root button:focus-visible,

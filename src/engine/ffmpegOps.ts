@@ -52,6 +52,36 @@ async function fetchLocalAssetAsBlobUrl(url: string, mime: string): Promise<stri
   return URL.createObjectURL(new Blob([buf], {type: mime}));
 }
 
+const MAX_LOCAL_FFMPEG_FILE_BYTES = 350 * 1024 * 1024;
+
+function assertLocalFfmpegFileSize(blob: Blob, label?: string): void {
+  if (blob.size > MAX_LOCAL_FFMPEG_FILE_BYTES) {
+    const sizeMb = Math.round(blob.size / (1024 * 1024));
+    const maxMb = Math.round(MAX_LOCAL_FFMPEG_FILE_BYTES / (1024 * 1024));
+    const namePart = label ? ` (${label})` : '';
+    throw new Error(
+      `Dosya cihaz içi FFmpeg bellek sınırını aşıyor${namePart}: ${sizeMb} MB (üst sınır ${maxMb} MB). Daha küçük bir klip veya harici sunucu modu kullanın.`
+    );
+  }
+}
+
+function describeFfmpegFailure(logs: string[], fallback: string): string {
+  const joined = logs.slice(-24).join('\n');
+  if (/out of memory|cannot allocate memory|memory access out of bounds|abort\(/i.test(joined)) {
+    return 'FFmpeg bellek sınırına ulaştı. Çözünürlüğü düşürün veya daha kısa bir video parçası deneyin.';
+  }
+  if (/moov atom not found|invalid data found when processing input|end of file/i.test(joined)) {
+    return 'Medya dosyası bozuk veya eksik görünüyor (başlık/moov verisi okunamadı).';
+  }
+  if (/unknown decoder|unknown encoder|unsupported codec|could not find codec|decoder .* not found|encoder .* not found/i.test(joined)) {
+    return 'Dosyadaki video veya ses kodeği cihaz içi FFmpeg motoru tarafından desteklenmiyor.';
+  }
+  if (/no such file or directory/i.test(joined)) {
+    return 'İşlem sırasında geçici medya dosyasına erişilemedi. Lütfen yeniden deneyin.';
+  }
+  return fallback;
+}
+
 async function getFFmpeg(onStatus?: (msg: string) => void): Promise<FFmpeg> {
   if (ffmpegInstance && ffmpegInstance.loaded) return ffmpegInstance;
   if (ffmpegLoading) return ffmpegLoading;
@@ -66,20 +96,31 @@ async function getFFmpeg(onStatus?: (msg: string) => void): Promise<FFmpeg> {
     let coreURL = '';
     let wasmURL = '';
     try {
-      [coreURL, wasmURL] = await Promise.all([
-        fetchLocalAssetAsBlobUrl(`${localBase}/ffmpeg-core.js`, 'text/javascript'),
-        fetchLocalAssetAsBlobUrl(`${localBase}/ffmpeg-core.wasm`, 'application/wasm'),
-      ]);
-    } catch {
+      try {
+        [coreURL, wasmURL] = await Promise.all([
+          fetchLocalAssetAsBlobUrl(`${localBase}/ffmpeg-core.js`, 'text/javascript'),
+          fetchLocalAssetAsBlobUrl(`${localBase}/ffmpeg-core.wasm`, 'application/wasm'),
+        ]);
+      } catch {
+        if (coreURL) {
+          URL.revokeObjectURL(coreURL);
+          coreURL = '';
+        }
+        if (wasmURL) {
+          URL.revokeObjectURL(wasmURL);
+          wasmURL = '';
+        }
+        coreURL = await toBlobURL(`${cdnBase}/ffmpeg-core.js`, 'text/javascript');
+        wasmURL = await toBlobURL(`${cdnBase}/ffmpeg-core.wasm`, 'application/wasm');
+      }
+
+      await ffmpeg.load({coreURL, wasmURL});
+      ffmpegInstance = ffmpeg;
+      return ffmpeg;
+    } finally {
       if (coreURL) URL.revokeObjectURL(coreURL);
       if (wasmURL) URL.revokeObjectURL(wasmURL);
-      coreURL = await toBlobURL(`${cdnBase}/ffmpeg-core.js`, 'text/javascript');
-      wasmURL = await toBlobURL(`${cdnBase}/ffmpeg-core.wasm`, 'application/wasm');
     }
-
-    await ffmpeg.load({coreURL, wasmURL});
-    ffmpegInstance = ffmpeg;
-    return ffmpeg;
   })();
 
   try {
@@ -116,6 +157,13 @@ async function execSingle(
 ): Promise<Array<{name: string; blob: Blob}>> {
   if (signal?.aborted) throw new Error('Cancelled');
 
+  const logTail: string[] = [];
+  const logHandler = ({message}: {message: string}) => {
+    if (message) {
+      logTail.push(message);
+      if (logTail.length > 40) logTail.shift();
+    }
+  };
   const progressHandler = ({progress}: {progress: number}) => {
     if (Number.isFinite(progress)) {
       onProgress?.(Math.min(0.98, Math.max(0.05, progress)));
@@ -125,12 +173,14 @@ async function execSingle(
     terminateFFmpegInstance();
   };
 
+  ffmpeg.on('log', logHandler);
   ffmpeg.on('progress', progressHandler);
   signal?.addEventListener('abort', onAbort, {once: true});
 
   try {
     for (const f of inputFiles) {
       if (signal?.aborted) throw new Error('Cancelled');
+      assertLocalFfmpegFileSize(f.blob, f.name);
       await ffmpeg.writeFile(f.name, await fetchFile(f.blob));
     }
     if (signal?.aborted) throw new Error('Cancelled');
@@ -138,7 +188,7 @@ async function execSingle(
     const exitCode = await ffmpeg.exec(args);
     if (signal?.aborted) throw new Error('Cancelled');
     if (exitCode !== 0) {
-      throw new Error('FFmpeg işlemi tamamlanamadı.');
+      throw new Error(describeFfmpegFailure(logTail, 'FFmpeg işlemi tamamlanamadı.'));
     }
 
     const outputs: Array<{name: string; blob: Blob}> = [];
@@ -146,6 +196,9 @@ async function execSingle(
       const data = await ffmpeg.readFile(outName);
       const uint8 =
         data instanceof Uint8Array ? new Uint8Array(data) : new TextEncoder().encode(String(data));
+      if (uint8.byteLength === 0) {
+        throw new Error(describeFfmpegFailure(logTail, 'FFmpeg boş çıktı üretti (0 bayt).'));
+      }
       const ext = outName.includes('.') ? outName.split('.').pop()! : '';
       outputs.push({
         name: outName,
@@ -156,6 +209,7 @@ async function execSingle(
   } finally {
     signal?.removeEventListener('abort', onAbort);
     if (ffmpegInstance === ffmpeg && ffmpeg.loaded) {
+      ffmpeg.off('log', logHandler);
       ffmpeg.off('progress', progressHandler);
       for (const f of inputFiles) {
         await ffmpeg.deleteFile(f.name).catch(() => {});
@@ -319,6 +373,7 @@ async function runLocalFfmpegToolInternal(
         const fExt = safeExt(orderedFiles[i], 'mp4');
         const src = `join_in_${i}.${fExt}`;
         const ts = `join_part_${i}.ts`;
+        assertLocalFfmpegFileSize(orderedFiles[i].file, orderedFiles[i].name);
         inputs.push({name: src, blob: orderedFiles[i].file});
         await ffmpeg.writeFile(src, await fetchFile(orderedFiles[i].file));
         const rc = await ffmpeg.exec([
@@ -352,6 +407,9 @@ async function runLocalFfmpegToolInternal(
       const data = await ffmpeg.readFile(outName);
       const uint8 = data instanceof Uint8Array ? new Uint8Array(data) : new Uint8Array();
       await ffmpeg.deleteFile(outName).catch(() => {});
+      if (uint8.byteLength === 0) {
+        throw new Error('Birleştirilen video dosyası boş (0 bayt) oluşturuldu.');
+      }
       return [{name: outName, blob: new Blob([uint8], {type: 'video/mp4'})}];
     } finally {
       signal?.removeEventListener('abort', onAbortSpecial);
@@ -377,6 +435,7 @@ async function runLocalFfmpegToolInternal(
         onProgress((i / orderedFiles.length) * 0.35, orderedFiles[i].name);
         const fExt = safeExt(orderedFiles[i], 'mp3');
         const src = `ajoin_${i}.${fExt}`;
+        assertLocalFfmpegFileSize(orderedFiles[i].file, orderedFiles[i].name);
         writtenNames.push(src);
         await ffmpeg.writeFile(src, await fetchFile(orderedFiles[i].file));
         inputArgs.push('-i', src);
@@ -406,6 +465,9 @@ async function runLocalFfmpegToolInternal(
       const data = await ffmpeg.readFile(outName);
       const uint8 = data instanceof Uint8Array ? new Uint8Array(data) : new Uint8Array();
       await ffmpeg.deleteFile(outName).catch(() => {});
+      if (uint8.byteLength === 0) {
+        throw new Error('Birleştirilen ses dosyası boş (0 bayt) oluşturuldu.');
+      }
       return [{name: outName, blob: new Blob([uint8], {type: mimeFromExt(targetFmt)})}];
     } finally {
       signal?.removeEventListener('abort', onAbortSpecial);
@@ -507,16 +569,21 @@ async function runLocalFfmpegToolInternal(
 
       const d1 = await ffmpeg.readFile(p1);
       const d2 = await ffmpeg.readFile(p2);
+      const b1 = d1 instanceof Uint8Array ? new Uint8Array(d1) : new Uint8Array();
+      const b2 = d2 instanceof Uint8Array ? new Uint8Array(d2) : new Uint8Array();
+      if (b1.byteLength === 0 || b2.byteLength === 0) {
+        throw new Error('Bölünen video parçalarından biri boş (0 bayt) oluşturuldu.');
+      }
       return [
         {
           name: p1,
-          blob: new Blob([d1 instanceof Uint8Array ? new Uint8Array(d1) : new Uint8Array()], {
+          blob: new Blob([b1], {
             type: 'video/mp4',
           }),
         },
         {
           name: p2,
-          blob: new Blob([d2 instanceof Uint8Array ? new Uint8Array(d2) : new Uint8Array()], {
+          blob: new Blob([b2], {
             type: 'video/mp4',
           }),
         },
@@ -600,6 +667,7 @@ async function runLocalFfmpegToolInternal(
       : '192k';
 
     signal?.addEventListener('abort', onAbortSpecial, {once: true});
+    assertLocalFfmpegFileSize(first.file, first.name);
     await ffmpeg.writeFile(inName, await fetchFile(first.file));
 
     const tempFilesToClean: string[] = [inName];
@@ -1602,11 +1670,19 @@ async function runLocalFfmpegToolInternal(
         }
       }
 
+      const studioLogTail: string[] = [];
+      const studioLogHandler = ({message}: {message: string}) => {
+        if (message) {
+          studioLogTail.push(message);
+          if (studioLogTail.length > 40) studioLogTail.shift();
+        }
+      };
       const progressHandler = ({progress}: {progress: number}) => {
         if (Number.isFinite(progress)) {
           onProgress(Math.min(0.95, 0.15 + progress * 0.72), outFile);
         }
       };
+      ffmpeg.on('log', studioLogHandler);
       ffmpeg.on('progress', progressHandler);
 
       try {
@@ -2344,17 +2420,23 @@ async function runLocalFfmpegToolInternal(
             pipOut,
           ]);
           if (signal?.aborted) throw new Error('Cancelled');
-          if (rcPip === 0) {
-            const pipBytes = await ffmpeg.readFile(pipOut);
-            await ffmpeg.writeFile(
-              outFile,
-              pipBytes instanceof Uint8Array ? new Uint8Array(pipBytes) : new Uint8Array()
+          if (rcPip !== 0) {
+            throw new Error(
+              describeFfmpegFailure(
+                studioLogTail,
+                'Üst video (PiP) katmanı dışa aktarma sırasında işlenemedi.'
+              )
             );
-            if (mixPipAudio) {
-              renderedHasAudio = true;
-            }
-            await cleanupVfsFiles(ffmpeg, [pipOut]);
           }
+          const pipBytes = await ffmpeg.readFile(pipOut);
+          await ffmpeg.writeFile(
+            outFile,
+            pipBytes instanceof Uint8Array ? new Uint8Array(pipBytes) : new Uint8Array()
+          );
+          if (mixPipAudio) {
+            renderedHasAudio = true;
+          }
+          await cleanupVfsFiles(ffmpeg, [pipOut]);
         }
 
         // Dedicated Mask & Timed Multi-Caption / Text Burn-in Pass (Exact Timeline Windows)
@@ -2432,14 +2514,20 @@ async function runLocalFfmpegToolInternal(
               txtOut,
             ]);
             if (signal?.aborted) throw new Error('Cancelled');
-            if (rcTxt === 0) {
-              const txtBytes = await ffmpeg.readFile(txtOut);
-              await ffmpeg.writeFile(
-                outFile,
-                txtBytes instanceof Uint8Array ? new Uint8Array(txtBytes) : new Uint8Array()
+            if (rcTxt !== 0) {
+              throw new Error(
+                describeFfmpegFailure(
+                  studioLogTail,
+                  'Metin/maske katmanı dışa aktarma sırasında videoya işlenemedi.'
+                )
               );
-              await cleanupVfsFiles(ffmpeg, [txtOut]);
             }
+            const txtBytes = await ffmpeg.readFile(txtOut);
+            await ffmpeg.writeFile(
+              outFile,
+              txtBytes instanceof Uint8Array ? new Uint8Array(txtBytes) : new Uint8Array()
+            );
+            await cleanupVfsFiles(ffmpeg, [txtOut]);
           }
         }
 
@@ -2487,14 +2575,20 @@ async function runLocalFfmpegToolInternal(
             wmOut,
           ]);
           if (signal?.aborted) throw new Error('Cancelled');
-          if (rcWm === 0) {
-            const wmOutBytes = await ffmpeg.readFile(wmOut);
-            await ffmpeg.writeFile(
-              outFile,
-              wmOutBytes instanceof Uint8Array ? new Uint8Array(wmOutBytes) : new Uint8Array()
+          if (rcWm !== 0) {
+            throw new Error(
+              describeFfmpegFailure(
+                studioLogTail,
+                'Filigran katmanı dışa aktarma sırasında videoya işlenemedi.'
+              )
             );
-            await cleanupVfsFiles(ffmpeg, [wmOut]);
           }
+          const wmOutBytes = await ffmpeg.readFile(wmOut);
+          await ffmpeg.writeFile(
+            outFile,
+            wmOutBytes instanceof Uint8Array ? new Uint8Array(wmOutBytes) : new Uint8Array()
+          );
+          await cleanupVfsFiles(ffmpeg, [wmOut]);
         }
 
         // Real Multi-Track External Audio Mixing Pass (Music + Voiceover + Ducking + Timeline Delay)
@@ -2639,14 +2733,20 @@ async function runLocalFfmpegToolInternal(
               mixedOut,
             ]);
             if (signal?.aborted) throw new Error('Cancelled');
-            if (rcMix === 0) {
-              const mixedData = await ffmpeg.readFile(mixedOut);
-              await ffmpeg.writeFile(
-                outFile,
-                mixedData instanceof Uint8Array ? new Uint8Array(mixedData) : new Uint8Array()
+            if (rcMix !== 0) {
+              throw new Error(
+                describeFfmpegFailure(
+                  studioLogTail,
+                  'Harici ses/müzik katmanı miksajı tamamlanamadı.'
+                )
               );
-              await cleanupVfsFiles(ffmpeg, [mixedOut]);
             }
+            const mixedData = await ffmpeg.readFile(mixedOut);
+            await ffmpeg.writeFile(
+              outFile,
+              mixedData instanceof Uint8Array ? new Uint8Array(mixedData) : new Uint8Array()
+            );
+            await cleanupVfsFiles(ffmpeg, [mixedOut]);
           }
         }
 
@@ -2686,8 +2786,14 @@ async function runLocalFfmpegToolInternal(
 
         const outData = await ffmpeg.readFile(outFile);
         const uint8 = outData instanceof Uint8Array ? new Uint8Array(outData) : new Uint8Array();
+        if (uint8.byteLength === 0) {
+          throw new Error(
+            describeFfmpegFailure(studioLogTail, 'Dışa aktarılan video dosyası boş (0 bayt) oluşturuldu.')
+          );
+        }
         return [{name: outFile, blob: new Blob([uint8], {type: mimeFromExt(outFmt)})}];
       } finally {
+        ffmpeg.off('log', studioLogHandler);
         ffmpeg.off('progress', progressHandler);
       }
     } finally {

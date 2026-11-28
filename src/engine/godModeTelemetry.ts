@@ -419,6 +419,18 @@ export async function probeApiLatency(): Promise<{ok: boolean; ms: number | null
   }
 }
 
+function readFlagFast(key: string, fallback: boolean): boolean {
+  try {
+    if (typeof window === 'undefined') return fallback;
+    const raw = window.localStorage.getItem('morph_godmode_flags_v1');
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return typeof parsed[key] === 'boolean' ? (parsed[key] as boolean) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function startSamplingLoop(): void {
   if (rafId || typeof window === 'undefined') return;
   installGlobalObservers();
@@ -428,6 +440,14 @@ function startSamplingLoop(): void {
   maxFrameDelta = 16.7;
 
   const tick = (now: number) => {
+    if (typeof document !== 'undefined' && document.hidden) {
+      lastFrameTs = now;
+      sampleWindowStart = now;
+      frameCount = 0;
+      rafId = window.requestAnimationFrame(tick);
+      return;
+    }
+
     const delta = now - lastFrameTs;
     lastFrameTs = now;
     if (delta > 34) {
@@ -438,7 +458,8 @@ function startSamplingLoop(): void {
     }
     frameCount += 1;
 
-    if (now - sampleWindowStart >= 1000) {
+    const sampleWindowMs = readFlagFast('gm_high_freq_telemetry', true) ? 1000 : 2500;
+    if (now - sampleWindowStart >= sampleWindowMs) {
       const elapsed = now - sampleWindowStart;
       const fps = Math.max(0, Math.round((frameCount * 1000) / Math.max(1, elapsed)));
       const avgFrameMs = Number((elapsed / Math.max(1, frameCount)).toFixed(1));
@@ -472,6 +493,7 @@ function startSamplingLoop(): void {
   void pollSlowMetrics();
   void probeApiLatency();
   slowTimerId = window.setInterval(() => {
+    if (typeof document !== 'undefined' && document.hidden) return;
     void pollSlowMetrics();
   }, 5000);
 }
@@ -823,6 +845,27 @@ export async function runRealDiagnostics(): Promise<DiagnosticCheckResult[]> {
       summaryEn: native
         ? 'Android Capacitor Native bridge active'
         : `Web / PWA runtime (${detectPlatform().toUpperCase()})`,
+    });
+  }
+
+  // 8b. Optional FFmpeg Multi-Thread Probe (controlled by gm_ffmpeg_mt_probe feature flag)
+  if (readFlagFast('gm_ffmpeg_mt_probe', false)) {
+    const t0 = performance.now();
+    const isolated = typeof window !== 'undefined' && Boolean(window.crossOriginIsolated);
+    const hasSab = typeof SharedArrayBuffer !== 'undefined';
+    const ready = isolated && hasSab;
+    results.push({
+      id: 'ffmpeg_mt_probe',
+      titleTr: 'FFmpeg Çoklu İş Parçacığı (SAB)',
+      titleEn: 'FFmpeg Multi-Thread (SAB)',
+      status: ready ? 'pass' : 'warn',
+      durationMs: Math.round(performance.now() - t0),
+      summaryTr: ready
+        ? 'crossOriginIsolated + SharedArrayBuffer hazır (MT destekli)'
+        : `Tek iş parçacığı modu (COI: ${isolated ? 'Var' : 'Yok'} · SAB: ${hasSab ? 'Var' : 'Yok'})`,
+      summaryEn: ready
+        ? 'crossOriginIsolated + SharedArrayBuffer ready (MT capable)'
+        : `Single-thread mode (COI: ${isolated ? 'Yes' : 'No'} · SAB: ${hasSab ? 'Yes' : 'No'})`,
     });
   }
 

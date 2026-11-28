@@ -593,8 +593,14 @@ export interface Prefs {
   deadpoolLogoPadding?: number;
   /** Dedicated logo background preset ('auto' uses outer shell gradient) */
   deadpoolLogoBg?: DeadpoolLogoBgMode;
+  /** Optional custom solid background color independent of outer shell gradient */
+  deadpoolCustomBgColor?: string | null;
   /** Emblem contrast adjustment (75 - 150%, default 100) */
   deadpoolLogoContrast?: number;
+  /** Horizontal emblem offset inside the 28×28 frame (-4 to +4 viewBox units, default 0) */
+  deadpoolLogoOffsetX?: number;
+  /** Vertical emblem offset inside the 28×28 frame (-4 to +4 viewBox units, default 0) */
+  deadpoolLogoOffsetY?: number;
   // Developer-Only ("Sana Özel") Global UI & Runtime Overrides
   devOledBlack?: boolean;
   devCustomAccent?: string | null;

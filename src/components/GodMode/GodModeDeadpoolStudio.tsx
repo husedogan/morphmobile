@@ -73,10 +73,12 @@ import {
   buildEyePaths,
   computeDeadpoolAnimatedAngles,
   getBreathingAnimClass,
+  getDeadpoolOuterShapeGeometry,
   isPolygonOuterShape,
   normalizeHexColor,
   resolveDeadpoolConfig,
   resolveDeadpoolShellBackground,
+  resolveDeadpoolShellBorderColor,
 } from '../DeadpoolWheelVisual';
 import {DeadpoolLogoIcon} from './DeadpoolLogoIcon';
 import {
@@ -94,7 +96,7 @@ interface GodModeDeadpoolStudioProps {
   onShowToast?: (msg: string) => void;
 }
 
-type StageBackdrop = 'dark' | 'light' | 'grid';
+type StageBackdrop = 'black' | 'white' | 'dark_gray' | 'light_gray' | 'colored' | 'transparent';
 type StudioCategoryId =
   | 'basic'
   | 'color_material'
@@ -148,7 +150,10 @@ const DEADPOOL_PREF_KEYS: ReadonlyArray<keyof Prefs> = [
   'deadpoolColorBoost',
   'deadpoolLogoPadding',
   'deadpoolLogoBg',
+  'deadpoolCustomBgColor',
   'deadpoolLogoContrast',
+  'deadpoolLogoOffsetX',
+  'deadpoolLogoOffsetY',
 ];
 
 function captureDeadpoolSnapshot(prefs: Prefs): Partial<Prefs> {
@@ -157,21 +162,6 @@ function captureDeadpoolSnapshot(prefs: Prefs): Partial<Prefs> {
     (snap as Record<string, unknown>)[key] = prefs[key];
   }
   return snap;
-}
-
-function getOuterShapeClipPath(shape: WheelIconStylePref): string | undefined {
-  switch (shape) {
-    case 'octa_shield':
-      return 'polygon(29% 2%, 71% 2%, 98% 29%, 98% 71%, 71% 98%, 29% 98%, 2% 71%, 2% 29%)';
-    case 'blade_hex':
-      return 'polygon(25% 4%, 75% 4%, 99% 50%, 75% 96%, 25% 96%, 1% 50%)';
-    case 'star_prism':
-      return 'polygon(50% 2%, 69% 31%, 98% 50%, 69% 69%, 50% 98%, 31% 69%, 2% 50%, 31% 31%)';
-    case 'shield_crest':
-      return 'polygon(50% 2%, 95% 26%, 88% 78%, 50% 99%, 12% 78%, 5% 26%)';
-    default:
-      return undefined;
-  }
 }
 
 function renderOuterShapeSvg(id: WheelIconStylePref): React.ReactNode {
@@ -500,7 +490,8 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
   onShowToast,
 }) => {
   const isTr = lang === 'tr';
-  const [backdrop, setBackdrop] = useState<StageBackdrop>('dark');
+  const [backdrop, setBackdrop] = useState<StageBackdrop>('black');
+  const [stageSizePx, setStageSizePx] = useState<64 | 80 | 128>(80);
   const [tapBounceKey, setTapBounceKey] = useState(0);
   const [tapFlashKey, setTapFlashKey] = useState(0);
   const [tapKickDeg, setTapKickDeg] = useState(0);
@@ -609,7 +600,10 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
         logoVariant: dpCfg.logoVariant,
         logoPadding: dpCfg.logoPadding,
         logoBg: dpCfg.logoBg,
+        customBgColor: dpCfg.customBgColor,
         logoContrast: dpCfg.logoContrast,
+        logoOffsetX: dpCfg.logoOffsetX,
+        logoOffsetY: dpCfg.logoOffsetY,
         outerColor: dpCfg.outerColor,
         outerColorEnd: dpCfg.outerColorEnd,
         innerColor: dpCfg.innerColor,
@@ -644,7 +638,10 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
         logoVariant: DeadpoolLogoVariant;
         logoPadding: number;
         logoBg: DeadpoolLogoBgMode;
+        customBgColor: string | null;
         logoContrast: number;
+        logoOffsetX: number;
+        logoOffsetY: number;
         outerColor: string | null;
         outerColorEnd: string | null;
         innerColor: string | null;
@@ -658,8 +655,14 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
             deadpoolLogoPadding:
               typeof parsed.logoPadding === 'number' ? parsed.logoPadding : dpCfg.logoPadding,
             deadpoolLogoBg: parsed.logoBg ?? dpCfg.logoBg,
+            deadpoolCustomBgColor:
+              parsed.customBgColor !== undefined ? parsed.customBgColor : dpCfg.customBgColor,
             deadpoolLogoContrast:
               typeof parsed.logoContrast === 'number' ? parsed.logoContrast : dpCfg.logoContrast,
+            deadpoolLogoOffsetX:
+              typeof parsed.logoOffsetX === 'number' ? parsed.logoOffsetX : dpCfg.logoOffsetX,
+            deadpoolLogoOffsetY:
+              typeof parsed.logoOffsetY === 'number' ? parsed.logoOffsetY : dpCfg.logoOffsetY,
             deadpoolOuterColor: parsed.outerColor ?? dpCfg.outerColor,
             deadpoolOuterColorEnd: parsed.outerColorEnd ?? dpCfg.outerColorEnd,
             deadpoolInnerColor: parsed.innerColor ?? dpCfg.innerColor,
@@ -719,34 +722,42 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
     else if (dpCfg.tapFx === 'spin_kick') setTapKickDeg((d) => (d + 180) % 360);
   };
 
-  const shapeClipPath = getOuterShapeClipPath(activeShape);
+  const shapeGeom = getDeadpoolOuterShapeGeometry(activeShape, dpCfg.cornerRadius);
+  const shapeClipPath = shapeGeom.clipPath;
   const isPoly = isPolygonOuterShape(activeShape);
+  const isTransparentBg = dpCfg.logoBg === 'transparent';
   const previewBgImage = resolveDeadpoolShellBackground(dpCfg);
   const previewShadow = buildDeadpoolBoxShadow(dpCfg, isPoly);
-  const previewFilter = buildDeadpoolShellFilter(dpCfg);
-  const previewRadius =
-    !isPoly && dpCfg.cornerRadius !== null
-      ? `${dpCfg.cornerRadius}%`
-      : activeShape === 'squircle'
-        ? '24%'
-        : '9999px';
-  const baseOuterRot =
-    (activeShape === 'diamond' ? 45 : 0) + animAngles.outerDeltaDeg + tapKickDeg;
-  const counterDiamondRot = activeShape === 'diamond' ? -45 : 0;
-  const localMaskRot = counterDiamondRot + animAngles.innerDeltaDeg;
-  const borderCol = dpCfg.ringColor || 'rgba(255,255,255,0.22)';
+  const previewBgFilter = buildDeadpoolShellFilter(dpCfg);
+  const previewRadius = isPoly ? undefined : shapeGeom.defaultBorderRadius;
+  const baseOuterRot = shapeGeom.baseRotationDeg + animAngles.outerDeltaDeg + tapKickDeg;
+  // Exact WheelFab rotation parity: world inner angle minus outer shell angle so 'locked' stays upright!
+  const localMaskRot = animAngles.innerDeltaDeg - baseOuterRot;
+  const borderCol =
+    isTransparentBg && !dpCfg.ringColor ? 'transparent' : resolveDeadpoolShellBorderColor(dpCfg);
 
   const backdropStyle: React.CSSProperties =
-    backdrop === 'light'
-      ? {background: '#F4F4F8', color: '#0F172A'}
-      : backdrop === 'grid'
-        ? {
-            backgroundColor: '#0D0C14',
-            backgroundImage:
-              'linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px)',
-            backgroundSize: '16px 16px',
-          }
-        : {background: '#09090E'};
+    backdrop === 'white'
+      ? {background: '#FFFFFF', color: '#0F172A'}
+      : backdrop === 'dark_gray'
+        ? {background: '#27272A', color: '#F4F4F5'}
+        : backdrop === 'light_gray'
+          ? {background: '#D4D4D8', color: '#18181B'}
+          : backdrop === 'colored'
+            ? {
+                background: 'linear-gradient(135deg, #312E81 0%, #581C87 52%, #7F1D1D 100%)',
+                color: '#F8FAFC',
+              }
+            : backdrop === 'transparent'
+              ? {
+                  backgroundColor: '#1E293B',
+                  backgroundImage:
+                    'linear-gradient(45deg, #334155 25%, transparent 25%, transparent 75%, #334155 75%), linear-gradient(45deg, #334155 25%, transparent 25%, transparent 75%, #334155 75%)',
+                  backgroundSize: '16px 16px',
+                  backgroundPosition: '0 0, 8px 8px',
+                  color: '#F8FAFC',
+                }
+              : {background: '#050507', color: '#F4F4F5'};
 
   const bgModeOptions: ReadonlyArray<{id: DeadpoolLogoBgMode; labelTr: string; labelEn: string}> = [
     {id: 'auto', labelTr: 'Otomatik', labelEn: 'Auto'},
@@ -812,62 +823,76 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
     {id: 'metallic', labelTr: 'Metalik', labelEn: 'Metal'},
   ];
 
-  const renderPreviewBadge = (sizePx: number) => (
-    <div
-      className="relative flex shrink-0 items-center justify-center overflow-hidden"
-      style={{
-        width: sizePx,
-        height: sizePx,
-        backgroundImage: previewBgImage,
-        borderRadius: isPoly ? undefined : previewRadius,
-        clipPath: shapeClipPath,
-        border:
-          !isPoly && dpCfg.borderWidth > 0
-            ? `${Math.max(1, dpCfg.borderWidth * (sizePx / 72))}px ${dpCfg.borderStyle} ${borderCol}`
-            : undefined,
-        filter: previewFilter,
-      }}
-    >
-      <DeadpoolShellOverlays cfg={dpCfg} />
-      {isPoly && dpCfg.borderWidth > 0 && (
-        <DeadpoolPolygonBorder
-          shape={activeShape}
-          color={borderCol}
-          width={Math.max(1, dpCfg.borderWidth)}
-          style={dpCfg.borderStyle}
-        />
-      )}
-      <svg
-        viewBox="0 0 28 28"
+  const renderPreviewBadge = (sizePx: number) => {
+    const isPill = shapeGeom.aspectRatio === 'pill';
+    const boxW = isPill ? Math.round(sizePx * 1.38) : sizePx;
+    const svgRatio =
+      activeShape === 'star_prism'
+        ? 0.56
+        : activeShape === 'diamond'
+          ? 0.64
+          : activeShape === 'blade_hex' || activeShape === 'shield_crest'
+            ? 0.7
+            : 0.78;
+    const svgDim = Math.round(sizePx * svgRatio);
+    return (
+      <div
+        className="relative flex shrink-0 items-center justify-center overflow-hidden"
         style={{
-          width: Math.round(
-            sizePx *
-              (activeShape === 'star_prism'
-                ? 0.56
-                : activeShape === 'diamond'
-                  ? 0.64
-                  : activeShape === 'blade_hex' || activeShape === 'shield_crest'
-                    ? 0.7
-                    : 0.78)
-          ),
-          height: Math.round(
-            sizePx *
-              (activeShape === 'star_prism'
-                ? 0.56
-                : activeShape === 'diamond'
-                  ? 0.64
-                  : activeShape === 'blade_hex' || activeShape === 'shield_crest'
-                    ? 0.7
-                    : 0.78)
-          ),
+          width: boxW,
+          height: sizePx,
+          borderRadius: previewRadius,
+          clipPath: shapeClipPath,
+          border:
+            !isPoly && dpCfg.borderWidth > 0 && borderCol !== 'transparent'
+              ? `${Math.max(1, dpCfg.borderWidth * (sizePx / 72))}px ${dpCfg.borderStyle} ${borderCol}`
+              : undefined,
+          transform: shapeGeom.baseRotationDeg
+            ? `rotate(${shapeGeom.baseRotationDeg}deg)`
+            : undefined,
         }}
-        fill="none"
-        aria-hidden="true"
       >
-        <DeadpoolEmblemGroup cfg={dpCfg} maskFill={dpCfg.innerColor || '#0B0B0E'} />
-      </svg>
-    </div>
-  );
+        {!isTransparentBg && (
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 z-0"
+            style={{
+              backgroundImage: previewBgImage,
+              filter: previewBgFilter,
+            }}
+          />
+        )}
+        <DeadpoolShellOverlays cfg={dpCfg} />
+        {isPoly && dpCfg.borderWidth > 0 && (
+          <DeadpoolPolygonBorder
+            shape={activeShape}
+            color={resolveDeadpoolShellBorderColor(dpCfg)}
+            width={Math.max(1, dpCfg.borderWidth)}
+            style={dpCfg.borderStyle}
+          />
+        )}
+        <svg
+          viewBox="0 0 28 28"
+          className="relative z-[4]"
+          style={{
+            width: svgDim,
+            height: svgDim,
+            transform: shapeGeom.baseRotationDeg
+              ? `rotate(${-shapeGeom.baseRotationDeg}deg)`
+              : undefined,
+          }}
+          fill="none"
+          aria-hidden="true"
+        >
+          <DeadpoolEmblemGroup
+            cfg={dpCfg}
+            maskFill={dpCfg.innerColor || '#0B0B0E'}
+            compact={sizePx <= 32}
+          />
+        </svg>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-4">
@@ -915,35 +940,59 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
         }
       />
 
-      {/* LIVE SHOWCASE STAGE + MULTI-SIZE LEGIBILITY BAR */}
+      {/* LIVE SHOWCASE STAGE + 6-GROUND & 24/40/64/128px LEGIBILITY MATRIX */}
       <section className="gm-card overflow-hidden">
         <div
-          className="flex flex-wrap items-center justify-between gap-2 border-b px-3.5 py-2.5"
+          className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2.5"
           style={{borderColor: 'var(--gm-border)'}}
         >
-          <div className="flex items-center gap-1">
+          {/* 6 Test Backdrops: Black, White, Dark Gray, Light Gray, Colored, Transparent Checkerboard */}
+          <div className="flex flex-wrap items-center gap-1" role="group" aria-label={isTr ? 'Test zemini' : 'Test surface'}>
             {(
               [
-                {id: 'dark', icon: Moon, label: isTr ? 'Koyu' : 'Dark'},
-                {id: 'light', icon: Sun, label: isTr ? 'Açık' : 'Light'},
-                {id: 'grid', icon: Grid3X3, label: isTr ? 'Izgara' : 'Grid'},
-              ] as const
+                {id: 'black', label: isTr ? 'Siyah' : 'Black', swatch: {background: '#050507'}},
+                {id: 'white', label: isTr ? 'Beyaz' : 'White', swatch: {background: '#FFFFFF'}},
+                {id: 'dark_gray', label: isTr ? 'K.Gri' : 'D.Gray', swatch: {background: '#27272A'}},
+                {id: 'light_gray', label: isTr ? 'A.Gri' : 'L.Gray', swatch: {background: '#D4D4D8'}},
+                {
+                  id: 'colored',
+                  label: isTr ? 'Renkli' : 'Color',
+                  swatch: {background: 'linear-gradient(135deg, #4338CA, #991B1B)'},
+                },
+                {
+                  id: 'transparent',
+                  label: isTr ? 'Şeffaf' : 'Alpha',
+                  swatch: {
+                    backgroundColor: '#1E293B',
+                    backgroundImage:
+                      'linear-gradient(45deg, #64748B 25%, transparent 25%, transparent 75%, #64748B 75%), linear-gradient(45deg, #64748B 25%, transparent 25%, transparent 75%, #64748B 75%)',
+                    backgroundSize: '6px 6px',
+                    backgroundPosition: '0 0, 3px 3px',
+                  },
+                },
+              ] as ReadonlyArray<{id: StageBackdrop; label: string; swatch: React.CSSProperties}>
             ).map((bg) => {
-              const Icon = bg.icon;
               const active = backdrop === bg.id;
               return (
                 <button
                   key={bg.id}
                   type="button"
                   onClick={() => setBackdrop(bg.id)}
+                  title={bg.label}
                   aria-label={bg.label}
-                  className={`flex min-h-[38px] items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold transition-colors ${
-                    active ? 'gm-nav-icon-active' : 'hover:bg-white/[0.05]'
+                  aria-pressed={active}
+                  className={`flex min-h-[44px] items-center gap-1.5 rounded-xl border px-2 text-[11px] font-semibold transition-colors ${
+                    active ? 'gm-nav-icon-active border-transparent' : 'hover:bg-white/[0.05]'
                   }`}
-                  style={active ? undefined : {color: 'var(--gm-muted)'}}
+                  style={
+                    active ? undefined : {borderColor: 'var(--gm-border)', color: 'var(--gm-muted)'}
+                  }
                 >
-                  <Icon className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">{bg.label}</span>
+                  <span
+                    className="h-4 w-4 shrink-0 rounded-full border border-white/30 shadow-inner"
+                    style={bg.swatch}
+                  />
+                  <span className="hidden md:inline">{bg.label}</span>
                 </button>
               );
             })}
@@ -952,39 +1001,58 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
           <div className="flex items-center gap-1.5">
             <button
               type="button"
+              onClick={() => setStageSizePx((s) => (s === 80 ? 128 : s === 128 ? 64 : 80))}
+              className="gm-btn-ghost gm-mono flex min-h-[44px] items-center justify-center px-2.5 text-[11px] font-bold"
+              title={isTr ? 'Sahne boyutunu değiştir (64 / 80 / 128px)' : 'Cycle stage size (64 / 80 / 128px)'}
+            >
+              {stageSizePx}px
+            </button>
+            <button
+              type="button"
               onClick={handleUndo}
               disabled={undoStack.length === 0}
-              className="gm-btn-ghost flex h-[38px] w-[38px] items-center justify-center disabled:opacity-35"
+              className="gm-btn-ghost flex h-11 w-11 items-center justify-center disabled:opacity-35"
               title={isTr ? 'Geri Al' : 'Undo'}
               aria-label={isTr ? 'Geri Al' : 'Undo'}
             >
-              <Undo2 className="h-3.5 w-3.5" />
+              <Undo2 className="h-4 w-4" />
             </button>
             <button
               type="button"
               onClick={() => setConfirmResetOpen(true)}
-              className="gm-btn-ghost flex h-[38px] w-[38px] items-center justify-center text-rose-400"
+              className="gm-btn-ghost flex h-11 w-11 items-center justify-center text-rose-400"
               title={isTr ? 'Sıfırla' : 'Reset'}
               aria-label={isTr ? 'Sıfırla' : 'Reset'}
             >
-              <RotateCcw className="h-3.5 w-3.5" />
+              <RotateCcw className="h-4 w-4" />
             </button>
           </div>
         </div>
 
         {/* Center Preview Stage */}
         <div
-          className="relative flex flex-col items-center justify-center gap-4 px-4 py-7"
+          className="relative flex flex-col items-center justify-center gap-5 px-4 py-6"
           style={backdropStyle}
         >
-          <div className="relative flex h-28 w-28 items-center justify-center">
-            <DeadpoolOuterHalo cfg={dpCfg} sizePx={100} />
+          <div
+            className="relative flex items-center justify-center transition-all"
+            style={{
+              width: stageSizePx + 36,
+              height: stageSizePx + 36,
+            }}
+          >
+            <DeadpoolOuterHalo cfg={dpCfg} sizePx={stageSizePx + 24} />
             {tapFlashKey > 0 && dpCfg.tapFx === 'flash' && (
               <span
                 key={tapFlashKey}
                 aria-hidden="true"
-                className="morph-dp-tap-flash pointer-events-none absolute h-20 w-20 rounded-full border-2"
-                style={{borderColor: dpCfg.eyeColor || '#FFFFFF'}}
+                className="morph-dp-tap-flash pointer-events-none absolute rounded-full border-2"
+                style={{
+                  width: stageSizePx,
+                  height: stageSizePx,
+                  borderColor:
+                    dpCfg.eyeColor && dpCfg.eyeColor !== 'transparent' ? dpCfg.eyeColor : '#FFFFFF',
+                }}
               />
             )}
             <button
@@ -997,46 +1065,69 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
             >
               <span
                 key={tapBounceKey > 0 ? `dp-prev-${tapBounceKey}` : 'dp-prev'}
-                className={`relative flex h-20 w-20 items-center justify-center overflow-hidden transition-transform duration-150 ${
+                className={`relative flex items-center justify-center overflow-hidden transition-transform duration-150 ${
                   dpCfg.glowPulse && dpCfg.glowIntensity > 0 ? 'morph-dp-glow-pulse' : ''
                 } ${tapBounceKey > 0 && dpCfg.tapFx === 'bounce' ? 'morph-dp-tap-bounce' : ''}`}
                 style={{
-                  backgroundImage: previewBgImage,
-                  borderRadius: isPoly ? undefined : previewRadius,
+                  width: shapeGeom.aspectRatio === 'pill' ? Math.round(stageSizePx * 1.38) : stageSizePx,
+                  height: stageSizePx,
+                  borderRadius: previewRadius,
                   clipPath: shapeClipPath,
                   boxShadow: previewShadow,
                   border:
-                    !isPoly && dpCfg.borderWidth > 0
+                    !isPoly && dpCfg.borderWidth > 0 && borderCol !== 'transparent'
                       ? `${dpCfg.borderWidth}px ${dpCfg.borderStyle} ${borderCol}`
                       : undefined,
-                  filter: previewFilter,
                   transform: `scale(${dpCfg.shellScale}) rotate(${baseOuterRot.toFixed(1)}deg)`,
                 }}
               >
+                {!isTransparentBg && (
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 z-0"
+                    style={{
+                      backgroundImage: previewBgImage,
+                      filter: previewBgFilter,
+                    }}
+                  />
+                )}
                 <DeadpoolShellOverlays cfg={dpCfg} />
                 {isPoly && dpCfg.borderWidth > 0 && (
                   <DeadpoolPolygonBorder
                     shape={activeShape}
-                    color={borderCol}
+                    color={resolveDeadpoolShellBorderColor(dpCfg)}
                     width={dpCfg.borderWidth}
                     style={dpCfg.borderStyle}
                   />
                 )}
                 <span
-                  className="relative z-[2] flex items-center justify-center"
+                  className="relative z-[4] flex items-center justify-center"
                   style={{transform: `rotate(${localMaskRot.toFixed(1)}deg)`}}
                 >
                   <svg
                     viewBox="0 0 28 28"
-                    className={
-                      activeShape === 'star_prism'
-                        ? 'h-[45px] w-[45px]'
-                        : activeShape === 'diamond'
-                          ? 'h-[52px] w-[52px]'
-                          : activeShape === 'blade_hex' || activeShape === 'shield_crest'
-                            ? 'h-[56px] w-[56px]'
-                            : 'h-[62px] w-[62px]'
-                    }
+                    style={{
+                      width: Math.round(
+                        stageSizePx *
+                          (activeShape === 'star_prism'
+                            ? 0.56
+                            : activeShape === 'diamond'
+                              ? 0.64
+                              : activeShape === 'blade_hex' || activeShape === 'shield_crest'
+                                ? 0.7
+                                : 0.78)
+                      ),
+                      height: Math.round(
+                        stageSizePx *
+                          (activeShape === 'star_prism'
+                            ? 0.56
+                            : activeShape === 'diamond'
+                              ? 0.64
+                              : activeShape === 'blade_hex' || activeShape === 'shield_crest'
+                                ? 0.7
+                                : 0.78)
+                      ),
+                    }}
                     fill="none"
                   >
                     <DeadpoolEmblemGroup cfg={dpCfg} maskFill={dpCfg.innerColor || '#0B0B0E'} />
@@ -1046,16 +1137,31 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
             </button>
           </div>
 
-          {/* Small-size legibility strip (40px & 24px live checks) */}
-          <div className="flex items-center justify-center gap-5 text-[11px]">
-            <div className="flex items-center gap-2">
-              {renderPreviewBadge(40)}
-              <span className="gm-mono opacity-70">40px</span>
-            </div>
-            <div className="flex items-center gap-2">
+          {/* 4-Size Live Quality Check Strip: 24px, 40px, 64px, and toggleable 128px */}
+          <div className="flex flex-wrap items-end justify-center gap-4 text-[11px]">
+            <div className="flex flex-col items-center gap-1">
               {renderPreviewBadge(24)}
-              <span className="gm-mono opacity-70">24px</span>
+              <span className="gm-mono opacity-75">24px</span>
             </div>
+            <div className="flex flex-col items-center gap-1">
+              {renderPreviewBadge(40)}
+              <span className="gm-mono opacity-75">40px</span>
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              {renderPreviewBadge(64)}
+              <span className="gm-mono opacity-75">64px</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setStageSizePx(stageSizePx === 128 ? 80 : 128)}
+              className="flex min-h-[44px] flex-col items-center justify-end gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold transition-opacity hover:opacity-100"
+              style={{
+                opacity: stageSizePx === 128 ? 1 : 0.72,
+                border: stageSizePx === 128 ? '1px solid currentColor' : '1px dashed currentColor',
+              }}
+            >
+              <span className="gm-mono">{stageSizePx === 128 ? '128px ✓' : '128px'}</span>
+            </button>
           </div>
         </div>
       </section>
@@ -1151,11 +1257,11 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
           })}
         </div>
 
-        {/* Size, Padding, Contrast */}
+        {/* Size, Padding, Contrast & Position X/Y */}
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
           <GmSlider
             icon={<Maximize2 className="h-3.5 w-3.5" />}
-            label={isTr ? 'Boyut' : 'Scale'}
+            label={isTr ? 'Ölçek' : 'Scale'}
             value={Math.round(dpCfg.shellScale * 100)}
             min={85}
             max={120}
@@ -1188,16 +1294,42 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
           />
         </div>
 
-        {/* Background Mode Swatches & Light Glow Toggle */}
+        {/* Independent Emblem Position (X / Y) */}
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+          <GmSlider
+            icon={<MoveHorizontal className="h-3.5 w-3.5" />}
+            label={isTr ? 'Konum X' : 'Position X'}
+            value={dpCfg.logoOffsetX}
+            min={-4}
+            max={4}
+            step={0.5}
+            valueLabel={`${dpCfg.logoOffsetX > 0 ? '+' : ''}${dpCfg.logoOffsetX}`}
+            onChange={(v) => patchPrefs({deadpoolLogoOffsetX: v})}
+            onReset={() => patchPrefs({deadpoolLogoOffsetX: 0}, true)}
+          />
+          <GmSlider
+            icon={<MoveHorizontal className="h-3.5 w-3.5 rotate-90" />}
+            label={isTr ? 'Konum Y' : 'Position Y'}
+            value={dpCfg.logoOffsetY}
+            min={-4}
+            max={4}
+            step={0.5}
+            valueLabel={`${dpCfg.logoOffsetY > 0 ? '+' : ''}${dpCfg.logoOffsetY}`}
+            onChange={(v) => patchPrefs({deadpoolLogoOffsetY: v})}
+            onReset={() => patchPrefs({deadpoolLogoOffsetY: 0}, true)}
+          />
+        </div>
+
+        {/* Background Mode Swatches, Custom Background Color & Light Glow Toggle */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="gm-inset p-3">
             <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold" style={{color: 'var(--gm-ink)'}}>
               <Layers className="h-3.5 w-3.5" style={{color: 'var(--gm-accent)'}} />
-              <span>{isTr ? 'Zemin' : 'Backdrop'}</span>
+              <span>{isTr ? 'Arka Plan' : 'Background'}</span>
             </div>
             <div className="grid grid-cols-5 gap-1.5">
               {bgModeOptions.map((opt) => {
-                const active = dpCfg.logoBg === opt.id;
+                const active = dpCfg.logoBg === opt.id && !dpCfg.customBgColor;
                 const swatchStyle: React.CSSProperties =
                   opt.id === 'auto'
                     ? {background: 'linear-gradient(135deg, #DC2626 0%, #18181B 100%)'}
@@ -1219,7 +1351,7 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
                     key={opt.id}
                     type="button"
                     title={isTr ? opt.labelTr : opt.labelEn}
-                    onClick={() => patchPrefs({deadpoolLogoBg: opt.id}, true)}
+                    onClick={() => patchPrefs({deadpoolLogoBg: opt.id, deadpoolCustomBgColor: null}, true)}
                     className={`flex min-h-[48px] flex-col items-center justify-center gap-1 rounded-xl border p-1 transition-all active:scale-95 ${
                       active ? 'gm-nav-icon-active' : 'hover:bg-white/[0.04]'
                     }`}
@@ -1242,7 +1374,20 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
             </div>
           </div>
 
-          <div className="flex flex-col justify-center">
+          <div className="flex flex-col justify-between gap-2.5">
+            <GmHexColorField
+              label={isTr ? 'Özel Arka Plan Rengi' : 'Custom Background'}
+              value={dpCfg.customBgColor}
+              fallback="#14141D"
+              nullable
+              onChange={(hex) =>
+                patchPrefs({
+                  deadpoolLogoBg: 'auto',
+                  deadpoolCustomBgColor: hex,
+                })
+              }
+              onClear={() => patchPrefs({deadpoolCustomBgColor: null}, true)}
+            />
             <GmToggleTile
               icon={<Sparkles className="h-3.5 w-3.5" />}
               label={isTr ? 'Işık Efekti' : 'Light Glow'}
@@ -1403,10 +1548,10 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
           </div>
         </div>
 
-        {/* Fine-tune Custom HEX Swatches */}
+        {/* Fine-tune Custom HEX Swatches (each channel independent) */}
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
           <GmHexColorField
-            label={isTr ? 'Dış Ana' : 'Outer'}
+            label={isTr ? 'Dış Kabuk' : 'Outer Shell'}
             value={dpCfg.outerColor}
             fallback="#DC2626"
             nullable
@@ -1422,23 +1567,55 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
             onClear={() => patchPrefs({deadpoolOuterColorEnd: null}, true)}
           />
           <GmHexColorField
-            label={isTr ? 'Maske' : 'Mask'}
+            label={isTr ? 'İç Maske' : 'Inner Mask'}
             value={dpCfg.innerColor}
             fallback="#0B0B0E"
             nullable
             onChange={(hex) => patchPrefs({deadpoolInnerColor: hex})}
             onClear={() => patchPrefs({deadpoolInnerColor: null}, true)}
           />
+          <div className="space-y-1.5">
+            <GmHexColorField
+              label={isTr ? 'Göz Rengi' : 'Eye Color'}
+              value={dpCfg.eyeColor === 'transparent' ? null : dpCfg.eyeColor}
+              fallback="#FFFFFF"
+              nullable
+              onChange={(hex) => patchPrefs({deadpoolEyeColor: hex})}
+              onClear={() => patchPrefs({deadpoolEyeColor: null}, true)}
+            />
+            <button
+              type="button"
+              onClick={() =>
+                patchPrefs(
+                  {
+                    deadpoolEyeColor: dpCfg.eyeColor === 'transparent' ? null : 'transparent',
+                  },
+                  true
+                )
+              }
+              className={`flex min-h-[36px] w-full items-center justify-center gap-1.5 rounded-lg border px-2 text-[10.5px] font-semibold transition-colors ${
+                dpCfg.eyeColor === 'transparent' ? 'gm-nav-icon-active border-transparent' : ''
+              }`}
+              style={
+                dpCfg.eyeColor === 'transparent'
+                  ? undefined
+                  : {borderColor: 'var(--gm-border)', color: 'var(--gm-muted)'}
+              }
+            >
+              <Eye className="h-3 w-3" />
+              <span>
+                {dpCfg.eyeColor === 'transparent'
+                  ? isTr
+                    ? 'Şeffaf Göz Oyuğu Aktif'
+                    : 'Transparent Cutout On'
+                  : isTr
+                    ? 'Gözleri Şeffaf Oy'
+                    : 'Cut Out Eyes (Alpha)'}
+              </span>
+            </button>
+          </div>
           <GmHexColorField
-            label={isTr ? 'Göz' : 'Eye'}
-            value={dpCfg.eyeColor === 'transparent' ? null : dpCfg.eyeColor}
-            fallback="#FFFFFF"
-            nullable
-            onChange={(hex) => patchPrefs({deadpoolEyeColor: hex})}
-            onClear={() => patchPrefs({deadpoolEyeColor: null}, true)}
-          />
-          <GmHexColorField
-            label={isTr ? 'Halka' : 'Ring'}
+            label={isTr ? 'Kontur / Halka' : 'Border / Ring'}
             value={dpCfg.ringColor}
             fallback="#18181B"
             nullable
@@ -2283,11 +2460,16 @@ export const GodModeDeadpoolStudio: React.FC<GodModeDeadpoolStudioProps> = ({
               >
                 <DeadpoolMiniSwatch
                   outer={profile.previewOuter}
+                  mid={profile.patch.deadpoolOuterColorMid ?? null}
                   end={profile.previewEnd}
                   mask={profile.previewMask}
                   eye={profile.previewEye}
                   ring={profile.previewRing}
                   angle={profile.previewAngle}
+                  gradientType={profile.patch.deadpoolGradientType ?? 'linear'}
+                  logoBg={profile.patch.deadpoolLogoBg ?? 'auto'}
+                  surfaceTexture={profile.patch.deadpoolSurfaceTexture ?? 'none'}
+                  glossMode={profile.patch.deadpoolGlossMode ?? 'none'}
                   variant={profile.logoVariant}
                 />
                 <span className="max-w-full truncate text-[11px] font-bold" style={{color: 'var(--gm-ink)'}}>

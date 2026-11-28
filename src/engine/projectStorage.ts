@@ -549,12 +549,27 @@ export async function exportMorphPackage(
  * rehydrates all bundled audio & secondary video Blobs,
  * and saves the imported project directly to IndexedDB.
  */
+const MAX_MORPH_IMPORT_ENTRIES = 200;
+const MAX_MORPH_IMPORT_TOTAL_BYTES = 260 * 1024 * 1024; // 260 MB unpacked mobile safety cap
+
+function isSafeArchiveEntryPath(entryPath: unknown): entryPath is string {
+  if (typeof entryPath !== 'string') return false;
+  const normalized = entryPath.replace(/\\/g, '/').trim();
+  if (!normalized || normalized.startsWith('/') || normalized.includes('\0')) return false;
+  if (normalized.split('/').some((seg) => seg === '..' || seg === '.')) return false;
+  return true;
+}
+
 export async function importMorphPackage(file: File): Promise<{
   project: NleProjectState;
   sourceVideoBlob?: Blob;
   restoredAudioCount: number;
   restoredVideoCount: number;
 }> {
+  if (file.size > MAX_MORPH_IMPORT_TOTAL_BYTES) {
+    throw new Error('Proje paketi cihaz bellek sınırını (260 MB) aşıyor.');
+  }
+
   // Support plain JSON fallback
   if (file.name.toLowerCase().endsWith('.json')) {
     const parsed = JSON.parse(await file.text()) as NleProjectState;
@@ -565,6 +580,11 @@ export async function importMorphPackage(file: File): Promise<{
   }
 
   const zip = await JSZip.loadAsync(file);
+  const allEntries = Object.values(zip.files);
+  if (allEntries.length > MAX_MORPH_IMPORT_ENTRIES) {
+    throw new Error('Proje paketi izin verilen maksimum dosya sayısını aşıyor.');
+  }
+
   const projectFile = zip.file('project.json');
   if (!projectFile) {
     throw new Error('Bu .morph paketi geçerli bir proje verisi içermiyor.');
@@ -580,14 +600,26 @@ export async function importMorphPackage(file: File): Promise<{
     ? (JSON.parse(await manifestFile.async('string')) as MorphPackageManifest)
     : null;
 
+  let unpackedBytes = 0;
+  const readBoundedEntry = async (entryPath: string): Promise<ArrayBuffer | null> => {
+    if (!isSafeArchiveEntryPath(entryPath)) return null;
+    const entry = zip.file(entryPath);
+    if (!entry || entry.dir) return null;
+    const buf = await entry.async('arraybuffer');
+    unpackedBytes += buf.byteLength;
+    if (unpackedBytes > MAX_MORPH_IMPORT_TOTAL_BYTES) {
+      throw new Error('Proje paketinin açılmış boyutu güvenli bellek sınırını (260 MB) aşıyor.');
+    }
+    return buf;
+  };
+
   let restoredAudioCount = 0;
   const hydratedAudioClips = await Promise.all(
     (rawProject.audioClips || []).map(async (clip) => {
       const meta = manifest?.audioFiles?.[clip.id];
-      if (!meta) return clip;
-      const entry = zip.file(meta.path);
-      if (!entry) return clip;
-      const buf = await entry.async('arraybuffer');
+      if (!meta || !isSafeArchiveEntryPath(meta.path)) return clip;
+      const buf = await readBoundedEntry(meta.path);
+      if (!buf) return clip;
       const blob = new Blob([buf], {type: meta.mime || 'audio/webm'});
       registerAudioClipBlob(clip.id, blob, meta.name);
       restoredAudioCount++;
@@ -601,9 +633,9 @@ export async function importMorphPackage(file: File): Promise<{
   let restoredVideoCount = 0;
   if (manifest?.videoFiles) {
     for (const [mediaId, meta] of Object.entries(manifest.videoFiles)) {
-      const entry = zip.file(meta.path);
-      if (!entry) continue;
-      const buf = await entry.async('arraybuffer');
+      if (!meta || !isSafeArchiveEntryPath(meta.path)) continue;
+      const buf = await readBoundedEntry(meta.path);
+      if (!buf) continue;
       const blob = new Blob([buf], {type: meta.mime || 'video/mp4'});
       registerMediaAssetBlob(mediaId, blob, meta.name);
       restoredVideoCount++;
@@ -611,10 +643,9 @@ export async function importMorphPackage(file: File): Promise<{
   }
 
   let sourceVideoBlob: Blob | undefined;
-  if (manifest?.hasSourceVideo && manifest.sourceVideoPath) {
-    const vEntry = zip.file(manifest.sourceVideoPath);
-    if (vEntry) {
-      const buf = await vEntry.async('arraybuffer');
+  if (manifest?.hasSourceVideo && isSafeArchiveEntryPath(manifest.sourceVideoPath)) {
+    const buf = await readBoundedEntry(manifest.sourceVideoPath);
+    if (buf) {
       sourceVideoBlob = new Blob([buf], {type: manifest.sourceVideoMime || 'video/mp4'});
     }
   }

@@ -21,8 +21,10 @@ import {
   buildDeadpoolShellFilter,
   computeDeadpoolAnimatedAngles,
   getBreathingAnimClass,
+  getDeadpoolOuterShapeGeometry,
   resolveDeadpoolConfig,
   resolveDeadpoolShellBackground,
+  resolveDeadpoolShellBorderColor,
 } from './DeadpoolWheelVisual';
 
 export function isLandscapeFixedWheelViewport(): boolean {
@@ -2145,16 +2147,7 @@ export const WheelFab: React.FC<{
                   ? 'h-[58px] w-[58px] rounded-none'
                   : 'h-14 w-14 rounded-full';
 
-  const shapeClipPath: string | undefined =
-    iconStyle === 'octa_shield'
-      ? 'polygon(29% 2%, 71% 2%, 98% 29%, 98% 71%, 71% 98%, 29% 98%, 2% 71%, 2% 29%)'
-      : iconStyle === 'blade_hex'
-        ? 'polygon(25% 4%, 75% 4%, 99% 50%, 75% 96%, 25% 96%, 1% 50%)'
-        : iconStyle === 'star_prism'
-          ? 'polygon(50% 2%, 69% 31%, 98% 50%, 69% 69%, 50% 98%, 31% 69%, 2% 50%, 31% 31%)'
-          : iconStyle === 'shield_crest'
-            ? 'polygon(50% 2%, 95% 26%, 88% 78%, 50% 99%, 12% 78%, 5% 26%)'
-            : undefined;
+  const shapeClipPath: string | undefined = getDeadpoolOuterShapeGeometry(iconStyle).clipPath;
 
   const dpShellScaleMul = isDeadpoolInner ? dpCfg.shellScale : 1;
   const baseOuterRot =
@@ -2211,13 +2204,13 @@ export const WheelFab: React.FC<{
         }
       : isDeadpoolInner
         ? {
-            backgroundColor: dpIsTransparentBg ? 'transparent' : undefined,
-            backgroundImage: dpBgImage,
+            backgroundColor: 'transparent',
             ...(!shapeClipPath
               ? {
                   borderColor:
-                    dpCfg.ringColor ||
-                    (dpIsTransparentBg ? 'transparent' : 'rgba(255,255,255,0.22)'),
+                    dpIsTransparentBg && !dpCfg.ringColor
+                      ? 'transparent'
+                      : resolveDeadpoolShellBorderColor(dpCfg),
                   borderWidth: `${dpCfg.borderWidth}px`,
                   borderStyle: dpCfg.borderStyle,
                 }
@@ -2954,13 +2947,7 @@ export const WheelFab: React.FC<{
               ...fireStyle,
               clipPath: shapeClipPath,
               opacity: phase === 'ash' ? ashBtnOpacity : undefined,
-              filter:
-                [
-                  ashCharFilter,
-                  isDeadpoolInner ? buildDeadpoolShellFilter(dpCfg) ?? '' : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ') || undefined,
+              filter: ashCharFilter || undefined,
               transform: baseButtonTransform,
             }}
             className={
@@ -2976,13 +2963,23 @@ export const WheelFab: React.FC<{
               } ${isDeadpoolInner && dpTapBounceKey > 0 && dpCfg.tapFx === 'bounce' ? 'morph-dp-tap-bounce' : ''}`
             }
           >
+            {isDeadpoolInner && phase === 'idle' && heat <= 0.04 && !dpIsTransparentBg && dpBgImage && (
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 z-0"
+                style={{
+                  backgroundImage: dpBgImage,
+                  filter: buildDeadpoolShellFilter(dpCfg),
+                }}
+              />
+            )}
             {isDeadpoolInner && phase === 'idle' && <DeadpoolShellOverlays cfg={dpCfg} />}
             {shapeClipPath && phase === 'idle' && (
               <DeadpoolPolygonBorder
                 shape={iconStyle}
                 color={
-                  isDeadpoolInner && dpCfg.ringColor
-                    ? dpCfg.ringColor
+                  isDeadpoolInner
+                    ? resolveDeadpoolShellBorderColor(dpCfg)
                     : 'rgba(255,255,255,0.24)'
                 }
                 width={isDeadpoolInner ? dpCfg.borderWidth : 1}
